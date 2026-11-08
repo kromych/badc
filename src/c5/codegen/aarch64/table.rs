@@ -935,45 +935,88 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
     // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
     // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
-    // (Reg operands) fall through to the catalogue below.
-    if let Some((op_base, u, lo, hi)) = match mnemonic {
-        "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8)),
-        "sub" => Some((0x0E20_8400, 1, 0, 3)),
-        "mul" => Some((0x0E20_9C00, 0, 0, 2)),
-        "pmul" => Some((0x0E20_9C00, 1, 0, 0)),
-        "cmeq" => Some((0x0E20_8C00, 1, 0, 3)),
-        "cmtst" => Some((0x0E20_8C00, 0, 0, 3)),
-        "cmgt" => Some((0x0E20_3400, 0, 0, 3)),
-        "cmge" => Some((0x0E20_3C00, 0, 0, 3)),
-        "cmhi" => Some((0x0E20_3400, 1, 0, 3)),
-        "cmhs" => Some((0x0E20_3C00, 1, 0, 3)),
-        "smax" => Some((0x0E20_6400, 0, 0, 2)),
-        "smin" => Some((0x0E20_6C00, 0, 0, 2)),
-        "umax" => Some((0x0E20_6400, 1, 0, 2)),
-        "umin" => Some((0x0E20_6C00, 1, 0, 2)),
-        "sqadd" => Some((0x0E20_0C00, 0, 0, 3)),
-        "uqadd" => Some((0x0E20_0C00, 1, 0, 3)),
-        "sqsub" => Some((0x0E20_2C00, 0, 0, 3)),
-        "uqsub" => Some((0x0E20_2C00, 1, 0, 3)),
-        "mla" => Some((0x0E20_9400, 0, 0, 2)),
-        "mls" => Some((0x0E20_9400, 1, 0, 2)),
-        "sabd" => Some((0x0E20_7400, 0, 0, 2)),
-        "uabd" => Some((0x0E20_7400, 1, 0, 2)),
-        "addp" => Some((0x0E20_BC00, 0, 0, 3)),
+    // (Reg operands) fall through to the catalogue below. `scalar` is the
+    // smallest element of the scalar form `Rd, Rn, Rm` over the s or d view
+    // (bits 30 and 28 set), where the instruction has one.
+    let three_same = match mnemonic {
+        "add" => Some((0x0E20_8400u32, 0u32, 0u8, 3u8, Some(3u8))),
+        "sub" => Some((0x0E20_8400, 1, 0, 3, Some(3))),
+        "mul" => Some((0x0E20_9C00, 0, 0, 2, None)),
+        "pmul" => Some((0x0E20_9C00, 1, 0, 0, None)),
+        "cmeq" => Some((0x0E20_8C00, 1, 0, 3, Some(3))),
+        "cmtst" => Some((0x0E20_8C00, 0, 0, 3, Some(3))),
+        "cmgt" => Some((0x0E20_3400, 0, 0, 3, Some(3))),
+        "cmge" => Some((0x0E20_3C00, 0, 0, 3, Some(3))),
+        "cmhi" => Some((0x0E20_3400, 1, 0, 3, Some(3))),
+        "cmhs" => Some((0x0E20_3C00, 1, 0, 3, Some(3))),
+        "smax" => Some((0x0E20_6400, 0, 0, 2, None)),
+        "smin" => Some((0x0E20_6C00, 0, 0, 2, None)),
+        "umax" => Some((0x0E20_6400, 1, 0, 2, None)),
+        "umin" => Some((0x0E20_6C00, 1, 0, 2, None)),
+        "sqadd" => Some((0x0E20_0C00, 0, 0, 3, Some(2))),
+        "uqadd" => Some((0x0E20_0C00, 1, 0, 3, Some(2))),
+        "sqsub" => Some((0x0E20_2C00, 0, 0, 3, Some(2))),
+        "uqsub" => Some((0x0E20_2C00, 1, 0, 3, Some(2))),
+        "mla" => Some((0x0E20_9400, 0, 0, 2, None)),
+        "mls" => Some((0x0E20_9400, 1, 0, 2, None)),
+        "sabd" => Some((0x0E20_7400, 0, 0, 2, None)),
+        "uabd" => Some((0x0E20_7400, 1, 0, 2, None)),
+        "saba" => Some((0x0E20_7C00, 0, 0, 2, None)),
+        "uaba" => Some((0x0E20_7C00, 1, 0, 2, None)),
+        "addp" => Some((0x0E20_BC00, 0, 0, 3, None)),
+        "smaxp" => Some((0x0E20_A400, 0, 0, 2, None)),
+        "umaxp" => Some((0x0E20_A400, 1, 0, 2, None)),
+        "sminp" => Some((0x0E20_AC00, 0, 0, 2, None)),
+        "uminp" => Some((0x0E20_AC00, 1, 0, 2, None)),
+        "shadd" => Some((0x0E20_0400, 0, 0, 2, None)),
+        "uhadd" => Some((0x0E20_0400, 1, 0, 2, None)),
+        "srhadd" => Some((0x0E20_1400, 0, 0, 2, None)),
+        "urhadd" => Some((0x0E20_1400, 1, 0, 2, None)),
+        "shsub" => Some((0x0E20_2400, 0, 0, 2, None)),
+        "uhsub" => Some((0x0E20_2400, 1, 0, 2, None)),
+        "sshl" => Some((0x0E20_4400, 0, 0, 3, Some(3))),
+        "ushl" => Some((0x0E20_4400, 1, 0, 3, Some(3))),
+        "sqshl" => Some((0x0E20_4C00, 0, 0, 3, Some(2))),
+        "uqshl" => Some((0x0E20_4C00, 1, 0, 3, Some(2))),
+        "srshl" => Some((0x0E20_5400, 0, 0, 3, Some(3))),
+        "urshl" => Some((0x0E20_5400, 1, 0, 3, Some(3))),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-        Opnd::VecReg {
-            num: rm,
-            size: s2,
-            q: q2,
-        },
-    ] = *ops
+    };
+    if let Some((op_base, u, _, _, Some(lo))) = three_same
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: b },
+            Opnd::VReg { num: rm, is_d: c },
+        ] = *ops
+        && is_d == b
+        && is_d == c
+    {
+        let size = if is_d { 3u32 } else { 2 };
+        if size < lo as u32 {
+            return Err(format!("inline asm: `{mnemonic}` has no s-register form"));
+        }
+        return Ok(op_base
+            | 0x5000_0000
+            | (u << 29)
+            | (size << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    if let Some((op_base, u, lo, hi, _)) = three_same
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: s2,
+                q: q2,
+            },
+        ] = *ops
     {
         if size != s1 || size != s2 || q != q1 || q != q2 {
             return Err(String::from(
@@ -1102,19 +1145,46 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // `sli` counts from the left, holding `esize + shift` for 0..=esize-1.
     // Byte-identical to GNU as: `sri v1.4s, v17.4s, #20` is 0x6F2C4621 and
     // `sli v1.4s, v17.4s, #20` is 0x6F345621.
-    if let Some((base, right)) = match mnemonic {
+    let insert = match mnemonic {
         "sri" => Some((0x2F00_4400u32, true)),
         "sli" => Some((0x2F00_5400u32, false)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-        Opnd::Imm(shift),
-    ] = *ops
+    };
+    // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set): a 64-bit element.
+    if let Some((base, right)) = insert
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        let field = match right {
+            true if (1..=64).contains(&shift) => 128 - shift,
+            false if (0..64).contains(&shift) => 64 + shift,
+            _ => {
+                return Err(format!(
+                    "inline asm: `{mnemonic}` shift {shift} out of range"
+                ));
+            }
+        };
+        return Ok(base | 0x5000_0000 | ((field as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    if let Some((base, right)) = insert
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from("inline asm: vector shift arrangements differ"));
@@ -1147,30 +1217,21 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // take their two sources as q registers. Byte-identical to GNU as:
     // `sha1su0 v0.4s, v1.4s, v2.4s` is 0x5E023020 and `sha512h q3, q6, v7.2d`
     // is 0xCE6780C3.
-    // Scalar SIMD forms on the 64-bit view: `add`/`sub Dd, Dn, Dm` and the
-    // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
-    // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
-    if let Some((base, is_d)) = match mnemonic {
-        "add" => Some((0x5EE0_8400u32, true)),
-        "sub" => Some((0x7EE0_8400, true)),
-        "sha1h" => Some((0x5E28_0800, false)),
-        _ => None,
-    } {
-        let fields = match *ops {
-            [
-                Opnd::VReg { num: rd, is_d: a },
-                Opnd::VReg { num: rn, is_d: b },
-            ] if !is_d && !a && !b => Some((rd, rn, 0)),
-            [
-                Opnd::VReg { num: rd, is_d: a },
-                Opnd::VReg { num: rn, is_d: b },
-                Opnd::VReg { num: rm, is_d: c },
-            ] if is_d && a && b && c => Some((rd, rn, rm)),
-            _ => None,
-        };
-        if let Some((rd, rn, rm)) = fields {
-            return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
-        }
+    // The SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `sha1h
+    // s14, s12` is 0x5E28098E.
+    if mnemonic == "sha1h"
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: false,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: false,
+            },
+        ] = *ops
+    {
+        return Ok(0x5E28_0800 | ((rn as u32) << 5) | (rd as u32));
     }
     if let Some((base, esize)) = match mnemonic {
         "sha1su0" => Some((0x5E00_3000u32, 2u8)),
@@ -1294,6 +1355,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fmls" => Some(0x0EA0_CC00),
         "fabd" => Some(0x2EA0_D400),
         "faddp" => Some(0x2E20_D400),
+        "frecps" => Some(0x0E20_FC00),
+        "frsqrts" => Some(0x0EA0_FC00),
         _ => None,
     } && let [
         Opnd::VecReg { num: rd, size, q },
@@ -1323,14 +1386,44 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD shift by immediate `<shl|sshr|ushr> Vd.T, Vn.T, #shift`. The immh:immb
-    // field (bits 22..16) encodes both element size and amount: left shifts use
-    // esize+shift, right shifts use 2*esize-shift. U at bit 29 selects ushr; the
-    // .1d arrangement is reserved (only .2d exists for vectors).
+    // The Newton-Raphson steps also have a scalar form over the s or d view
+    // (bits 30 and 28 set, sz at 22).
+    if let Some(base) = match mnemonic {
+        "frecps" => Some(0x5E20_FC00u32),
+        "frsqrts" => Some(0x5EA0_FC00),
+        _ => None,
+    } && let [
+        Opnd::VReg { num: rd, is_d },
+        Opnd::VReg { num: rn, is_d: b },
+        Opnd::VReg { num: rm, is_d: c },
+    ] = *ops
+        && is_d == b
+        && is_d == c
+    {
+        return Ok(base
+            | if is_d { 0x40_0000 } else { 0 }
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD shift by immediate `<op> Vd.T, Vn.T, #shift`: the left shifts shl and
+    // [us]qshl, the right shifts [us]shr, the accumulating [us]sra, the
+    // rounding [us]rshr and [us]rsra. The immh:immb field (bits 22..16) encodes
+    // both element size and amount: left shifts use esize+shift, right shifts
+    // use 2*esize-shift. U at bit 29 selects the unsigned op; the .1d
+    // arrangement is reserved (only .2d exists for vectors).
     let shift_imm = match mnemonic {
         "shl" => Some((0x0F00_5400u32, 0u32, true)),
+        "sqshl" => Some((0x0F00_7400, 0, true)),
+        "uqshl" => Some((0x0F00_7400, 1, true)),
         "sshr" => Some((0x0F00_0400, 0, false)),
         "ushr" => Some((0x0F00_0400, 1, false)),
+        "ssra" => Some((0x0F00_1400, 0, false)),
+        "usra" => Some((0x0F00_1400, 1, false)),
+        "srshr" => Some((0x0F00_2400, 0, false)),
+        "urshr" => Some((0x0F00_2400, 1, false)),
+        "srsra" => Some((0x0F00_3400, 0, false)),
+        "ursra" => Some((0x0F00_3400, 1, false)),
         _ => None,
     };
     // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set) exists for the
@@ -1595,32 +1688,57 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((v & 0x1F) << 5)
             | (rd as u32));
     }
-    // SIMD two-register misc (one source): the sign ops abs/neg, bitwise
-    // not/mvn, popcount cnt, the reverses rev16/rev32/rev64, and the FP unary
-    // fabs/fneg/fsqrt. Each base word bakes U and the opcode; `lo..=hi` bounds
-    // the element size (byte-only for not/cnt/rev16, up to word for rev64, all
-    // sizes for abs/neg, 2s/4s/2d for the FP ops). GP neg/mvn and scalar
-    // fabs/fneg/fsqrt (Reg/VReg operands) fall through.
-    if let Some((base, lo, hi)) = match mnemonic {
-        "rev64" => Some((0x0E20_0800u32, 0u8, 2u8)),
-        "rev32" => Some((0x2E20_0800, 0, 1)),
-        "rev16" => Some((0x0E20_1800, 0, 0)),
-        "cnt" => Some((0x0E20_5800, 0, 0)),
-        "not" | "mvn" => Some((0x2E20_5800, 0, 0)),
-        "abs" => Some((0x0E20_B800, 0, 3)),
-        "neg" => Some((0x2E20_B800, 0, 3)),
-        "fabs" => Some((0x0E20_F800, 2, 3)),
-        "fneg" => Some((0x2E20_F800, 2, 3)),
-        "fsqrt" => Some((0x2E21_F800, 2, 3)),
+    // SIMD two-register misc (one source): the sign ops abs/neg and their
+    // saturating sqabs/sqneg, bitwise not/mvn, popcount cnt, the leading-bit
+    // counts cls/clz, the reverses rev16/rev32/rev64, the FP unary
+    // fabs/fneg/fsqrt and the estimates frecpe/frsqrte. Each base word bakes U
+    // and the opcode; `lo..=hi` bounds the element size (byte-only for
+    // not/cnt/rev16, up to word for rev64 and cls/clz, all sizes for the sign
+    // ops, 2s/4s/2d for the FP ops, whose sz lands at bit 22). GP neg/mvn/cls/
+    // clz and scalar fabs/fneg/fsqrt (Reg/VReg operands) fall through.
+    let misc = match mnemonic {
+        "rev64" => Some((0x0E20_0800u32, 0u8, 2u8, None)),
+        "rev32" => Some((0x2E20_0800, 0, 1, None)),
+        "rev16" => Some((0x0E20_1800, 0, 0, None)),
+        "cnt" => Some((0x0E20_5800, 0, 0, None)),
+        "not" | "mvn" => Some((0x2E20_5800, 0, 0, None)),
+        "cls" => Some((0x0E20_4800, 0, 2, None)),
+        "clz" => Some((0x2E20_4800, 0, 2, None)),
+        "abs" => Some((0x0E20_B800, 0, 3, Some(3u8))),
+        "neg" => Some((0x2E20_B800, 0, 3, Some(3))),
+        "sqabs" => Some((0x0E20_7800, 0, 3, Some(3))),
+        "sqneg" => Some((0x2E20_7800, 0, 3, Some(3))),
+        "fabs" => Some((0x0E20_F800, 2, 3, None)),
+        "fneg" => Some((0x2E20_F800, 2, 3, None)),
+        "fsqrt" => Some((0x2E21_F800, 2, 3, None)),
+        "frecpe" => Some((0x0E21_D800, 2, 3, Some(2))),
+        "frsqrte" => Some((0x2E21_D800, 2, 3, Some(2))),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-    ] = *ops
+    };
+    // The scalar form `Rd, Rn` over the s or d view (bits 30 and 28 set), from
+    // the element size `scalar` up, where the instruction has one.
+    if let Some((base, _, _, Some(lo))) = misc
+        && let [
+            Opnd::VReg { num: rd, is_d },
+            Opnd::VReg { num: rn, is_d: b },
+        ] = *ops
+        && is_d == b
+    {
+        let size = if is_d { 3u32 } else { 2 };
+        if size < lo as u32 {
+            return Err(format!("inline asm: `{mnemonic}` has no s-register form"));
+        }
+        return Ok(base | 0x5000_0000 | (size << 22) | ((rn as u32) << 5) | (rd as u32));
+    }
+    if let Some((base, lo, hi, _)) = misc
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from(
@@ -1691,6 +1809,56 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (if *q { 1u32 << 30 } else { 0 })
             | ((*ss as u32) << 22)
             | ((*rn as u32) << 5)
+            | (rd as u32));
+    }
+    // The pairwise sum of a 2-lane doubleword vector into a scalar, `addp Dd,
+    // Vn.2d`.
+    if mnemonic == "addp"
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: 3,
+                q: true,
+            },
+        ] = *ops
+    {
+        return Ok(0x5EF1_B800 | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD long pairwise add `<saddlp|uaddlp> Vd.<Ta>, Vn.<Tb>`: each pair of
+    // adjacent elements summed into one of twice the width, so the
+    // destination has half the lanes in the same register size (.1d from .2s
+    // included). size (bit 22) is the source width, U at 29 the unsigned op.
+    if let Some(u) = match mnemonic {
+        "saddlp" => Some(0u32),
+        "uaddlp" => Some(1),
+        _ => None,
+    } && let [
+        Opnd::VecReg {
+            num: rd,
+            size: ds,
+            q: dq,
+        },
+        Opnd::VecReg {
+            num: rn,
+            size: ss,
+            q: sq,
+        },
+    ] = *ops
+    {
+        if ss > 2 || ds != ss + 1 || dq != sq {
+            return Err(String::from(
+                "inline asm: long pairwise destination must be one element size wider",
+            ));
+        }
+        return Ok(0x0E20_2800
+            | (u << 29)
+            | (if sq { 1u32 << 30 } else { 0 })
+            | ((ss as u32) << 22)
+            | ((rn as u32) << 5)
             | (rd as u32));
     }
     // Crypto two-register, fixed arrangement `<op> Vd.T, Vn.T`: the AES round
@@ -1838,6 +2006,49 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (u << 29)
             | (if upper { 1u32 << 30 } else { 0 })
             | ((ss as u32) << 22)
+            | ((rm as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD wide add and subtract `<saddw|uaddw|ssubw|usubw>{2} Vd.<2T>,
+    // Vn.<2T>, Vm.<T>`: a wide vector and the widened elements of a narrow one.
+    // size (bit 22) is the narrow width; the `2` form reads the upper half of a
+    // 128-bit Vm (Q at 30).
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((base, u)) = match wmnem {
+            "saddw" => Some((0x0E20_1000u32, 0u32)),
+            "uaddw" => Some((0x0E20_1000, 1)),
+            "ssubw" => Some((0x0E20_3000, 0)),
+            "usubw" => Some((0x0E20_3000, 1)),
+            _ => None,
+        }
+        && let [
+            Opnd::VecReg {
+                num: rd,
+                size: ds,
+                q: dq,
+            },
+            Opnd::VecReg {
+                num: rn,
+                size: ns,
+                q: nq,
+            },
+            Opnd::VecReg {
+                num: rm,
+                size: ms,
+                q: mq,
+            },
+        ] = *ops
+    {
+        if !dq || !nq || ds != ns || ms > 2 || ds != ms + 1 || mq != upper {
+            return Err(String::from(
+                "inline asm: wide operands must be 8h/4s/2d over 8b/4h/2s (16b/8h/4s for `2`)",
+            ));
+        }
+        return Ok(base
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | ((ms as u32) << 22)
             | ((rm as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));

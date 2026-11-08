@@ -559,6 +559,46 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
     }
 }
 
+/// The interpreter rounds and raises only on its scalar floating-point
+/// path: an inline-asm template that would compute in a floating-point
+/// register is refused on either architecture, so none runs on the host's
+/// arithmetic under another rounding direction.
+#[test]
+fn the_interpreter_refuses_floating_point_inline_asm() {
+    use crate::{Compiler, Target};
+    for (target, asm, what) in [
+        (
+            Target::LinuxAarch64,
+            "__asm__(\"fadd %d0, %d0, %d1\" : \"+w\"(d) : \"w\"(e));",
+            "a SIMD / FP register operand",
+        ),
+        (
+            Target::LinuxAarch64,
+            "unsigned long r; __asm__(\"fmov d0, %1\\n\\tfadd d0, d0, d0\\n\\tfmov %0, d0\" \
+             : \"=r\"(r) : \"r\"(1UL));",
+            "`fadd`",
+        ),
+        (
+            Target::LinuxX64,
+            "__asm__(\"addsd %1, %0\" : \"+x\"(d) : \"x\"(e));",
+            "`x` (xmm) register operands",
+        ),
+        (
+            Target::LinuxX64,
+            "unsigned long r; __asm__(\"movq %1, %%xmm0\\n\\taddsd %%xmm0, %%xmm0\\n\\tmovq %%xmm0, %0\" \
+             : \"=r\"(r) : \"r\"(1UL));",
+            "SSE register ops",
+        ),
+    ] {
+        let src = format!("int main(void) {{ double d = 1.0, e = 0.1; {asm} return (int)d; }}");
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect(&src);
+        let err = super::Vm::new(program).run().expect_err(&src).to_string();
+        assert!(err.contains(what), "{src}: {err}");
+    }
+}
+
 #[test]
 fn cacheflush_asm() {
     // AArch64 `mrs ctr_el0` / `dc cvau` / `ic ivau` / `dsb ish` / `isb`

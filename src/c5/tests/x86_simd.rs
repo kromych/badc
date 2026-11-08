@@ -1175,3 +1175,54 @@ fn the_table_is_well_formed() {
         );
     }
 }
+
+/// The interpreter evaluates every row over integer lanes, apart from the
+/// rounding direction and the IEC 60559 exceptions its scalar
+/// floating-point operations follow: a floating-point row of the table is
+/// a bitwise operation or a move. A new semantics takes its place here.
+#[test]
+fn no_row_computes_in_floating_point() {
+    let floating = |sem: Sem| match sem {
+        Sem::Add(_)
+        | Sem::Sub(_)
+        | Sem::MulLo(_)
+        | Sem::MulHi(_)
+        | Sem::MulAddWords
+        | Sem::MulAddBytes
+        | Sem::AddSat(..)
+        | Sem::SubSat(..)
+        | Sem::SadBytes
+        | Sem::And
+        | Sem::AndNot
+        | Sem::Or
+        | Sem::Xor
+        | Sem::CmpEq(_)
+        | Sem::CmpGt(_)
+        | Sem::Shl(_)
+        | Sem::Shr(_)
+        | Sem::Sar(_)
+        | Sem::ShlBytes
+        | Sem::ShrBytes
+        | Sem::PackSigned(_)
+        | Sem::PackUnsigned(_)
+        | Sem::UnpackLo(_)
+        | Sem::UnpackHi(_)
+        | Sem::ShufD
+        | Sem::ShufHi
+        | Sem::ShufLo
+        | Sem::ShufB
+        | Sem::ShufPd
+        | Sem::ClMul
+        | Sem::AesEnc
+        | Sem::AesEncLast
+        | Sem::AesDec
+        | Sem::AesDecLast
+        | Sem::AesImc
+        | Sem::AesKeygen
+        | Sem::Move
+        | Sem::Rand => false,
+    };
+    for op in x86_simd::OPS {
+        assert!(!floating(op.sem), "{} computes in floating point", op.name);
+    }
+}

@@ -342,7 +342,7 @@ def self_test() -> int:
     assert all(c.boots for c in full)
     # The boot count is the gate's budget: a kernel added here costs every
     # Linux lane another emulator start.
-    assert (len(full), sum(c.arch == "x64" for c in full)) == (14, 8), full
+    assert (len(full), sum(c.arch == "x64" for c in full)) == (18, 10), full
     for arch in ("x64", "aarch64"):
         kept = plan(arch)
         assert [c[:-1] for c in kept] == [c[:-1] for c in full]

@@ -62,24 +62,7 @@ jobs:
       # checked here too -- they build a command line and a stdin script, and
       # whether the token stays out of the former is decidable without a box.
       - name: script harness self-tests
-        run: |
-          python3 demos/linux/kaslr.py
-          python3 demos/linux/initramfs.py --self-test
-          python3 demos/linux/verify.py --self-test
-          python3 demos/linux/packages.py --self-test
-          python3 demos/linux/layout.py --self-test
-          python3 demos/linux/exercise.py --self-test
-          python3 demos/linux/hwprep.py --self-test
-          python3 demos/edk2/qemu_efi.py --self-test
-          python3 demos/kernel/smoke.py --self-test
-          python3 scripts/snapshots.py --self-test
-          python3 scripts/validate_local_boxes.py --self-test
-          python3 scripts/cargo_test.py --self-test
-          python3 tests/perf/run.py --self-test
-          python3 scripts/perf_publish.py --self-test
-          python3 scripts/perf_backfill.py --self-test
-          python3 scripts/csmith_fuzz.py --self-test
-          python3 scripts/c_reduce.py --self-test
+        run: python3 scripts/harness_self_tests.py
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises

@@ -618,6 +618,8 @@ def posix_steps(
         # Linux-gated path passes every local check and fails in CI. Debug
         # profile, matching the `fmt + clippy` job.
         steps.append("step cargo clippy --all-targets --features full -- -D warnings")
+        # The harness self-checks of the same CI job.
+        steps.append("step python3 scripts/harness_self_tests.py")
     # cargo passes a test binary that exits 0 before its last test, which a
     # test running C code in-process can make it do; cargo_test.py fails it.
     steps += [

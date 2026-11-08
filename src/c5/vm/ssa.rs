@@ -3223,6 +3223,16 @@ fn run_inline_asm(
     .map_err(C5Error::Runtime)?;
     let insns =
         parse_template(sized.as_deref().unwrap_or(text).as_bytes()).map_err(C5Error::Runtime)?;
+    // A cache line write-back or prefetch leaves the interpreter's memory as
+    // it is, whatever its operand.
+    let insns: alloc::vec::Vec<_> = (insns.into_iter())
+        .filter(|i| {
+            !matches!(
+                i.mnemonic,
+                Mnemonic::Table("clflushopt" | "clwb" | "prefetchw" | "prefetchwt1")
+            )
+        })
+        .collect();
     // An `asm goto` label branch transfers control between blocks,
     // which this per-instruction evaluator cannot model.
     if insns.iter().any(|i| {
@@ -4039,21 +4049,34 @@ fn run_intrinsic(
         | Intrinsic::AtomicReleaseFence
         | Intrinsic::AtomicSignalFence => Ok(()),
         Intrinsic::X87StoreControlWord => {
-            // The interpreter evaluates floats with host doubles, so it
-            // has no x87 control word to read; store the architectural
-            // default so a caller that round-trips it sees a sane value.
             let addr = frame.regs[args[0] as usize] as usize;
-            store_to_memory(mem, addr, 0x037f, StoreKind::I16)
+            store_to_memory(mem, addr, i64::from(mem.fp.x87_control()), StoreKind::I16)
         }
         Intrinsic::X87LoadControlWord => {
-            // Setting the control word has no effect on host-double
-            // arithmetic.
-            Ok(())
+            let addr = frame.regs[args[0] as usize] as usize;
+            let fcw = load_from_memory(mem, addr, LoadKind::U16)? as u32;
+            mem.fp.set_x87_control(fcw).map_err(|what| {
+                C5Error::Runtime(alloc::format!(
+                    "fldcw: the {what}, which the interpreter does not model"
+                ))
+            })
         }
-        Intrinsic::X86FxSave | Intrinsic::X86FxRestore => {
-            // No modelled x87/SSE register file to save or restore; the
-            // interpreter evaluates floats with host doubles.
-            Ok(())
+        // The control and status state the environment models; the register
+        // area holds zeros, as no x87 or XMM register outlives a statement.
+        Intrinsic::X86FxSave => {
+            let addr = frame.regs[args[0] as usize] as usize;
+            let mut area = [0u8; 512];
+            area[..32].copy_from_slice(&mem.fp.fxsave_header());
+            mem.write_bytes(addr, &area)
+        }
+        Intrinsic::X86FxRestore => {
+            let addr = frame.regs[args[0] as usize] as usize;
+            let header = mem.read_bytes(addr, 32)?.to_vec();
+            mem.fp.fxrstor_header(&header).map_err(|what| {
+                C5Error::Runtime(alloc::format!(
+                    "fxrstor: the {what}, which the interpreter does not model"
+                ))
+            })
         }
         Intrinsic::X86Sgdt | Intrinsic::X86Sidt | Intrinsic::X86Sldt | Intrinsic::X86Str => {
             // Store forms: no modelled descriptor tables. Zero the operand so

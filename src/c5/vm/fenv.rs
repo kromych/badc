@@ -738,6 +738,64 @@ impl FpEnv {
         Ok(())
     }
 
+    /// The x87 control word a process starts with: every exception masked,
+    /// and extended precision, or on Windows double precision.
+    fn x87_default_control(&self) -> u32 {
+        if self.target == Target::WindowsX64 {
+            0x027f
+        } else {
+            0x037f
+        }
+    }
+
+    /// The x87 control word: the default one with the rounding direction.
+    pub(super) fn x87_control(&self) -> u32 {
+        self.x87_default_control() | (self.mxcsr() >> 13 & 3) << 10
+    }
+
+    /// Load the x87 control word, or refuse one that unmasks an exception,
+    /// changes the precision, or on linux-x64, where `long double` and
+    /// `fegetround` follow it, rounds apart from MXCSR.
+    pub(super) fn set_x87_control(&mut self, fcw: u32) -> Result<(), &'static str> {
+        if fcw & !0xc00 != self.x87_default_control() {
+            return Err("x87 control word unmasks an exception or changes the precision");
+        }
+        if self.target == Target::LinuxX64 && fcw >> 10 & 3 != self.mxcsr() >> 13 & 3 {
+            return Err("x87 control word rounds apart from MXCSR");
+        }
+        Ok(())
+    }
+
+    /// FXSAVE's first 32 bytes: the x87 control word, a clear status
+    /// word (the flags are those of the SSE arithmetic `float` and `double`
+    /// take), an empty tag word, MXCSR and the mask of its writable bits.
+    pub(super) fn fxsave_header(&self) -> [u8; 32] {
+        let mut h = [0u8; 32];
+        let mxcsr = self.mxcsr();
+        h[0..2].copy_from_slice(&self.x87_control().to_le_bytes()[..2]);
+        h[24..28].copy_from_slice(&mxcsr.to_le_bytes());
+        h[28..32].copy_from_slice(&0xffffu32.to_le_bytes());
+        h
+    }
+
+    /// FXRSTOR of an FXSAVE header: an x87 control word that unmasks an
+    /// exception, sets a precision other than extended, or on linux-x64
+    /// rounds apart from MXCSR is refused, as MXCSR's own load is.
+    pub(super) fn fxrstor_header(&mut self, h: &[u8]) -> Result<(), &'static str> {
+        let fcw = u32::from(u16::from_le_bytes([h[0], h[1]]));
+        let fsw = u32::from(u16::from_le_bytes([h[2], h[3]]));
+        let mxcsr = u32::from_le_bytes([h[24], h[25], h[26], h[27]]);
+        let saved = (self.round, self.flags);
+        self.round =
+            [Round::Nearest, Round::Down, Round::Up, Round::Zero][(mxcsr >> 13 & 3) as usize];
+        let loaded =
+            (self.set_mxcsr(mxcsr | (fsw & 0x3f))).and_then(|()| self.set_x87_control(fcw));
+        if loaded.is_err() {
+            (self.round, self.flags) = saved;
+        }
+        loaded
+    }
+
     /// `fesetround`; false for a value that names no direction.
     pub(super) fn set_round(&mut self, value: i32) -> bool {
         let dirs = [Round::Nearest, Round::Up, Round::Down, Round::Zero];

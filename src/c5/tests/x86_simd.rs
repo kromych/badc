@@ -1918,6 +1918,50 @@ fn the_interpreter_runs_the_fences_and_mxcsr_access() {
     assert!(err.to_string().contains("unmasks an exception"), "{err}");
 }
 
+/// FXSAVE, FNSTCW and FLDCW under the interpreter: the control word the
+/// target's process starts with (double precision on Windows, extended
+/// elsewhere) with the rounding direction, MXCSR, and an FXRSTOR or FLDCW of
+/// what was saved; a control word that changes the precision is refused.
+#[test]
+fn the_interpreter_saves_the_x87_and_sse_control_state() {
+    const SRC: &str = "#include <immintrin.h>\n\
+        static unsigned char area[512] __attribute__((aligned(16)));\n\
+        int main(void) {\n\
+            unsigned short cw;\n\
+            __asm__ volatile(\"fnstcw %0\" : \"=m\"(cw));\n\
+            _fxsave(area);\n\
+            if (cw != (area[0] | area[1] << 8) || area[24] != 0x80 || area[25] != 0x1f) return 1;\n\
+            __asm__ volatile(\"fldcw %0\" : : \"m\"(cw));\n\
+            _fxrstor(area);\n\
+            return cw;\n\
+        }\n";
+    for (target, cw) in [
+        (crate::Target::LinuxX64, 0x037f),
+        (crate::Target::WindowsX64, 0x027f),
+    ] {
+        let program = crate::Compiler::with_options(SRC.to_string(), target, Default::default())
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(
+            super::Vm::new(program).run().expect("run"),
+            cw,
+            "{target:?}"
+        );
+    }
+    let src = "int main(void) { unsigned short cw = 0x007f; __asm__ volatile(\"fldcw %0\" : : \"m\"(cw)); return 0; }\n";
+    let program = (crate::Compiler::with_options(
+        src.to_string(),
+        crate::Target::LinuxX64,
+        Default::default(),
+    )
+    .compile())
+    .expect("compiles");
+    let err = super::Vm::new(program)
+        .run()
+        .expect_err("a precision change is refused");
+    assert!(err.to_string().contains("changes the precision"), "{err}");
+}
+
 /// The floating-point rows, and the AVX and FMA forms built on them, compute
 /// in the interpreter as the instructions do: the fixtures' hashes, which
 /// the instructions gave in each rounding direction, hold under the

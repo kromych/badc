@@ -1528,6 +1528,8 @@ static inline unsigned int _lzcnt_u32(unsigned int __X) {
 static inline unsigned short __tzcnt_u16(unsigned short __X) {
     return __X ? (unsigned short)__builtin_ctz(__X) : 16;
 }
+static inline unsigned short _tzcnt_u16(unsigned short __X) { return __tzcnt_u16(__X); }
+static inline unsigned int __tzcnt_u32(unsigned int __X) { return _tzcnt_u32(__X); }
 static inline unsigned int _andn_u32(unsigned int __X, unsigned int __Y) {
     return ~__X & __Y;
 }
@@ -1542,6 +1544,10 @@ static inline unsigned int _bextr_u32(unsigned int __X, unsigned int __S, unsign
 static inline unsigned int _blsi_u32(unsigned int __X) { return __X & -__X; }
 static inline unsigned int _blsmsk_u32(unsigned int __X) { return __X ^ (__X - 1); }
 static inline unsigned int _blsr_u32(unsigned int __X) { return __X & (__X - 1); }
+static inline unsigned int __andn_u32(unsigned int __X, unsigned int __Y) { return ~__X & __Y; }
+static inline unsigned int __blsi_u32(unsigned int __X) { return _blsi_u32(__X); }
+static inline unsigned int __blsmsk_u32(unsigned int __X) { return _blsmsk_u32(__X); }
+static inline unsigned int __blsr_u32(unsigned int __X) { return _blsr_u32(__X); }
 static inline unsigned int _bzhi_u32(unsigned int __X, unsigned int __Y) {
     unsigned int __n = __Y & 0xff;
     return __n < 32 ? __X & ((1u << __n) - 1) : __X;
@@ -1601,6 +1607,13 @@ static inline unsigned long long _bextr_u64(unsigned long long __X, unsigned int
 static inline unsigned long long _blsi_u64(unsigned long long __X) { return __X & -__X; }
 static inline unsigned long long _blsmsk_u64(unsigned long long __X) { return __X ^ (__X - 1); }
 static inline unsigned long long _blsr_u64(unsigned long long __X) { return __X & (__X - 1); }
+static inline unsigned long long __andn_u64(unsigned long long __X, unsigned long long __Y) {
+    return ~__X & __Y;
+}
+static inline unsigned long long __blsi_u64(unsigned long long __X) { return _blsi_u64(__X); }
+static inline unsigned long long __blsmsk_u64(unsigned long long __X) { return _blsmsk_u64(__X); }
+static inline unsigned long long __blsr_u64(unsigned long long __X) { return _blsr_u64(__X); }
+static inline unsigned long long __tzcnt_u64(unsigned long long __X) { return _tzcnt_u64(__X); }
 static inline unsigned long long _bzhi_u64(unsigned long long __X, unsigned int __Y) {
     unsigned int __n = __Y & 0xff;
     return __n < 64 ? __X & ((1ull << __n) - 1) : __X;
@@ -1672,4 +1685,58 @@ static inline unsigned int __lzcnt32(unsigned int __X) { return _lzcnt_u32(__X);
 #ifdef __x86_64__
 static inline unsigned long long __lzcnt64(unsigned long long __X) { return _lzcnt_u64(__X); }
 #endif
+#endif
+
+/* CLFLUSHOPT and CLWB write a cache line back; FXSAVE / FXRSTOR and XSAVE /
+** XRSTOR save and restore the processor state, XSAVE's in the components
+** the mask's EDX:EAX selects. */
+static inline void _mm_clflushopt(void const *__P) {
+    __asm__ __volatile__("clflushopt (%0)" : : "r"(__P) : "memory");
+}
+static inline void _mm_clwb(void const *__P) {
+    __asm__ __volatile__("clwb (%0)" : : "r"(__P) : "memory");
+}
+struct __badc_fxarea { char __b[512]; };
+static inline void _fxsave(void *__P) {
+    __asm__ __volatile__("fxsave %0" : "=m"(*(struct __badc_fxarea *)__P));
+}
+static inline void _fxrstor(void *__P) {
+    __asm__ __volatile__("fxrstor %0" : : "m"(*(struct __badc_fxarea *)__P));
+}
+static inline void _xsave(void *__P, long long __M) {
+    __asm__ __volatile__("xsave (%0)"
+                         : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
+                         : "memory");
+}
+static inline void _xrstor(void *__P, long long __M) {
+    __asm__ __volatile__("xrstor (%0)"
+                         : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
+                         : "memory");
+}
+#ifdef __x86_64__
+static inline void _fxsave64(void *__P) {
+    __asm__ __volatile__("fxsave64 (%0)" : : "r"(__P) : "memory");
+}
+static inline void _fxrstor64(void *__P) {
+    __asm__ __volatile__("fxrstor64 (%0)" : : "r"(__P) : "memory");
+}
+static inline void _xsave64(void *__P, long long __M) {
+    __asm__ __volatile__("xsave64 (%0)"
+                         : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
+                         : "memory");
+}
+static inline void _xrstor64(void *__P, long long __M) {
+    __asm__ __volatile__("xrstor64 (%0)"
+                         : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
+                         : "memory");
+}
+#endif
+#ifndef _WIN32
+/* gcc's spellings of what MSVC's <intrin.h> names as the compiler's own. */
+static inline void _xsetbv(unsigned int __A, unsigned long long __V) {
+    __asm__ __volatile__("xsetbv" : : "c"(__A), "a"((unsigned int)__V), "d"((unsigned int)(__V >> 32)));
+}
+static inline void _m_prefetchw(void *__P) {
+    __asm__ __volatile__("prefetchw (%0)" : : "r"(__P));
+}
 #endif

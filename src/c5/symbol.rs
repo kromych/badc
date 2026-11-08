@@ -173,6 +173,9 @@ pub(crate) struct Symbol {
     /// symbol's bytes go to instead of the default `.text` / `.data` /
     /// `.bss` placement.
     pub section_name: Option<String>,
+    /// `__attribute__((error("message")))` (`true`) or `((warning(...)))`:
+    /// a call left in the emitted code is diagnosed with the message.
+    pub call_diagnostic: Option<(bool, String)>,
 
     /// `__attribute__((patchable_function_entry(N, M)))` seen on any
     /// declaration of the name: `N` NOPs at the entry, `M` of them ahead
@@ -979,6 +982,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             visibility: _,
             visibility_stated: _,
             section_name,
+            call_diagnostic: _,
             patchable_function_entry: _,
             code_align: _,
             no_instrument_function: _,

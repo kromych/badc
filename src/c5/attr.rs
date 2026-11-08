@@ -36,6 +36,9 @@ pub(crate) enum Attr {
     Alias,
     Visibility,
     PatchableFunctionEntry,
+    /// `error("message")` / `warning("message")`: a call to the function
+    /// left in the emitted code is diagnosed with the message.
+    CallDiagnostic,
     /// Parsed with its operands and without effect on the code badc emits.
     Accepted,
 }
@@ -108,8 +111,8 @@ const TABLE: &[(&str, Attr, Spelling)] = &[
     ("nothrow", Accepted, Gnu),
     ("returns_twice", Accepted, Gnu),
     ("noclone", Accepted, Gnu),
-    ("error", Accepted, Gnu),
-    ("warning", Accepted, Gnu),
+    ("error", CallDiagnostic, Gnu),
+    ("warning", CallDiagnostic, Gnu),
     ("unavailable", Accepted, Gnu),
     // Validated for its feature names; badc emits every instruction its
     // intrinsic surface carries on x86-64, so it selects nothing further.

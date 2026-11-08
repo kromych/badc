@@ -1142,6 +1142,7 @@ impl Compiler {
             | Attr::Alias
             | Attr::Visibility
             | Attr::PatchableFunctionEntry
+            | Attr::CallDiagnostic
             | Attr::Accepted => {}
         }
     }
@@ -1279,6 +1280,9 @@ impl Compiler {
                         let is_alias = named == Some(Attr::Alias);
                         let is_visibility = named == Some(Attr::Visibility);
                         let is_patchable_entry = named == Some(Attr::PatchableFunctionEntry);
+                        let call_diagnostic = (named == Some(Attr::CallDiagnostic)).then(|| {
+                            self.symbols[self.lex.curr_id_idx].name.trim_matches('_') == "error"
+                        });
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);
@@ -1340,6 +1344,21 @@ impl Compiler {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
                                     "`)` expected after `section` operand",
+                                ));
+                            }
+                            self.next()?;
+                        } else if let Some(error) = call_diagnostic
+                            && self.lex.tk == '('
+                        {
+                            // GCC `error("message")` / `warning("message")`.
+                            self.next()?; // `(`
+                            let what = if error { "error" } else { "warning" };
+                            let message = self.parse_attribute_string_operand(what)?;
+                            self.pending.attrs.call_diagnostic = Some((error, message));
+                            if self.lex.tk != ')' {
+                                return Err(self.compile_err(
+                                    Code::SYNTAX,
+                                    "`)` expected after the attribute's message",
                                 ));
                             }
                             self.next()?;

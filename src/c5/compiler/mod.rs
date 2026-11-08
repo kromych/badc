@@ -1623,6 +1623,8 @@ pub(super) struct DeclAttrs {
     /// choice.
     pub visibility: Option<Option<crate::c5::program::SymVisibility>>,
     pub section: Option<alloc::string::String>,
+    /// `error("message")` (`true`) or `warning("message")`.
+    pub call_diagnostic: Option<(bool, alloc::string::String)>,
     pub patchable_entry: Option<(u32, u32)>,
     pub no_instrument: bool,
     pub no_stack_protector: bool,

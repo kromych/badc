@@ -9516,11 +9516,12 @@ fn later_address_escape_folds_assert_call_at_o() {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
         };
-        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
-        let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+        let err = emit_native_with_options(&program, Target::LinuxX64, opts)
+            .expect_err("without -O the call stays")
+            .to_string();
         assert!(
-            has(b"compiletime_assert_33"),
-            "{shape}: without -O the reference stays, as with gcc -O0"
+            err.contains("call to `compiletime_assert_33` declared with attribute error"),
+            "{shape}: without -O the call stays and is diagnosed, as with gcc -O0: {err}"
         );
     }
 }
@@ -9547,7 +9548,7 @@ fn const_array_copy_member_folds_assert_calls_at_o() {
          extern void ct_size_1(void) __attribute__((__noreturn__, __error__(\"s1\")));\n\
          extern void ct_order_2(void) __attribute__((__noreturn__, __error__(\"o2\")));\n\
          extern void ct_size_2(void) __attribute__((__noreturn__, __error__(\"s2\")));\n\
-         extern void ct_kept_mut(void) __attribute__((__error__(\"m\")));\n\
+         extern void ct_kept_mut(void) __attribute__((__warning__(\"m\")));\n\
          int check(void) {{\n\
              int r = 0;\n\
              ({{ struct pf __f = fields[0];\n\
@@ -9608,17 +9609,22 @@ fn const_array_copy_member_folds_assert_calls_at_o() {
             "{target:?}: a copy from a mutable array must keep its call"
         );
     }
-    // Without -O the template fold does not run, as gcc -O0 keeps the
-    // references.
+    // Without -O the template fold does not run, so the guarded calls stay
+    // and are diagnosed, as under gcc -O0.
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit -O0");
-    let has = |name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    let err = emit_native_with_options(&program, Target::LinuxX64, opts)
+        .expect_err("without -O the calls stay")
+        .to_string();
     assert!(
-        has(b"ct_order_0") && has(b"ct_size_2") && has(b"ct_kept_mut"),
-        "without -O the guards keep their references"
+        ["ct_order_0", "ct_size_2"]
+            .iter()
+            .all(|f| err.contains(&alloc::format!(
+                "call to `{f}` declared with attribute error"
+            ))),
+        "without -O the guards keep their calls: {err}"
     );
 }
 

@@ -13965,7 +13965,7 @@ fn literal_index_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_1(void) __attribute__((__error__(\"newline\")));\n\
-        extern void __compiletime_assert_2(void) __attribute__((__error__(\"held\")));\n\
+        extern void __compiletime_assert_2(void) __attribute__((__warning__(\"held\")));\n\
         void f(void) {\n\
             do {\n\
                 if (!(!(\"HW step 0x%0x\\n\"[sizeof(\"HW step 0x%0x\\n\") - 2] != '\\n')))\n\
@@ -14127,7 +14127,7 @@ fn fortified_inline_overflow_checks_fold() {
     const SRC: &str = "\
         typedef __SIZE_TYPE__ size_t;\n\
         #define FI static inline __attribute__((__always_inline__))\n\
-        #define FAIL(n) extern void over_##n(void) __attribute__((__error__(\"over\")))\n\
+        #define FAIL(n) extern void over_##n(void) __attribute__((__warning__(\"over\")))\n\
         FAIL(1); FAIL(2); FAIL(3); FAIL(4); FAIL(5); FAIL(6); FAIL(7);\n\
         FI size_t known_len(const char *p) {\n\
             size_t n = __builtin_object_size(p, 1);\n\
@@ -14218,7 +14218,7 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_73(void) __attribute__((__error__(\"too large\")));\n\
-        extern void __compiletime_assert_74(void) __attribute__((__error__(\"too large\")));\n\
+        extern void __compiletime_assert_74(void) __attribute__((__warning__(\"too large\")));\n\
         unsigned long long sink;\n\
         static void undefined_count(unsigned lg2) {\n\
             unsigned long long v = ((unsigned long long)1 << (lg2 - 12 - 1)) - 1;\n\
@@ -14277,7 +14277,7 @@ fn member_store_constant_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_761(void) __attribute__((__error__(\"not a power of 2\")));\n\
-        extern void __compiletime_assert_762(void) __attribute__((__error__(\"held\")));\n\
+        extern void __compiletime_assert_762(void) __attribute__((__warning__(\"held\")));\n\
         struct dev { void *buf; unsigned char size; };\n\
         static int config_size(unsigned short device) { (void)device; return 8; }\n\
         void init(struct dev *d, unsigned short device) {\n\
@@ -14324,11 +14324,11 @@ fn member_store_constant_guarded_assert_call_folds_away() {
                 ..NativeOptions::new()
             },
         )
-        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
-        let syms = elf_symbol_shndx(&plain);
+        .expect_err("without -O the call stays")
+        .to_string();
         assert!(
-            syms.iter().any(|(n, _)| n == "__compiletime_assert_761"),
-            "{target:?}: without -O the guard stays a runtime test"
+            plain.contains("call to `__compiletime_assert_761` declared with attribute error"),
+            "{target:?}: without -O the guard stays a runtime test, and is diagnosed: {plain}"
         );
     }
 }
@@ -14347,7 +14347,7 @@ fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
     const SRC: &str = "\
         struct desc { unsigned long addr; unsigned len; };\n\
         extern void __compiletime_assert_905(void) __attribute__((__error__(\"not constant\")));\n\
-        extern void __compiletime_assert_906(void) __attribute__((__error__(\"held\")));\n\
+        extern void __compiletime_assert_906(void) __attribute__((__warning__(\"held\")));\n\
         #define MARKER ((const void *)0x9e37fffffffc0001ull)\n\
         static struct desc raw(unsigned i) { struct desc d; d.addr = i; d.len = i; return d; }\n\
         static inline __attribute__((always_inline)) struct desc fill(unsigned i, unsigned long long priv) {\n\
@@ -14407,11 +14407,11 @@ fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
                 ..NativeOptions::new()
             },
         )
-        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
-        let syms = elf_symbol_shndx(&plain);
+        .expect_err("without -O the call stays")
+        .to_string();
         assert!(
-            syms.iter().any(|(n, _)| n == "__compiletime_assert_905"),
-            "{target:?}: without -O the query answers 0 and the call stays"
+            plain.contains("call to `__compiletime_assert_905` declared with attribute error"),
+            "{target:?}: without -O the query answers 0 and the call stays, and is diagnosed: {plain}"
         );
     }
 }
@@ -14428,7 +14428,7 @@ fn stored_bound_decides_a_clamp_signedness_assert() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_612(void) __attribute__((__error__(\"clamp() signedness error\")));\n\
-        extern void __compiletime_assert_613(void) __attribute__((__error__(\"held\")));\n\
+        extern void __compiletime_assert_613(void) __attribute__((__warning__(\"held\")));\n\
         extern int read_reg(void *m, unsigned reg, int *val);\n\
         struct desc { unsigned int count; };\n\
         struct dev { struct desc *desc; };\n\
@@ -14483,11 +14483,11 @@ fn stored_bound_decides_a_clamp_signedness_assert() {
                 ..NativeOptions::new()
             },
         )
-        .unwrap_or_else(|e| panic!("emit -O0 for {target:?}: {e}"));
-        let syms = elf_symbol_shndx(&plain);
+        .expect_err("without -O the call stays")
+        .to_string();
         assert!(
-            syms.iter().any(|(n, _)| n == "__compiletime_assert_612"),
-            "{target:?}: without -O the tag stays a runtime test"
+            plain.contains("call to `__compiletime_assert_612` declared with attribute error"),
+            "{target:?}: without -O the tag stays a runtime test, and is diagnosed: {plain}"
         );
     }
 }
@@ -19125,5 +19125,64 @@ fn win_arm64_hardened_entries_take_their_own_unwind_records() {
                 );
             }
         }
+    }
+}
+
+/// gcc's `error` and `warning` function attributes diagnose a call left in
+/// the emitted code: one the optimizer folds away is not, one it keeps is,
+/// and an error fails the lowering.
+#[test]
+fn a_call_left_to_an_error_or_warning_function_is_diagnosed() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let decls = "extern void bad(void) __attribute__((error(\"too small\")));\n\
+                 extern void soft(void) __attribute__((__warning__(\"prefer checked\")));\n\
+                 static inline void check(int n) { if (n > 8) bad(); }\n\
+                 int f(void) { check(4); soft(); return 0; }\n";
+    let lower = |src: &str, target: Target, optimize: bool| {
+        let program = Compiler::with_options(
+            alloc::format!("{decls}{src}"),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(optimize),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions::new();
+        opts.output_kind = OutputKind::Relocatable;
+        if optimize {
+            opts = opts.with_optimize();
+        }
+        crate::c5::codegen::lower_for(&program, target, opts)
+    };
+    let error = "call to `bad` declared with attribute error: too small";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::MacOSAarch64,
+    ] {
+        let build = lower("", target, true).expect("the folded call is no error");
+        let texts: alloc::vec::Vec<&str> =
+            build.diagnostics.iter().map(|d| d.text.as_str()).collect();
+        assert!(
+            texts
+                .iter()
+                .any(|t| t
+                    .starts_with("call to `soft` declared with attribute warning: prefer checked")),
+            "{target:?}: {texts:?}"
+        );
+        assert!(
+            !texts.iter().any(|t| t.contains("`bad`")),
+            "{target:?}: {texts:?}"
+        );
+        let err = lower("", target, false)
+            .expect_err("-O0 keeps the call")
+            .to_string();
+        assert!(err.contains(error), "{target:?}: {err}");
+        let err = lower("int g(int n) { check(n); return n; }\n", target, true)
+            .expect_err("a call -O keeps")
+            .to_string();
+        assert!(err.contains(error), "{target:?}: {err}");
     }
 }

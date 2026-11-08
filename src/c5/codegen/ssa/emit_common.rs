@@ -2351,6 +2351,54 @@ pub(crate) trait LowerTarget {
 
 /// Where the function entered at `ent_pc` is defined, for a report the
 /// lowering makes about it; `None` when no symbol records a line.
+/// gcc's `error` and `warning` function attributes: each call `func` still
+/// makes to such a function, which the optimizer did not remove, is
+/// diagnosed with the attribute's message.
+fn report_call_diagnostics(
+    sink: &mut Sink,
+    program: &super::super::program::Program,
+    imports: &super::ResolvedImports,
+    func: &crate::c5::ir::FunctionSsa,
+) {
+    use crate::c5::ir::Inst;
+    use crate::c5::token::Token;
+    let marked = || {
+        (program.symbols.iter())
+            .filter(|s| s.class == Token::Fun as i64 && s.call_diagnostic.is_some())
+    };
+    if marked().next().is_none() {
+        return;
+    }
+
+    for inst in &func.insts {
+        let callee = match inst {
+            // A function's `val` is its entry, or an undefined one's stub.
+            Inst::Call { target_pc, .. } => marked().find(|s| s.val as usize == *target_pc),
+            Inst::CallExt { binding_idx, .. } => (imports.imports.iter())
+                .find(|i| i.binding_idx == *binding_idx)
+                .and_then(|i| marked().find(|s| s.link_name() == i.local_name)),
+            _ => None,
+        };
+        let Some(sym) = callee else { continue };
+        let Some((error, message)) = &sym.call_diagnostic else {
+            continue;
+        };
+        let (code, kind) = match error {
+            true => (Code::ATTRIBUTE_ERROR, "error"),
+            false => (Code::ATTRIBUTE_WARNING, "warning"),
+        };
+        sink.emit(
+            code,
+            function_loc(program, func.ent_pc),
+            alloc::format!(
+                "call to `{}` declared with attribute {kind}: {message} (in `{}`)",
+                sym.name,
+                func.name
+            ),
+        );
+    }
+}
+
 fn function_loc(
     program: &super::super::program::Program,
     ent_pc: usize,
@@ -3119,6 +3167,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 ),
             );
         }
+        report_call_diagnostics(&mut sink, program, imports, func_ssa);
         st.func_ends.push(st.code.len());
     }
     b.after_functions(&mut st, &native);

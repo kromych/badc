@@ -3509,6 +3509,9 @@ impl Compiler {
         if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
+        if let Some(d) = self.pending.attrs.call_diagnostic.take() {
+            self.symbols[id_idx].call_diagnostic = Some(d);
+        }
         if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
         }

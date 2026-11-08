@@ -287,6 +287,12 @@ catalog! {
     4006, "general-regs-only", [], Error, Hard,
         [], Live,
         "a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs";
+    4007, "attribute-error", [], Error, Hard,
+        [], Live,
+        "a call left in the emitted code to a function declared with `__attribute__((error(\"message\")))`, which the diagnostic quotes";
+    4008, "attribute-warning", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a call left in the emitted code to a function declared with `__attribute__((warning(\"message\")))`, which the diagnostic quotes";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -555,6 +561,8 @@ impl Code {
     pub const ALWAYS_INLINE: Code = Code::new(4004);
     pub const FRAME_LARGER_THAN: Code = Code::new(4005);
     pub const GENERAL_REGS_ONLY: Code = Code::new(4006);
+    pub const ATTRIBUTE_ERROR: Code = Code::new(4007);
+    pub const ATTRIBUTE_WARNING: Code = Code::new(4008);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

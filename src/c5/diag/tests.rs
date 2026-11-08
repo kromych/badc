@@ -513,6 +513,8 @@ fn the_named_codes_match_their_rows() {
         (Code::INLINE, "inline"),
         (Code::ALWAYS_INLINE, "always-inline"),
         (Code::FRAME_LARGER_THAN, "frame-larger-than"),
+        (Code::ATTRIBUTE_ERROR, "attribute-error"),
+        (Code::ATTRIBUTE_WARNING, "attribute-warning"),
         (Code::ASM_SYNTAX, "asm-syntax"),
         (Code::ASSEMBLER, "assembler"),
         (

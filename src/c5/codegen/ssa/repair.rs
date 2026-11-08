@@ -50,17 +50,18 @@ pub(crate) struct Plan {
 }
 
 /// The phis and renames that rename every read of each item outside its
-/// home, over the CFG whose predecessor lists are `preds`, or `None` when
-/// a read is reached by no definition.
+/// home, over the CFG whose predecessor lists are `preds` and whose
+/// reachable blocks are `live`, or `None` when a read is reached by no
+/// definition.
 pub(crate) fn plan(
     func: &FunctionSsa,
     preds: &[Vec<BlockId>],
+    live: &[bool],
     items: &[Redefined],
 ) -> Option<Vec<Plan>> {
-    let live = reachable(func, preds);
     items
         .iter()
-        .map(|r| plan_one(func, preds, &live, r))
+        .map(|r| plan_one(func, preds, live, r))
         .collect()
 }
 
@@ -202,27 +203,6 @@ fn resolve(same: &BTreeMap<BlockId, Src>, mut s: Src) -> Src {
     s
 }
 
-/// Blocks reachable from the entry and the computed-goto targets over
-/// `preds`.
-fn reachable(func: &FunctionSsa, preds: &[Vec<BlockId>]) -> Vec<bool> {
-    let mut succs: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); preds.len()];
-    for (b, ps) in preds.iter().enumerate() {
-        for &q in ps {
-            succs[q as usize].push(b as BlockId);
-        }
-    }
-    let mut live = alloc::vec![false; preds.len()];
-    let mut stack: Vec<BlockId> = alloc::vec![0];
-    stack.extend(&func.computed_goto_targets);
-    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
-    while let Some(b) = stack.pop() {
-        if !core::mem::replace(&mut live[b as usize], true) {
-            stack.extend(&succs[b as usize]);
-        }
-    }
-    live
-}
-
 /// Insert the phis of `plans` and rename the reads, in the CFG the plans
 /// were made over.
 pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan]) {
@@ -254,7 +234,7 @@ pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan])
         .map(|(j, &(k, b, _))| ((k, b), j))
         .collect();
     let insertions: Vec<Insertion> = placed.into_iter().map(|(_, _, i)| i).collect();
-    let (rw, _) = tape::insert(func, &insertions);
+    let rw = tape::insert(func, &insertions);
     let id_of = |k: usize, s: Src| match s {
         Src::Val(v) => rw.remap[v as usize],
         Src::Entry(b) => rw.ids[slot[&(k, b)]],

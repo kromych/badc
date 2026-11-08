@@ -165,84 +165,93 @@ fn ent_pc=8 n_params=0 variadic=false locals=29
     v236 BinopI { op=eq, lhs=v231, rhs_imm=0 }            -> x1
     terminator Bz { cond=v231, target=b9, fall=b8 }   (low word)   (exit_acc=v236)
   block 8  start_pc=0
-    v291 BinopI { op=and, lhs=v231, rhs_imm=4294967295 }  -> x1
-    v292 Imm(2147483647)                                  -> x1
-    v293 BinopI { op=ult, lhs=v231, rhs_imm=2147483647 }  -> x0
-    v294 Imm(0)                                           -> x1
-    terminator Bz { cond=v293, target=b20, fall=b9 }   (exit_acc=v293)
+    v276 BinopI { op=and, lhs=v231, rhs_imm=4294967295 }  -> x1
+    v277 Imm(2147483647)                                  -> x1
+    v278 BinopI { op=ult, lhs=v231, rhs_imm=2147483647 }  -> x0
+    v279 Imm(0)                                           -> x1
+    terminator Bz { cond=v278, target=b20, fall=b9 }   (exit_acc=v278)
   block 9  start_pc=0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(2779096485)                                  -> x0
+    v282 Imm(0)                                           -> x0
+    v283 Imm(0)                                           -> x0
+    v284 Imm(2779096485)                                  -> x0
+    v285 Imm(0)                                           -> x0
+    v286 Imm(0)                                           -> x0
+    v287 Imm(2779096485)                                  -> x0
+    v288 Imm(0)                                           -> x0
+    v289 Imm(0)                                           -> x0
+    v290 Imm(7)                                           -> x0
+    v291 Imm(0)                                           -> x0
+    v292 Imm(0)                                           -> x0
+    v293 Imm(0)                                           -> x0
+    v294 Imm(0)                                           -> x0
     v295 Imm(0)                                           -> x0
     v296 Imm(7)                                           -> x0
     v297 Imm(0)                                           -> x0
     v298 Imm(0)                                           -> x0
     v299 Imm(0)                                           -> x0
-    v300 Imm(0)                                           -> x0
-    v301 Imm(0)                                           -> x0
-    v302 Imm(7)                                           -> x0
-    v303 Imm(0)                                           -> x0
-    v304 Imm(0)                                           -> x0
-    v305 Imm(0)                                           -> x0
-    v306 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v305] } -> x0
-    v307 AsmOut(1, kind=I64)                              -> x3
-    v308 BinopI { op=and, lhs=v306, rhs_imm=4294967295 }  -> x1
-    v309 BinopI { op=and, lhs=v306, rhs_imm=4294967295 }  -> x1
-    v310 BinopI { op=and, lhs=v306, rhs_imm=4294967295 }  -> x1
-    v311 BinopI { op=eq, lhs=v306, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v306, target=b11, fall=b10 }   (low word)   (exit_acc=v311)
+    v300 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v299] } -> x0
+    v301 AsmOut(1, kind=I64)                              -> x3
+    v302 BinopI { op=and, lhs=v300, rhs_imm=4294967295 }  -> x1
+    v303 BinopI { op=and, lhs=v300, rhs_imm=4294967295 }  -> x1
+    v304 BinopI { op=and, lhs=v300, rhs_imm=4294967295 }  -> x1
+    v305 BinopI { op=eq, lhs=v300, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v300, target=b11, fall=b10 }   (low word)   (exit_acc=v305)
   block 10  start_pc=0
-    v338 BinopI { op=and, lhs=v306, rhs_imm=4294967295 }  -> x1
-    v339 Imm(7)                                           -> x1
-    v340 BinopI { op=ult, lhs=v306, rhs_imm=7 }           -> x0
-    v341 Imm(0)                                           -> x1
-    terminator Bz { cond=v340, target=b19, fall=b11 }   (exit_acc=v340)
+    v332 BinopI { op=and, lhs=v300, rhs_imm=4294967295 }  -> x1
+    v333 Imm(7)                                           -> x1
+    v334 BinopI { op=ult, lhs=v300, rhs_imm=7 }           -> x0
+    v335 Imm(0)                                           -> x1
+    terminator Bz { cond=v334, target=b19, fall=b11 }   (exit_acc=v334)
   block 11  start_pc=0
-    v342 Imm(0)                                           -> x6
-    terminator Jmp(b12)   (exit_acc=v342)
+    v336 Imm(0)                                           -> x6
+    terminator Jmp(b12)   (exit_acc=v336)
   block 12  start_pc=0
-    v354 Phi { incoming=[b11:v342, b19:v353], kind=I64 }  -> x6
-    v355 Extend { value=v354, kind=I32 }                  -> x0
-    v356 Imm(7)                                           -> x0
+    v348 Phi { incoming=[b11:v336, b19:v347], kind=I64 }  -> x6
+    v349 Extend { value=v348, kind=I32 }                  -> x0
+    v350 Imm(7)                                           -> x0
+    v351 Imm(0)                                           -> x0
+    v352 Imm(0)                                           -> x0
+    v353 Imm(0)                                           -> x0
+    v354 Imm(0)                                           -> x0
+    v355 Imm(7)                                           -> x0
+    v356 Imm(0)                                           -> x0
     v357 Imm(0)                                           -> x0
     v358 Imm(0)                                           -> x0
-    v359 Imm(0)                                           -> x0
-    v360 Imm(0)                                           -> x0
-    v361 Imm(7)                                           -> x0
-    v362 Imm(0)                                           -> x0
-    v363 Imm(0)                                           -> x0
-    v364 Imm(0)                                           -> x0
-    v365 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v364] } -> x0
-    v366 AsmOut(1, kind=I64)                              -> x3
-    v367 BinopI { op=and, lhs=v365, rhs_imm=4294967295 }  -> x1
-    v368 BinopI { op=and, lhs=v365, rhs_imm=4294967295 }  -> x1
-    v369 BinopI { op=and, lhs=v365, rhs_imm=4294967295 }  -> x1
-    v370 BinopI { op=eq, lhs=v365, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v365, target=b14, fall=b13 }   (low word)   (exit_acc=v370)
+    v359 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v358] } -> x0
+    v360 AsmOut(1, kind=I64)                              -> x3
+    v361 BinopI { op=and, lhs=v359, rhs_imm=4294967295 }  -> x1
+    v362 BinopI { op=and, lhs=v359, rhs_imm=4294967295 }  -> x1
+    v363 BinopI { op=and, lhs=v359, rhs_imm=4294967295 }  -> x1
+    v364 BinopI { op=eq, lhs=v359, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v359, target=b14, fall=b13 }   (low word)   (exit_acc=v364)
   block 13  start_pc=0
-    v371 BinopI { op=and, lhs=v365, rhs_imm=4294967295 }  -> x1
-    v372 Imm(7)                                           -> x1
-    v373 BinopI { op=ult, lhs=v365, rhs_imm=7 }           -> x0
-    v374 Imm(0)                                           -> x1
-    terminator Bz { cond=v373, target=b18, fall=b14 }   (exit_acc=v373)
+    v365 BinopI { op=and, lhs=v359, rhs_imm=4294967295 }  -> x1
+    v366 Imm(7)                                           -> x1
+    v367 BinopI { op=ult, lhs=v359, rhs_imm=7 }           -> x0
+    v368 Imm(0)                                           -> x1
+    terminator Bz { cond=v367, target=b18, fall=b14 }   (exit_acc=v367)
   block 14  start_pc=0
-    v375 Imm(0)                                           -> x0
-    terminator Jmp(b15)   (exit_acc=v375)
+    v369 Imm(0)                                           -> x0
+    terminator Jmp(b15)   (exit_acc=v369)
   block 15  start_pc=0
-    v386 Phi { incoming=[b14:v375, b18:v385], kind=I64 }  -> x0
-    v387 Extend { value=v386, kind=I32 }                  -> x1
-    v388 Binop { op=eq, lhs=v354, rhs=v386 }              -> x0
-    v389 Extend { value=v388, kind=I32 }                  -> x1
-    v390 LifetimeEnd(-8)                                  -> -
-    v391 LifetimeEnd(-7)                                  -> -
-    v392 LifetimeEnd(-6)                                  -> -
-    v393 LifetimeEnd(-5)                                  -> -
-    v394 LifetimeEnd(-4)                                  -> -
-    v395 LifetimeEnd(-3)                                  -> -
-    v396 LifetimeEnd(-2)                                  -> -
-    v397 LifetimeEnd(-1)                                  -> -
-    v398 Imm(0)                                           -> x1
-    v399 Extend { value=v388, kind=I32 }                  -> x1
-    v400 BinopI { op=eq, lhs=v388, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v388, target=b17, fall=b16 }   (low word)   (exit_acc=v400)
+    v380 Phi { incoming=[b14:v369, b18:v379], kind=I64 }  -> x0
+    v381 Extend { value=v380, kind=I32 }                  -> x1
+    v382 Binop { op=eq, lhs=v348, rhs=v380 }              -> x0
+    v383 Extend { value=v382, kind=I32 }                  -> x1
+    v384 LifetimeEnd(-8)                                  -> -
+    v385 LifetimeEnd(-7)                                  -> -
+    v386 LifetimeEnd(-6)                                  -> -
+    v387 LifetimeEnd(-5)                                  -> -
+    v388 LifetimeEnd(-4)                                  -> -
+    v389 LifetimeEnd(-3)                                  -> -
+    v390 LifetimeEnd(-2)                                  -> -
+    v391 LifetimeEnd(-1)                                  -> -
+    v392 Imm(0)                                           -> x1
+    v393 Extend { value=v382, kind=I32 }                  -> x1
+    v394 BinopI { op=eq, lhs=v382, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v382, target=b17, fall=b16 }   (low word)   (exit_acc=v394)
   block 16  start_pc=0
     v22  Imm(4)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
@@ -250,52 +259,52 @@ fn ent_pc=8 n_params=0 variadic=false locals=29
     v23  Imm(0)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 18  start_pc=0
-    v376 Imm(7)                                           -> x0
-    v377 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v376] } -> x0
-    v378 AsmOut(1, kind=I64)                              -> x3
-    v379 AsmOut(2, kind=I64)                              -> x1
-    v380 AsmOut(3, kind=I64)                              -> x2
-    v381 Imm(0)                                           -> x0
-    v382 Imm(0)                                           -> x0
-    v383 Imm(0)                                           -> x0
-    v384 Imm(0)                                           -> x0
-    v385 Imm(1)                                           -> x0
-    terminator Jmp(b15)   (exit_acc=v385)
+    v370 Imm(7)                                           -> x0
+    v371 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v370] } -> x0
+    v372 AsmOut(1, kind=I64)                              -> x3
+    v373 AsmOut(2, kind=I64)                              -> x1
+    v374 AsmOut(3, kind=I64)                              -> x2
+    v375 Imm(0)                                           -> x0
+    v376 Imm(0)                                           -> x0
+    v377 Imm(0)                                           -> x0
+    v378 Imm(0)                                           -> x0
+    v379 Imm(1)                                           -> x0
+    terminator Jmp(b15)   (exit_acc=v379)
   block 19  start_pc=0
-    v343 Imm(7)                                           -> x0
+    v337 Imm(7)                                           -> x0
+    v338 Imm(0)                                           -> x0
+    v339 InlineAsm { template="cpuid\n\t", ops=6, args=[-, -, -, -, v337, v338] } -> x0
+    v340 AsmOut(1, kind=I64)                              -> x3
+    v341 AsmOut(2, kind=I64)                              -> x1
+    v342 AsmOut(3, kind=I64)                              -> x2
+    v343 Imm(0)                                           -> x0
     v344 Imm(0)                                           -> x0
-    v345 InlineAsm { template="cpuid\n\t", ops=6, args=[-, -, -, -, v343, v344] } -> x0
-    v346 AsmOut(1, kind=I64)                              -> x3
-    v347 AsmOut(2, kind=I64)                              -> x1
-    v348 AsmOut(3, kind=I64)                              -> x2
-    v349 Imm(0)                                           -> x0
-    v350 Imm(0)                                           -> x0
-    v351 Imm(0)                                           -> x0
-    v352 Imm(0)                                           -> x0
-    v353 Imm(1)                                           -> x6
-    terminator Jmp(b12)   (exit_acc=v353)
+    v345 Imm(0)                                           -> x0
+    v346 Imm(0)                                           -> x0
+    v347 Imm(1)                                           -> x6
+    terminator Jmp(b12)   (exit_acc=v347)
   block 20  start_pc=0
-    v312 Imm(2147483647)                                  -> x0
+    v306 Imm(2147483647)                                  -> x0
+    v307 Imm(0)                                           -> x0
+    v308 InlineAsm { template="cpuid\n\t", ops=6, args=[-, -, -, -, v306, v307] } -> x0
+    v309 AsmOut(1, kind=I64)                              -> x3
+    v310 AsmOut(2, kind=I64)                              -> x1
+    v311 AsmOut(3, kind=I64)                              -> x2
+    v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x0
-    v314 InlineAsm { template="cpuid\n\t", ops=6, args=[-, -, -, -, v312, v313] } -> x0
-    v315 AsmOut(1, kind=I64)                              -> x3
-    v316 AsmOut(2, kind=I64)                              -> x1
-    v317 AsmOut(3, kind=I64)                              -> x2
-    v318 Imm(0)                                           -> x0
-    v319 Imm(0)                                           -> x0
-    v320 Imm(0)                                           -> x0
-    v321 Imm(0)                                           -> x0
-    v322 Imm(1)                                           -> x0
-    v323 Imm(0)                                           -> x0
-    v324 LifetimeEnd(-8)                                  -> -
-    v325 LifetimeEnd(-7)                                  -> -
-    v326 LifetimeEnd(-6)                                  -> -
-    v327 LifetimeEnd(-5)                                  -> -
-    v328 LifetimeEnd(-4)                                  -> -
-    v329 LifetimeEnd(-3)                                  -> -
-    v330 LifetimeEnd(-2)                                  -> -
-    v331 LifetimeEnd(-1)                                  -> -
-    terminator Jmp(b16)   (exit_acc=v323)
+    v314 Imm(0)                                           -> x0
+    v315 Imm(0)                                           -> x0
+    v316 Imm(1)                                           -> x0
+    v317 Imm(0)                                           -> x0
+    v318 LifetimeEnd(-8)                                  -> -
+    v319 LifetimeEnd(-7)                                  -> -
+    v320 LifetimeEnd(-6)                                  -> -
+    v321 LifetimeEnd(-5)                                  -> -
+    v322 LifetimeEnd(-4)                                  -> -
+    v323 LifetimeEnd(-3)                                  -> -
+    v324 LifetimeEnd(-2)                                  -> -
+    v325 LifetimeEnd(-1)                                  -> -
+    terminator Jmp(b16)   (exit_acc=v317)
   block 21  start_pc=0
     v237 Imm(4294967295)                                  -> x0
     v238 InlineAsm { template="cpuid\n\t", ops=5, args=[-, -, -, -, v237] } -> x0

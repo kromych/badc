@@ -190,7 +190,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             put(&mut ins, store(o, NO_VALUE), false);
         }
     }
-    let (rw, _) = insert(func, &ins);
+    let rw = insert(func, &ins);
     let mut next = 0usize;
     let mut take = || {
         next += 1;

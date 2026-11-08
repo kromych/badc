@@ -213,7 +213,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
             }
         })
         .collect();
-    let (rewrite, undo) = super::tape::insert(func, &ins);
+    let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
     let mut copy_id: Vec<ValueId> = vec![NO_VALUE; runs.len()];
     for (pos, &k) in order.iter().enumerate() {
         copy_id[k as usize] = rewrite.ids[pos];

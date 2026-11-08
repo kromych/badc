@@ -433,7 +433,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             _ => {}
         }
     }
-    let (rw, _) = insert(func, &ins);
+    let rw = insert(func, &ins);
     let mut next = 0usize;
     let mut take = || {
         next += 1;

@@ -29,7 +29,7 @@ use super::constfold::imm_through_phis;
 use super::constfold_branch::{block_index, edge_truth};
 use super::merge_blocks::reads_alike;
 use super::unroll::{bind_phis, eval_value};
-use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+use crate::c5::codegen::ssa::mem2reg::predecessors;
 use crate::c5::codegen::ssa::repair;
 use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 
@@ -55,11 +55,17 @@ struct Site {
 /// whether any edge moved; the caller prunes a merge left without
 /// predecessors.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
-    let block_of = block_index(func);
+    let mut block_of = block_index(func);
     let mut preds = predecessors(func);
+    let mut succs = successor_lists(&preds);
     let mut changed = false;
-    for b in 0..func.blocks.len() {
+    // Each rethread renumbers the values; the scan then resumes at its
+    // block rather than restarting, bounded by the block count.
+    let mut rethreads = func.blocks.len();
+    let mut b = 0;
+    'blocks: while b < func.blocks.len() {
         let Some(site) = site_of(func, &block_of, &preds, b as BlockId) else {
+            b += 1;
             continue;
         };
         let decided: Vec<(BlockId, BlockId)> = preds[site.head as usize]
@@ -70,6 +76,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             })
             .collect();
         if decided.is_empty() || !chain_is_pure(func, &site) {
+            b += 1;
             continue;
         }
         let escaping = escaping_phis(func, &block_of, &site);
@@ -77,49 +84,59 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         for (p, succ) in decided {
             if contained {
                 if thread(func, &block_of, &site, p, succ) {
-                    preds[site.head as usize].retain(|&q| q != p);
-                    preds[succ as usize].push(p);
+                    move_edge(&mut preds, &mut succs, p, site.head, succ);
                     changed = true;
                 }
                 continue;
             }
+            let live = live_after(func, &succs, p, site.head, succ);
             // The line dies: the next round reads the function the prune left.
-            if let Some(to) = dying_line(func, &block_of, &site, p, succ)
+            if !live[site.head as usize]
+                && let Some(to) = dying_line(func, &block_of, &site, p, succ, &live)
                 && thread(func, &block_of, &site, p, succ)
             {
                 forward(func, &to);
                 return true;
             }
             if let Some(phis) = &escaping
-                && rethread(func, &block_of, &preds, &site, (p, succ), phis)
+                && rethread(
+                    func,
+                    &block_of,
+                    (&mut preds, &mut succs),
+                    &live,
+                    &site,
+                    (p, succ),
+                    phis,
+                )
             {
-                return true;
+                rethreads -= 1;
+                if rethreads == 0 {
+                    return true;
+                }
+                block_of = block_index(func);
+                changed = true;
+                continue 'blocks;
             }
         }
+        b += 1;
     }
     changed
 }
 
 /// Move `p`'s edge to `succ` when head phis are read past the chain: each
 /// read then takes the phi or its incoming from `p`, whichever reaches it.
+/// `preds` follows the edge when it moves.
 fn rethread(
     func: &mut FunctionSsa,
     block_of: &[BlockId],
-    preds: &[Vec<BlockId>],
+    (preds, succs): (&mut [Vec<BlockId>], &mut [Vec<BlockId>]),
+    live: &[bool],
     site: &Site,
     (p, succ): (BlockId, BlockId),
     phis: &BTreeSet<ValueId>,
 ) -> bool {
     // A second edge from `p` would give `succ`'s phis two values from it.
     if preds[succ as usize].contains(&p) {
-        return false;
-    }
-    let mut after = preds.to_vec();
-    after[site.head as usize].retain(|&q| q != p);
-    after[succ as usize].push(p);
-    // An edge into a cycle through the head would enter the loop past its
-    // header.
-    if reaches(&after, succ, site.head) {
         return false;
     }
     let mut items = Vec::new();
@@ -140,14 +157,69 @@ fn rethread(
             edges: alloc::vec![(p, succ, v)],
         });
     }
-    let Some(plans) = repair::plan(func, &after, &items) else {
+    let head_preds = preds[site.head as usize].clone();
+    move_edge(preds, succs, p, site.head, succ);
+    // An edge into a cycle through the head would enter the loop past its
+    // header.
+    let plans = (!reaches(preds, succ, site.head))
+        .then(|| repair::plan(func, preds, live, &items))
+        .flatten();
+    let Some(plans) = plans.filter(|_| thread(func, block_of, site, p, succ)) else {
+        move_edge(preds, succs, p, succ, site.head);
+        preds[site.head as usize] = head_preds;
         return false;
     };
-    if !thread(func, block_of, site, p, succ) {
-        return false;
-    }
     repair::apply(func, &items, &plans);
     true
+}
+
+/// The successor lists the predecessor lists `preds` imply.
+fn successor_lists(preds: &[Vec<BlockId>]) -> Vec<Vec<BlockId>> {
+    let mut succs: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); preds.len()];
+    for (b, ps) in preds.iter().enumerate() {
+        for &q in ps {
+            succs[q as usize].push(b as BlockId);
+        }
+    }
+    succs
+}
+
+/// Point `p`'s edges into `from` at `to`, in both lists.
+fn move_edge(
+    preds: &mut [Vec<BlockId>],
+    succs: &mut [Vec<BlockId>],
+    p: BlockId,
+    from: BlockId,
+    to: BlockId,
+) {
+    preds[from as usize].retain(|&q| q != p);
+    preds[to as usize].push(p);
+    for s in succs[p as usize].iter_mut().filter(|s| **s == from) {
+        *s = to;
+    }
+}
+
+/// The blocks reachable once `p`'s edges into `head` lead to `succ`.
+fn live_after(
+    func: &FunctionSsa,
+    succs: &[Vec<BlockId>],
+    p: BlockId,
+    head: BlockId,
+    succ: BlockId,
+) -> Vec<bool> {
+    let mut live = alloc::vec![false; succs.len()];
+    let mut stack: Vec<BlockId> = alloc::vec![0];
+    stack.extend(&func.computed_goto_targets);
+    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
+    while let Some(b) = stack.pop() {
+        if core::mem::replace(&mut live[b as usize], true) {
+            continue;
+        }
+        for &s in &succs[b as usize] {
+            stack.push(if b == p && s == head { succ } else { s });
+        }
+    }
+    live
 }
 
 /// Whether `from` reaches `to` over the predecessor lists `preds`.
@@ -401,23 +473,8 @@ fn dying_line(
     site: &Site,
     p: BlockId,
     succ: BlockId,
+    live: &[bool],
 ) -> Option<Vec<(ValueId, ValueId)>> {
-    let mut live = alloc::vec![false; func.blocks.len()];
-    let mut stack: Vec<BlockId> = alloc::vec![0];
-    stack.extend(&func.computed_goto_targets);
-    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
-    while let Some(b) = stack.pop() {
-        if core::mem::replace(&mut live[b as usize], true) {
-            continue;
-        }
-        let term = &func.blocks[b as usize].terminator;
-        for s in successors(term, &func.computed_goto_targets, &func.jump_tables) {
-            stack.push(if b == p && s == site.head { succ } else { s });
-        }
-    }
-    if live[site.head as usize] {
-        return None;
-    }
     let mut to = Vec::new();
     for v in func.blocks[site.head as usize].inst_range.clone() {
         let Inst::Phi { incoming, .. } = &func.insts[v as usize] else {
@@ -704,10 +761,12 @@ mod tests {
             rhs_imm: 1,
         };
         // b1's 0 selects b5, which reads nothing of the chain; b6, the
-        // reader, is still reached only through it.
+        // reader, is still reached through it. The same scan then sends b3
+        // to b6, the line dies, and the reader takes b3's 1.
         assert!(run_one(&mut f));
         assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
-        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 2, .. }));
+        assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
+        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 3, .. }));
     }
 
     /// `for (done = 0; !done; done = 1) len = f(len);` then `return len`:
@@ -751,11 +810,12 @@ mod tests {
     fn a_latch_that_decides_the_exit_leaves_the_loop() {
         let mut f = run_once();
         assert!(run_one(&mut f));
-        // The latch leaves for b3; the entry's decided edge into the body
-        // stays, since it would enter the loop past its header.
+        // The latch leaves for b3. The entry's decided edge into the body
+        // then leaves the header without a way in, and the line dies.
         assert_eq!(f.blocks[2].terminator, Terminator::Jmp(3));
-        assert_eq!(f.blocks[0].terminator, Terminator::Jmp(1));
-        // b3 merges `len` from the header and the latch's next value.
+        assert_eq!(f.blocks[0].terminator, Terminator::Jmp(2));
+        // b3 merges the latch's next value and the dead header's `len`,
+        // which reads the entry's; the prune drops the header's.
         let Terminator::Return(r) = f.blocks[3].terminator else {
             panic!("b3 returns");
         };
@@ -763,13 +823,74 @@ mod tests {
         let Inst::Phi { incoming, .. } = &f.insts[r as usize] else {
             panic!("b3 returns a phi");
         };
-        let len = f.blocks[1].inst_range.start + 1;
         let next = f.blocks[2].inst_range.end - 1;
         assert!(matches!(
             f.insts[next as usize],
-            Inst::BinopI { op: BinOp::Add, .. }
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                ..
+            }
         ));
-        assert_eq!(incoming, &vec![(1, len), (2, next)]);
+        assert!(matches!(f.insts[1], Inst::ParamRef { .. }));
+        assert_eq!(incoming, &vec![(1, 1), (2, next)]);
+    }
+
+    /// Two loops in sequence whose latches set `done` and whose entries
+    /// take it from a parameter, the second taking the first's `len`: one
+    /// scan moves both latches, resuming after each rethread.
+    #[test]
+    fn one_scan_rethreads_each_site_in_turn() {
+        let add = |lhs| Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm: 7,
+        };
+        let param = |idx| Inst::ParamRef {
+            idx,
+            kind: LoadKind::I64,
+        };
+        let mut f = fresh(
+            vec![
+                param(1),
+                param(0),
+                phi(vec![(0, 0), (2, 4)]),
+                phi(vec![(0, 1), (2, 5)]),
+                Inst::Imm(1),
+                add(3),
+                param(2),
+                phi(vec![(3, 6), (5, 9)]),
+                phi(vec![(3, 3), (5, 10)]),
+                Inst::Imm(1),
+                add(8),
+            ],
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..4,
+                    Terminator::Bnz {
+                        cond: 2,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(4..6, Terminator::Jmp(1)),
+                block(6..7, Terminator::Jmp(4)),
+                block(
+                    7..9,
+                    Terminator::Bnz {
+                        cond: 7,
+                        target: 6,
+                        fall_through: 5,
+                    },
+                ),
+                block(9..11, Terminator::Jmp(4)),
+                block(11..11, Terminator::Return(8)),
+            ],
+        );
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks[2].terminator, Terminator::Jmp(3));
+        assert_eq!(f.blocks[5].terminator, Terminator::Jmp(6));
     }
 
     #[test]

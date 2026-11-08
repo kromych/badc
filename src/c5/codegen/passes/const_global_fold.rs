@@ -349,7 +349,7 @@ fn apply(func: &mut FunctionSsa, folds: &mut [(ValueId, Folded)]) -> bool {
             _ => None,
         })
         .collect();
-    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins).0);
+    let rewrite = (!ins.is_empty()).then(|| tape::insert(func, &ins));
     let mut bases = rewrite
         .as_ref()
         .map_or(&[][..], |r| r.ids.as_slice())

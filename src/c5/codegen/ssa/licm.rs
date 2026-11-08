@@ -410,7 +410,7 @@ fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
             is_f32: h.key.is_f32(),
         })
         .collect();
-    let (rewrite, undo) = super::tape::insert(func, &ins);
+    let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
     let copy_id = &rewrite.ids;
     // The copy inherits the site's binding: a bound `ImmData` /
     // `ImmCode` / `TlsAddr` names a cross-TU symbol's address, which

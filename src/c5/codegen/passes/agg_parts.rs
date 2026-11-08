@@ -454,7 +454,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     }
     let Plan { mut ins, base } = plan;
     let pos = tape::sort(&mut ins, &func.blocks, base as usize);
-    let (rewrite, _undo) = tape::insert(func, &ins);
+    let rewrite = tape::insert(func, &ins);
     for (b, bundle) in bundles {
         let id = rewrite.ids[pos[(bundle - base) as usize]];
         func.blocks[b].terminator = Terminator::Return(id);

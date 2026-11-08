@@ -420,7 +420,7 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
         }
     }
     first.push(ins.len());
-    let (rewrite, _undo) = super::tape::insert(func, &ins);
+    let rewrite = super::tape::insert(func, &ins);
     for (i, &k) in order.iter().enumerate() {
         let r = &runs[k];
         let ids = &rewrite.ids[first[i]..first[i + 1]];

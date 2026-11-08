@@ -590,9 +590,11 @@ fatal and `-Wno-` silences it. `n` takes the size suffixes `kB`, `KiB`, `MB`,
 `pac-ret` signs the return address of every function that stores the link
 register: `paciasp` before the prologue, and `autiasp` after the last teardown
 instruction of each epilogue, where sp, the signing modifier, again holds its
-value at entry. A leaf with no frame stores no link register and is left alone
+value at entry. On the Windows targets the key is B, `pacibsp` and `autibsp`,
+as MSVC signs and as the unwind code `pac_sign_lr` describes the instruction.
+A leaf with no frame stores no link register and is left alone
 unless `+leaf` is given. `bti` puts a `BTI` landing pad at each function entry
-and indirect-branch target. `standard` is `bti+pac-ret`. A signed function starts with `paciasp`, which is
+and indirect-branch target. `standard` is `bti+pac-ret`. A signed function starts with its signing instruction, which is
 itself a landing pad for the branches that reach a function entry, so it takes
 no separate `BTI C`.
 

@@ -3971,6 +3971,10 @@ pub struct Hardening {
     /// `-mbranch-protection=pac-ret+leaf`: a function that keeps its
     /// return address in the link register signs it as well.
     pub pac_ret_leaf: bool,
+    /// The return address is signed with key B (`pacibsp` / `autibsp`), as
+    /// on Windows, where unwind code `pac_sign_lr` names that key and MSVC
+    /// signs with it; key A elsewhere.
+    pub pac_b_key: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -3988,6 +3992,7 @@ impl Hardening {
         bti: false,
         pac_ret: false,
         pac_ret_leaf: false,
+        pac_b_key: false,
         cf_protection_branch: false,
     };
 }

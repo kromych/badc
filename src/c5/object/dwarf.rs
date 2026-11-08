@@ -472,7 +472,8 @@ fn paciasp_offset(build: &Build, low_pc: usize, frame: Option<u32>) -> Option<u3
             at += 4;
         }
     }
-    (word(at) == Some(encode::PACIASP)).then(|| (at - low_pc) as u32)
+    (word(at).is_some_and(|w| w == encode::PACIASP || w == encode::PACIBSP))
+        .then(|| (at - low_pc) as u32)
 }
 
 /// The frame-base-relative byte offset of the variable the front end placed

@@ -1482,6 +1482,19 @@ pub(crate) const PACIASP: u32 = 0xD503_233F;
 /// be back at its function-entry value.
 pub(crate) const AUTIASP: u32 = 0xD503_23BF;
 
+/// `PACIBSP` / `AUTIBSP` -- `PACIASP` / `AUTIASP` with key B. `HINT #27`
+/// and `HINT #31`.
+pub(crate) const PACIBSP: u32 = 0xD503_237F;
+pub(crate) const AUTIBSP: u32 = 0xD503_23FF;
+
+/// The sign and authenticate instructions of the key `hardening` names.
+pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (u32, u32) {
+    match hardening.pac_b_key {
+        true => (PACIBSP, AUTIBSP),
+        false => (PACIASP, AUTIASP),
+    }
+}
+
 /// `XPACLRI` -- strip the authentication code from x30. `HINT #7`, so it
 /// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
 /// pointer unchanged. x30 is the only register the hint form reaches;

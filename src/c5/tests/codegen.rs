@@ -19003,7 +19003,8 @@ fn a64_code_describes(code: &[u8], w: u32) -> bool {
     let z = |b: u8| u32::from(b);
     match code[0] {
         0xE3 => matches!(w, 0xD503_245F | 0xD503_201F) || w & 0xFFC0_03E0 == 0xF900_03E0,
-        0xFC => w == 0xD503_233F,
+        // `paciasp`, or `pacibsp`, which the Windows targets sign with.
+        0xFC => w == 0xD503_233F || w == 0xD503_237F,
         0xE1 => w == 0x9100_03FD,
         0xE2 => w == 0x9100_03FD | (8 * z(code[1])) << 10,
         0x81 => w == 0xA9BF_7BFD,
@@ -19085,7 +19086,8 @@ fn win_arm64_hardened_entries_take_their_own_unwind_records() {
             let at = base + elf_func_value(&obj, name).unwrap() as u32;
             let span = at..at + 4 * words.len() as u32;
             let x29 = words.iter().position(|w| w & 0xFFC0_03FF == 0x9100_03FD);
-            let last = x29.or_else(|| words.iter().position(|&w| w == 0xD503_233F));
+            // `pacibsp`, the key the Windows targets sign with.
+            let last = x29.or_else(|| words.iter().position(|&w| w == 0xD503_237F));
             let n = 4 * (last.unwrap_or(0) + 1);
             let image = &text[(at - text_rva) as usize..][..n];
             assert_eq!(image, &function_bytes(&obj, name)[..n], "{case}: `{name}`");

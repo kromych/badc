@@ -13,7 +13,9 @@
 
 use crate::c5::codegen::A64Step;
 #[cfg(test)]
-use crate::c5::codegen::aarch64::encode::{AUTIASP, BTI_C, NOP as NOP_INSN, PACIASP};
+use crate::c5::codegen::aarch64::encode::{
+    AUTIASP, AUTIBSP, BTI_C, NOP as NOP_INSN, PACIASP, PACIBSP,
+};
 use alloc::vec::Vec;
 
 const NOP: u8 = 0xE3;
@@ -121,7 +123,7 @@ fn classify(w: u32) -> Insn {
     };
     match w {
         BTI_C | NOP_INSN => return Insn::Hint,
-        PACIASP => return Insn::Pac,
+        PACIASP | PACIBSP => return Insn::Pac,
         _ => {}
     }
     if rn != 31 {
@@ -334,7 +336,7 @@ pub(crate) fn epilogue_codes(text: &[u8], start: u32) -> Option<(Vec<u8>, u32)> 
         let pair = u32::try_from(simm((w >> 15) & 0x7F, 7) * 8).ok();
         let code = match w {
             0xD65F_03C0 => return Some((out, at)),
-            AUTIASP => alloc::vec![0xFC],
+            AUTIASP | AUTIBSP => alloc::vec![0xFC],
             _ if w & 0xFF80_03FF == 0x9100_03FF => {
                 alloc(((w >> 10) & 0xFFF) << (12 * ((w >> 22) & 1)))?
             }

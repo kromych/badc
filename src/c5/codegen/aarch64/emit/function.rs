@@ -202,6 +202,7 @@ pub(crate) fn emit_function(
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;
+        a.hardening.pac_b_key = target.is_windows();
         a.stack_protect = stack_protect;
         a.fixed_regs = fixed_regs;
         a
@@ -667,7 +668,7 @@ impl FunctionEmitter<'_, '_> {
         let mut described = None;
         if !func.is_naked {
             if signs {
-                emit(self.cx.code, super::encode::PACIASP);
+                emit(self.cx.code, super::encode::pac_pair(abi.hardening).0);
                 self.unwind.push(S::PacSignLr);
                 described = Some(self.cx.code.len());
             }
@@ -2244,7 +2245,7 @@ pub(super) fn emit_return(
     if is_full_leaf(frame, alloc) {
         let start = code.len();
         if signs {
-            emit(code, super::encode::AUTIASP);
+            emit(code, super::encode::pac_pair(abi.hardening).1);
             push_steps(&mut uw, &[S::PacSignLr]);
         }
         emit(code, enc_ret(Reg(30)));
@@ -2303,7 +2304,7 @@ pub(super) fn emit_return(
     }
     // sp holds the value `paciasp` signed against.
     if signs {
-        emit(code, super::encode::AUTIASP);
+        emit(code, super::encode::pac_pair(abi.hardening).1);
         push_steps(&mut uw, &[S::PacSignLr]);
     }
     emit(code, enc_ret(Reg(30)));

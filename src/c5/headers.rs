@@ -99,6 +99,11 @@ pub(super) fn withheld(name: &str, target: Target) -> bool {
 #[cfg(test)]
 pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     (
+        "arm64_neon.h",
+        TargetSet::of(Target::WindowsAarch64),
+        "MSVC's NEON header, which its <intrin.h> includes as badc's includes <arm_neon.h>",
+    ),
+    (
         "msvc_compat.h",
         ALL,
         "badc's own; a no-op off Windows, so one `-include msvc_compat.h` serves every target",
@@ -135,6 +140,7 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
 /// wraps, as gcc installs it.
 pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "arm_neon.h",
+    "arm64_neon.h",
     "intrin.h",
     "x86intrin.h",
     "immintrin.h",
@@ -216,6 +222,11 @@ macro_rules! header {
 /// on.
 pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("arm_neon.h", AARCH64, compiler),
+    header!(
+        "arm64_neon.h",
+        TargetSet::of(Target::WindowsAarch64),
+        compiler
+    ),
     header!("x86intrin.h", X86_64, compiler),
     header!("immintrin.h", X86_64, compiler),
     header!("mmintrin.h", X86_64, compiler),

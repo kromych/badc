@@ -756,7 +756,10 @@ structure loads, float16 and bfloat16 are not provided.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory, a system directory, does not
   supply it, as clang's copy shadows MSVC's. A project's own `<intrin.h>` in
-  a `-I` directory is used.
+  a `-I` directory is used. On arm64 `<arm64_neon.h>`, which MSVC's
+  `<intrin.h>` includes, is the compiler's `<arm_neon.h>`: the vector types are
+  the Arm C Language Extensions' distinct types, and MSVC's `__n64` /
+  `__n128` unions are not provided.
 - MSVC's inline linkage on the PE targets, in place of C99 6.7.4p6-p7, as MSVC
   and clang's `*-windows-msvc` targets apply it to C. An inline function of
   external linkage without `gnu_inline` is emitted, as an

@@ -18,6 +18,7 @@
 #
 # name	macos-aarch64	linux-aarch64	linux-x64	windows-x64	windows-arm64
 arm_neon.h	y	y	-	-	y
+arm64_neon.h	-	-	-	-	-
 x86intrin.h	f	-	y	y	f
 immintrin.h	f	-	y	y	f
 mmintrin.h	f	-	y	y	f

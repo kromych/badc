@@ -4856,6 +4856,26 @@ fn has_include_matches_what_include_resolves() {
 }
 
 #[test]
+fn msvcs_neon_header_name_binds_the_embedded_neon_header() {
+    // MSVC's <intrin.h> includes <arm64_neon.h> on arm64, as badc's includes
+    // <arm_neon.h>: the name binds badc's NEON header over a copy in a system
+    // directory, so the two do not define the vector types twice.
+    let dir = std::env::temp_dir().join(format!("badc-arm64-neon-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("arm64_neon.h"), "typedef int float32x2_t;\n").unwrap();
+    let mut pp = Preprocessor::new("windows-arm64", Target::WindowsAarch64, "0.1.0");
+    pp.add_isystem_path(dir.to_str().unwrap());
+    let out =
+        (pp.process("#include <intrin.h>\n#include <arm64_neon.h>\n")).expect("both names resolve");
+    assert!(!out.contains("typedef int float32x2_t"), "{out}");
+    assert!(
+        out.contains("vld1q_u8"),
+        "the embedded NEON header expected"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
     // An intrinsic header (arm_neon.h) resolves to the embedded copy where a
     // `-I` directory holds a same-named file (a foreign toolchain's private

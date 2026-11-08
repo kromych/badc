@@ -149,6 +149,9 @@ On Windows x86-64, `__isa_available` and `__isa_enabled`, which code built for
 the MSVC runtime reads, come from badc's compiler runtime when a unit names
 them: the highest level of `<isa_availability.h>` the processor and the OS
 support, and a bit per level from SSE2 up, set before the C initializers run.
+On Windows arm64 the compiler runtime defines MSVC's `_Interlocked*` functions
+out of line (each width and ordering variant), which a cl object calls where cl
+does not expand the intrinsic.
 A module-definition file (`.def`) among a PE link's inputs gives the image its
 `EXPORTS`, as link.exe's `/DEF:` does: an export under another name, at an
 `@ordinal`, `NONAME`, `DATA` or `PRIVATE` (kept out of `--out-implib`'s

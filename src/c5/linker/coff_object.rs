@@ -757,6 +757,8 @@ pub(crate) struct Directives {
     pub(crate) default_libs: Vec<String>,
     /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
     pub(crate) mismatch_keys: Vec<(String, String)>,
+    /// `/merge:from=to`: the image section `from`'s contents join `to`.
+    pub(crate) section_merges: Vec<(String, String)>,
     pub(crate) export_forms: Vec<super::object::ExportForm>,
 }
 
@@ -951,6 +953,12 @@ pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5E
                     .split_once('=')
                     .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no value")))?;
                 d.mismatch_keys.push((key.to_string(), value.to_string()));
+            }
+            "merge" => {
+                let (from, to) = (arg.split_once('='))
+                    .filter(|(f, t)| !f.is_empty() && !t.is_empty())
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
+                d.section_merges.push((from.to_string(), to.to_string()));
             }
             "aligncomm" => {
                 let (name, log2) = arg
@@ -2057,6 +2065,7 @@ pub fn parse_native_coff(
         comdats,
         default_libs: directives.default_libs.clone(),
         mismatch_keys: directives.mismatch_keys.clone(),
+        section_merges: directives.section_merges.clone(),
         resources,
         export_forms: directives.export_forms.clone(),
         debug_info: Vec::new(),
@@ -2379,12 +2388,13 @@ mod tests {
     }
 
     /// `.drectve`: `/alternatename:` names a stand-in, `-aligncomm:` a
-    /// common symbol's alignment; an option the linker does not carry out
-    /// is refused by name.
+    /// common symbol's alignment, `/merge:` a section merge; an option the
+    /// linker does not carry out is refused by name.
     #[test]
     fn directives_name_stand_ins_and_common_alignment() {
         let drectve = IMAGE_SCN_LNK_INFO | IMAGE_SCN_LNK_REMOVE;
-        let text = b"   /DEFAULTLIB:\"LIBCMT\" /alternatename:__isa=__isa_default -aligncomm:c,4";
+        let text = b"   /DEFAULTLIB:\"LIBCMT\" /alternatename:__isa=__isa_default -aligncomm:c,4 \
+                     /merge:minATL=.rdata";
         let o = parse(
             &[sec(".drectve", drectve, text)],
             &[sym("c", 3, 0, IMAGE_SYM_CLASS_EXTERNAL)],
@@ -2400,8 +2410,13 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
+        assert_eq!(
+            o.section_merges,
+            [("minATL".to_string(), ".rdata".to_string())]
+        );
         for refused in [
-            "/MERGE:.a=.b",
+            "/SECTION:.a,R",
+            "/MERGE:.a",
             "/EXPORT:f,@0",
             "/EXPORT:f,NONAME",
             "/EXPORT:=g",

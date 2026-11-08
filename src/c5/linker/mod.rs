@@ -77,6 +77,8 @@ pub(crate) mod on_demand;
 #[cfg(feature = "std")]
 pub(crate) mod relocatable;
 #[cfg(feature = "std")]
+mod section_groups;
+#[cfg(feature = "std")]
 mod synth_build;
 #[cfg(feature = "std")]
 pub(crate) mod target_libc;

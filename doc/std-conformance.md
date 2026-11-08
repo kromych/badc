@@ -748,9 +748,9 @@ structure loads, float16 and bfloat16 are not provided.
 - `#pragma comment(lib, "name")`, a default library, and on the PE targets
   `#pragma comment(linker, "options")`, link.exe options the object carries as
   cl's `.drectve` does: `/EXPORT:` (under another name, or forwarded as
-  `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`
-  and `/FAILIFMISMATCH:`. Elsewhere it warns and is ignored, as in clang.
-  `#pragma detect_mismatch("name", "value")` gives the object cl's
+  `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`,
+  `/FAILIFMISMATCH:` and `/merge:`. Elsewhere it warns and is ignored, as in
+  clang. `#pragma detect_mismatch("name", "value")` gives the object cl's
   `/FAILIFMISMATCH:"name=value"`. Macros in the operands expand, as in cl
   and clang.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the

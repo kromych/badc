@@ -125,6 +125,11 @@ A COFF weak external or `/alternatename:` resolves a name nothing defines to its
 alternate, a definition or a DLL import; an archive member holding a weak
 external of the alias kind is pulled for its name, as link.exe pulls the
 members of MSVC's oldnames.lib.
+In a PE link a section `base$suffix` of a C-identifier `base` joins the image
+section `base`, every unit's contributions together and ordered by suffix, as
+the PE/COFF grouped-section rule orders them. `/merge:from=to` in an object's
+directives moves `from` into `to`; one into `.text`, `.rdata` or `.data` keeps
+that section's protection, so contents of another kind are refused.
 A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
 becomes the image's `.rsrc` section: the resource directory by type, name and
 language, which the loader reads for the manifest, the version and the strings.

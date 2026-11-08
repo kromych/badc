@@ -30,6 +30,7 @@ use super::object::{
     EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
     NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
 };
+use super::section_groups::SectionGroups;
 use crate::c5::codegen::{
     BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
     PointerSlot,
@@ -773,20 +774,6 @@ fn init_fini_frame(machine: NativeMachine) -> (&'static [u8], &'static [u8], &'s
 
 /// Every unit's `fam` sections grouped by name. Name order, then link
 /// order within a name, so the merge is a function of its inputs.
-fn named_group_order(
-    objs: &[NativeObject],
-    fam: SectionFamily,
-) -> Vec<(usize, &super::object::InputSection)> {
-    let mut v: Vec<(usize, &super::object::InputSection)> = objs
-        .iter()
-        .enumerate()
-        .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
-        .filter(|(_, s)| s.family == fam && super::object::grouped_by_name(&s.name))
-        .collect();
-    v.sort_by(|a, b| a.1.name.cmp(&b.1.name).then(a.0.cmp(&b.0)));
-    v
-}
-
 /// The widest alignment the merged `.bss` answers to: each unit's `.bss`
 /// family, each named zero-fill section, and each common symbol, whose
 /// `st_value` is its alignment.
@@ -794,9 +781,9 @@ fn bss_alignment(objs: &[NativeObject]) -> usize {
     let units = objs
         .iter()
         .map(|o| crate::c5::layout::bss_image_align(o.bss_align));
-    let named = named_group_order(objs, SectionFamily::Bss)
-        .into_iter()
-        .map(|(_, s)| s.align.max(1) as usize);
+    let named = (objs.iter().flat_map(|o| &o.sections))
+        .filter(|s| s.family == SectionFamily::Bss && super::object::grouped_by_name(&s.name))
+        .map(|s| s.align.max(1) as usize);
     let commons = objs
         .iter()
         .flat_map(|o| &o.symbols)
@@ -852,18 +839,19 @@ fn note_extent(extents: &mut Vec<NamedExtent>, e: NamedExtent) {
 /// starts on so a section of its own keeps every contribution's residue.
 fn named_group_aligns<'o>(
     order: &[(usize, &'o super::object::InputSection)],
+    groups: &'o SectionGroups,
 ) -> BTreeMap<&'o str, u64> {
     let mut widest: BTreeMap<&'o str, u64> = BTreeMap::new();
     for (_, s) in order {
-        let w = widest.entry(s.name.as_str()).or_insert(1);
+        let w = widest.entry(groups.output(&s.name)).or_insert(1);
         *w = (*w).max(s.align.max(1));
     }
     widest
 }
 
 /// Append the grouped named sections of `fam` to the merged stream `data`,
-/// recording each one's new offset in its unit's map. Each name starts on
-/// a multiple of `open_align` at least.
+/// recording each one's new offset in its unit's map. A PE image's named
+/// code section starts on a section boundary.
 fn group_named_bytes(
     data: &mut Vec<u8>,
     objs: &[NativeObject],
@@ -871,32 +859,43 @@ fn group_named_bytes(
     blob: impl Fn(&NativeObject) -> &Vec<u8>,
     maps: &mut [BlobMap],
     extents: &mut Vec<NamedExtent>,
-    open_align: u64,
+    groups: &SectionGroups,
 ) {
+    let open_align = match groups.pe() && fam == SectionFamily::Text {
+        true => pe_code_section_align(objs),
+        false => 1,
+    };
     let sec = match fam {
         SectionFamily::Text => NativeSymSection::Text,
         _ => NativeSymSection::Data,
     };
-    let order = named_group_order(objs, fam);
+    let order = groups.order(objs, fam);
     let any = !order.is_empty();
     let write = matches!(fam, SectionFamily::RelRo | SectionFamily::Data);
-    let widest = named_group_aligns(&order);
+    let widest = named_group_aligns(&order, groups);
     let mut prev: Option<&str> = None;
     // The unwind table's previous contribution, `(start, end)` in `data`.
     let mut last_eh: Option<(usize, usize)> = None;
     for (i, s) in order {
+        let out = groups.output(&s.name);
         // A writer that gives each name a section of its own places
         // them apart, so an offset at one group's end must not name the
         // next group's first byte.
-        if let Some(p) = prev.filter(|&p| p != s.name) {
+        if let Some(p) = prev.filter(|&p| p != out) {
             close_named_group(data, p, extents);
             data.push(0);
         }
-        let opens = prev != Some(s.name.as_str());
-        prev = Some(&s.name);
+        let opens = prev != Some(out);
+        // A group folded into a standard section opens that section only
+        // behind a section of its own.
+        let open_align = match groups.folded(out) && !prev.is_some_and(|p| !groups.folded(p)) {
+            true => 1,
+            false => open_align,
+        };
+        prev = Some(out);
         let unpadded = data.len();
         let align = if opens {
-            widest[s.name.as_str()].max(open_align)
+            widest[out].max(open_align)
         } else {
             s.align.max(1)
         };
@@ -917,7 +916,7 @@ fn group_named_bytes(
         note_extent(
             extents,
             NamedExtent {
-                name: s.name.clone(),
+                name: out.to_string(),
                 sec,
                 start: at,
                 end: at + s.size,
@@ -965,22 +964,20 @@ fn group_named_zerofill(
     objs: &[NativeObject],
     maps: &mut [BlobMap],
     extents: &mut Vec<NamedExtent>,
+    groups: &SectionGroups,
 ) {
-    let order = named_group_order(objs, SectionFamily::Bss);
+    let order = groups.order(objs, SectionFamily::Bss);
     let any = !order.is_empty();
-    let widest = named_group_aligns(&order);
+    let widest = named_group_aligns(&order, groups);
     let mut prev: Option<&str> = None;
     for (i, s) in order {
-        if prev.is_some_and(|p| p != s.name) {
+        let out = groups.output(&s.name);
+        if prev.is_some_and(|p| p != out) {
             *bss_size += 1;
         }
-        let opens = prev != Some(s.name.as_str());
-        prev = Some(&s.name);
-        let align = if opens {
-            widest[s.name.as_str()]
-        } else {
-            s.align.max(1)
-        };
+        let opens = prev != Some(out);
+        prev = Some(out);
+        let align = if opens { widest[out] } else { s.align.max(1) };
         *bss_size = align_usize(*bss_size, align as usize);
         let at = *bss_size as u64;
         *bss_size += s.size as usize;
@@ -988,7 +985,7 @@ fn group_named_zerofill(
         note_extent(
             extents,
             NamedExtent {
-                name: s.name.clone(),
+                name: out.to_string(),
                 sec: NativeSymSection::Bss,
                 start: at,
                 end: at + s.size,
@@ -1332,6 +1329,8 @@ struct Link<'a> {
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// The output section each grouped input section joins.
+    groups: SectionGroups,
     /// A Mach-O image: a binding's host symbol carries the C underscore.
     mach_o: bool,
     /// The image runs `.init` / `.fini` code: an ELF one.
@@ -1508,6 +1507,7 @@ impl<'a> Link<'a> {
             export_data: opts.export_data,
             no_copy_relocs: opts.format != BinaryFormat::Elf,
             pe_image: opts.format == BinaryFormat::Pe,
+            groups: SectionGroups::new(objs, opts.format == BinaryFormat::Pe)?,
             mach_o: opts.format == BinaryFormat::MachO,
             init_fini: opts.format == BinaryFormat::Elf,
             comdats: super::comdat::select_coff(objs)?,
@@ -2321,9 +2321,10 @@ impl<'a> Link<'a> {
                 |o| &o.text,
                 &mut self.text_map,
                 &mut named_extents,
-                pe_code_section_align(objs),
+                &self.groups,
             );
-            if !self.text.is_empty() {
+            let last = (named_extents.iter()).rfind(|e| e.sec == NativeSymSection::Text);
+            if last.is_some_and(|e| !self.groups.folded(&e.name)) {
                 align_up(&mut self.text, pe_code_section_align(objs) as usize);
             }
         }
@@ -2356,7 +2357,7 @@ impl<'a> Link<'a> {
                 |o| &o.text,
                 &mut self.text_map,
                 &mut named_extents,
-                1,
+                &self.groups,
             );
         }
         self.keep_end_label_byte(SectionFamily::RoData);
@@ -2367,7 +2368,7 @@ impl<'a> Link<'a> {
             |o| &o.rodata,
             &mut self.ro_map,
             &mut named_extents,
-            1,
+            &self.groups,
         );
         // One alignment covers the whole data image: the writers place
         // every region from it, and each region starts at a multiple of
@@ -2401,7 +2402,7 @@ impl<'a> Link<'a> {
             |o| &o.relro,
             &mut self.relro_map,
             &mut named_extents,
-            1,
+            &self.groups,
         );
         align_up(&mut self.data, self.data_align);
         self.data_relro_len = self.data.len();
@@ -2433,13 +2434,14 @@ impl<'a> Link<'a> {
             |o| &o.data,
             &mut self.rw_map,
             &mut named_extents,
-            1,
+            &self.groups,
         );
         group_named_zerofill(
             &mut self.bss_size,
             objs,
             &mut self.bss_map,
             &mut named_extents,
+            &self.groups,
         );
         self.start_stop_bounds = named_extents
             .iter()
@@ -2461,12 +2463,12 @@ impl<'a> Link<'a> {
             bss: e.bss,
             write: e.write,
         };
-        self.named_code_sections = (named_extents.iter())
+        let own = || (named_extents.iter()).filter(|e| !self.groups.folded(&e.name));
+        self.named_code_sections = own()
             .filter(|e| e.sec == NativeSymSection::Text)
             .map(named)
             .collect();
-        self.named_sections = named_extents
-            .iter()
+        self.named_sections = own()
             .filter(|e| e.sec != NativeSymSection::Text)
             .map(named)
             .collect();
@@ -8053,6 +8055,7 @@ mod tests {
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
                 mismatch_keys: Vec::new(),
+                section_merges: Vec::new(),
                 resources: Vec::new(),
                 export_forms: Vec::new(),
                 debug_info: alloc::vec::Vec::new(),

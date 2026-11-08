@@ -1211,6 +1211,8 @@ pub struct NativeObject {
     /// A COFF object's `/FAILIFMISMATCH:key=value` pairs: every input of a
     /// link that names a key gives it one value.
     pub mismatch_keys: Vec<(String, String)>,
+    /// A COFF object's `/merge:from=to` options.
+    pub section_merges: Vec<(String, String)>,
     /// A cvtres object's resources, as compiled resource file records.
     pub resources: Vec<u8>,
     /// The `/EXPORT:` options naming an ordinal, `NONAME` or `PRIVATE`.
@@ -1296,6 +1298,7 @@ impl NativeObject {
             comdats: Vec::new(),
             default_libs: Vec::new(),
             mismatch_keys: Vec::new(),
+            section_merges: Vec::new(),
             resources: Vec::new(),
             export_forms: Vec::new(),
             debug_info: Vec::new(),
@@ -1562,6 +1565,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             .chain(directives.default_libs)
             .collect(),
         mismatch_keys: directives.mismatch_keys,
+        section_merges: directives.section_merges,
         resources: Vec::new(),
         export_forms: directives.export_forms,
         debug_info: debug.info,
@@ -2968,9 +2972,15 @@ pub(crate) use crate::c5::object::eh_frame::EH_FRAME;
 
 /// Whether the merge gathers every unit's contribution to `name` into one
 /// output section: a C-identifier name, which `__start_` / `__stop_` bound,
-/// and the unwind table.
+/// a COFF grouped section of one, and the unwind table.
 pub fn grouped_by_name(name: &str) -> bool {
-    is_c_identifier(name) || name == EH_FRAME
+    is_c_identifier(name) || name == EH_FRAME || coff_group_base(name).is_some()
+}
+
+/// The C-identifier `base` of a COFF grouped section name `base$suffix`.
+pub fn coff_group_base(name: &str) -> Option<&str> {
+    let (base, _) = name.split_once('$')?;
+    is_c_identifier(base).then_some(base)
 }
 
 /// `.init` / `.fini`: the gABI's process initialization and termination

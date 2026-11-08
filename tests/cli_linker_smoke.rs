@@ -6890,6 +6890,85 @@ fn delay_loading_is_refused_outside_a_pe_image() {
     );
 }
 
+/// A COFF section `base$suffix` joins `base`, its contributions from every
+/// unit contiguous and ordered by suffix (PE/COFF specification 4.2), so a
+/// table bracketed by its `$a` and `$z` entries holds the `$m` ones between.
+/// `/merge:from=to` folds `from` into `to`; one into a standard section of
+/// other protection is refused.
+#[test]
+fn grouped_sections_join_their_base_in_suffix_order() {
+    let dir = tempdir("pe-grouped-sections");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "#pragma section(\"grp$a\", read)\n\
+         #pragma section(\"grp$m\", read)\n\
+         #pragma section(\"grp$z\", read)\n\
+         __declspec(allocate(\"grp$z\")) const int last = 99;\n\
+         __declspec(allocate(\"grp$a\")) const int first = 1;\n\
+         __declspec(allocate(\"grp$m\")) const int mid_a = 10;\n\
+         #pragma code_seg(\"hot$b\")\n\
+         int twice(int x) { return 2 * x; }\n\
+         #pragma code_seg(\"hot$a\")\n\
+         int thrice(int x) { return 3 * x; }\n\
+         #pragma code_seg()\n\
+         #ifdef MERGE\n\
+         #pragma comment(linker, \"/merge:grp=\" MERGE)\n\
+         #pragma comment(linker, \"/merge:hot=.text\")\n\
+         #endif\n\
+         int main(void)\n\
+         {\n\
+             int sum = 0;\n\
+             for (const int *p = &first + 1; p < &last; p++) sum += *p;\n\
+             return sum == 30 && twice(2) + thrice(1) == 7 ? 0 : 1;\n\
+         }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "#pragma section(\"grp$m\", read)\n\
+         __declspec(allocate(\"grp$m\")) const int mid_b = 20;\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        for (define, own) in [(None, true), (Some("-DMERGE=\".rdata\""), false)] {
+            let exe = dir.join(format!("grouped-{target}-{own}.exe"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args(define)
+                    .args([&a, &b])
+                    .arg("-o")
+                    .arg(&exe),
+                &format!("link {target}"),
+            );
+            let names = pe_section_names(&std::fs::read(&exe).expect("read image"));
+            for group in ["grp", "hot"] {
+                assert_eq!(
+                    names.iter().any(|(n, _)| n == group),
+                    own,
+                    "{target} {define:?}: {names:?}"
+                );
+            }
+            if runs_windows(target) {
+                let out = Command::new(&exe).output().expect("run the image");
+                assert_eq!(out.status.code(), Some(0), "{target} {define:?}: {out:?}");
+            }
+        }
+    }
+    let out = Command::new(badc())
+        .args(["--target=windows-x64", "-DMERGE=\".data\""])
+        .args([&a, &b])
+        .arg("-o")
+        .arg(dir.join("refused.exe"))
+        .output()
+        .expect("run badc");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && stderr.contains("holds read-only data, which `.data` does not"),
+        "{stderr}"
+    );
+}
+
 /// An import library of short import members (PE/COFF specification), each
 /// `(machine, name, ordinal)` importing a function from `dll`.
 fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {

@@ -464,6 +464,20 @@ __BADC_AVX2_BINARY(subs_epu16)
 __BADC_AVX2_BINARY(shuffle_epi8)
 #undef __BADC_AVX2_BINARY
 
+/* VAES and VPCLMULQDQ: the AES-NI and PCLMULQDQ instruction on each 128-bit
+** lane, the immediate's qword selectors within each lane. */
+#define __BADC_LANES(name, op)                                                    \
+    static inline __m256i name(__m256i __A, __m256i __B) {                         \
+        return __badc_join_si(op(__badc_lo_si(__A), __badc_lo_si(__B)),            \
+                              op(__badc_hi_si(__A), __badc_hi_si(__B)));           \
+    }
+__BADC_LANES(_mm256_aesenc_epi128, _mm_aesenc_si128)
+__BADC_LANES(_mm256_aesenclast_epi128, _mm_aesenclast_si128)
+__BADC_LANES(_mm256_aesdec_epi128, _mm_aesdec_si128)
+__BADC_LANES(_mm256_aesdeclast_epi128, _mm_aesdeclast_si128)
+#undef __BADC_LANES
+#define _mm256_clmulepi64_epi128(A, B, I) __BADC_AVX2_IMM2(_mm_clmulepi64_si128, A, B, I)
+
 static inline int _mm256_movemask_epi8(__m256i __A) {
     return (int)((unsigned)_mm_movemask_epi8(__badc_lo_si(__A)) |
                  (unsigned)_mm_movemask_epi8(__badc_hi_si(__A)) << 16);

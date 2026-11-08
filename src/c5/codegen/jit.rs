@@ -699,6 +699,9 @@ mod jit_impl {
         // defines binds ahead of the unit's C definitions, as in an image.
         use super::super::asm_fold::{bind_label_calls, fold_asm_sections};
         let mut defs = super::super::unit_definitions(&program, &build);
+        for (name, def) in super::super::section_bounds(&program, &build) {
+            defs.entry(name).or_insert(def);
+        }
         let labels = fold_asm_sections(&program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));

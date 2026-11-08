@@ -1139,7 +1139,7 @@ pub(crate) fn compact_program_data(
         &sets,
         &live_func_pcs,
         segregate,
-        false,
+        true,
         None,
     );
     Ok(Compaction {

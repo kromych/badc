@@ -5599,6 +5599,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("vector_casts_keep_the_bits.c", 0),
+    ("named_code_section_bounds.c", 0),
+    ("named_data_section_bounds.c", 0),
     ("value_builtins.c", 0),
     ("neon_raid6_checksum.c", 0),
     ("long_double_math.c", 0),

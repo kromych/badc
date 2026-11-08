@@ -144,6 +144,7 @@ pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "pmmintrin.h",
     "tmmintrin.h",
     "smmintrin.h",
+    "nmmintrin.h",
     "wmmintrin.h",
 ];
 
@@ -223,6 +224,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("pmmintrin.h", X86_64, compiler),
     header!("tmmintrin.h", X86_64, compiler),
     header!("smmintrin.h", X86_64, compiler),
+    header!("nmmintrin.h", X86_64, compiler),
     header!("wmmintrin.h", X86_64, compiler),
     header!(
         "mm_malloc.h",

@@ -683,7 +683,8 @@ one fails at the undeclared name.
 | `<emmintrin.h>` | SSE2 on `__m128i`: add and subtract, saturating add and subtract, `_mm_sad_epu8`, `_mm_mullo_epi16`, `_mm_mulhi_epi16`, `_mm_madd_epi16`, logic, compares, packs, interleaves, immediate shifts, shuffles, element access, `_mm_movemask_epi8`, loads and stores; `_mm_set*`, `_mm_setr*` and `_mm_cvtsi*`; `_mm_mul_epu32`; on `__m128d`, the double-precision counterparts of `<xmmintrin.h>`'s operations and the conversions between `__m128`, `__m128d` and `__m128i`; `_mm_shuffle_pd`; the `__m128`, `__m128i` and `__m128d` casts; the fences. |
 | `<pmmintrin.h>` | SSE3: `addsub`, horizontal add and subtract, `lddqu`, the duplicating moves and loads, `monitor` and `mwait`. |
 | `<tmmintrin.h>` | SSSE3: `_mm_shuffle_epi8`, `_mm_maddubs_epi16` and the `__m64` forms. |
-| `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`. |
+| `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`; SSE4.2: `_mm_crc32_u8`, `_u16`, `_u32` and `_u64`. |
+| `<nmmintrin.h>` | SSE4.2, through `<smmintrin.h>`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
 | `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*`, `_mm256_cmpgt_epi32` / `_epi64`, `_mm256_movemask_epi8`, the element extracts and inserts, `_mm256_set_*` / `_mm256_setr_*`, the permutes, `_mm256_shuffle_epi8`, the element and byte shifts by an immediate, `_mm256_mullo_epi32`, `_mm256_mul_epu32`, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_subs_epu16` and the interleaves; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
@@ -691,7 +692,7 @@ one fails at the undeclared name.
 Not provided: the 128-bit averaging, minimum and maximum integer operations,
 shifts by a vector count,
 the 128-bit non-temporal stores, and everything past SSE4.1 (AVX, AVX2,
-AVX-512, FMA) but the 256-bit integer subset. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
+AVX-512, FMA) but SSE4.2's CRC32 and the 256-bit integer subset. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand its instruction encodes as an `imm8` is a
 macro, as gcc's are without `-O`; a lane move written over the vector
 extension takes its selector as an argument. The rest are `static inline` functions, which `-O` inlines so the

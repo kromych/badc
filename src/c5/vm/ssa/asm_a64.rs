@@ -477,6 +477,17 @@ fn step(model: &Model<'_, '_>, g: &mut Regs, m: &str, ops: &[AsmOpndA64]) -> Res
             let y = ((v >> 1) ^ v) & field_mask(bits - 1);
             u64::from(y.leading_zeros() - (64 - (bits - 1)))
         }
+        "crc32b" | "crc32h" | "crc32w" | "crc32x" | "crc32cb" | "crc32ch" | "crc32cw"
+        | "crc32cx" => {
+            let bytes = match m.as_bytes()[m.len() - 1] {
+                b'b' => 1,
+                b'h' => 2,
+                b'w' => 4,
+                _ => 8,
+            };
+            let castagnoli = m.len() == 7;
+            u64::from(super::crc32(src(1)? as u32, src(2)?, bytes, castagnoli))
+        }
         "rbit" => src(1)?.reverse_bits() >> (64 - bits),
         "rev" => src(1)?.swap_bytes() >> (64 - bits),
         "rev16" | "rev32" => {

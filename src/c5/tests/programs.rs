@@ -559,6 +559,34 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
     }
 }
 
+/// The interpreter computes CRC32 as the instructions do: x86's CRC32 and
+/// AArch64's CRC32C* the CRC-32C, AArch64's CRC32* the IEEE CRC-32, each
+/// giving its check value over "123456789" from all ones, inverted at the end.
+#[test]
+fn the_interpreter_computes_crc32() {
+    use crate::{Compiler, Target};
+    let x86 = super::load_fixture("sse42_crc32_accumulates_castagnoli.c");
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_options(x86.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: line {rc}");
+    }
+    for (insn, want) in [("crc32b", 0xCBF4_3926u32), ("crc32cb", 0xE306_9283)] {
+        let src = format!(
+            "int main(void) {{ const char *s = \"123456789\"; unsigned c = ~0u;\n\
+             for (int i = 0; i < 9; i++)\n\
+             __asm__(\"{insn} %w0, %w0, %w1\" : \"+r\"(c) : \"r\"((unsigned)(unsigned char)s[i]));\n\
+             return ~c == {want:#x}u ? 0 : 1; }}"
+        );
+        let program = Compiler::with_options(src.clone(), Target::LinuxAarch64, Default::default())
+            .compile()
+            .expect(&src);
+        assert_eq!(super::Vm::new(program).run().expect(&src), 0, "{insn}");
+    }
+}
+
 /// The interpreter rounds and raises only on its scalar floating-point
 /// path: an inline-asm template that would compute in a floating-point
 /// register is refused on either architecture, so none runs on the host's

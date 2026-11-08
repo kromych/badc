@@ -3439,11 +3439,12 @@ fn run_inline_asm(
                 )));
             }
             Mnemonic::Crc32 => {
-                // No CRC unit in the interpreter, and the polynomial is the
-                // instruction's own; refused rather than mis-modelled.
-                return Err(C5Error::Runtime(alloc::string::String::from(
-                    "inline asm: `crc32` is not supported under --interp",
-                )));
+                let (data, size) = value_of(&ops[0], &xregs);
+                let (acc, _) = value_of(&ops[1], &xregs);
+                let bytes = insn.suffix.unwrap_or(size).bytes() as u32;
+                if let Some(r) = dst_reg(&ops[1]) {
+                    xregs[r] = i64::from(crc32(acc as u32, data as u64, bytes, true));
+                }
             }
             Mnemonic::Nop | Mnemonic::Rdtsc | Mnemonic::Rdtscp => {
                 // No host clock: the timestamp read produces zero in the
@@ -3668,6 +3669,20 @@ fn merge_width(prev: i64, res: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
 }
 
 /// Byte-reverse the low `w` bytes of `v` (BSWAP).
+/// The reflected CRC-32 of `data`'s low `bytes`, accumulated onto `acc` with
+/// no inversion, as the CRC32 instructions compute it: the IEEE polynomial,
+/// or Castagnoli's (x86 CRC32, AArch64 CRC32C*).
+pub(super) fn crc32(mut acc: u32, data: u64, bytes: u32, castagnoli: bool) -> u32 {
+    let poly = if castagnoli { 0x82F6_3B78 } else { 0xEDB8_8320 };
+    for k in 0..bytes {
+        acc ^= u32::from((data >> (8 * k)) as u8);
+        for _ in 0..8 {
+            acc = (acc >> 1) ^ (poly & (acc & 1).wrapping_neg());
+        }
+    }
+    acc
+}
+
 fn byte_swap(v: i64, w: crate::c5::ir::AsmRegSize) -> i64 {
     match w.bytes() {
         8 => v.swap_bytes(),

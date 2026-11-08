@@ -26,6 +26,7 @@ emmintrin.h	f	-	y	y	f
 pmmintrin.h	f	-	y	y	f
 tmmintrin.h	f	-	y	y	f
 smmintrin.h	f	-	y	y	f
+nmmintrin.h	f	-	y	y	f
 wmmintrin.h	f	-	y	y	f
 mm_malloc.h	y	-	y	y	y
 stdalign.h	y	y	y	y	y

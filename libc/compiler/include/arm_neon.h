@@ -19,17 +19,17 @@
  * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n, vmovl vmovn vqmovn vqmovun vaddl
  * vsubl vaddw vsubw vmull vmlal vmlsl with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
- * vfms, the compares, and the conversions to and from the integers of one
- * width (truncating) and between single and double. Also vmul_p8,
- * vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds, vmull_p64, vmull_high_p64,
- * vld2q_u16 and vld4q_u8.
+ * vfms vrecpe vrecps vrsqrte vrsqrts, the compares, and the conversions to
+ * and from the integers of one width (truncating) and between single and
+ * double. Also vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
+ * vmull_p64, vmull_high_p64, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the saturating narrowing shifts, vqshlu_n,
  * vshll_n, vabdl, vabal, vpadal, compares against zero, the other structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
- * absolute-difference, rounding, maxnum and estimate forms, the fixed-point
- * and rounding-mode conversions, the dot products and the SHA intrinsics.
+ * absolute-difference, rounding and maxnum forms, the fixed-point and
+ * rounding-mode conversions, the dot products and the SHA intrinsics.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -1088,6 +1088,13 @@ __BADC_NEON_ARITH2(vmin, "fmin")
 __BADC_NEON_ARITH1(vabs, "fabs")
 __BADC_NEON_ARITH1(vneg, "fneg")
 __BADC_NEON_ARITH1(vsqrt, "fsqrt")
+
+/* The reciprocal and reciprocal square root estimates, and their
+ * Newton-Raphson steps: vrecps is 2 - a * b, vrsqrts (3 - a * b) / 2. */
+__BADC_NEON_ARITH1(vrecpe, "frecpe")
+__BADC_NEON_ARITH1(vrsqrte, "frsqrte")
+__BADC_NEON_ARITH2(vrecps, "frecps")
+__BADC_NEON_ARITH2(vrsqrts, "frsqrts")
 
 /* vfma: a + b * c, vfms: a - b * c, each rounded once. */
 #define __BADC_NEON_FUSED(op, insn)                                       \

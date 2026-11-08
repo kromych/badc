@@ -44,6 +44,7 @@ impl Compiler {
             Scalar::LLong => Ty::LongLong as i64,
             Scalar::ULLong => unsigned(Ty::LongLong),
             Scalar::VoidPtr => void_ptr_ty(),
+            Scalar::Void => void_ty(),
         }
     }
 

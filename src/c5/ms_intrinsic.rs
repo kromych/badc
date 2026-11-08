@@ -24,6 +24,8 @@ pub(crate) enum Scalar {
     LLong,
     ULLong,
     VoidPtr,
+    /// A pointer parameter's pointee only.
+    Void,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -417,6 +419,8 @@ const FIXED: &[Row] = &[
     ("__outwordstring", X64, ports(2, true), None, &[V(UShort), p(UShort), V(ULong)]),
     ("__outdwordstring", X64, ports(4, true), None, &[V(UShort), p(ULong), V(ULong)]),
     ("__halt", X64, Op::Insn("hlt"), None, &[]),
+    ("__int2c", X64, Op::Insn("int $0x2c"), None, &[]),
+    ("_m_prefetchw", X64, Op::Asm("prefetchw (%0)"), None, &[pcv(Void)]),
     ("_mm_pause", X64, Op::Pause, None, &[]),
     ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
     ("_mm_mfence", X64, Op::Insn("mfence"), None, &[]),

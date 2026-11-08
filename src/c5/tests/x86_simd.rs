@@ -698,6 +698,8 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
             &[&[x(0x0f), x(0x03)]],
         ),
         ("void", "__wbinvd()", &[&[x(0x0f), x(0x09)]]),
+        ("void", "__int2c()", &[&[x(0xcd), x(0x2c)]]),
+        ("void", "_m_prefetchw(p)", &[&[x(0x0f), x(0x0d), reg(1)]]),
         ("void", "_disable(), _enable()", &[&[x(0xfa), x(0xfb)]]),
         (
             "unsigned char",
@@ -776,7 +778,7 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
         output_kind: OutputKind::Relocatable,
         ..NativeOptions::default()
     };
-    let obj = crate::emit_native_with_options(&program, Target::WindowsX64, nopts)
+    let obj = crate::emit_native_with_options(&program, Target::WindowsX64, nopts.clone())
         .expect("emit the object");
     let fits = |w: &[u8], p: Pattern| w.iter().zip(p).all(|(b, (v, m))| b & m == *v);
     for (i, (ret, call, patterns)) in CASES.iter().enumerate() {
@@ -790,6 +792,24 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
                 "{call}: setz and setc not in {bytes:02x?}"
             );
         }
+    }
+    // `_byteswap_ulong` is the UCRT's function until `#pragma intrinsic`
+    // names it, as under cl without `/Oi`.
+    for (pragma, swaps) in [("", false), ("#pragma intrinsic(_byteswap_ulong)\n", true)] {
+        let src = alloc::format!(
+            "#include <intrin.h>\n{pragma}unsigned long f(unsigned long x) {{ return _byteswap_ulong(x); }}\n"
+        );
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src, Target::WindowsX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{e}"));
+        let obj = crate::emit_native_with_options(&program, Target::WindowsX64, nopts.clone())
+            .expect("emit the object");
+        let bytes = super::codegen::function_bytes(&obj, "f");
+        let bswap = bytes
+            .windows(2)
+            .any(|w| w[0] == 0x0f && w[1] & 0xf8 == 0xc8);
+        assert_eq!(bswap, swaps, "{pragma:?}: {bytes:02x?}");
     }
     for target in [Target::LinuxX64, Target::WindowsAarch64] {
         let call = "void f(void) { __wbinvd(); }\nint main(void) { return 0; }\n";

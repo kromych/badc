@@ -778,7 +778,7 @@ structure loads, float16 and bfloat16 are not provided.
   `__vmx_vmwrite`, returning 0, 1 or 2 as the instruction succeeds or fails
   with or without a VM-instruction error), the SVM family (`__svm_clgi`
   through `__svm_vmrun`) and port I/O (`__inbyte` through
-  `__outdwordstring`).
+  `__outdwordstring`), `__int2c` and `_m_prefetchw`.
 - A definition of an intrinsic's name outside a system header is an error,
   as cl's C2169 is: calls lower to the intrinsic and would never reach it.
   `#pragma function(name, ...)` makes the names functions, which calls
@@ -810,7 +810,8 @@ structure loads, float16 and bfloat16 are not provided.
   struct passed to or returned from a bound import by value follows the
   platform ABI like any other call.
 - `#pragma intrinsic(<name>)` binds a library name to an intrinsic badc
-  lowers. The bundled headers reach `sqrt` and `fma` this way. Under
+  lowers. The bundled headers reach `sqrt` and `fma` this way, and MSVC's
+  `_byteswap_*` lower to a byte swap once a pragma names them. Under
   `-fno-builtin` it binds only reserved names (7.1.3); `alloca` is a macro
   over `__builtin_alloca`, as in the glibc and macOS headers.
 - `#pragma entrypoint(<name>)` replaces `main` as the entry point, for example

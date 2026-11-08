@@ -36,6 +36,8 @@ pub(crate) enum Form {
     MoveMask,
     /// `int = carry`, the random value stored through the pointer operand.
     RdRand,
+    /// `int` or `long long` = the low lane of v128 converted.
+    ToInt,
 }
 
 /// Result type, as the builtin's prototype declares it: one of the headers'
@@ -49,6 +51,7 @@ pub(crate) enum Ret {
     V2df,
     V4sf,
     Int,
+    Int64,
     Void,
 }
 
@@ -62,7 +65,7 @@ impl Ret {
             Ret::V2di => Some(Ty::LongLong),
             Ret::V2df => Some(Ty::Double),
             Ret::V4sf => Some(Ty::Float),
-            Ret::Int | Ret::Void => None,
+            Ret::Int | Ret::Int64 | Ret::Void => None,
         }
     }
 }
@@ -132,6 +135,63 @@ pub(crate) enum Sem {
     Move,
     /// Hardware random number generator.
     Rand,
+    /// Unsigned products of the low doubleword of each quadword.
+    MulEvenU,
+    /// Floating-point arithmetic on lanes of the width; the scalar form
+    /// computes lane 0 alone, the others from the first operand.
+    Float(FOp, u8, bool),
+    /// A floating-point comparison by the imm8 predicate (0 eq, 1 lt, 2 le,
+    /// 3 unord, 4 neq, 5 nlt, 6 nle, 7 ord): a lane of ones where it holds.
+    FloatCmp(u8, bool),
+    /// A conversion between integer and floating lanes.
+    Convert(Cvt),
+    /// The low lane of the width converted to an integer of the row's
+    /// `int_width`, by the rounding direction or truncating.
+    ToInt(u8, bool),
+}
+
+/// A floating-point lane operation. MIN and MAX give the second operand
+/// unless the first is strictly less (greater), a NaN or two zeros included.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum FOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Min,
+    Max,
+    Sqrt,
+}
+
+/// A conversion, from the low lanes of the source to the low lanes of the
+/// result, the rest zero. An int32 result is 0x80000000 for a NaN or a value
+/// out of range.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Cvt {
+    IntToSingle,
+    SingleToInt { truncate: bool },
+    IntToDouble,
+    DoubleToInt { truncate: bool },
+    SingleToDouble,
+    DoubleToSingle,
+}
+
+/// The floating-point environment a row's lanes compute in, which rounds in
+/// its direction and raises its exceptions. A lane is a `double` bit
+/// pattern, a `float` one widened.
+pub(crate) trait FloatEnv {
+    fn arith(&mut self, op: FOp, a: u64, b: u64, single: bool) -> u64;
+    /// `None` when unordered. A signaling comparison raises invalid for
+    /// any NaN, a quiet one for a signaling NaN.
+    fn compare(&mut self, a: u64, b: u64, signaling: bool) -> Option<core::cmp::Ordering>;
+    /// A `bits`-wide integer; the integer indefinite, the type's minimum,
+    /// for a NaN or a value out of range.
+    fn to_int(&mut self, a: u64, truncate: bool, bits: u32) -> i64;
+    fn int32_to_float(&mut self, n: i32, single: bool) -> u64;
+    fn to_single(&mut self, a: u64) -> u64;
+    /// A `float` lane as a `double` result: a signaling NaN quieted, with
+    /// invalid.
+    fn widen(&mut self, a: u64) -> u64;
 }
 
 pub(crate) struct SimdOp {
@@ -255,10 +315,63 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_aeskeygenassist128", "aeskeygenassist", Form::VI, Ret::V2di, Sem::AesKeygen, 0),
     // PCLMUL.
     op("__builtin_ia32_pclmulqdq128", "pclmulqdq", Form::VvI, Ret::V2di, Sem::ClMul, 0),
-    // RDRAND.
+    // SSE and SSE2 floating-point arithmetic, compares and conversions.
+    op("__builtin_ia32_addps", "addps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Add, 4, false), 0),
+    op("__builtin_ia32_subps", "subps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Sub, 4, false), 0),
+    op("__builtin_ia32_mulps", "mulps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Mul, 4, false), 0),
+    op("__builtin_ia32_divps", "divps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Div, 4, false), 0),
+    op("__builtin_ia32_minps", "minps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Min, 4, false), 0),
+    op("__builtin_ia32_maxps", "maxps", Form::Vv, Ret::V4sf, Sem::Float(FOp::Max, 4, false), 0),
+    op("__builtin_ia32_sqrtps", "sqrtps", Form::V, Ret::V4sf, Sem::Float(FOp::Sqrt, 4, false), 0),
+    op("__builtin_ia32_addss", "addss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Add, 4, true), 0),
+    op("__builtin_ia32_subss", "subss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Sub, 4, true), 0),
+    op("__builtin_ia32_mulss", "mulss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Mul, 4, true), 0),
+    op("__builtin_ia32_divss", "divss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Div, 4, true), 0),
+    op("__builtin_ia32_minss", "minss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Min, 4, true), 0),
+    op("__builtin_ia32_maxss", "maxss", Form::Vv, Ret::V4sf, Sem::Float(FOp::Max, 4, true), 0),
+    op("__builtin_ia32_sqrtss", "sqrtss", Form::V, Ret::V4sf, Sem::Float(FOp::Sqrt, 4, true), 0),
+    op("__builtin_ia32_addpd", "addpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Add, 8, false), 0),
+    op("__builtin_ia32_subpd", "subpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Sub, 8, false), 0),
+    op("__builtin_ia32_mulpd", "mulpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Mul, 8, false), 0),
+    op("__builtin_ia32_divpd", "divpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Div, 8, false), 0),
+    op("__builtin_ia32_minpd", "minpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Min, 8, false), 0),
+    op("__builtin_ia32_maxpd", "maxpd", Form::Vv, Ret::V2df, Sem::Float(FOp::Max, 8, false), 0),
+    op("__builtin_ia32_sqrtpd", "sqrtpd", Form::V, Ret::V2df, Sem::Float(FOp::Sqrt, 8, false), 0),
+    op("__builtin_ia32_addsd", "addsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Add, 8, true), 0),
+    op("__builtin_ia32_subsd", "subsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Sub, 8, true), 0),
+    op("__builtin_ia32_mulsd", "mulsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Mul, 8, true), 0),
+    op("__builtin_ia32_divsd", "divsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Div, 8, true), 0),
+    op("__builtin_ia32_minsd", "minsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Min, 8, true), 0),
+    op("__builtin_ia32_maxsd", "maxsd", Form::Vv, Ret::V2df, Sem::Float(FOp::Max, 8, true), 0),
+    op("__builtin_ia32_sqrtsd", "sqrtsd", Form::V, Ret::V2df, Sem::Float(FOp::Sqrt, 8, true), 0),
+    op("__builtin_ia32_cmpps", "cmpps", Form::VvI, Ret::V4sf, Sem::FloatCmp(4, false), 0),
+    op("__builtin_ia32_cmpss", "cmpss", Form::VvI, Ret::V4sf, Sem::FloatCmp(4, true), 0),
+    op("__builtin_ia32_cmppd", "cmppd", Form::VvI, Ret::V2df, Sem::FloatCmp(8, false), 0),
+    op("__builtin_ia32_cmpsd", "cmpsd", Form::VvI, Ret::V2df, Sem::FloatCmp(8, true), 0),
+    op("__builtin_ia32_cvtdq2ps", "cvtdq2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::IntToSingle), 0),
+    op("__builtin_ia32_cvtps2dq", "cvtps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttps2dq", "cvttps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: true }), 0),
+    op("__builtin_ia32_cvtdq2pd", "cvtdq2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::IntToDouble), 0),
+    op("__builtin_ia32_cvtpd2dq", "cvtpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttpd2dq", "cvttpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: true }), 0),
+    op("__builtin_ia32_cvtps2pd", "cvtps2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 0),
+    op("__builtin_ia32_cvtpd2ps", "cvtpd2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::DoubleToSingle), 0),
+    op("__builtin_ia32_pmuludq128", "pmuludq", Form::Vv, Ret::V2di, Sem::MulEvenU, 0),
+    op("__builtin_ia32_cvtss2si", "cvtss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, false), 4),
+    op("__builtin_ia32_cvttss2si", "cvttss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, true), 4),
+    op("__builtin_ia32_cvtsd2si", "cvtsd2si", Form::ToInt, Ret::Int, Sem::ToInt(8, false), 4),
+    op("__builtin_ia32_cvttsd2si", "cvttsd2si", Form::ToInt, Ret::Int, Sem::ToInt(8, true), 4),
+    op("__builtin_ia32_cvtss2si64", "cvtss2si", Form::ToInt, Ret::Int64, Sem::ToInt(4, false), 8),
+    op("__builtin_ia32_cvttss2si64", "cvttss2si", Form::ToInt, Ret::Int64, Sem::ToInt(4, true), 8),
+    op("__builtin_ia32_cvtsd2si64", "cvtsd2si", Form::ToInt, Ret::Int64, Sem::ToInt(8, false), 8),
+    op("__builtin_ia32_cvttsd2si64", "cvttsd2si", Form::ToInt, Ret::Int64, Sem::ToInt(8, true), 8),
+    // RDRAND and RDSEED.
     op("__builtin_ia32_rdrand16_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 2),
     op("__builtin_ia32_rdrand32_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 4),
     op("__builtin_ia32_rdrand64_step", "rdrand", Form::RdRand, Ret::Int, Sem::Rand, 8),
+    op("__builtin_ia32_rdseed16_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 2),
+    op("__builtin_ia32_rdseed32_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 4),
+    op("__builtin_ia32_rdseed64_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 8),
 ];
 
 /// The table index of `name`, or `None` when it is not a SIMD builtin.
@@ -279,6 +392,8 @@ impl SimdOp {
     pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
         let width = if self.form.returns_vector() || self.form == Form::Store {
             16
+        } else if self.form == Form::ToInt {
+            self.int_width
         } else {
             4
         };
@@ -291,7 +406,7 @@ impl Form {
     /// Number of source operands the builtin call takes.
     pub(crate) fn arity(self) -> usize {
         match self {
-            Form::V | Form::Load | Form::MoveMask | Form::RdRand => 1,
+            Form::V | Form::Load | Form::MoveMask | Form::RdRand | Form::ToInt => 1,
             Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract => 2,
             Form::VvI | Form::Insert => 3,
         }
@@ -730,9 +845,131 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             set_lane(&mut o, 4, 2, sub_word(x3) as u64);
             set_lane(&mut o, 4, 3, (rot_word(sub_word(x3)) ^ imm as u32) as u64);
         }
+        Sem::MulEvenU => {
+            for i in 0..2 {
+                set_lane(
+                    &mut o,
+                    8,
+                    i,
+                    (lane(a, 8, i) & 0xFFFF_FFFF) * (lane(b, 8, i) & 0xFFFF_FFFF),
+                );
+            }
+        }
         Sem::Move | Sem::Rand => o = *a,
+        // `eval_float` computes these in a floating-point environment.
+        Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
     }
     o
+}
+
+/// Lane `i` of width 4 or 8 as a `double` bit pattern; a NaN keeps its
+/// payload and whether it signals.
+fn flane(v: &[u8; 16], width: u8, i: usize) -> u64 {
+    let x = lane(v, width, i);
+    match width {
+        4 if x & 0x7F80_0000 == 0x7F80_0000 && x & 0x7F_FFFF != 0 => {
+            (x & 0x8000_0000) << 32 | 0x7FF0_0000_0000_0000 | (x & 0x7F_FFFF) << 29
+        }
+        4 => f64::from(f32::from_bits(x as u32)).to_bits(),
+        _ => x,
+    }
+}
+
+fn set_flane(v: &mut [u8; 16], width: u8, i: usize, x: u64) {
+    match width {
+        4 => set_lane(v, 4, i, u64::from((f64::from_bits(x) as f32).to_bits())),
+        _ => set_lane(v, 8, i, x),
+    }
+}
+
+/// `Form::ToInt`: the low lane converted, in `env`; `None` for another
+/// semantics.
+pub(crate) fn eval_to_int(
+    env: &mut impl FloatEnv,
+    sem: Sem,
+    a: &[u8; 16],
+    bits: u32,
+) -> Option<i64> {
+    match sem {
+        Sem::ToInt(w, truncate) => Some(env.to_int(flane(a, w, 0), truncate, bits)),
+        _ => None,
+    }
+}
+
+/// The floating-point rows, in `env`; `None` for another semantics.
+pub(crate) fn eval_float(
+    env: &mut impl FloatEnv,
+    sem: Sem,
+    a: &[u8; 16],
+    b: &[u8; 16],
+    imm: u8,
+) -> Option<[u8; 16]> {
+    use core::cmp::Ordering::{Equal, Greater, Less};
+    let mut o = *a;
+    match sem {
+        Sem::Float(op, w, scalar) => {
+            for i in 0..if scalar { 1 } else { 16 / w as usize } {
+                let (x, y) = (flane(a, w, i), flane(b, w, i));
+                match op {
+                    FOp::Min | FOp::Max => {
+                        let c = env.compare(x, y, true);
+                        let first = c == Some(if op == FOp::Min { Less } else { Greater });
+                        set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
+                    }
+                    FOp::Sqrt => set_flane(&mut o, w, i, env.arith(op, x, 0, w == 4)),
+                    _ => set_flane(&mut o, w, i, env.arith(op, x, y, w == 4)),
+                }
+            }
+        }
+        Sem::FloatCmp(w, scalar) => {
+            for i in 0..if scalar { 1 } else { 16 / w as usize } {
+                let p = imm & 7;
+                let c = env.compare(flane(a, w, i), flane(b, w, i), matches!(p, 1 | 2 | 5 | 6));
+                let holds = match p {
+                    0 => c == Some(Equal),
+                    1 => c == Some(Less),
+                    2 => matches!(c, Some(Less | Equal)),
+                    3 => c.is_none(),
+                    4 => c != Some(Equal),
+                    5 => c != Some(Less),
+                    6 => !matches!(c, Some(Less | Equal)),
+                    _ => c.is_some(),
+                };
+                set_lane(&mut o, w, i, if holds { mask(w) } else { 0 });
+            }
+        }
+        Sem::Convert(cvt) => {
+            o = [0; 16];
+            match cvt {
+                Cvt::IntToSingle => (0..4).for_each(|i| {
+                    let x = env.int32_to_float(slane(a, 4, i) as i32, true);
+                    set_flane(&mut o, 4, i, x);
+                }),
+                Cvt::SingleToInt { truncate } => (0..4).for_each(|i| {
+                    let x = env.to_int(flane(a, 4, i), truncate, 32);
+                    set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
+                }),
+                Cvt::IntToDouble => (0..2).for_each(|i| {
+                    let x = env.int32_to_float(slane(a, 4, i) as i32, false);
+                    set_flane(&mut o, 8, i, x);
+                }),
+                Cvt::DoubleToInt { truncate } => (0..2).for_each(|i| {
+                    let x = env.to_int(flane(a, 8, i), truncate, 32);
+                    set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
+                }),
+                Cvt::SingleToDouble => (0..2).for_each(|i| {
+                    let x = env.widen(flane(a, 4, i));
+                    set_flane(&mut o, 8, i, x);
+                }),
+                Cvt::DoubleToSingle => (0..2).for_each(|i| {
+                    let x = env.to_single(flane(a, 8, i));
+                    set_flane(&mut o, 4, i, x);
+                }),
+            }
+        }
+        _ => return None,
+    }
+    Some(o)
 }
 
 /// `Form::Extract`: the selected lane, zero-extended.

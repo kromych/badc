@@ -1,9 +1,8 @@
-/* SSE intrinsics. This build carries the vector types, the shuffle selector,
-** the MXCSR access, the cache hints, the bitwise packed-single operations
-** and the operations on __m64; the SSE1 packed-single arithmetic is not
-** provided. As in gcc and clang, the MMX types come from
-** <mmintrin.h> and, in a hosted unit, _mm_malloc and _mm_free from
-** <mm_malloc.h>. */
+/* SSE intrinsics. The arithmetic, comparisons and conversions lower to their
+** SDM instructions; the transfers and lane moves are written over the
+** vector extension, on the integer view of the lanes, so they keep every
+** bit. As in gcc and clang, the MMX types come from <mmintrin.h> and, in a
+** hosted unit, _mm_malloc and _mm_free from <mm_malloc.h>. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
@@ -24,6 +23,7 @@ typedef float __m128 __attribute__((__vector_size__(16)));
 typedef float __v4sf __attribute__((__vector_size__(16)));
 /* The unaligned form of the vector type an unaligned access dereferences. */
 typedef float __m128_u __attribute__((__vector_size__(16), __may_alias__, __aligned__(1)));
+typedef int __v4si __attribute__((__vector_size__(16)));
 
 #define _MM_SHUFFLE(w, x, y, z) (((w) << 6) | ((x) << 4) | ((y) << 2) | (z))
 
@@ -95,30 +95,320 @@ static inline __m128 _mm_xor_ps(__m128 __A, __m128 __B) {
     return (__m128)__builtin_ia32_xorps((__v4sf)__A, (__v4sf)__B);
 }
 
+static inline __m128 _mm_setzero_ps(void) {
+    return (__m128){0, 0, 0, 0};
+}
+
+static inline __m128 _mm_set_ps(float __D, float __C, float __B, float __A) {
+    return (__m128){__A, __B, __C, __D};
+}
+
+static inline __m128 _mm_setr_ps(float __A, float __B, float __C, float __D) {
+    return (__m128){__A, __B, __C, __D};
+}
+
+static inline __m128 _mm_set1_ps(float __A) {
+    return (__m128){__A, __A, __A, __A};
+}
+#define _mm_set_ps1 _mm_set1_ps
+
+static inline __m128 _mm_set_ss(float __A) {
+    return (__m128){__A, 0, 0, 0};
+}
+
+static inline __m128 _mm_load_ps(float const *__P) {
+    return *(__m128 const *)__P;
+}
+
+static inline __m128 _mm_loadu_ps(float const *__P) {
+    return *(__m128_u const *)__P;
+}
+
+static inline __m128 _mm_load_ss(float const *__P) {
+    return (__m128)(__v4si){*(int const *)__P, 0, 0, 0};
+}
+
+static inline __m128 _mm_load1_ps(float const *__P) {
+    int __x = *(int const *)__P;
+    return (__m128)(__v4si){__x, __x, __x, __x};
+}
+#define _mm_load_ps1 _mm_load1_ps
+
+static inline __m128 _mm_loadr_ps(float const *__P) {
+    __v4si __v = (__v4si)_mm_load_ps(__P);
+    return (__m128)(__v4si){__v[3], __v[2], __v[1], __v[0]};
+}
+
+static inline void _mm_store_ps(float *__P, __m128 __A) {
+    *(__m128 *)__P = __A;
+}
+
+static inline void _mm_storeu_ps(float *__P, __m128 __A) {
+    *(__m128_u *)__P = __A;
+}
+
+static inline void _mm_store_ss(float *__P, __m128 __A) {
+    *(int *)__P = ((__v4si)__A)[0];
+}
+
+static inline void _mm_store1_ps(float *__P, __m128 __A) {
+    int __x = ((__v4si)__A)[0];
+    _mm_store_ps(__P, (__m128)(__v4si){__x, __x, __x, __x});
+}
+#define _mm_store_ps1 _mm_store1_ps
+
+static inline void _mm_storer_ps(float *__P, __m128 __A) {
+    __v4si __v = (__v4si)__A;
+    _mm_store_ps(__P, (__m128)(__v4si){__v[3], __v[2], __v[1], __v[0]});
+}
+
+static inline void _mm_stream_ps(float *__P, __m128 __A) {
+    _mm_store_ps(__P, __A);
+}
+
+static inline float _mm_cvtss_f32(__m128 __A) {
+    return __A[0];
+}
+
+static inline __m128 _mm_move_ss(__m128 __A, __m128 __B) {
+    __v4si __a = (__v4si)__A;
+    __a[0] = ((__v4si)__B)[0];
+    return (__m128)__a;
+}
+
+static inline __m128 _mm_shuffle_ps(__m128 __A, __m128 __B, const int __M) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    return (__m128)(__v4si){__a[__M & 3], __a[(__M >> 2) & 3], __b[(__M >> 4) & 3],
+                            __b[(__M >> 6) & 3]};
+}
+
+static inline __m128 _mm_unpacklo_ps(__m128 __A, __m128 __B) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    return (__m128)(__v4si){__a[0], __b[0], __a[1], __b[1]};
+}
+
+static inline __m128 _mm_unpackhi_ps(__m128 __A, __m128 __B) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    return (__m128)(__v4si){__a[2], __b[2], __a[3], __b[3]};
+}
+
+static inline __m128 _mm_movehl_ps(__m128 __A, __m128 __B) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    return (__m128)(__v4si){__b[2], __b[3], __a[2], __a[3]};
+}
+
+static inline __m128 _mm_movelh_ps(__m128 __A, __m128 __B) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    return (__m128)(__v4si){__a[0], __a[1], __b[0], __b[1]};
+}
+
+static inline int _mm_movemask_ps(__m128 __A) {
+    __v4si __a = (__v4si)__A;
+    return (__a[0] < 0) | (__a[1] < 0) << 1 | (__a[2] < 0) << 2 | (__a[3] < 0) << 3;
+}
+
+static inline __m128 _mm_add_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_addps(__A, __B);
+}
+
+static inline __m128 _mm_sub_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_subps(__A, __B);
+}
+
+static inline __m128 _mm_mul_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_mulps(__A, __B);
+}
+
+static inline __m128 _mm_div_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_divps(__A, __B);
+}
+
+static inline __m128 _mm_min_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_minps(__A, __B);
+}
+
+static inline __m128 _mm_max_ps(__m128 __A, __m128 __B) {
+    return __builtin_ia32_maxps(__A, __B);
+}
+
+static inline __m128 _mm_sqrt_ps(__m128 __A) {
+    return __builtin_ia32_sqrtps(__A);
+}
+
+static inline __m128 _mm_add_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_addss(__A, __B);
+}
+
+static inline __m128 _mm_sub_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_subss(__A, __B);
+}
+
+static inline __m128 _mm_mul_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_mulss(__A, __B);
+}
+
+static inline __m128 _mm_div_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_divss(__A, __B);
+}
+
+static inline __m128 _mm_min_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_minss(__A, __B);
+}
+
+static inline __m128 _mm_max_ss(__m128 __A, __m128 __B) {
+    return __builtin_ia32_maxss(__A, __B);
+}
+
+static inline __m128 _mm_sqrt_ss(__m128 __A) {
+    return __builtin_ia32_sqrtss(__A);
+}
+
+/* RCPPS and RSQRTPS approximate within a relative 1.5 * 2^-12, which CPUs
+** meet with different values; the exact quotient meets it on every one. */
+static inline __m128 _mm_rcp_ps(__m128 __A) {
+    return _mm_div_ps(_mm_set1_ps(1.0f), __A);
+}
+
+static inline __m128 _mm_rcp_ss(__m128 __A) {
+    return _mm_move_ss(__A, _mm_div_ss(_mm_set_ss(1.0f), __A));
+}
+
+static inline __m128 _mm_rsqrt_ps(__m128 __A) {
+    return _mm_div_ps(_mm_set1_ps(1.0f), _mm_sqrt_ps(__A));
+}
+
+static inline __m128 _mm_rsqrt_ss(__m128 __A) {
+    return _mm_move_ss(__A, _mm_div_ss(_mm_set_ss(1.0f), _mm_sqrt_ss(__A)));
+}
+
+/* CMPPS / CMPSS by predicate; the greater-than forms swap the operands, a
+** scalar one keeping the first operand's upper lanes. */
+#define __BADC_CMP_PS(name, pred)                                    \
+    static inline __m128 _mm_##name##_ps(__m128 __A, __m128 __B) {   \
+        return __builtin_ia32_cmpps(__A, __B, pred);                \
+    }                                                               \
+    static inline __m128 _mm_##name##_ss(__m128 __A, __m128 __B) {   \
+        return __builtin_ia32_cmpss(__A, __B, pred);                \
+    }
+#define __BADC_CMP_PS_SWAPPED(name, pred)                                    \
+    static inline __m128 _mm_##name##_ps(__m128 __A, __m128 __B) {           \
+        return __builtin_ia32_cmpps(__B, __A, pred);                        \
+    }                                                                       \
+    static inline __m128 _mm_##name##_ss(__m128 __A, __m128 __B) {           \
+        return _mm_move_ss(__A, __builtin_ia32_cmpss(__B, __A, pred));      \
+    }
+__BADC_CMP_PS(cmpeq, 0)
+__BADC_CMP_PS(cmplt, 1)
+__BADC_CMP_PS(cmple, 2)
+__BADC_CMP_PS(cmpunord, 3)
+__BADC_CMP_PS(cmpneq, 4)
+__BADC_CMP_PS(cmpnlt, 5)
+__BADC_CMP_PS(cmpnle, 6)
+__BADC_CMP_PS(cmpord, 7)
+__BADC_CMP_PS_SWAPPED(cmpgt, 1)
+__BADC_CMP_PS_SWAPPED(cmpge, 2)
+__BADC_CMP_PS_SWAPPED(cmpngt, 5)
+__BADC_CMP_PS_SWAPPED(cmpnge, 6)
+#undef __BADC_CMP_PS
+#undef __BADC_CMP_PS_SWAPPED
+
+/* COMISS signals invalid for a quiet NaN and UCOMISS only for a signaling
+** one, as C's relational and equality operators do; an unordered pair
+** compares unequal. */
+static inline int _mm_comieq_ss(__m128 __A, __m128 __B) {
+    return __A[0] <= __B[0] && __A[0] >= __B[0];
+}
+
+static inline int _mm_comilt_ss(__m128 __A, __m128 __B) {
+    return __A[0] < __B[0];
+}
+
+static inline int _mm_comile_ss(__m128 __A, __m128 __B) {
+    return __A[0] <= __B[0];
+}
+
+static inline int _mm_comigt_ss(__m128 __A, __m128 __B) {
+    return __A[0] > __B[0];
+}
+
+static inline int _mm_comige_ss(__m128 __A, __m128 __B) {
+    return __A[0] >= __B[0];
+}
+
+static inline int _mm_comineq_ss(__m128 __A, __m128 __B) {
+    return !(__A[0] <= __B[0] && __A[0] >= __B[0]);
+}
+
+static inline int _mm_ucomieq_ss(__m128 __A, __m128 __B) {
+    return __A[0] == __B[0];
+}
+
+static inline int _mm_ucomilt_ss(__m128 __A, __m128 __B) {
+    return __builtin_isless(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomile_ss(__m128 __A, __m128 __B) {
+    return __builtin_islessequal(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomigt_ss(__m128 __A, __m128 __B) {
+    return __builtin_isgreater(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomige_ss(__m128 __A, __m128 __B) {
+    return __builtin_isgreaterequal(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomineq_ss(__m128 __A, __m128 __B) {
+    return __A[0] != __B[0];
+}
+
 /* The SSE operations on __m64, written lane by lane over the vector
 ** extension as the SDM defines each instruction. A float converts to an
-** integer through CVTSS2SI, which rounds by MXCSR, or CVTTSS2SI; both give
-** 0x80000000 for a NaN or a value out of range. */
-
-static inline int __mm_cvtss2si(float __f) {
-    int __r;
-    __asm__("cvtss2si %1, %0" : "=r"(__r) : "x"(__f));
-    return __r;
-}
-
-static inline int __mm_cvttss2si(float __f) {
-    int __r;
-    __asm__("cvttss2si %1, %0" : "=r"(__r) : "x"(__f));
-    return __r;
-}
+** integer through CVTPS2DQ, which rounds by MXCSR, or CVTTPS2DQ: 0x80000000
+** for a NaN or a value out of range. The two-lane forms convert their two
+** lanes twice over, raising what CVTPS2PI raises. */
 
 static inline __m64 _mm_cvtps_pi32(__m128 __A) {
-    return (__m64)(__v2si){__mm_cvtss2si(__A[0]), __mm_cvtss2si(__A[1])};
+    __v4si __r = __builtin_ia32_cvtps2dq(_mm_movelh_ps(__A, __A));
+    return (__m64)(__v2si){__r[0], __r[1]};
 }
 
 static inline __m64 _mm_cvttps_pi32(__m128 __A) {
-    return (__m64)(__v2si){__mm_cvttss2si(__A[0]), __mm_cvttss2si(__A[1])};
+    __v4si __r = __builtin_ia32_cvttps2dq(_mm_movelh_ps(__A, __A));
+    return (__m64)(__v2si){__r[0], __r[1]};
 }
+
+static inline int _mm_cvtss_si32(__m128 __A) {
+    return __builtin_ia32_cvtss2si(__A);
+}
+#define _mm_cvt_ss2si _mm_cvtss_si32
+
+static inline int _mm_cvttss_si32(__m128 __A) {
+    return __builtin_ia32_cvttss2si(__A);
+}
+#define _mm_cvtt_ss2si _mm_cvttss_si32
+
+static inline __m128 _mm_cvtsi32_ss(__m128 __A, int __B) {
+    __A[0] = (float)__B;
+    return __A;
+}
+#define _mm_cvt_si2ss _mm_cvtsi32_ss
+
+#ifdef __x86_64__
+static inline long long _mm_cvtss_si64(__m128 __A) {
+    return __builtin_ia32_cvtss2si64(__A);
+}
+
+static inline long long _mm_cvttss_si64(__m128 __A) {
+    return __builtin_ia32_cvttss2si64(__A);
+}
+
+static inline __m128 _mm_cvtsi64_ss(__m128 __A, long long __B) {
+    __A[0] = (float)__B;
+    return __A;
+}
+#endif
 
 static inline __m128 _mm_cvtpi32_ps(__m128 __A, __m64 __B) {
     __v2si __b = (__v2si)__B;
@@ -153,16 +443,18 @@ static inline __m128 _mm_cvtpi32x2_ps(__m64 __A, __m64 __B) {
 /* CVTPS2PI on each half, then PACKSSDW, and for the bytes PACKSSWB with
 ** zero: the lanes saturate. */
 static inline __m64 _mm_cvtps_pi16(__m128 __A) {
+    __v4si __c = __builtin_ia32_cvtps2dq(__A);
     __v4hi __r;
     for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (short)__mm_sat_signed(__mm_cvtss2si(__A[__i]), 16);
+        __r[__i] = (short)__mm_sat_signed(__c[__i], 16);
     return (__m64)__r;
 }
 
 static inline __m64 _mm_cvtps_pi8(__m128 __A) {
+    __v4si __c = __builtin_ia32_cvtps2dq(__A);
     __v8qs __r = (__v8qs)0LL;
     for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (signed char)__mm_sat_signed(__mm_cvtss2si(__A[__i]), 8);
+        __r[__i] = (signed char)__mm_sat_signed(__c[__i], 8);
     return (__m64)__r;
 }
 

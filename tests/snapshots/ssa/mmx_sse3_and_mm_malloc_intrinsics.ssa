@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=223 ---
+; --- SSA dump (ok=true) ent_pc=394 ---
 ; name=mmx
-fn ent_pc=223 n_params=0 variadic=false locals=8
+fn ent_pc=394 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -4508,9 +4508,9 @@ fn ent_pc=223 n_params=0 variadic=false locals=8
     v4077 LifetimeEnd(-7)                                  -> -
     v4078 LifetimeEnd(-8)                                  -> -
     terminator Return(v4074)   (exit_acc=v4074)
-; --- SSA dump (ok=true) ent_pc=224 ---
+; --- SSA dump (ok=true) ent_pc=395 ---
 ; name=sse3
-fn ent_pc=224 n_params=0 variadic=false locals=4
+fn ent_pc=395 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -5455,9 +5455,9 @@ fn ent_pc=224 n_params=0 variadic=false locals=4
     v817 LifetimeEnd(-160)                                -> -
     v818 LifetimeEnd(-159)                                -> -
     terminator Return(v808)   (exit_acc=v808)
-; --- SSA dump (ok=true) ent_pc=225 ---
+; --- SSA dump (ok=true) ent_pc=396 ---
 ; name=wait_on
-fn ent_pc=225 n_params=1 variadic=false locals=0
+fn ent_pc=396 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -5477,24 +5477,24 @@ fn ent_pc=225 n_params=1 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  InlineAsm { template="mwait", ops=2, args=[v13, v13] } -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=227 ---
+; --- SSA dump (ok=true) ent_pc=398 ---
 ; name=main
-fn ent_pc=227 n_params=0 variadic=false locals=1
+fn ent_pc=398 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   ImmData(176)                                     -> x0
-    v4   ImmCode(ent_pc=225)                              -> x0
+    v4   ImmCode(ent_pc=396)                              -> x0
     v5   Store { addr=v3, disp=0, value=v4, kind=I64, volatile pc_rel } -> -
-    v6   Call { target_pc=223, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=394, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   Extend { value=v6, kind=I32 }                    -> x0
     v8   Imm(0)                                           -> x1
     v9   Imm(0)                                           -> x1
     terminator Bnz { cond=v7, target=b19, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
-    v10  Call { target_pc=224, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  Call { target_pc=395, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x0
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x1

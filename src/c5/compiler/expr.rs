@@ -403,7 +403,8 @@ impl Compiler {
                 | Form::Shift
                 | Form::Extract
                 | Form::Insert
-                | Form::MoveMask => i == 0,
+                | Form::MoveMask
+                | Form::ToInt => i == 0,
                 Form::Vv | Form::VvI => i < 2,
                 Form::Store => i == 1,
                 Form::Load | Form::RdRand => false,
@@ -476,6 +477,7 @@ impl Compiler {
             }
             Some(lane) => self.make_vector_type(lane as i64, 16),
             None if row.ret == Ret::Void => super::types::void_ty(),
+            None if row.ret == Ret::Int64 => Ty::LongLong as i64,
             None => Ty::Int as i64,
         };
         let pos = self.ast_src_pos();

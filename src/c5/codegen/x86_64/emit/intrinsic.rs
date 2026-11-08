@@ -93,6 +93,10 @@ pub(super) fn emit_x86_simd(
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
+            // A scalar form keeps the operand's other lanes.
+            if matches!(row.sem, x86_simd::Sem::Float(_, _, true)) {
+                load128(code, dst_x, a)?;
+            }
             if row.form == Form::V {
                 insn(code, row.mnem, &[xmm(src_x), xmm(dst_x)])
             } else {
@@ -130,6 +134,21 @@ pub(super) fn emit_x86_simd(
                 return fail("x86 simd: pointer operand has no place");
             };
             return store128(code, p, dst_x);
+        }
+        Form::ToInt => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            load128(code, src_x, a)?;
+            let size = match row.int_width {
+                8 => AsmRegSize::Quad,
+                _ => AsmRegSize::Long,
+            };
+            insn(code, row.mnem, &[xmm(src_x), gpr(SCRATCH_R11, size)])?;
+            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(code, "mov", &[gpr(SCRATCH_R11, size), at(d, size)]);
         }
         Form::Extract => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {

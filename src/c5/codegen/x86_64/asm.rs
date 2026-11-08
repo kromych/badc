@@ -1534,7 +1534,8 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("cvtpd2ps", 0x66, 0x5A), ("cvtps2pd", 0, 0x5A),
         ("cvtdq2pd", 0xF3, 0xE6), ("cvtpd2dq", 0xF2, 0xE6), ("cvttpd2dq", 0x66, 0xE6),
         ("addpd", 0x66, 0x58), ("subpd", 0x66, 0x5C), ("mulpd", 0x66, 0x59), ("divpd", 0x66, 0x5E),
-        ("andpd", 0x66, 0x54), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
+        ("minpd", 0x66, 0x5D), ("maxpd", 0x66, 0x5F), ("sqrtpd", 0x66, 0x51),
+        ("andpd", 0x66, 0x54), ("andnpd", 0x66, 0x55), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
         ("unpcklpd", 0x66, 0x14), ("unpckhpd", 0x66, 0x15),
     ];
     OPS.iter()
@@ -1613,6 +1614,10 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("pshuflw", 0xF2, 1, 0x70, false, false),
         ("pshufhw", 0xF3, 1, 0x70, false, false),
         ("shufps", 0, 1, 0xC6, false, false), ("shufpd", 0x66, 1, 0xC6, false, false),
+        // The compares by an imm8 predicate (0 eq, 1 lt, 2 le, 3 unord, 4 neq,
+        // 5 nlt, 6 nle, 7 ord), packed or scalar by the prefix.
+        ("cmpps", 0, 1, 0xC2, false, false), ("cmppd", 0x66, 1, 0xC2, false, false),
+        ("cmpss", 0xF3, 1, 0xC2, false, false), ("cmpsd", 0xF2, 1, 0xC2, false, false),
         ("palignr", 0x66, 3, 0x0F, false, false),
         ("pclmulqdq", 0x66, 3, 0x44, false, false),
         // GFNI. The legacy encoding leaves the qword element width implicit.

@@ -443,6 +443,20 @@ static inline int _rdrand64_step(unsigned long long *__P) {
 }
 #endif
 
+static inline int _rdseed16_step(unsigned short *__P) {
+    return __builtin_ia32_rdseed16_step(__P);
+}
+
+static inline int _rdseed32_step(unsigned int *__P) {
+    return __builtin_ia32_rdseed32_step(__P);
+}
+
+#ifdef __x86_64__
+static inline int _rdseed64_step(unsigned long long *__P) {
+    return __builtin_ia32_rdseed64_step(__P);
+}
+#endif
+
 /* XCR[__A], as gcc's <immintrin.h> carries it through <xsaveintrin.h>. */
 static inline long long _xgetbv(unsigned int __A) {
     return __builtin_ia32_xgetbv(__A);

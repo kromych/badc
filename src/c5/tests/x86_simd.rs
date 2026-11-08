@@ -1176,19 +1176,78 @@ fn the_table_is_well_formed() {
     }
 }
 
-/// The interpreter evaluates every row over integer lanes, apart from the
-/// rounding direction and the IEC 60559 exceptions its scalar
-/// floating-point operations follow: a floating-point row of the table is
-/// a bitwise operation or a move. A new semantics takes its place here.
+/// The floating-point rows emit their instruction: `<op> %xmm14, %xmm15`
+/// under its prefix, a compare with its predicate byte, and a conversion to
+/// an integer into `%r11d` or `%r11`.
+#[cfg(feature = "full")]
 #[test]
-fn no_row_computes_in_floating_point() {
+fn floating_rows_emit_their_instruction() {
+    const PS: &str = "typedef float __v4sf __attribute__((vector_size(16))); ";
+    for (src, expected, what) in [
+        (
+            "__v4sf f(__v4sf a, __v4sf b) { return __builtin_ia32_addps(a, b); }",
+            &[0x45, 0x0f, 0x58, 0xfe][..],
+            "addps",
+        ),
+        (
+            "__v4sf f(__v4sf a, __v4sf b) { return __builtin_ia32_minss(a, b); }",
+            &[0xf3, 0x45, 0x0f, 0x5d, 0xfe],
+            "minss",
+        ),
+        (
+            "__v2df f(__v2df a, __v2df b) { return __builtin_ia32_divpd(a, b); }",
+            &[0x66, 0x45, 0x0f, 0x5e, 0xfe],
+            "divpd",
+        ),
+        (
+            "__v2df f(__v2df a) { return __builtin_ia32_sqrtpd(a); }",
+            &[0x66, 0x45, 0x0f, 0x51, 0xfe],
+            "sqrtpd",
+        ),
+        (
+            "__v4sf f(__v4sf a, __v4sf b) { return __builtin_ia32_cmpps(a, b, 6); }",
+            &[0x45, 0x0f, 0xc2, 0xfe, 0x06],
+            "cmpps",
+        ),
+        (
+            "__v2df f(__v2df a, __v2df b) { return __builtin_ia32_cmpsd(a, b, 3); }",
+            &[0xf2, 0x45, 0x0f, 0xc2, 0xfe, 0x03],
+            "cmpsd",
+        ),
+        (
+            "__v4si f(__v4sf a) { return __builtin_ia32_cvttps2dq(a); }",
+            &[0xf3, 0x45, 0x0f, 0x5b, 0xfe],
+            "cvttps2dq",
+        ),
+        (
+            "int f(__v2df a) { return __builtin_ia32_cvtsd2si(a); }",
+            &[0xf2, 0x45, 0x0f, 0x2d, 0xde],
+            "cvtsd2si",
+        ),
+        (
+            "long long f(__v4sf a) { return __builtin_ia32_cvttss2si64(a); }",
+            &[0xf3, 0x4d, 0x0f, 0x2c, 0xde],
+            "cvttss2si64",
+        ),
+    ] {
+        assert_emits(&format!("{PS}{src}"), expected, what);
+    }
+}
+
+/// A floating-point row computes in the interpreter's floating-point
+/// environment, which rounds in its direction and raises its exceptions; the
+/// others compute over integer lanes. A new semantics takes its place here.
+#[test]
+fn floating_rows_compute_in_the_environment() {
     let floating = |sem: Sem| match sem {
+        Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
         | Sem::MulHi(_)
         | Sem::MulAddWords
         | Sem::MulAddBytes
+        | Sem::MulEvenU
         | Sem::AddSat(..)
         | Sem::SubSat(..)
         | Sem::SadBytes
@@ -1222,7 +1281,54 @@ fn no_row_computes_in_floating_point() {
         | Sem::Move
         | Sem::Rand => false,
     };
+    /// Counts the operations a row asks of the environment.
+    struct Counting(u32);
+    impl x86_simd::FloatEnv for Counting {
+        fn arith(&mut self, _: x86_simd::FOp, a: u64, _: u64, _: bool) -> u64 {
+            self.0 += 1;
+            a
+        }
+        fn compare(&mut self, _: u64, _: u64, _: bool) -> Option<core::cmp::Ordering> {
+            self.0 += 1;
+            None
+        }
+        fn to_int(&mut self, _: u64, _: bool, _: u32) -> i64 {
+            self.0 += 1;
+            0
+        }
+        fn int32_to_float(&mut self, _: i32, _: bool) -> u64 {
+            self.0 += 1;
+            0
+        }
+        fn to_single(&mut self, a: u64) -> u64 {
+            self.0 += 1;
+            a
+        }
+        fn widen(&mut self, a: u64) -> u64 {
+            self.0 += 1;
+            a
+        }
+    }
     for op in x86_simd::OPS {
-        assert!(!floating(op.sem), "{} computes in floating point", op.name);
+        let (mut env, a) = (Counting(0), [0x3f; 16]);
+        let packed = x86_simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some();
+        let scalar = x86_simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
+        assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
+        assert_eq!(env.0 > 0, floating(op.sem), "{}", op.name);
+    }
+}
+
+/// The floating-point rows compute in the interpreter as the instructions
+/// do: the fixture's hashes, which the instructions gave in each rounding
+/// direction, hold under the interpreter for both x86-64 targets.
+#[test]
+fn the_interpreter_computes_the_floating_rows_as_the_instructions_do() {
+    let src = super::load_fixture("sse_floating_lanes_follow_the_sdm.c");
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        let program = crate::Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: row {rc} differs");
     }
 }

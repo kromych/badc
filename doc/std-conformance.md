@@ -679,22 +679,22 @@ one fails at the undeclared name.
 | header | contents |
 |--------|----------|
 | `<mmintrin.h>` | MMX: gcc's `__m64` operations and their `_m_` names; `_mm_empty` executes `emms`. |
-| `<xmmintrin.h>` | SSE: `__m128`, `_MM_SHUFFLE`, MXCSR access, `_mm_sfence`, `_mm_pause`, `_mm_prefetch` with the `_MM_HINT_*` hints, `_mm_and_ps`, `_mm_andnot_ps`, `_mm_or_ps`, `_mm_xor_ps` and the `__m64` operations. No packed-single arithmetic. |
-| `<emmintrin.h>` | SSE2 on `__m128i`: add and subtract, saturating add and subtract, `_mm_sad_epu8`, `_mm_mullo_epi16`, `_mm_mulhi_epi16`, `_mm_madd_epi16`, logic, compares, packs, interleaves, immediate shifts, shuffles, element access, `_mm_movemask_epi8`, loads and stores; `_mm_set*`, `_mm_setr*` and `_mm_cvtsi*`; `_mm_shuffle_pd`; the `__m128`, `__m128i` and `__m128d` casts; the fences. |
+| `<xmmintrin.h>` | SSE: `__m128`, `_MM_SHUFFLE`, MXCSR access, `_mm_sfence`, `_mm_pause`, `_mm_prefetch` with the `_MM_HINT_*` hints; the packed and scalar single-precision arithmetic, minimum, maximum and square root, `cmp*`, `comi*` and `ucomi*` compares, conversions, `_mm_set*`, loads, stores, shuffles, interleaves and `_mm_movemask_ps`; `_mm_rcp_*` and `_mm_rsqrt_*` as the exact quotient, within the instructions' error bound; logic and the `__m64` operations. |
+| `<emmintrin.h>` | SSE2 on `__m128i`: add and subtract, saturating add and subtract, `_mm_sad_epu8`, `_mm_mullo_epi16`, `_mm_mulhi_epi16`, `_mm_madd_epi16`, logic, compares, packs, interleaves, immediate shifts, shuffles, element access, `_mm_movemask_epi8`, loads and stores; `_mm_set*`, `_mm_setr*` and `_mm_cvtsi*`; `_mm_mul_epu32`; on `__m128d`, the double-precision counterparts of `<xmmintrin.h>`'s operations and the conversions between `__m128`, `__m128d` and `__m128i`; `_mm_shuffle_pd`; the `__m128`, `__m128i` and `__m128d` casts; the fences. |
 | `<pmmintrin.h>` | SSE3: `addsub`, horizontal add and subtract, `lddqu`, the duplicating moves and loads, `monitor` and `mwait`. |
 | `<tmmintrin.h>` | SSSE3: `_mm_shuffle_epi8`, `_mm_maddubs_epi16` and the `__m64` forms. |
 | `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
-| `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*` and `_mm256_movemask_epi8`; `_rdrand16_step`, `_rdrand32_step`, `_rdrand64_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
+| `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*`, `_mm256_cmpgt_epi32` / `_epi64`, `_mm256_movemask_epi8`, the element extracts and inserts, `_mm256_set_*` / `_mm256_setr_*`, the permutes, `_mm256_shuffle_epi8`, the element and byte shifts by an immediate, `_mm256_mullo_epi32`, `_mm256_mul_epu32`, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_subs_epu16` and the interleaves; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
-Not provided: packed-single arithmetic, packed-double operations other than
-`_mm_shuffle_pd` and the SSE3 ones, the 128-bit averaging, minimum and maximum
-integer operations, shifts by a vector count,
+Not provided: the 128-bit averaging, minimum and maximum integer operations,
+shifts by a vector count,
 the 128-bit non-temporal stores, and everything past SSE4.1 (AVX, AVX2,
 AVX-512, FMA) but the 256-bit integer subset. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
-An intrinsic whose last operand is an `imm8` is a macro, as gcc's are without
-`-O`. The rest are `static inline` functions, which `-O` inlines so the
+An intrinsic whose last operand its instruction encodes as an `imm8` is a
+macro, as gcc's are without `-O`; a lane move written over the vector
+extension takes its selector as an argument. The rest are `static inline` functions, which `-O` inlines so the
 instruction appears at the call site; without `-O` they stay calls.
 
 On the AArch64 targets `<arm_neon.h>` provides a subset of the ACLE NEON

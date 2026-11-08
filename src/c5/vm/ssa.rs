@@ -3780,12 +3780,14 @@ fn run_x86_simd(
     match row.form {
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
-            let out = x86_simd::eval(row.sem, &a, &b, imm8, 0);
+            let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
+                .unwrap_or_else(|| x86_simd::eval(row.sem, &a, &b, imm8, 0));
             mem.write_bytes(reg(0), &out)?;
         }
         Form::V | Form::VI => {
             let a = read(mem, reg(1))?;
-            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0);
+            let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8)
+                .unwrap_or_else(|| x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
             mem.write_bytes(reg(0), &out)?;
         }
         Form::Shift => {
@@ -3806,6 +3808,12 @@ fn run_x86_simd(
         Form::Store => {
             let a = read(mem, reg(1))?;
             mem.write_bytes(reg(0), &a)?;
+        }
+        Form::ToInt => {
+            let a = read(mem, reg(1))?;
+            let bits = 8 * u32::from(row.int_width);
+            let x = x86_simd::eval_to_int(&mut mem.fp, row.sem, &a, bits).unwrap_or(0);
+            mem.write_bytes(reg(0), &x.to_le_bytes()[..row.int_width as usize])?;
         }
         Form::Extract => {
             let a = read(mem, reg(1))?;

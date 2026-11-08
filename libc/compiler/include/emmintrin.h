@@ -23,7 +23,6 @@
 typedef long long __m128i __attribute__((__vector_size__(16)));
 typedef double __m128d __attribute__((__vector_size__(16)));
 typedef long long __v2di __attribute__((__vector_size__(16)));
-typedef int __v4si __attribute__((__vector_size__(16)));
 typedef short __v8hi __attribute__((__vector_size__(16)));
 typedef char __v16qi __attribute__((__vector_size__(16)));
 typedef double __v2df __attribute__((__vector_size__(16)));
@@ -177,24 +176,14 @@ static inline __m64 _mm_mul_su32(__m64 __A, __m64 __B) {
     return (__m64)((unsigned long long)((__v2su)__A)[0] * ((__v2su)__B)[0]);
 }
 
-static inline int __mm_cvtsd2si(double __d) {
-    int __r;
-    __asm__("cvtsd2si %1, %0" : "=r"(__r) : "x"(__d));
-    return __r;
-}
-
-static inline int __mm_cvttsd2si(double __d) {
-    int __r;
-    __asm__("cvttsd2si %1, %0" : "=r"(__r) : "x"(__d));
-    return __r;
-}
-
 static inline __m64 _mm_cvtpd_pi32(__m128d __A) {
-    return (__m64)(__v2si){__mm_cvtsd2si(__A[0]), __mm_cvtsd2si(__A[1])};
+    __v4si __r = __builtin_ia32_cvtpd2dq(__A);
+    return (__m64)(__v2si){__r[0], __r[1]};
 }
 
 static inline __m64 _mm_cvttpd_pi32(__m128d __A) {
-    return (__m64)(__v2si){__mm_cvttsd2si(__A[0]), __mm_cvttsd2si(__A[1])};
+    __v4si __r = __builtin_ia32_cvttpd2dq(__A);
+    return (__m64)(__v2si){__r[0], __r[1]};
 }
 
 static inline __m128d _mm_cvtpi32_pd(__m64 __A) {
@@ -488,5 +477,334 @@ static inline int _mm_movemask_epi8(__m128i __A) {
     ((int)__builtin_ia32_vec_ext_v8hi((__v8hi)(__m128i)(A), (int)(N)))
 #define _mm_insert_epi16(A, D, N) \
     ((__m128i)__builtin_ia32_vec_set_v8hi((__v8hi)(__m128i)(A), (int)(D), (int)(N)))
+
+
+/* The SSE2 double-precision operations. The arithmetic, comparisons and
+** conversions lower to their SDM instructions; the transfers and lane moves
+** are written over the vector extension, on the integer view of the lanes. */
+
+static inline __m128d _mm_setzero_pd(void) {
+    return (__m128d){0, 0};
+}
+
+static inline __m128d _mm_set_pd(double __B, double __A) {
+    return (__m128d){__A, __B};
+}
+
+static inline __m128d _mm_setr_pd(double __A, double __B) {
+    return (__m128d){__A, __B};
+}
+
+static inline __m128d _mm_set1_pd(double __A) {
+    return (__m128d){__A, __A};
+}
+#define _mm_set_pd1 _mm_set1_pd
+
+static inline __m128d _mm_set_sd(double __A) {
+    return (__m128d){__A, 0};
+}
+
+static inline __m128d _mm_load_pd(double const *__P) {
+    return *(__m128d const *)__P;
+}
+
+static inline __m128d _mm_loadu_pd(double const *__P) {
+    return *(__m128d_u const *)__P;
+}
+
+static inline __m128d _mm_load_sd(double const *__P) {
+    return (__m128d)(__v2di){*(long long const *)__P, 0};
+}
+
+static inline __m128d _mm_load1_pd(double const *__P) {
+    long long __x = *(long long const *)__P;
+    return (__m128d)(__v2di){__x, __x};
+}
+#define _mm_load_pd1 _mm_load1_pd
+
+static inline __m128d _mm_loadr_pd(double const *__P) {
+    __v2di __v = (__v2di)_mm_load_pd(__P);
+    return (__m128d)(__v2di){__v[1], __v[0]};
+}
+
+static inline __m128d _mm_loadh_pd(__m128d __A, double const *__P) {
+    __v2di __a = (__v2di)__A;
+    __a[1] = *(long long const *)__P;
+    return (__m128d)__a;
+}
+
+static inline __m128d _mm_loadl_pd(__m128d __A, double const *__P) {
+    __v2di __a = (__v2di)__A;
+    __a[0] = *(long long const *)__P;
+    return (__m128d)__a;
+}
+
+static inline void _mm_store_pd(double *__P, __m128d __A) {
+    *(__m128d *)__P = __A;
+}
+
+static inline void _mm_storeu_pd(double *__P, __m128d __A) {
+    *(__m128d_u *)__P = __A;
+}
+
+static inline void _mm_store_sd(double *__P, __m128d __A) {
+    *(long long *)__P = ((__v2di)__A)[0];
+}
+#define _mm_storel_pd _mm_store_sd
+
+static inline void _mm_storeh_pd(double *__P, __m128d __A) {
+    *(long long *)__P = ((__v2di)__A)[1];
+}
+
+static inline void _mm_store1_pd(double *__P, __m128d __A) {
+    long long __x = ((__v2di)__A)[0];
+    _mm_store_pd(__P, (__m128d)(__v2di){__x, __x});
+}
+#define _mm_store_pd1 _mm_store1_pd
+
+static inline void _mm_storer_pd(double *__P, __m128d __A) {
+    __v2di __v = (__v2di)__A;
+    _mm_store_pd(__P, (__m128d)(__v2di){__v[1], __v[0]});
+}
+
+static inline void _mm_stream_pd(double *__P, __m128d __A) {
+    _mm_store_pd(__P, __A);
+}
+
+static inline double _mm_cvtsd_f64(__m128d __A) {
+    return __A[0];
+}
+
+static inline __m128d _mm_move_sd(__m128d __A, __m128d __B) {
+    __v2di __a = (__v2di)__A;
+    __a[0] = ((__v2di)__B)[0];
+    return (__m128d)__a;
+}
+
+static inline __m128d _mm_unpacklo_pd(__m128d __A, __m128d __B) {
+    return (__m128d)(__v2di){((__v2di)__A)[0], ((__v2di)__B)[0]};
+}
+
+static inline __m128d _mm_unpackhi_pd(__m128d __A, __m128d __B) {
+    return (__m128d)(__v2di){((__v2di)__A)[1], ((__v2di)__B)[1]};
+}
+
+static inline int _mm_movemask_pd(__m128d __A) {
+    __v2di __a = (__v2di)__A;
+    return (__a[0] < 0) | (__a[1] < 0) << 1;
+}
+
+static inline __m128d _mm_add_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_addpd(__A, __B);
+}
+
+static inline __m128d _mm_sub_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_subpd(__A, __B);
+}
+
+static inline __m128d _mm_mul_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_mulpd(__A, __B);
+}
+
+static inline __m128d _mm_div_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_divpd(__A, __B);
+}
+
+static inline __m128d _mm_min_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_minpd(__A, __B);
+}
+
+static inline __m128d _mm_max_pd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_maxpd(__A, __B);
+}
+
+static inline __m128d _mm_sqrt_pd(__m128d __A) {
+    return __builtin_ia32_sqrtpd(__A);
+}
+
+static inline __m128d _mm_add_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_addsd(__A, __B);
+}
+
+static inline __m128d _mm_sub_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_subsd(__A, __B);
+}
+
+static inline __m128d _mm_mul_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_mulsd(__A, __B);
+}
+
+static inline __m128d _mm_div_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_divsd(__A, __B);
+}
+
+static inline __m128d _mm_min_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_minsd(__A, __B);
+}
+
+static inline __m128d _mm_max_sd(__m128d __A, __m128d __B) {
+    return __builtin_ia32_maxsd(__A, __B);
+}
+
+/* SQRTSD: the root of the second operand's low lane over the first's. */
+static inline __m128d _mm_sqrt_sd(__m128d __A, __m128d __B) {
+    return _mm_move_sd(__A, __builtin_ia32_sqrtsd(__B));
+}
+
+#define __BADC_CMP_PD(name, pred)                                       \
+    static inline __m128d _mm_##name##_pd(__m128d __A, __m128d __B) {    \
+        return __builtin_ia32_cmppd(__A, __B, pred);                    \
+    }                                                                   \
+    static inline __m128d _mm_##name##_sd(__m128d __A, __m128d __B) {    \
+        return __builtin_ia32_cmpsd(__A, __B, pred);                    \
+    }
+#define __BADC_CMP_PD_SWAPPED(name, pred)                                \
+    static inline __m128d _mm_##name##_pd(__m128d __A, __m128d __B) {    \
+        return __builtin_ia32_cmppd(__B, __A, pred);                    \
+    }                                                                   \
+    static inline __m128d _mm_##name##_sd(__m128d __A, __m128d __B) {    \
+        return _mm_move_sd(__A, __builtin_ia32_cmpsd(__B, __A, pred));  \
+    }
+__BADC_CMP_PD(cmpeq, 0)
+__BADC_CMP_PD(cmplt, 1)
+__BADC_CMP_PD(cmple, 2)
+__BADC_CMP_PD(cmpunord, 3)
+__BADC_CMP_PD(cmpneq, 4)
+__BADC_CMP_PD(cmpnlt, 5)
+__BADC_CMP_PD(cmpnle, 6)
+__BADC_CMP_PD(cmpord, 7)
+__BADC_CMP_PD_SWAPPED(cmpgt, 1)
+__BADC_CMP_PD_SWAPPED(cmpge, 2)
+__BADC_CMP_PD_SWAPPED(cmpngt, 5)
+__BADC_CMP_PD_SWAPPED(cmpnge, 6)
+#undef __BADC_CMP_PD
+#undef __BADC_CMP_PD_SWAPPED
+
+/* As <xmmintrin.h>'s COMISS / UCOMISS forms. */
+static inline int _mm_comieq_sd(__m128d __A, __m128d __B) {
+    return __A[0] <= __B[0] && __A[0] >= __B[0];
+}
+
+static inline int _mm_comilt_sd(__m128d __A, __m128d __B) {
+    return __A[0] < __B[0];
+}
+
+static inline int _mm_comile_sd(__m128d __A, __m128d __B) {
+    return __A[0] <= __B[0];
+}
+
+static inline int _mm_comigt_sd(__m128d __A, __m128d __B) {
+    return __A[0] > __B[0];
+}
+
+static inline int _mm_comige_sd(__m128d __A, __m128d __B) {
+    return __A[0] >= __B[0];
+}
+
+static inline int _mm_comineq_sd(__m128d __A, __m128d __B) {
+    return !(__A[0] <= __B[0] && __A[0] >= __B[0]);
+}
+
+static inline int _mm_ucomieq_sd(__m128d __A, __m128d __B) {
+    return __A[0] == __B[0];
+}
+
+static inline int _mm_ucomilt_sd(__m128d __A, __m128d __B) {
+    return __builtin_isless(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomile_sd(__m128d __A, __m128d __B) {
+    return __builtin_islessequal(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomigt_sd(__m128d __A, __m128d __B) {
+    return __builtin_isgreater(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomige_sd(__m128d __A, __m128d __B) {
+    return __builtin_isgreaterequal(__A[0], __B[0]);
+}
+
+static inline int _mm_ucomineq_sd(__m128d __A, __m128d __B) {
+    return __A[0] != __B[0];
+}
+
+static inline __m128 _mm_cvtepi32_ps(__m128i __A) {
+    return __builtin_ia32_cvtdq2ps((__v4si)__A);
+}
+
+static inline __m128i _mm_cvtps_epi32(__m128 __A) {
+    return (__m128i)__builtin_ia32_cvtps2dq(__A);
+}
+
+static inline __m128i _mm_cvttps_epi32(__m128 __A) {
+    return (__m128i)__builtin_ia32_cvttps2dq(__A);
+}
+
+static inline __m128d _mm_cvtepi32_pd(__m128i __A) {
+    return __builtin_ia32_cvtdq2pd((__v4si)__A);
+}
+
+static inline __m128i _mm_cvtpd_epi32(__m128d __A) {
+    return (__m128i)__builtin_ia32_cvtpd2dq(__A);
+}
+
+static inline __m128i _mm_cvttpd_epi32(__m128d __A) {
+    return (__m128i)__builtin_ia32_cvttpd2dq(__A);
+}
+
+static inline __m128d _mm_cvtps_pd(__m128 __A) {
+    return __builtin_ia32_cvtps2pd(__A);
+}
+
+static inline __m128 _mm_cvtpd_ps(__m128d __A) {
+    return __builtin_ia32_cvtpd2ps(__A);
+}
+
+static inline int _mm_cvtsd_si32(__m128d __A) {
+    return __builtin_ia32_cvtsd2si(__A);
+}
+
+static inline int _mm_cvttsd_si32(__m128d __A) {
+    return __builtin_ia32_cvttsd2si(__A);
+}
+
+static inline __m128d _mm_cvtsi32_sd(__m128d __A, int __B) {
+    __A[0] = (double)__B;
+    return __A;
+}
+
+static inline __m128 _mm_cvtsd_ss(__m128 __A, __m128d __B) {
+    __A[0] = (float)__B[0];
+    return __A;
+}
+
+static inline __m128d _mm_cvtss_sd(__m128d __A, __m128 __B) {
+    __A[0] = (double)__B[0];
+    return __A;
+}
+
+#ifdef __x86_64__
+static inline long long _mm_cvtsd_si64(__m128d __A) {
+    return __builtin_ia32_cvtsd2si64(__A);
+}
+#define _mm_cvtsd_si64x _mm_cvtsd_si64
+
+static inline long long _mm_cvttsd_si64(__m128d __A) {
+    return __builtin_ia32_cvttsd2si64(__A);
+}
+#define _mm_cvttsd_si64x _mm_cvttsd_si64
+
+static inline __m128d _mm_cvtsi64_sd(__m128d __A, long long __B) {
+    __A[0] = (double)__B;
+    return __A;
+}
+#define _mm_cvtsi64x_sd _mm_cvtsi64_sd
+#endif
+
+/* PMULUDQ: the unsigned products of the low doubleword of each quadword. */
+static inline __m128i _mm_mul_epu32(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pmuludq128((__v2di)__A, (__v2di)__B);
+}
 
 #pragma pop_macro("__attribute__")

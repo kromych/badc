@@ -200,7 +200,7 @@ impl<'a> Walker<'a> {
         args: &[ExprId],
         imm: Option<u8>,
     ) -> Result<ValueId, WalkError> {
-        use crate::c5::x86_simd::{self, Form};
+        use crate::c5::x86_simd::{self, Form, Ret};
         let form = x86_simd::get(op).form;
         let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
         for &a in args {
@@ -222,6 +222,8 @@ impl<'a> Walker<'a> {
         b.x86_simd(op, imm, ops);
         if form.returns_vector() {
             Ok(dst)
+        } else if x86_simd::get(op).ret == Ret::Int64 {
+            Ok(b.load(dst, LoadKind::I64))
         } else {
             Ok(b.load(dst, LoadKind::I32))
         }

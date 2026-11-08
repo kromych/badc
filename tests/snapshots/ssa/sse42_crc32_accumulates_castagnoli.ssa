@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=421 ---
+; --- SSA dump (ok=true) ent_pc=425 ---
 ; name=reference
-fn ent_pc=421 n_params=3 variadic=false locals=0
+fn ent_pc=425 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -164,9 +164,9 @@ fn ent_pc=421 n_params=3 variadic=false locals=0
   block 3  start_pc=0
     v153 BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x0
     terminator Return(v11)   (exit_acc=v11)
-; --- SSA dump (ok=true) ent_pc=422 ---
+; --- SSA dump (ok=true) ent_pc=426 ---
 ; name=main
-fn ent_pc=422 n_params=0 variadic=false locals=3
+fn ent_pc=426 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -566,7 +566,7 @@ fn ent_pc=422 n_params=0 variadic=false locals=3
     v385 BinopI { op=and, lhs=v374, rhs_imm=4294967295 }  -> x0
     v386 Imm(0)                                           -> x0
     v387 Imm(8)                                           -> x2
-    v388 Call { target_pc=421, args=[v374, v380, v387], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v388 Call { target_pc=425, args=[v374, v380, v387], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v389 BinopI { op=and, lhs=v388, rhs_imm=4294967295 }  -> x0
     v390 Binop { op=eq, lhs=v384, rhs=v389 }              -> x0
     v391 BinopI { op=eq, lhs=v390, rhs_imm=0 }            -> x1
@@ -584,7 +584,7 @@ fn ent_pc=422 n_params=0 variadic=false locals=3
     v405 BinopI { op=and, lhs=v374, rhs_imm=4294967295 }  -> x0
     v406 Imm(0)                                           -> x0
     v407 Imm(4)                                           -> x2
-    v408 Call { target_pc=421, args=[v374, v380, v407], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v408 Call { target_pc=425, args=[v374, v380, v407], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v409 BinopI { op=and, lhs=v408, rhs_imm=4294967295 }  -> x1
     v410 Binop { op=eq, lhs=v402, rhs=v408 }              -> x0
     v411 BinopI { op=eq, lhs=v410, rhs_imm=0 }            -> x1
@@ -602,7 +602,7 @@ fn ent_pc=422 n_params=0 variadic=false locals=3
     v425 BinopI { op=and, lhs=v374, rhs_imm=4294967295 }  -> x0
     v426 Imm(0)                                           -> x0
     v427 Imm(2)                                           -> x2
-    v428 Call { target_pc=421, args=[v374, v380, v427], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v428 Call { target_pc=425, args=[v374, v380, v427], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v429 BinopI { op=and, lhs=v428, rhs_imm=4294967295 }  -> x1
     v430 Binop { op=eq, lhs=v422, rhs=v428 }              -> x0
     v431 BinopI { op=eq, lhs=v430, rhs_imm=0 }            -> x1
@@ -620,7 +620,7 @@ fn ent_pc=422 n_params=0 variadic=false locals=3
     v445 BinopI { op=and, lhs=v374, rhs_imm=4294967295 }  -> x0
     v446 Imm(0)                                           -> x0
     v447 Imm(1)                                           -> x2
-    v448 Call { target_pc=421, args=[v374, v380, v447], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v448 Call { target_pc=425, args=[v374, v380, v447], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v449 BinopI { op=and, lhs=v448, rhs_imm=4294967295 }  -> x1
     v450 Binop { op=eq, lhs=v442, rhs=v448 }              -> x0
     v451 BinopI { op=eq, lhs=v450, rhs_imm=0 }            -> x1

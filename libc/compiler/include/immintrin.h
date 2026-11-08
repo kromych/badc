@@ -25,6 +25,12 @@ typedef unsigned short __v16hu __attribute__((__vector_size__(32)));
 typedef unsigned int __v8su __attribute__((__vector_size__(32)));
 typedef unsigned long long __v4du __attribute__((__vector_size__(32)));
 typedef long long __m256i_u __attribute__((__vector_size__(32), __may_alias__, __aligned__(1)));
+typedef float __m256 __attribute__((__vector_size__(32)));
+typedef double __m256d __attribute__((__vector_size__(32)));
+typedef float __v8sf __attribute__((__vector_size__(32)));
+typedef double __v4df __attribute__((__vector_size__(32)));
+typedef float __m256_u __attribute__((__vector_size__(32), __may_alias__, __aligned__(1)));
+typedef double __m256d_u __attribute__((__vector_size__(32), __may_alias__, __aligned__(1)));
 #pragma pop_macro("__attribute__")
 
 static inline __m256i _mm256_loadu_si256(__m256i_u const *__P) {
@@ -428,6 +434,585 @@ static inline __m256i _mm256_unpacklo_epi64(__m256i __A, __m256i __B) {
 static inline __m256i _mm256_unpackhi_epi64(__m256i __A, __m256i __B) {
     return (__m256i){__A[1], __B[1], __A[3], __B[3]};
 }
+
+/* AVX's floating-point operations. Each one an SSE instruction applies to
+** a 128-bit half applies to the two halves, so it lowers to that SSE
+** instruction twice; the compares by AVX's 32 predicates and the FMA forms
+** are written lane by lane, a predicate that signals raising invalid for a
+** NaN operand. The transfers and lane moves work on the integer view of the
+** lanes, which keeps every bit. No VEX instruction is emitted. */
+
+static inline __m128 __badc_lo_ps(__m256 __A) {
+    __v8si __a = (__v8si)__A;
+    return (__m128)(__v4si){__a[0], __a[1], __a[2], __a[3]};
+}
+
+static inline __m128 __badc_hi_ps(__m256 __A) {
+    __v8si __a = (__v8si)__A;
+    return (__m128)(__v4si){__a[4], __a[5], __a[6], __a[7]};
+}
+
+static inline __m256 __badc_join_ps(__m128 __L, __m128 __H) {
+    __v4si __l = (__v4si)__L, __h = (__v4si)__H;
+    return (__m256)(__v8si){__l[0], __l[1], __l[2], __l[3], __h[0], __h[1], __h[2], __h[3]};
+}
+
+static inline __m128d __badc_lo_pd(__m256d __A) {
+    __v4di __a = (__v4di)__A;
+    return (__m128d)(__v2di){__a[0], __a[1]};
+}
+
+static inline __m128d __badc_hi_pd(__m256d __A) {
+    __v4di __a = (__v4di)__A;
+    return (__m128d)(__v2di){__a[2], __a[3]};
+}
+
+static inline __m256d __badc_join_pd(__m128d __L, __m128d __H) {
+    __v2di __l = (__v2di)__L, __h = (__v2di)__H;
+    return (__m256d)(__v4di){__l[0], __l[1], __h[0], __h[1]};
+}
+
+#define __BADC_AVX_BINARY(name)                                                         \
+    static inline __m256 _mm256_##name##_ps(__m256 __A, __m256 __B) {                  \
+        return __badc_join_ps(_mm_##name##_ps(__badc_lo_ps(__A), __badc_lo_ps(__B)),   \
+                              _mm_##name##_ps(__badc_hi_ps(__A), __badc_hi_ps(__B)));  \
+    }                                                                                 \
+    static inline __m256d _mm256_##name##_pd(__m256d __A, __m256d __B) {               \
+        return __badc_join_pd(_mm_##name##_pd(__badc_lo_pd(__A), __badc_lo_pd(__B)),   \
+                              _mm_##name##_pd(__badc_hi_pd(__A), __badc_hi_pd(__B)));  \
+    }
+__BADC_AVX_BINARY(add)
+__BADC_AVX_BINARY(sub)
+__BADC_AVX_BINARY(mul)
+__BADC_AVX_BINARY(div)
+__BADC_AVX_BINARY(min)
+__BADC_AVX_BINARY(max)
+__BADC_AVX_BINARY(and)
+__BADC_AVX_BINARY(andnot)
+__BADC_AVX_BINARY(or)
+__BADC_AVX_BINARY(xor)
+__BADC_AVX_BINARY(addsub)
+__BADC_AVX_BINARY(hadd)
+__BADC_AVX_BINARY(hsub)
+__BADC_AVX_BINARY(unpacklo)
+__BADC_AVX_BINARY(unpackhi)
+#undef __BADC_AVX_BINARY
+
+static inline __m256 _mm256_sqrt_ps(__m256 __A) {
+    return __badc_join_ps(_mm_sqrt_ps(__badc_lo_ps(__A)), _mm_sqrt_ps(__badc_hi_ps(__A)));
+}
+
+static inline __m256d _mm256_sqrt_pd(__m256d __A) {
+    return __badc_join_pd(_mm_sqrt_pd(__badc_lo_pd(__A)), _mm_sqrt_pd(__badc_hi_pd(__A)));
+}
+
+static inline __m256 _mm256_rcp_ps(__m256 __A) {
+    return __badc_join_ps(_mm_rcp_ps(__badc_lo_ps(__A)), _mm_rcp_ps(__badc_hi_ps(__A)));
+}
+
+static inline __m256 _mm256_rsqrt_ps(__m256 __A) {
+    return __badc_join_ps(_mm_rsqrt_ps(__badc_lo_ps(__A)), _mm_rsqrt_ps(__badc_hi_ps(__A)));
+}
+
+static inline __m256 _mm256_movehdup_ps(__m256 __A) {
+    return __badc_join_ps(_mm_movehdup_ps(__badc_lo_ps(__A)), _mm_movehdup_ps(__badc_hi_ps(__A)));
+}
+
+static inline __m256 _mm256_moveldup_ps(__m256 __A) {
+    return __badc_join_ps(_mm_moveldup_ps(__badc_lo_ps(__A)), _mm_moveldup_ps(__badc_hi_ps(__A)));
+}
+
+static inline __m256d _mm256_movedup_pd(__m256d __A) {
+    return __badc_join_pd(_mm_movedup_pd(__badc_lo_pd(__A)), _mm_movedup_pd(__badc_hi_pd(__A)));
+}
+
+static inline __m256 _mm256_setzero_ps(void) {
+    return (__m256){0, 0, 0, 0, 0, 0, 0, 0};
+}
+
+static inline __m256d _mm256_setzero_pd(void) {
+    return (__m256d){0, 0, 0, 0};
+}
+
+static inline __m256 _mm256_set_ps(float __H, float __G, float __F, float __E, float __D,
+                                   float __C, float __B, float __A) {
+    return (__m256){__A, __B, __C, __D, __E, __F, __G, __H};
+}
+
+static inline __m256 _mm256_setr_ps(float __A, float __B, float __C, float __D, float __E,
+                                    float __F, float __G, float __H) {
+    return (__m256){__A, __B, __C, __D, __E, __F, __G, __H};
+}
+
+static inline __m256 _mm256_set1_ps(float __A) {
+    return (__m256){__A, __A, __A, __A, __A, __A, __A, __A};
+}
+
+static inline __m256d _mm256_set_pd(double __D, double __C, double __B, double __A) {
+    return (__m256d){__A, __B, __C, __D};
+}
+
+static inline __m256d _mm256_setr_pd(double __A, double __B, double __C, double __D) {
+    return (__m256d){__A, __B, __C, __D};
+}
+
+static inline __m256d _mm256_set1_pd(double __A) {
+    return (__m256d){__A, __A, __A, __A};
+}
+
+static inline __m256 _mm256_set_m128(__m128 __H, __m128 __L) {
+    return __badc_join_ps(__L, __H);
+}
+
+static inline __m256d _mm256_set_m128d(__m128d __H, __m128d __L) {
+    return __badc_join_pd(__L, __H);
+}
+
+static inline __m256 _mm256_setr_m128(__m128 __L, __m128 __H) {
+    return __badc_join_ps(__L, __H);
+}
+
+static inline __m256d _mm256_setr_m128d(__m128d __L, __m128d __H) {
+    return __badc_join_pd(__L, __H);
+}
+
+static inline __m256 _mm256_load_ps(float const *__P) {
+    return *(__m256 const *)__P;
+}
+
+static inline __m256 _mm256_loadu_ps(float const *__P) {
+    return *(__m256_u const *)__P;
+}
+
+static inline __m256d _mm256_load_pd(double const *__P) {
+    return *(__m256d const *)__P;
+}
+
+static inline __m256d _mm256_loadu_pd(double const *__P) {
+    return *(__m256d_u const *)__P;
+}
+
+static inline void _mm256_store_ps(float *__P, __m256 __A) {
+    *(__m256 *)__P = __A;
+}
+
+static inline void _mm256_storeu_ps(float *__P, __m256 __A) {
+    *(__m256_u *)__P = __A;
+}
+
+static inline void _mm256_store_pd(double *__P, __m256d __A) {
+    *(__m256d *)__P = __A;
+}
+
+static inline void _mm256_storeu_pd(double *__P, __m256d __A) {
+    *(__m256d_u *)__P = __A;
+}
+
+static inline __m256 _mm256_broadcast_ss(float const *__P) {
+    int __x = *(int const *)__P;
+    return (__m256)(__v8si){__x, __x, __x, __x, __x, __x, __x, __x};
+}
+
+static inline __m128 _mm_broadcast_ss(float const *__P) {
+    return _mm_load1_ps(__P);
+}
+
+static inline __m256d _mm256_broadcast_sd(double const *__P) {
+    long long __x = *(long long const *)__P;
+    return (__m256d)(__v4di){__x, __x, __x, __x};
+}
+
+static inline __m256 _mm256_broadcast_ps(__m128 const *__P) {
+    return __badc_join_ps(_mm_loadu_ps((float const *)__P), _mm_loadu_ps((float const *)__P));
+}
+
+static inline __m256d _mm256_broadcast_pd(__m128d const *__P) {
+    return __badc_join_pd(_mm_loadu_pd((double const *)__P), _mm_loadu_pd((double const *)__P));
+}
+
+static inline __m256d _mm256_castps_pd(__m256 __A) {
+    return (__m256d)__A;
+}
+
+static inline __m256 _mm256_castpd_ps(__m256d __A) {
+    return (__m256)__A;
+}
+
+static inline __m256i _mm256_castps_si256(__m256 __A) {
+    return (__m256i)__A;
+}
+
+static inline __m256 _mm256_castsi256_ps(__m256i __A) {
+    return (__m256)__A;
+}
+
+static inline __m256i _mm256_castpd_si256(__m256d __A) {
+    return (__m256i)__A;
+}
+
+static inline __m256d _mm256_castsi256_pd(__m256i __A) {
+    return (__m256d)__A;
+}
+
+static inline __m128 _mm256_castps256_ps128(__m256 __A) {
+    return __badc_lo_ps(__A);
+}
+
+static inline __m128d _mm256_castpd256_pd128(__m256d __A) {
+    return __badc_lo_pd(__A);
+}
+
+/* The upper half is undefined in the SDM; this gives zero. */
+static inline __m256 _mm256_castps128_ps256(__m128 __A) {
+    return __badc_join_ps(__A, _mm_setzero_ps());
+}
+
+static inline __m256d _mm256_castpd128_pd256(__m128d __A) {
+    return __badc_join_pd(__A, _mm_setzero_pd());
+}
+
+static inline __m256 _mm256_zextps128_ps256(__m128 __A) {
+    return __badc_join_ps(__A, _mm_setzero_ps());
+}
+
+static inline __m256d _mm256_zextpd128_pd256(__m128d __A) {
+    return __badc_join_pd(__A, _mm_setzero_pd());
+}
+
+static inline __m128 _mm256_extractf128_ps(__m256 __A, const int __N) {
+    return __N & 1 ? __badc_hi_ps(__A) : __badc_lo_ps(__A);
+}
+
+static inline __m128d _mm256_extractf128_pd(__m256d __A, const int __N) {
+    return __N & 1 ? __badc_hi_pd(__A) : __badc_lo_pd(__A);
+}
+
+static inline __m128i _mm256_extractf128_si256(__m256i __A, const int __N) {
+    return _mm256_extracti128_si256(__A, __N);
+}
+
+static inline __m256 _mm256_insertf128_ps(__m256 __A, __m128 __B, const int __N) {
+    return __N & 1 ? __badc_join_ps(__badc_lo_ps(__A), __B) : __badc_join_ps(__B, __badc_hi_ps(__A));
+}
+
+static inline __m256d _mm256_insertf128_pd(__m256d __A, __m128d __B, const int __N) {
+    return __N & 1 ? __badc_join_pd(__badc_lo_pd(__A), __B) : __badc_join_pd(__B, __badc_hi_pd(__A));
+}
+
+static inline __m256i _mm256_insertf128_si256(__m256i __A, __m128i __B, const int __N) {
+    return _mm256_inserti128_si256(__A, __B, __N);
+}
+
+static inline __m256 _mm256_permute2f128_ps(__m256 __A, __m256 __B, const int __M) {
+    return (__m256)_mm256_permute2x128_si256((__m256i)__A, (__m256i)__B, __M);
+}
+
+static inline __m256d _mm256_permute2f128_pd(__m256d __A, __m256d __B, const int __M) {
+    return (__m256d)_mm256_permute2x128_si256((__m256i)__A, (__m256i)__B, __M);
+}
+
+static inline __m256i _mm256_permute2f128_si256(__m256i __A, __m256i __B, const int __M) {
+    return _mm256_permute2x128_si256(__A, __B, __M);
+}
+
+/* VPERMILPS / VSHUFPS select within each 128-bit lane by the same imm8. */
+static inline __m256 _mm256_permute_ps(__m256 __A, const int __M) {
+    return __badc_join_ps(_mm_shuffle_ps(__badc_lo_ps(__A), __badc_lo_ps(__A), __M),
+                          _mm_shuffle_ps(__badc_hi_ps(__A), __badc_hi_ps(__A), __M));
+}
+
+static inline __m128 _mm_permute_ps(__m128 __A, const int __M) {
+    return _mm_shuffle_ps(__A, __A, __M);
+}
+
+static inline __m256 _mm256_shuffle_ps(__m256 __A, __m256 __B, const int __M) {
+    return __badc_join_ps(_mm_shuffle_ps(__badc_lo_ps(__A), __badc_lo_ps(__B), __M),
+                          _mm_shuffle_ps(__badc_hi_ps(__A), __badc_hi_ps(__B), __M));
+}
+
+/* VPERMILPD / VSHUFPD take a bit per lane, two bits per 128-bit lane. */
+static inline __m256d _mm256_permute_pd(__m256d __A, const int __M) {
+    __v4di __a = (__v4di)__A;
+    return (__m256d)(__v4di){__a[__M & 1], __a[(__M >> 1) & 1], __a[2 + ((__M >> 2) & 1)],
+                             __a[2 + ((__M >> 3) & 1)]};
+}
+
+static inline __m128d _mm_permute_pd(__m128d __A, const int __M) {
+    __v2di __a = (__v2di)__A;
+    return (__m128d)(__v2di){__a[__M & 1], __a[(__M >> 1) & 1]};
+}
+
+static inline __m256d _mm256_shuffle_pd(__m256d __A, __m256d __B, const int __M) {
+    __v4di __a = (__v4di)__A, __b = (__v4di)__B;
+    return (__m256d)(__v4di){__a[__M & 1], __b[(__M >> 1) & 1], __a[2 + ((__M >> 2) & 1)],
+                             __b[2 + ((__M >> 3) & 1)]};
+}
+
+static inline __m256 _mm256_blend_ps(__m256 __A, __m256 __B, const int __M) {
+    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
+    for (int __i = 0; __i < 8; __i++)
+        if (__M >> __i & 1)
+            __a[__i] = __b[__i];
+    return (__m256)__a;
+}
+
+static inline __m256d _mm256_blend_pd(__m256d __A, __m256d __B, const int __M) {
+    __v4di __a = (__v4di)__A, __b = (__v4di)__B;
+    for (int __i = 0; __i < 4; __i++)
+        if (__M >> __i & 1)
+            __a[__i] = __b[__i];
+    return (__m256d)__a;
+}
+
+static inline __m128 _mm_blend_ps(__m128 __A, __m128 __B, const int __M) {
+    return _mm256_castps256_ps128(_mm256_blend_ps(_mm256_castps128_ps256(__A),
+                                                  _mm256_castps128_ps256(__B), __M & 15));
+}
+
+static inline __m128d _mm_blend_pd(__m128d __A, __m128d __B, const int __M) {
+    return _mm256_castpd256_pd128(_mm256_blend_pd(_mm256_castpd128_pd256(__A),
+                                                  _mm256_castpd128_pd256(__B), __M & 3));
+}
+
+/* BLENDVPS / BLENDVPD take a lane of the second operand where the mask
+** lane's sign bit is set. */
+static inline __m256 _mm256_blendv_ps(__m256 __A, __m256 __B, __m256 __M) {
+    __v8si __a = (__v8si)__A, __b = (__v8si)__B, __m = (__v8si)__M;
+    for (int __i = 0; __i < 8; __i++)
+        if (__m[__i] < 0)
+            __a[__i] = __b[__i];
+    return (__m256)__a;
+}
+
+static inline __m256d _mm256_blendv_pd(__m256d __A, __m256d __B, __m256d __M) {
+    __v4di __a = (__v4di)__A, __b = (__v4di)__B, __m = (__v4di)__M;
+    for (int __i = 0; __i < 4; __i++)
+        if (__m[__i] < 0)
+            __a[__i] = __b[__i];
+    return (__m256d)__a;
+}
+
+static inline __m128 _mm_blendv_ps(__m128 __A, __m128 __B, __m128 __M) {
+    return _mm256_castps256_ps128(_mm256_blendv_ps(
+        _mm256_castps128_ps256(__A), _mm256_castps128_ps256(__B), _mm256_castps128_ps256(__M)));
+}
+
+static inline __m128d _mm_blendv_pd(__m128d __A, __m128d __B, __m128d __M) {
+    return _mm256_castpd256_pd128(_mm256_blendv_pd(
+        _mm256_castpd128_pd256(__A), _mm256_castpd128_pd256(__B), _mm256_castpd128_pd256(__M)));
+}
+
+static inline int _mm256_movemask_ps(__m256 __A) {
+    return _mm_movemask_ps(__badc_lo_ps(__A)) | _mm_movemask_ps(__badc_hi_ps(__A)) << 4;
+}
+
+static inline int _mm256_movemask_pd(__m256d __A) {
+    return _mm_movemask_pd(__badc_lo_pd(__A)) | _mm_movemask_pd(__badc_hi_pd(__A)) << 2;
+}
+
+/* AVX's compare predicates: bits 0-3 the relation, among which those with
+** bit 0 or 1 set, but not both, signal, and bit 4 swaps quiet and signaling.
+** A signaling one raises invalid for any NaN operand, a quiet one only for a
+** signaling NaN. */
+static inline int __badc_cmp_holds(double __a, double __b, int __p) {
+    int __unord = __builtin_isunordered(__a, __b);
+    int __lt = __builtin_isless(__a, __b), __eq = __a == __b;
+    if (((__p & 3) == 1 || (__p & 3) == 2) ^ (__p >> 4 & 1)) {
+        volatile int __signal = __a < __b;
+        (void)__signal;
+    }
+    switch (__p & 15) {
+    case 0: return __eq;
+    case 1: return __lt;
+    case 2: return __lt || __eq;
+    case 3: return __unord;
+    case 4: return !__eq;
+    case 5: return !__lt;
+    case 6: return !(__lt || __eq);
+    case 7: return !__unord;
+    case 8: return __eq || __unord;
+    case 9: return __lt || __unord;
+    case 10: return __lt || __eq || __unord;
+    case 11: return 0;
+    case 12: return !__eq && !__unord;
+    case 13: return !__lt && !__unord;
+    case 14: return !__lt && !__eq && !__unord;
+    default: return 1;
+    }
+}
+
+static inline __m256 _mm256_cmp_ps(__m256 __A, __m256 __B, const int __P) {
+    __v8si __r;
+    for (int __i = 0; __i < 8; __i++)
+        __r[__i] = -__badc_cmp_holds(__A[__i], __B[__i], __P);
+    return (__m256)__r;
+}
+
+static inline __m256d _mm256_cmp_pd(__m256d __A, __m256d __B, const int __P) {
+    __v4di __r;
+    for (int __i = 0; __i < 4; __i++)
+        __r[__i] = -(long long)__badc_cmp_holds(__A[__i], __B[__i], __P);
+    return (__m256d)__r;
+}
+
+static inline __m128 _mm_cmp_ps(__m128 __A, __m128 __B, const int __P) {
+    __v4si __r;
+    for (int __i = 0; __i < 4; __i++)
+        __r[__i] = -__badc_cmp_holds(__A[__i], __B[__i], __P);
+    return (__m128)__r;
+}
+
+static inline __m128d _mm_cmp_pd(__m128d __A, __m128d __B, const int __P) {
+    __v2di __r;
+    for (int __i = 0; __i < 2; __i++)
+        __r[__i] = -(long long)__badc_cmp_holds(__A[__i], __B[__i], __P);
+    return (__m128d)__r;
+}
+
+static inline __m128 _mm_cmp_ss(__m128 __A, __m128 __B, const int __P) {
+    __v4si __r = (__v4si)__A;
+    __r[0] = -__badc_cmp_holds(__A[0], __B[0], __P);
+    return (__m128)__r;
+}
+
+static inline __m128d _mm_cmp_sd(__m128d __A, __m128d __B, const int __P) {
+    __v2di __r = (__v2di)__A;
+    __r[0] = -(long long)__badc_cmp_holds(__A[0], __B[0], __P);
+    return (__m128d)__r;
+}
+
+#define _CMP_EQ_OQ 0x00
+#define _CMP_LT_OS 0x01
+#define _CMP_LE_OS 0x02
+#define _CMP_UNORD_Q 0x03
+#define _CMP_NEQ_UQ 0x04
+#define _CMP_NLT_US 0x05
+#define _CMP_NLE_US 0x06
+#define _CMP_ORD_Q 0x07
+#define _CMP_EQ_UQ 0x08
+#define _CMP_NGE_US 0x09
+#define _CMP_NGT_US 0x0a
+#define _CMP_FALSE_OQ 0x0b
+#define _CMP_NEQ_OQ 0x0c
+#define _CMP_GE_OS 0x0d
+#define _CMP_GT_OS 0x0e
+#define _CMP_TRUE_UQ 0x0f
+#define _CMP_EQ_OS 0x10
+#define _CMP_LT_OQ 0x11
+#define _CMP_LE_OQ 0x12
+#define _CMP_UNORD_S 0x13
+#define _CMP_NEQ_US 0x14
+#define _CMP_NLT_UQ 0x15
+#define _CMP_NLE_UQ 0x16
+#define _CMP_ORD_S 0x17
+#define _CMP_EQ_US 0x18
+#define _CMP_NGE_UQ 0x19
+#define _CMP_NGT_UQ 0x1a
+#define _CMP_FALSE_OS 0x1b
+#define _CMP_NEQ_OS 0x1c
+#define _CMP_GE_OQ 0x1d
+#define _CMP_GT_OQ 0x1e
+#define _CMP_TRUE_US 0x1f
+
+static inline __m256 _mm256_cvtepi32_ps(__m256i __A) {
+    return __badc_join_ps(_mm_cvtepi32_ps(_mm256_castsi256_si128(__A)),
+                          _mm_cvtepi32_ps(_mm256_extracti128_si256(__A, 1)));
+}
+
+static inline __m256i _mm256_cvtps_epi32(__m256 __A) {
+    return _mm256_set_m128i(_mm_cvtps_epi32(__badc_hi_ps(__A)), _mm_cvtps_epi32(__badc_lo_ps(__A)));
+}
+
+static inline __m256i _mm256_cvttps_epi32(__m256 __A) {
+    return _mm256_set_m128i(_mm_cvttps_epi32(__badc_hi_ps(__A)),
+                            _mm_cvttps_epi32(__badc_lo_ps(__A)));
+}
+
+static inline __m256d _mm256_cvtps_pd(__m128 __A) {
+    return __badc_join_pd(_mm_cvtps_pd(__A), _mm_cvtps_pd(_mm_movehl_ps(__A, __A)));
+}
+
+static inline __m128 _mm256_cvtpd_ps(__m256d __A) {
+    return _mm_movelh_ps(_mm_cvtpd_ps(__badc_lo_pd(__A)), _mm_cvtpd_ps(__badc_hi_pd(__A)));
+}
+
+static inline __m256d _mm256_cvtepi32_pd(__m128i __A) {
+    return __badc_join_pd(_mm_cvtepi32_pd(__A), _mm_cvtepi32_pd(_mm_shuffle_epi32(__A, 0x0E)));
+}
+
+static inline __m128i _mm256_cvtpd_epi32(__m256d __A) {
+    return _mm_unpacklo_epi64(_mm_cvtpd_epi32(__badc_lo_pd(__A)), _mm_cvtpd_epi32(__badc_hi_pd(__A)));
+}
+
+static inline __m128i _mm256_cvttpd_epi32(__m256d __A) {
+    return _mm_unpacklo_epi64(_mm_cvttpd_epi32(__badc_lo_pd(__A)),
+                              _mm_cvttpd_epi32(__badc_hi_pd(__A)));
+}
+
+static inline float _mm256_cvtss_f32(__m256 __A) {
+    return __A[0];
+}
+
+static inline double _mm256_cvtsd_f64(__m256d __A) {
+    return __A[0];
+}
+
+/* VZEROUPPER / VZEROALL: no VEX instruction is emitted, so no upper state
+** is left to clear. */
+static inline void _mm256_zeroupper(void) {
+}
+
+static inline void _mm256_zeroall(void) {
+}
+
+/* FMA3: each lane rounds once, as fma does; the subtracting and negating
+** forms negate an operand, and the scalar forms keep the first operand's
+** upper lanes. */
+#define __BADC_FMA(name, ty, n, fma, x, y, z)                                  \
+    static inline ty name(ty __A, ty __B, ty __C) {                           \
+        ty __r;                                                               \
+        for (int __i = 0; __i < n; __i++)                                     \
+            __r[__i] = fma(x __A[__i], __B[__i], y __C[__i]);                 \
+        return __r;                                                           \
+    }
+#define __BADC_FMA_ALL(op, x, y)                                               \
+    __BADC_FMA(_mm_##op##_ps, __m128, 4, __builtin_fmaf, x, y, )               \
+    __BADC_FMA(_mm_##op##_pd, __m128d, 2, __builtin_fma, x, y, )               \
+    __BADC_FMA(_mm256_##op##_ps, __m256, 8, __builtin_fmaf, x, y, )            \
+    __BADC_FMA(_mm256_##op##_pd, __m256d, 4, __builtin_fma, x, y, )            \
+    static inline __m128 _mm_##op##_ss(__m128 __A, __m128 __B, __m128 __C) {  \
+        __A[0] = __builtin_fmaf(x __A[0], __B[0], y __C[0]);                  \
+        return __A;                                                           \
+    }                                                                         \
+    static inline __m128d _mm_##op##_sd(__m128d __A, __m128d __B, __m128d __C) { \
+        __A[0] = __builtin_fma(x __A[0], __B[0], y __C[0]);                   \
+        return __A;                                                           \
+    }
+__BADC_FMA_ALL(fmadd, +, +)
+__BADC_FMA_ALL(fmsub, +, -)
+__BADC_FMA_ALL(fnmadd, -, +)
+__BADC_FMA_ALL(fnmsub, -, -)
+#undef __BADC_FMA_ALL
+#undef __BADC_FMA
+
+/* FMADDSUB subtracts on the even lanes and adds on the odd; FMSUBADD the
+** reverse. */
+#define __BADC_FMA_ALT(name, ty, n, fma, even)                                 \
+    static inline ty name(ty __A, ty __B, ty __C) {                           \
+        ty __r;                                                               \
+        for (int __i = 0; __i < n; __i++)                                     \
+            __r[__i] = fma(__A[__i], __B[__i], (__i & 1) == even ? __C[__i] : -__C[__i]); \
+        return __r;                                                           \
+    }
+__BADC_FMA_ALT(_mm_fmaddsub_ps, __m128, 4, __builtin_fmaf, 1)
+__BADC_FMA_ALT(_mm_fmaddsub_pd, __m128d, 2, __builtin_fma, 1)
+__BADC_FMA_ALT(_mm256_fmaddsub_ps, __m256, 8, __builtin_fmaf, 1)
+__BADC_FMA_ALT(_mm256_fmaddsub_pd, __m256d, 4, __builtin_fma, 1)
+__BADC_FMA_ALT(_mm_fmsubadd_ps, __m128, 4, __builtin_fmaf, 0)
+__BADC_FMA_ALT(_mm_fmsubadd_pd, __m128d, 2, __builtin_fma, 0)
+__BADC_FMA_ALT(_mm256_fmsubadd_ps, __m256, 8, __builtin_fmaf, 0)
+__BADC_FMA_ALT(_mm256_fmsubadd_pd, __m256d, 4, __builtin_fma, 0)
+#undef __BADC_FMA_ALT
 
 static inline int _rdrand16_step(unsigned short *__P) {
     return __builtin_ia32_rdrand16_step(__P);

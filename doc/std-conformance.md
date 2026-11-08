@@ -686,13 +686,13 @@ one fails at the undeclared name.
 | `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`; SSE4.2: `_mm_crc32_u8`, `_u16`, `_u32` and `_u64`. |
 | `<nmmintrin.h>` | SSE4.2, through `<smmintrin.h>`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
-| `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*`, `_mm256_cmpgt_epi32` / `_epi64`, `_mm256_movemask_epi8`, the element extracts and inserts, `_mm256_set_*` / `_mm256_setr_*`, the permutes, `_mm256_shuffle_epi8`, the element and byte shifts by an immediate, `_mm256_mullo_epi32`, `_mm256_mul_epu32`, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_subs_epu16` and the interleaves; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
+| `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*`, `_mm256_cmpgt_epi32` / `_epi64`, `_mm256_movemask_epi8`, the element extracts and inserts, `_mm256_set_*` / `_mm256_setr_*`, the permutes, `_mm256_shuffle_epi8`, the element and byte shifts by an immediate, `_mm256_mullo_epi32`, `_mm256_mul_epu32`, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_subs_epu16` and the interleaves; of AVX on `__m256` and `__m256d`, the arithmetic, minimum, maximum and square root, logic, `addsub` and the horizontal forms, `_mm256_cmp_ps` / `_pd` and `_mm_cmp_ps` / `_pd` / `_ss` / `_sd` by all 32 predicates, conversions, `_mm256_set*`, loads, stores, broadcasts, casts, 128-bit extract and insert, permutes, shuffles, interleaves, blends and `_mm256_movemask_ps` / `_pd`, each built from the SSE operations on the two halves; the FMA3 forms, 128- and 256-bit; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
 Not provided: the 128-bit averaging, minimum and maximum integer operations,
 shifts by a vector count,
-the 128-bit non-temporal stores, and everything past SSE4.1 (AVX, AVX2,
-AVX-512, FMA) but SSE4.2's CRC32 and the 256-bit integer subset. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
+the 128-bit non-temporal stores, AVX2 past the 256-bit integer subset,
+AVX-512, and the rest of SSE4.1 and SSE4.2 past the operations listed. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand its instruction encodes as an `imm8` is a
 macro, as gcc's are without `-O`; a lane move written over the vector
 extension takes its selector as an argument. The rest are `static inline` functions, which `-O` inlines so the

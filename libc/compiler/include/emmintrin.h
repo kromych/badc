@@ -594,6 +594,22 @@ static inline int _mm_movemask_pd(__m128d __A) {
     return (__a[0] < 0) | (__a[1] < 0) << 1;
 }
 
+static inline __m128d _mm_and_pd(__m128d __A, __m128d __B) {
+    return (__m128d)((__v2di)__A & (__v2di)__B);
+}
+
+static inline __m128d _mm_andnot_pd(__m128d __A, __m128d __B) {
+    return (__m128d)(~(__v2di)__A & (__v2di)__B);
+}
+
+static inline __m128d _mm_or_pd(__m128d __A, __m128d __B) {
+    return (__m128d)((__v2di)__A | (__v2di)__B);
+}
+
+static inline __m128d _mm_xor_pd(__m128d __A, __m128d __B) {
+    return (__m128d)((__v2di)__A ^ (__v2di)__B);
+}
+
 static inline __m128d _mm_add_pd(__m128d __A, __m128d __B) {
     return __builtin_ia32_addpd(__A, __B);
 }

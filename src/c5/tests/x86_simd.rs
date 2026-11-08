@@ -1318,17 +1318,23 @@ fn floating_rows_compute_in_the_environment() {
     }
 }
 
-/// The floating-point rows compute in the interpreter as the instructions
-/// do: the fixture's hashes, which the instructions gave in each rounding
-/// direction, hold under the interpreter for both x86-64 targets.
+/// The floating-point rows, and the AVX and FMA forms built on them, compute
+/// in the interpreter as the instructions do: the fixtures' hashes, which
+/// the instructions gave in each rounding direction, hold under the
+/// interpreter for both x86-64 targets.
 #[test]
 fn the_interpreter_computes_the_floating_rows_as_the_instructions_do() {
-    let src = super::load_fixture("sse_floating_lanes_follow_the_sdm.c");
-    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
-        let program = crate::Compiler::with_options(src.clone(), target, Default::default())
-            .compile()
-            .expect("compile");
-        let rc = super::Vm::new(program).run().expect("run");
-        assert_eq!(rc, 0, "{target:?}: row {rc} differs");
+    for fixture in [
+        "sse_floating_lanes_follow_the_sdm.c",
+        "avx_floating_and_fma_follow_the_sdm.c",
+    ] {
+        let src = super::load_fixture(fixture);
+        for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+            let program = crate::Compiler::with_options(src.clone(), target, Default::default())
+                .compile()
+                .expect("compile");
+            let rc = super::Vm::new(program).run().expect("run");
+            assert_eq!(rc, 0, "{fixture} {target:?}: row {rc} differs");
+        }
     }
 }

@@ -290,6 +290,12 @@ Compile knobs:
                            recovery that declares an undeclared library
                            function by auto-including its header. The `__builtin_` spellings keep
                            folding. -fbuiltin restores the default.
+  -flax-vector-conversions[=all|integer|none]
+                           Let two vector types of one size convert
+                           implicitly: any two (all, the bare flag), or
+                           two integer ones; -fno-lax-vector-conversions
+                           is none. The default is none, and all under
+                           --msvc, where every NEON vector is __n128.
   -ffreestanding           Compile for a freestanding implementation:
                            -fno-builtin, and `__STDC_HOSTED__` is 0.
                            -fhosted restores both.

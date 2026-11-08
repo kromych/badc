@@ -6781,3 +6781,43 @@ fn the_address_of_a_register_object_is_an_error() {
         compile(body).unwrap_or_else(|e| panic!("{body}\n{e}"));
     }
 }
+
+/// `-flax-vector-conversions`: two vector types of one size convert
+/// implicitly, any two under `all` (the bare flag, and `--msvc`, whose NEON
+/// vectors are all one `__n128`) and two integer ones under `integer`; by
+/// default, as in gcc, neither. The conversion keeps the bits.
+#[test]
+fn lax_vector_conversions_admit_vectors_of_one_size() {
+    use crate::{CompileOptions, Compiler, LaxVectors, Target};
+    const INT: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
+        typedef long long v2di __attribute__((vector_size(16)));\n\
+        typedef float v4sf __attribute__((vector_size(16)));\n\
+        v2di widen(v4si v) { return v; }\n\
+        void store(v2di *p, v4si v) { *p = v; }\n";
+    const FLOAT: &str = "v4sf as_float(v4si v) { return v; }\n";
+    let compiles = |src: &str, lax: Option<LaxVectors>, msvc: bool| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_lax_vectors(lax)
+            .with_msvc(msvc);
+        Compiler::with_options(src.to_string(), Target::WindowsAarch64, opts)
+            .compile()
+            .is_ok()
+    };
+    let both = alloc::format!("{INT}{FLOAT}");
+    assert!(!compiles(INT, None, false));
+    assert!(compiles(INT, Some(LaxVectors::Integer), false));
+    assert!(!compiles(&both, Some(LaxVectors::Integer), false));
+    assert!(compiles(&both, Some(LaxVectors::All), false));
+    assert!(compiles(&both, None, true));
+    assert!(!compiles(INT, Some(LaxVectors::None), true));
+    let run = alloc::format!(
+        "{INT}int main(void) {{ v4si a = {{1, 2, 3, 4}}; v2di b = widen(a); \
+         return b[0] == 0x200000001LL && b[1] == 0x400000003LL ? 0 : 1; }}\n"
+    );
+    let opts = CompileOptions::default().with_lax_vectors(Some(LaxVectors::Integer));
+    let program = Compiler::with_options(run, Target::LinuxX64, opts)
+        .compile()
+        .expect("compiles");
+    assert_eq!(super::Vm::new(program).run().expect("run"), 0);
+}

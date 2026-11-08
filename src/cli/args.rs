@@ -121,6 +121,7 @@ pub(crate) struct FrontEnd {
     pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
+    pub(crate) lax_vectors: Option<badc::LaxVectors>,
     /// gcc `-ffreestanding`, the compile flag; `--freestanding` is the link's.
     pub(crate) freestanding: bool,
     pub(crate) defines: Vec<(String, String)>,
@@ -1534,6 +1535,17 @@ impl Parser {
                     .no_builtin_fns
                     .push(s["-fno-builtin-".len()..].to_string());
             }
+            // gcc's `-flax-vector-conversions` lets any two vector types of
+            // one size convert; clang's `=integer` only two integer ones.
+            "-flax-vector-conversions" | "-flax-vector-conversions=all" => {
+                front.lax_vectors = Some(badc::LaxVectors::All);
+            }
+            "-flax-vector-conversions=integer" => {
+                front.lax_vectors = Some(badc::LaxVectors::Integer);
+            }
+            "-fno-lax-vector-conversions" | "-flax-vector-conversions=none" => {
+                front.lax_vectors = Some(badc::LaxVectors::None);
+            }
             // gcc / clang `-nostdinc`: the bundled headers leave the
             // `#include` search, so a name no `-I` / `-iquote` path
             // carries is an error rather than a bind to badc's bundled
@@ -2882,6 +2894,7 @@ impl FrontEnd {
             .with_compiler_include_dir(self.compiler_include_dir.clone())
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_lax_vectors(self.lax_vectors)
             .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
             .with_std(self.std)

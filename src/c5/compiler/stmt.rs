@@ -3863,7 +3863,8 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
+                    let lax = self.lax_vectors;
+                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false, lax)
                         .filter(|_| !int128_from_scalar)
                     {
                         let want = super::types::format_type(ret_ty, &self.structs);
@@ -3904,6 +3905,7 @@ impl Compiler {
                             self.ty,
                             rhs_is_zero,
                             rhs_is_untyped,
+                            self.lax_vectors,
                         )
                     {
                         let want = self.typed_text(ret_ty, &ret_fn);

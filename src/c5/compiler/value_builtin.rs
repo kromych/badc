@@ -392,7 +392,9 @@ impl Compiler {
     ) -> Result<ExprId, C5Error> {
         let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
-        if let Some(m) = Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
+        let lax = self.lax_vectors;
+        if let Some(m) =
+            Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped, lax)
         {
             let text = format!(
                 "{} in argument {} of `{name}` (param={}, arg={})",

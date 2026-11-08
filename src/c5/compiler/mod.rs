@@ -523,6 +523,17 @@ pub struct Preprocessed {
 /// `with_include_paths`, `with_force_includes`, `with_source_label`,
 /// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
+/// Which vector types of one size convert implicitly, as
+/// `-flax-vector-conversions` selects them: none (gcc's default), two
+/// integer vectors (clang's default), or any two (gcc's flag; MSVC, whose
+/// NEON vectors are all one `__n128`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaxVectors {
+    None,
+    Integer,
+    All,
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct CompileOptions {
     /// `-D name[=body]` predefines installed before the source
@@ -574,6 +585,9 @@ pub struct CompileOptions {
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-flax-vector-conversions[=...]`: which same-size vector types
+    /// convert implicitly; `None` takes the identity's default.
+    pub lax_vectors: Option<LaxVectors>,
     /// `-ffreestanding` -- a freestanding implementation (C99 4p6):
     /// `__STDC_HOSTED__` is 0 (C99 6.10.8) and the auto-include retry,
     /// whose headers are hosted ones (C17 4p6), is off.
@@ -882,6 +896,10 @@ impl CompileOptions {
     /// (`-fno-builtin`).
     pub fn with_no_builtin(mut self, on: bool) -> Self {
         self.no_builtin = on;
+        self
+    }
+    pub fn with_lax_vectors(mut self, lax: Option<LaxVectors>) -> Self {
+        self.lax_vectors = lax;
         self
     }
     /// The same for the named library functions (`-fno-builtin-<name>`).
@@ -2574,6 +2592,8 @@ pub struct Compiler {
     /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// [`CompileOptions::lax_vectors`], or the identity's default.
+    lax_vectors: LaxVectors,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
@@ -3348,6 +3368,13 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
+            lax_vectors: opts
+                .lax_vectors
+                .unwrap_or(if opts.msvc && target.is_windows() {
+                    LaxVectors::All
+                } else {
+                    LaxVectors::None
+                }),
             nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
             atomic_types_formed: Vec::new(),

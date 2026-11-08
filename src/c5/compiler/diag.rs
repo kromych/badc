@@ -940,8 +940,16 @@ impl Compiler {
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
-        Self::type_warning_with_flags(structs, declared, actual, actual_is_zero_literal, false)
+        Self::type_warning_with_flags(
+            structs,
+            declared,
+            actual,
+            actual_is_zero_literal,
+            false,
+            lax,
+        )
     }
 
     /// Like [`Self::type_warning`] but with an extra `actual_is_untyped_call`
@@ -956,9 +964,10 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
         let zero = actual_is_zero_literal;
-        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call)
+        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call, lax)
             .or_else(|| Self::discarded_qualifiers(structs, declared, actual))
     }
 
@@ -986,6 +995,7 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
+        lax: super::LaxVectors,
     ) -> Option<TypeMismatch> {
         if is_pointer_ty(declared) && is_pointer_ty(actual) {
             return Self::pointer_mismatch(structs, declared, actual);
@@ -1084,6 +1094,9 @@ impl Compiler {
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
             let is_vector = |ty: i64| def_of(ty).is_some_and(|s| s.is_vector);
+            if Self::lax_vector_pair(structs, declared, actual, lax) {
+                return None;
+            }
             let reason = if is_vector(declared) || is_vector(actual) {
                 "incompatible types"
             } else {
@@ -1098,6 +1111,28 @@ impl Compiler {
 
         // Two arithmetic scalars: the conversion is silent.
         None
+    }
+
+    /// Two vector types of one size that `lax` lets convert implicitly.
+    pub(super) fn lax_vector_pair(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        lax: super::LaxVectors,
+    ) -> bool {
+        let vector = |ty: i64| {
+            let def = structs
+                .get(super::types::struct_id_of(ty))
+                .filter(|s| s.is_vector)?;
+            let integer = !super::types::is_floating_scalar(def.fields.first()?.ty);
+            Some((def.size, integer))
+        };
+        match (vector(declared), vector(actual), lax) {
+            (_, _, super::LaxVectors::None) => false,
+            (Some((a, x)), Some((b, y)), super::LaxVectors::Integer) => a == b && x && y,
+            (Some((a, _)), Some((b, _)), super::LaxVectors::All) => a == b,
+            _ => false,
+        }
     }
 
     /// C99 6.5.16.1p1 between two pointers: the types they point to are
@@ -1187,7 +1222,9 @@ impl Compiler {
         line: usize,
     ) -> Result<(), C5Error> {
         let structs = &self.structs;
-        let Some(m) = Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped)
+        let lax = self.lax_vectors;
+        let Some(m) =
+            Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped, lax)
         else {
             return Ok(());
         };
@@ -1455,8 +1492,15 @@ impl Compiler {
             .find(|f| {
                 f.array_size == 0
                     && f.bit_width == 0
-                    && Self::type_mismatch(structs, f.ty, actual, actual_is_zero_literal, false)
-                        .is_none()
+                    && Self::type_mismatch(
+                        structs,
+                        f.ty,
+                        actual,
+                        actual_is_zero_literal,
+                        false,
+                        super::LaxVectors::None,
+                    )
+                    .is_none()
             })
             .map(|f| f.ty)
     }

@@ -145,7 +145,7 @@ pub use c5::{
     AUTO_VAR_INIT_PATTERN_BYTE, AutoInclude, AutoVarInit, BinaryFormat, BuildId, C5Error, CStd,
     CodeModel, CompileOptions, Compiler, DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION,
     ElfClass, ElfImageOptions, ExecForm, FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol,
-    Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch,
+    Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, LaxVectors,
     MachOImageOptions, NativeOptions, OutputKind, Overwrite, PatchableEntry, PredefinedKind,
     PredefinedSymbol, Preprocessed, Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard,
     StackProtect, StackProtector, SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm,

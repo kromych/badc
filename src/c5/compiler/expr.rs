@@ -2089,7 +2089,10 @@ impl Compiler {
         // C99 6.5.2.2p7: the operand converts as if by assignment to the
         // builtin's parameter type, as gcc and clang check it.
         let zero = self.value_is_null_pointer_constant();
-        if let Some(m) = Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false) {
+        let lax = self.lax_vectors;
+        if let Some(m) =
+            Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false, lax)
+        {
             let want = super::types::format_type(to_ty, &self.structs);
             let got = super::types::format_type(self.ty, &self.structs);
             let (reason, n) = (m.reason, index + 1);
@@ -2707,9 +2710,15 @@ impl Compiler {
         };
         if tu_member.is_none()
             && !fn_checked
-            && let Some(m) =
-                Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
-                    .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
+            && let Some(m) = Self::type_warning_with_flags(
+                &self.structs,
+                want,
+                self.ty,
+                zero,
+                untyped,
+                self.lax_vectors,
+            )
+            .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
         {
             let got = self.ty;
             let want_s = self.typed_text(want, &want_fn);
@@ -4082,6 +4091,7 @@ impl Compiler {
                     self.ty,
                     rhs_is_zero,
                     rhs_is_untyped,
+                    self.lax_vectors,
                 )
             {
                 let lhs_s = self.typed_text(lhs_ty, &lhs_fn);
@@ -4143,7 +4153,9 @@ impl Compiler {
         // C99 6.5.16.1p1: compatible unqualified struct types; lvalue
         // conversion (6.3.2.1p2) dropped the qualifiers, and the 128-bit
         // integer's signedness bit converts by a bit copy (6.3.1.3).
-        if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty) {
+        if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty)
+            && !Self::lax_vector_pair(&self.structs, lhs_ty, self.ty, self.lax_vectors)
+        {
             let lhs_s = format_type(lhs_ty, &self.structs);
             let rhs_s = format_type(self.ty, &self.structs);
             let vector =

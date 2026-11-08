@@ -350,6 +350,10 @@ pub(crate) struct Preprocessor {
     /// `#pragma function(name, ...)`: call-site intrinsics the unit calls
     /// and may define as functions, as MSVC's pragma makes them.
     pub functions: alloc::collections::BTreeSet<String>,
+    /// MSVC-form `#pragma intrinsic` names no builtin answers, with the
+    /// pragma's site: the compiler reports those no intrinsic header
+    /// declares, as MSVC's C4163.
+    pub unresolved_intrinsics: Vec<(String, Loc)>,
     /// Recording state for the source pass of a compile that may retry
     /// with an extended force-include list; see [`Self::process_recording`].
     /// `None` outside that pass.
@@ -464,6 +468,8 @@ struct ReuseRecorder {
 /// what the pass observed of it, and what the pass produced.
 pub(crate) struct PpReuse {
     source_text: String,
+    /// Where the source's output began, which the recorded offsets count from.
+    source_start: usize,
     macros: HashMap<String, String>,
     fn_macros: HashMap<String, FnMacro>,
     pushed_macros: HashMap<String, Vec<SavedMacro>>,
@@ -478,6 +484,7 @@ pub(crate) struct PpReuse {
     consulted_includes: BTreeSet<include::FileId>,
     pragma_events: Vec<(String, usize, String)>,
     warnings: Vec<Diagnostic>,
+    unresolved_intrinsics: Vec<(String, Loc)>,
     include_records: Vec<IncludeRecord>,
 }
 
@@ -1352,6 +1359,7 @@ impl Preprocessor {
             diag_pragmas: 0,
             intrinsics,
             functions: alloc::collections::BTreeSet::new(),
+            unresolved_intrinsics: Vec::new(),
             reuse: None,
         }
     }
@@ -1862,6 +1870,7 @@ impl Preprocessor {
             .map_err(|e| self.failed(e))?;
         let source_start = out.len();
         let n_warnings = self.sink.diagnostics().len();
+        let n_unresolved = self.unresolved_intrinsics.len();
         let n_records = self.include_records.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
@@ -1882,6 +1891,7 @@ impl Preprocessor {
         result.map_err(|e| self.failed(e))?;
         let cache = PpReuse {
             source_text: out[source_start..].to_string(),
+            source_start,
             macros: entry_macros,
             fn_macros: entry_fn_macros,
             pushed_macros: entry_pushed,
@@ -1895,6 +1905,7 @@ impl Preprocessor {
             consulted_includes: rec.consulted_includes,
             pragma_events: rec.pragma_events,
             warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
+            unresolved_intrinsics: self.unresolved_intrinsics[n_unresolved..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
         };
         self.fail_on_errors()?;
@@ -1965,6 +1976,7 @@ impl Preprocessor {
         // diagnose falls back to it. What the appliers reported comes
         // back through `prior.warnings`, at its own position.
         let reported = self.sink.diagnostics().len();
+        let unresolved = self.unresolved_intrinsics.len();
         for (args, line, file) in &prior.pragma_events {
             let site = Site {
                 file,
@@ -1973,10 +1985,20 @@ impl Preprocessor {
             };
             self.parse_pragma(args, site).ok()?;
         }
+        // The recorded positions move with this run's preamble.
+        let shift = |loc: &Loc| Loc {
+            offset: (loc.offset).map(|o| (o as usize + out.len() - prior.source_start) as u32),
+            ..loc.clone()
+        };
         self.sink.truncate(reported);
         for warning in &prior.warnings {
-            self.sink.record(warning.clone());
+            let mut warning = warning.clone();
+            warning.loc = warning.loc.as_ref().map(shift);
+            self.sink.record(warning);
         }
+        self.unresolved_intrinsics.truncate(unresolved);
+        (self.unresolved_intrinsics)
+            .extend((prior.unresolved_intrinsics.iter()).map(|(n, l)| (n.clone(), shift(l))));
         self.include_records
             .extend(prior.include_records.iter().cloned());
         out.push_str(&prior.source_text);

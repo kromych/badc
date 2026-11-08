@@ -813,7 +813,9 @@ structure loads, float16 and bfloat16 are not provided.
   lowers. The bundled headers reach `sqrt` and `fma` this way, and MSVC's
   `_byteswap_*` lower to a byte swap once a pragma names them. Under
   `-fno-builtin` it binds only reserved names (7.1.3); `alloca` is a macro
-  over `__builtin_alloca`, as in the glibc and macOS headers.
+  over `__builtin_alloca`, as in the glibc and macOS headers. A name that is
+  no builtin draws B1007 (cl's C4163) unless one of badc's intrinsic headers
+  declares it in the unit, as the `_mm_*` functions are.
 - `#pragma entrypoint(<name>)` replaces `main` as the entry point, for example
   with `WinMain`.
 - `#pragma subsystem(<kind>)` sets the PE optional header's `Subsystem` field

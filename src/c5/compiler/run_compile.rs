@@ -438,7 +438,34 @@ impl Compiler {
         self.resolve_file_scope_asm_weak();
         self.reject_section_type_conflicts()?;
         self.warn_unused_static_functions();
+        self.report_unresolved_intrinsic_pragmas();
         Ok(())
+    }
+
+    /// MSVC's C4163 for a `#pragma intrinsic` name that is neither a builtin
+    /// nor a function one of badc's intrinsic headers declared in the unit.
+    fn report_unresolved_intrinsic_pragmas(&mut self) {
+        for (name, loc) in core::mem::take(&mut self.pp_unresolved_intrinsics) {
+            let found = crate::c5::lexer::find_symbol(&self.symbols, &self.symbol_index, &name);
+            let from_header = found.is_some_and(|i| {
+                let s = &self.symbols[i];
+                let file = self.source_files.get(s.binding.decl_file as usize);
+                s.class == Token::Fun as i64
+                    && file.is_some_and(|f| {
+                        crate::c5::headers::intrinsic_header(f) && self.system_headers.contains(f)
+                    })
+            });
+            if !from_header {
+                let text = format!(
+                    "`#pragma intrinsic({name})` names no builtin badc provides -- ignored"
+                );
+                self.sink.emit(
+                    crate::c5::preprocessor::IGNORED_PRAGMA_INTRINSIC,
+                    Some(loc),
+                    text,
+                );
+            }
+        }
     }
 
     /// GNU `section`: a named section holds code, writable data or read-only

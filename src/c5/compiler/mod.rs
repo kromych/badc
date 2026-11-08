@@ -2334,6 +2334,8 @@ pub struct Compiler {
     pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
     /// [`Preprocessor::functions`].
     pp_functions: alloc::collections::BTreeSet<String>,
+    /// [`Preprocessor::unresolved_intrinsics`].
+    pp_unresolved_intrinsics: Vec<(String, crate::c5::diag::Loc)>,
 
     /// Thread-local data segment. Same shape as `data` but the
     /// codegen lowers accesses with the per-target TLS sequence
@@ -3153,6 +3155,7 @@ impl Compiler {
         let pp_linker_directives = pp.linker_directives;
         let pp_intrinsics = pp.intrinsics;
         let pp_functions = pp.functions;
+        let pp_unresolved_intrinsics = pp.unresolved_intrinsics;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -3304,6 +3307,7 @@ impl Compiler {
             pp_linker_directives,
             pp_intrinsics,
             pp_functions,
+            pp_unresolved_intrinsics,
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),

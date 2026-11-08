@@ -504,8 +504,8 @@ fn va_builtins_are_preregistered() {
 fn pragma_intrinsic_bare_and_quoted_forms() {
     // MSVC's `#pragma intrinsic(name, name, ...)` names bare identifiers
     // as an inlining hint; c5 registers the ones it lowers specially and
-    // reports the rest as MSVC's C4163 does, registering nothing, so
-    // MSVC-shaped SDK headers parse. The quoted single-name form stays
+    // leaves the rest to the compiler, which reports those no intrinsic
+    // header declares as MSVC's C4163. The quoted single-name form stays
     // strict.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process("#pragma intrinsic(alloca, _rotl8, __ll_lshift)\nint x;\n")
@@ -516,14 +516,13 @@ fn pragma_intrinsic_bare_and_quoted_forms() {
     );
     assert!(
         !pp.intrinsics.contains_key("_rotl8"),
-        "unknown bare intrinsic is reported, not registered"
+        "unknown bare intrinsic is left to the compiler, not registered"
     );
-    assert_eq!(
-        codes(&pp),
-        vec![IGNORED_PRAGMA_INTRINSIC; 2],
-        "{:?}",
-        pp.sink.diagnostics()
-    );
+    let unresolved: Vec<&str> = (pp.unresolved_intrinsics.iter())
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert_eq!(unresolved, ["_rotl8", "__ll_lshift"]);
+    assert!(codes(&pp).is_empty(), "{:?}", pp.sink.diagnostics());
     assert_eq!(Code::from_msvc_number(4163), Some(IGNORED_PRAGMA_INTRINSIC));
 
     let mut pq = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -5404,6 +5403,8 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
                #pragma export(picked_up)\n\
                #pragma intrinsic(\"alloca\")\n\
                #pragma intrinsic(alloca, nonesuch_hint)\n\
+               #pragma comment(linker, \"/EXPORT:picked\")\n\
+               #pragma detect_mismatch(\"key\", \"1\")\n\
                bool flag = true;\n\
                int untouched_name;\n";
     let (_, cache) = reuse_pp()
@@ -5430,7 +5431,7 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
             .map(|d| {
                 (
                     d.code,
-                    d.loc.as_ref().map(|l| (l.file.clone(), l.line)),
+                    d.loc.as_ref().map(|l| (l.file.clone(), l.line, l.offset)),
                     d.text.clone(),
                 )
             })
@@ -5439,13 +5440,19 @@ fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
     assert_eq!(shape(&reused), shape(&full));
     assert_eq!(
         reused.sink.diagnostics().len(),
-        1,
+        2,
         "{:?}",
         reused.sink.diagnostics()
     );
     assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
     assert_eq!(reused.exports, full.exports);
     assert_eq!(reused.intrinsics, full.intrinsics);
+    assert_eq!(
+        format!("{:?}", reused.unresolved_intrinsics),
+        format!("{:?}", full.unresolved_intrinsics)
+    );
+    assert_eq!(reused.unresolved_intrinsics.len(), 1);
+    assert_eq!(reused.linker_directives, full.linker_directives);
     assert_eq!(reused.entrypoint, full.entrypoint);
     assert_eq!(reused.subsystem, full.subsystem);
 }
@@ -5905,18 +5912,15 @@ fn a_system_headers_warnings_are_suppressed_but_warning_directives() {
         .process("#include <noisy.h>\n")
         .expect("system header");
     assert_eq!(codes(&system), vec![WARNING_DIRECTIVE]);
+    assert!(system.unresolved_intrinsics.is_empty());
     let mut user = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
     user.add_search_path(dir.to_str().unwrap());
     let _ = user.process("#include \"noisy.h\"\n").expect("user header");
     assert_eq!(
         codes(&user),
-        vec![
-            UNKNOWN_PRAGMA,
-            IGNORED_PRAGMA_INTRINSIC,
-            UNKNOWN_PRAGMA,
-            WARNING_DIRECTIVE
-        ]
+        vec![UNKNOWN_PRAGMA, UNKNOWN_PRAGMA, WARNING_DIRECTIVE]
     );
+    assert_eq!(user.unresolved_intrinsics.len(), 1);
     std::fs::write(dir.join("fatal.h"), "#error from the header\n").unwrap();
     let mut fatal = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
     fatal.add_isystem_path(dir.to_str().unwrap());

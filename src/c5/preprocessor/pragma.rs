@@ -2,8 +2,8 @@ use super::builtins;
 use super::directive::format_line_marker;
 use super::text::skip_literal;
 use super::{
-    Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
-    Preprocessor, SavedMacro, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
+    Binding, DylibSpec, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX, Preprocessor, SavedMacro, Site,
+    Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
@@ -183,6 +183,7 @@ impl Preprocessor {
             "entrypoint(",
             "subsystem(",
             "comment(",
+            "detect_mismatch(",
         ]
         .iter()
         .any(|p| args.starts_with(p));
@@ -762,15 +763,9 @@ impl Preprocessor {
                     self.intrinsics.insert(item.to_string(), id);
                 } else if !builtins::is_builtin(item)
                     && !builtins::is_ms_intrinsic(item, self.target)
+                    && !self.in_system_header()
                 {
-                    self.warn(
-                        IGNORED_PRAGMA_INTRINSIC,
-                        site,
-                        format!(
-                            "`#pragma intrinsic({item})` names no builtin badc provides \
-                             -- ignored"
-                        ),
-                    );
+                    (self.unresolved_intrinsics).push((item.to_string(), site.loc()));
                 }
             } else {
                 return Err(C5Error::at(

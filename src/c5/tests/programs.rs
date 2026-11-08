@@ -2197,6 +2197,34 @@ fn msvc_intrinsics_check_their_operands() {
     }
 }
 
+/// MSVC's C4163 for `#pragma intrinsic`: a name one of badc's intrinsic
+/// headers declares is an intrinsic, before or after the include, as MSVC's
+/// vector intrinsics are; a name nothing provides is reported at the pragma,
+/// under the `#pragma warning` state there. `_byteswap_*` lower to a byte swap
+/// once the pragma names them.
+#[test]
+fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
+    let src = "#pragma intrinsic(_mm_getcsr, __int2c)\n#include <intrin.h>\n\
+               #pragma intrinsic(_mm_prefetch, _byteswap_ulong, _m_prefetchw)\n\
+               #pragma intrinsic(__none_such)\n\
+               #pragma warning(push)\n#pragma warning(disable: 4163)\n\
+               #pragma intrinsic(__silenced)\n#pragma warning(pop)\n\
+               unsigned long f(unsigned long x) { return _byteswap_ulong(x); }\n";
+    let opts = crate::CompileOptions::default().with_no_entry_point(true);
+    let program = crate::Compiler::with_options(src.to_string(), crate::Target::WindowsX64, opts)
+        .compile()
+        .expect("compiles");
+    let reported: Vec<String> = (program.warnings.iter())
+        .map(|w| w.to_string())
+        .filter(|w| w.contains("#pragma intrinsic"))
+        .collect();
+    assert_eq!(reported.len(), 1, "{reported:?}");
+    assert!(
+        reported[0].contains("__none_such") && reported[0].contains(":4:"),
+        "{reported:?}"
+    );
+}
+
 #[test]
 fn builtin_overflow_mixed_signedness() {
     // The exact value decides when an operand's signedness or width

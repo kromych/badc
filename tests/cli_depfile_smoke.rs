@@ -220,9 +220,9 @@ fn a_system_headers_warnings_are_suppressed_but_warning_directives() {
         [
             "sys/sysnoisy.h:4",
             "inc/projnoisy.h:1",
-            "inc/projnoisy.h:2",
             "inc/projnoisy.h:4",
-            "inc/projnoisy.h:3"
+            "inc/projnoisy.h:3",
+            "inc/projnoisy.h:2"
         ],
         "{err}"
     );

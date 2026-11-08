@@ -6,7 +6,7 @@ mod compiler;
 mod depfile;
 pub mod diag;
 mod error;
-mod headers;
+pub(crate) mod headers;
 mod host;
 mod ident;
 mod ir;

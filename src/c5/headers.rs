@@ -176,7 +176,7 @@ const COMPILER_HEADERS: &[&str] = &[
 ];
 
 /// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
-pub(super) fn intrinsic_header(name: &str) -> bool {
+pub(crate) fn intrinsic_header(name: &str) -> bool {
     INTRINSIC_HEADERS.contains(&name)
 }
 

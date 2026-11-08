@@ -647,6 +647,37 @@ fn reloc_directive_places_a_relocation_of_the_named_type() {
     );
 }
 
+#[test]
+fn reloc_directive_offset_may_be_the_location_counter() {
+    // `.reloc .`, `. - 4` and `. + 4` measure from the location counter.
+    // GNU as 2.46.1 on this source emits, in `.rela.myrel`, the 32-bit
+    // pc-relative type at 8 with addend 0 and at 12 with 8, and the 64-bit
+    // absolute type at 20 with 1, on x86-64 and aarch64 alike.
+    let d = dir("reloc-here");
+    let (kind32, kind64, want32, want64) = if cfg!(target_arch = "aarch64") {
+        ("R_AARCH64_PREL32", "R_AARCH64_ABS64", 261, 257)
+    } else {
+        ("R_X86_64_PC32", "R_X86_64_64", 2, 1)
+    };
+    write(
+        &d,
+        "rel.s",
+        &format!(
+            "\t.section .myrel, \"a\"\n\t.globl tgt\n\t.quad 0\n\
+             \t.reloc ., {kind32}, tgt\n\t.quad 0\n\
+             \t.reloc . - 4, {kind32}, tgt + 8\n\
+             \t.reloc .+4, {kind64}, tgt + 1\n\t.quad 0\n"
+        ),
+    );
+    let target = format!("--target={TARGET}");
+    run_ok(&d, &["-q", "-c", &target, "rel.s", "-o", "rel.o"]);
+    let bytes = std::fs::read(d.join("rel.o")).unwrap();
+    assert_eq!(
+        relocs(&bytes, ".rela.myrel"),
+        [(8, want32, 0), (12, want32, 8), (20, want64, 1)]
+    );
+}
+
 /// `(offset, type, addend)` of every entry of a named RELA section.
 fn relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, i64)> {
     let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

@@ -112,9 +112,10 @@ fn elf_reloc_type_by_name(name: &str) -> Option<u32> {
     })
 }
 
-/// Parse `.reloc offset, TYPE[, expression]`. The offset is measured from the
-/// start of the section the directive sits in, not from the location counter;
-/// the expression is a symbol with an optional constant addend, a bare
+/// Parse `.reloc offset, TYPE[, expression]`. The offset is a constant
+/// measured from the start of the section the directive sits in, or `.` and
+/// an optional constant, measured from the location counter, as GNU as takes
+/// both; the expression is a symbol with an optional constant addend, a bare
 /// constant (the section itself), or absent. The directive deposits no bytes.
 fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let bad = || alloc::format!("inline asm: `.reloc {rest}` is not `offset, TYPE[, expr]`");
@@ -122,7 +123,22 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
     let (Some(off), Some(ty)) = (args.next(), args.next()) else {
         return Err(bad());
     };
-    let offset = eval_const_expr(off).filter(|&v| (0..=u32::MAX as i64).contains(&v));
+    let off = off.trim();
+    let from_here = off.starts_with('.')
+        && off[1..]
+            .trim_start()
+            .chars()
+            .next()
+            .is_none_or(|c| c == '+' || c == '-');
+    let offset = match from_here {
+        true => match off[1..].trim() {
+            "" => Some(0),
+            rest => eval_const_expr(&alloc::format!("0{rest}")),
+        }
+        .and_then(|v| i32::try_from(v).ok())
+        .map(|v| v as u32 as i64),
+        false => eval_const_expr(off).filter(|&v| (0..=u32::MAX as i64).contains(&v)),
+    };
     let (Some(offset), Some(rtype)) = (offset, elf_reloc_type_by_name(ty)) else {
         return Err(bad());
     };
@@ -150,6 +166,7 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
     };
     Ok(AsmSectionItem::Reloc {
         offset: offset as u32,
+        from_here,
         rtype,
         target,
         addend,

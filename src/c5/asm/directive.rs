@@ -1097,6 +1097,27 @@ pub(crate) fn parse_section_item(
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
         // bytes in this section; it is carried to the frame-table builder,
         // which pairs it with the offset the materializer reaches it at.
+        // GNU as's `.def name; .scl n; .type n; .endef` block gives a COFF
+        // symbol its storage class and type, which the symbol's own
+        // definition and binding already decide here.
+        ".def" | ".scl" | ".endef" => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
+        // `.seh_*` is a function's PE unwind information, carried as `.cfi_*`
+        // is, with the offset the materializer reaches it at.
+        _ if tok.starts_with(".seh_") => {
+            let ctx = AsmExprCtx {
+                resolve: &|_| None,
+                const_of: &|_| None,
+                lax_div: false,
+            };
+            let eval = |s: &str| eval_asm_value(s, &ctx).ok().and_then(|v| v.to_abs());
+            match cfi::parse_seh_directive(tok, rest.trim(), &eval) {
+                Ok(op) if !is_aarch64 => Ok(AsmSectionItem::Cfi(cfi::CfiOp::Seh(op))),
+                Ok(_) => Err(alloc::format!(
+                    "inline asm: `{tok}` takes arm64's form, which is not supported"
+                )),
+                Err(m) => Err(alloc::format!("inline asm: {m}")),
+            }
+        }
         _ if tok.starts_with(".cfi_") => {
             // A frame operand is absolute: no leaf resolves, so an
             // expression naming a label folds to nothing and is rejected.
@@ -1476,6 +1497,10 @@ fn split_symbol_operand(rest: &str) -> (&str, &str) {
 /// an `STT_` spelling; badc's symbol model covers function, object, and
 /// untyped, and any other type is rejected.
 pub(crate) fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    // COFF's `.type n` inside a `.def` block: see `.def`.
+    if !rest.is_empty() && rest.trim().bytes().all(|b| b.is_ascii_digit()) {
+        return Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()));
+    }
     let (name, ty) = split_symbol_operand(rest);
     if !is_asm_symbol_name(name) {
         return Err(alloc::format!("inline asm: bad `.type` symbol `{name}`"));

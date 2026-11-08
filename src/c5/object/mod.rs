@@ -873,6 +873,7 @@ pub(crate) mod test_support {
             named_sections: Vec::new(),
             named_code_sections: Vec::new(),
             export_forms: Vec::new(),
+            asm_unwind: Vec::new(),
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             data_import_binds: Vec::new(),

@@ -6859,6 +6859,100 @@ fn code_seg_and_alloc_text_place_functions_in_code_sections() {
     }
 }
 
+/// GNU as's `.seh_*` directives in a `.s` unit give its function a PE
+/// unwind row, so an exception raised past the function's frame reaches a
+/// handler beyond it; the `.def` / `.scl` / `.type` / `.endef` block gcc
+/// writes for the symbol is accepted.
+#[test]
+fn seh_directives_in_an_assembly_unit_unwind_its_function() {
+    let dir = tempdir("pe-asm-seh");
+    let asm = write_source(
+        &dir,
+        "through.s",
+        "\t.text\n\t.globl call_through\n\t.def call_through; .scl 2; .type 32; .endef\n\
+         \t.seh_proc call_through\ncall_through:\n\tpushq %rbp\n\t.seh_pushreg %rbp\n\
+         \tpushq %rbx\n\t.seh_pushreg %rbx\n\tsubq $48, %rsp\n\t.seh_stackalloc 48\n\
+         \tleaq 32(%rsp), %rbp\n\t.seh_setframe %rbp, 32\n\t.seh_endprologue\n\
+         \tmovq $0x1234, %rbx\n\tcall *%rcx\n\tmovq %rbx, %rax\n\taddq $48, %rsp\n\
+         \tpopq %rbx\n\tpopq %rbp\n\tret\n\t.seh_endproc\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\nlong long call_through(void (*)(void));\n\
+         static void fault(void) { *(volatile int *)0 = 1; }\nstatic void fine(void) {}\n\
+         int main(void) {\n  if (call_through(fine) != 0x1234) return 3;\n  int r = 0;\n\
+           __try { call_through(fault); } __except (EXCEPTION_EXECUTE_HANDLER) { r = 1; }\n\
+           return r == 1 ? 0 : 2; }\n",
+    );
+    let exe = dir.join("through.exe");
+    let out = Command::new(badc())
+        .arg("--target=windows-x64")
+        .args([
+            main.as_os_str(),
+            asm.as_os_str(),
+            "-o".as_ref(),
+            exe.as_os_str(),
+        ])
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The function's row: push, push, allocation and frame register.
+    let pe = std::fs::read(&exe).expect("read image");
+    let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+    let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+    let coff = u32_at(0x3c) + 4;
+    let table = coff + 20 + u16_at(coff + 16);
+    let sections: Vec<(String, usize, usize, usize)> = (0..u16_at(coff + 2))
+        .map(|i| table + 40 * i)
+        .map(|h| {
+            let name = String::from_utf8_lossy(&pe[h..h + 8])
+                .trim_end_matches('\0')
+                .to_string();
+            (name, u32_at(h + 12), u32_at(h + 8), u32_at(h + 20))
+        })
+        .collect();
+    let file = |rva: usize| {
+        let s = sections
+            .iter()
+            .find(|s| (s.1..s.1 + s.2).contains(&rva))
+            .unwrap();
+        s.3 + rva - s.1
+    };
+    let pdata = sections.iter().find(|s| s.0 == ".pdata").expect(".pdata");
+    let rows: Vec<(u8, u8)> = (0..pdata.2 / 12)
+        .map(|k| file(u32_at(pdata.3 + 12 * k + 8)))
+        .map(|info| (pe[info + 2], pe[info + 3]))
+        .collect();
+    assert!(
+        rows.contains(&(4, 0x25)),
+        "no row with four codes and rbp at 32: {rows:?}"
+    );
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        let run = Command::new(&exe).output().expect("run the image");
+        assert_eq!(run.status.code(), Some(0), "{run:?}");
+    }
+    let out = Command::new(badc())
+        .args(["--target=windows-arm64", "-c", "-o"])
+        .arg(dir.join("through-arm64.o"))
+        .arg(write_source(
+            &dir,
+            "a64.s",
+            "\t.text\n\t.seh_proc f\nf:\n\tret\n\t.seh_endproc\n",
+        ))
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("arm64's form"),
+        "{err}"
+    );
+}
+
 /// A module-definition file among a PE link's inputs gives the DLL its
 /// exports as link.exe takes them: `LIBRARY` names it, an ordinal places an
 /// export, `NONAME` drops its name, `PRIVATE` keeps it out of the import

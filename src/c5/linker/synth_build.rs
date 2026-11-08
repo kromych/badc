@@ -300,6 +300,7 @@ fn synth_program_and_build(
         named_sections: merged.named_sections.clone(),
         named_code_sections: merged.named_code_sections.clone(),
         export_forms: merged.export_forms.clone(),
+        asm_unwind: Vec::new(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,

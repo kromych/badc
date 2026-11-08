@@ -2380,7 +2380,12 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
-        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@0", "/EXPORT:f,NONAME", "/EXPORT:=g"] {
+        for refused in [
+            "/MERGE:.a=.b",
+            "/EXPORT:f,@0",
+            "/EXPORT:f,NONAME",
+            "/EXPORT:=g",
+        ] {
             let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
             assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");
         }

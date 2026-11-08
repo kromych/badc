@@ -118,6 +118,9 @@ const NT_BADC_LINKER_DIRECTIVES: u32 = 17;
 /// section: the other records' code offsets in `[lo, hi)` lie from `base` in
 /// that section, the rest at the same offset in `.text`.
 const NT_BADC_TEXT_CARVE: u32 = 18;
+/// `(name NUL, record)` per asm function its `.seh_*` directives describe:
+/// the function the symbol names and its unwind steps.
+const NT_BADC_SYMBOL_UNWIND: u32 = 19;
 /// The target of a `__finally` row, the handler of a row whose filter is
 /// the constant `EXCEPTION_EXECUTE_HANDLER`.
 pub(crate) const SEH_NONE: u64 = u64::MAX;
@@ -4329,6 +4332,7 @@ impl<'a> RelocWriter<'a> {
             &self.syms.seh_rows,
             &self.syms.unwind,
             &text_carve,
+            &build.asm_unwind,
             &noted_names,
             &self.program.linker_directives,
         );
@@ -5135,6 +5139,7 @@ fn build_badc_note(
     seh_rows: &[[u64; 5]],
     unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
     text_carve: &[(u64, u64, u64, &str)],
+    symbol_unwind: &[(String, crate::c5::codegen::UnwindSteps)],
     extern_data_names: &[&str],
     linker_directives: &[String],
 ) -> Vec<u8> {
@@ -5283,6 +5288,16 @@ fn build_badc_note(
             steps.encode(&mut desc);
         }
         push_note_record(&mut out, NT_BADC_UNWIND, &desc);
+    }
+
+    if !symbol_unwind.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (name, steps) in symbol_unwind {
+            desc.extend_from_slice(name.as_bytes());
+            desc.push(0);
+            steps.encode(&mut desc);
+        }
+        push_note_record(&mut out, NT_BADC_SYMBOL_UNWIND, &desc);
     }
 
     let rows = !(prologue_ends.is_empty()

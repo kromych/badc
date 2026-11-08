@@ -1469,6 +1469,21 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         None => BadcNote::default(),
     };
     note.place_code_rows(&sections);
+    // A function's steps keyed by its symbol start at its definition.
+    for (name, steps) in core::mem::take(&mut note.symbol_unwind) {
+        let at = (symbols.iter())
+            .find(|s| s.name == name && s.section == NativeSymSection::Text)
+            .map(|s| s.value);
+        match at {
+            Some(at) => note.unwind.push((at, steps)),
+            None => {
+                return Err(C5Error::hard(
+                    Code::MALFORMED_INPUT,
+                    format!("unwind steps for `{name}`, which the object defines in no code"),
+                ));
+            }
+        }
+    }
     let mut default_libs = Vec::new();
     for &i in &roles.deplibs {
         default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
@@ -2397,6 +2412,8 @@ struct BadcNote {
     seh_rows: Vec<SehRowAt<u64>>,
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     text_carve: Vec<(u64, u64, u64, String)>,
+    /// Unwind steps keyed by the function symbol they describe.
+    symbol_unwind: Vec<(String, crate::c5::codegen::UnwindSteps)>,
     extern_data_names: Vec<String>,
     /// `#pragma comment(linker, ...)` strings, link.exe's `.drectve` options.
     linker_directives: Vec<String>,
@@ -2627,6 +2644,19 @@ impl BadcNote {
                 }
             }
             17 => self.linker_directives.extend(nul_separated(desc)),
+            19 => {
+                let mut c = cur;
+                while let Some(n) = body[c..desc_end].iter().position(|&b| b == 0) {
+                    let name = String::from_utf8_lossy(&body[c..c + n]).into_owned();
+                    let Some((steps, len)) =
+                        crate::c5::codegen::UnwindSteps::decode(&body[c + n + 1..desc_end])
+                    else {
+                        break;
+                    };
+                    self.symbol_unwind.push((name, steps));
+                    c += n + 1 + len;
+                }
+            }
             18 => {
                 let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
                 let mut c = cur;

@@ -3382,9 +3382,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             off
         };
 
+    let asm_err = |m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}"));
     st.asm_sections
         .emit_cfi_sections(B::cfi_target(&native))
-        .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+        .map_err(asm_err)?;
+    let asm_unwind = super::cfi::seh_unwind(&st.asm_sections.cfi).map_err(asm_err)?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     st.rodata.place_literals();
     // A row names its funclet by text offset.
@@ -3397,6 +3399,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         named_sections: alloc::vec::Vec::new(),
         named_code_sections: alloc::vec::Vec::new(),
         export_forms: alloc::vec::Vec::new(),
+        asm_unwind,
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: alloc::vec::Vec::new(),
         data_import_binds: alloc::vec::Vec::new(),

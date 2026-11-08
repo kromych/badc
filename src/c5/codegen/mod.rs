@@ -2138,6 +2138,9 @@ pub(crate) struct Build {
     pub named_sections: Vec<NamedSection>,
     /// The exports an ordinal or `NONAME` shapes (PE).
     pub export_forms: Vec<ExportForm>,
+    /// The prologue steps an asm function's `.seh_*` directives give it,
+    /// keyed by its name.
+    pub asm_unwind: Vec<(String, UnwindSteps)>,
     /// Named code sections, as offsets in `text`. Only the merged link path
     /// fills this, and only the PE writer gives each a header; for it each
     /// one starts on a multiple of the image's section alignment.

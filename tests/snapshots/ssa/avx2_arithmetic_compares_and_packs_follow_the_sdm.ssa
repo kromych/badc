@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=571 ---
+; --- SSA dump (ok=true) ent_pc=570 ---
 ; name=_mm256_cmpgt_epi32
-fn ent_pc=571 n_params=3 variadic=false locals=0
+fn ent_pc=570 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -74,9 +74,9 @@ fn ent_pc=571 n_params=3 variadic=false locals=0
     v68  LifetimeEnd(-14)                                 -> -
     v69  LifetimeEnd(-13)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=572 ---
+; --- SSA dump (ok=true) ent_pc=571 ---
 ; name=_mm256_cmpgt_epi64
-fn ent_pc=572 n_params=3 variadic=false locals=0
+fn ent_pc=571 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -125,84 +125,9 @@ fn ent_pc=572 n_params=3 variadic=false locals=0
     v43  LifetimeEnd(-14)                                 -> -
     v44  LifetimeEnd(-13)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=584 ---
-; name=_mm256_subs_epu16
-fn ent_pc=584 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-23)                                   -> x0
-    v2   LocalAddr(-25)                                   -> x2
-    v3   Mcpy { dst=v2, src=v1, size=32, align=32 }       -> -
-    v4   LocalAddr(-24)                                   -> x0
-    v5   LocalAddr(-26)                                   -> x6
-    v6   Mcpy { dst=v5, src=v4, size=32, align=32 }       -> -
-    v7   Imm(0)                                           -> x0
-    v8   Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v7)
-  block 1  start_pc=0
-    v12  LocalAddr(-27)                                   -> x7
-    v13  Extend { value=v9, kind=I32 }                    -> x1
-    v14  BinopI { op=shl, lhs=v9, rhs_imm=1 }             -> x1
-    v15  Binop { op=add, lhs=v12, rhs=v14 }               -> x1
-    v16  LocalAddr(-25)                                   -> x1
-    v17  Extend { value=v9, kind=I32 }                    -> x1
-    v18  BinopI { op=shl, lhs=v9, rhs_imm=1 }             -> x1
-    v19  Binop { op=add, lhs=v2, rhs=v18 }                -> x1
-    v20  LoadIndexed { base=v2, index=v9, scale=2, kind=U16 } -> x1
-    v21  LocalAddr(-26)                                   -> x8
-    v22  Extend { value=v9, kind=I32 }                    -> x8
-    v23  BinopI { op=shl, lhs=v9, rhs_imm=1 }             -> x8
-    v24  Binop { op=add, lhs=v5, rhs=v23 }                -> x8
-    v25  LoadIndexed { base=v5, index=v9, scale=2, kind=U16 } -> x8
-    v26  Binop { op=gt, lhs=v20, rhs=v25 }                -> x1
-    terminator Bz { cond=v26, target=b3, fall=b2 }   (exit_acc=v26)
-  block 2  start_pc=0
-    v35  LocalAddr(-25)                                   -> x1
-    v36  Extend { value=v9, kind=I32 }                    -> x1
-    v37  BinopI { op=shl, lhs=v9, rhs_imm=1 }             -> x1
-    v38  Binop { op=add, lhs=v2, rhs=v37 }                -> x1
-    v39  LoadIndexed { base=v2, index=v9, scale=2, kind=U16 } -> x1
-    v40  LocalAddr(-26)                                   -> x8
-    v41  Extend { value=v9, kind=I32 }                    -> x8
-    v42  BinopI { op=shl, lhs=v9, rhs_imm=1 }             -> x8
-    v43  Binop { op=add, lhs=v5, rhs=v42 }                -> x8
-    v44  LoadIndexed { base=v5, index=v9, scale=2, kind=U16 } -> x8
-    v45  Binop { op=sub, lhs=v39, rhs=v44 }               -> x1
-    v46  Extend { value=v45, kind=I32, nsw }              -> x8
-    v47  Imm(0)                                           -> x8
-    terminator Jmp(b4)   (exit_acc=v45)
-  block 3  start_pc=0
-    v48  Imm(0)                                           -> x1
-    v49  Imm(0)                                           -> x8
-    terminator Jmp(b4)   (exit_acc=v48)
-  block 4  start_pc=0
-    v50  Phi { incoming=[b2:v45, b3:v48], kind=I64 }      -> x1
-    v51  Imm(0)                                           -> x8
-    v52  StoreIndexed { base=v12, index=v9, scale=2, value=v50, kind=I16 } -> -
-    v53  BinopI { op=and, lhs=v50, rhs_imm=65535 }        -> x1
-    v54  Extend { value=v9, kind=I32 }                    -> x1
-    v55  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
-    v56  Extend { value=v55, kind=I32, nsw }              -> x1
-    terminator Jmp(b5)   (exit_acc=v55)
-  block 5  start_pc=0
-    v9   Phi { incoming=[b0:v7, b4:v55], kind=I64 }       -> x0
-    v10  Extend { value=v9, kind=I32 }                    -> x1
-    v11  BinopI { op=lt, lhs=v9, rhs_imm=16 }             -> x1
-    terminator Bz { cond=v11, target=b6, fall=b1 }   (exit_acc=v11)
-  block 6  start_pc=0
-    v27  LoadLocal { off=2, kind=I64 }                    -> x0
-    v28  LocalAddr(-27)                                   -> x1
-    v29  Mcpy { dst=v27, src=v28, size=32, align=32 }     -> -
-    v30  LifetimeEnd(-27)                                 -> -
-    v31  LifetimeEnd(-26)                                 -> -
-    v32  LifetimeEnd(-25)                                 -> -
-    v33  LifetimeEnd(-24)                                 -> -
-    v34  LifetimeEnd(-23)                                 -> -
-    terminator Return(v27)   (exit_acc=v27)
-; --- SSA dump (ok=true) ent_pc=599 ---
+; --- SSA dump (ok=true) ent_pc=593 ---
 ; name=__badc_lo_si
-fn ent_pc=599 n_params=1 variadic=false locals=0
+fn ent_pc=593 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -223,9 +148,9 @@ fn ent_pc=599 n_params=1 variadic=false locals=0
     v15  LocalAddr(-8)                                    -> x1
     v16  LifetimeEnd(-7)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=600 ---
+; --- SSA dump (ok=true) ent_pc=594 ---
 ; name=__badc_hi_si
-fn ent_pc=600 n_params=1 variadic=false locals=0
+fn ent_pc=594 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -247,9 +172,9 @@ fn ent_pc=600 n_params=1 variadic=false locals=0
     v16  LocalAddr(-8)                                    -> x1
     v17  LifetimeEnd(-7)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=601 ---
+; --- SSA dump (ok=true) ent_pc=595 ---
 ; name=__badc_join_si
-fn ent_pc=601 n_params=3 variadic=false locals=0
+fn ent_pc=595 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -284,8 +209,236 @@ fn ent_pc=601 n_params=3 variadic=false locals=0
     v29  LifetimeEnd(-11)                                 -> -
     v30  LifetimeEnd(-10)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=602 ---
+; --- SSA dump (ok=true) ent_pc=596 ---
 ; name=_mm256_adds_epi8
+fn ent_pc=596 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_paddsb128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_paddsb128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=597 ---
+; name=_mm256_adds_epi16
+fn ent_pc=597 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_paddsw128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_paddsw128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=598 ---
+; name=_mm256_adds_epu8
+fn ent_pc=598 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_paddusb128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_paddusb128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=599 ---
+; name=_mm256_adds_epu16
+fn ent_pc=599 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_paddusw128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_paddusw128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=600 ---
+; name=_mm256_subs_epi8
+fn ent_pc=600 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_psubsb128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_psubsb128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=601 ---
+; name=_mm256_subs_epi16
+fn ent_pc=601 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LoadLocal { off=2, kind=I64 }                    -> x3
+    v2   LocalAddr(-45)                                   -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   LocalAddr(-43)                                   -> x9
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   LocalAddr(-46)                                   -> x0
+    v8   LocalAddr(-44)                                   -> x9
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  LocalAddr(-47)                                   -> x0
+    v11  LocalAddr(-48)                                   -> x1
+    v12  LocalAddr(-46)                                   -> x2
+    v13  X86Simd { op=__builtin_ia32_psubsw128, imm=None, args=[v11, v12, v10] } -> -
+    v14  LocalAddr(-48)                                   -> x0
+    v15  LocalAddr(-43)                                   -> x9
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  LocalAddr(-49)                                   -> x0
+    v18  LocalAddr(-44)                                   -> x9
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v20  LocalAddr(-50)                                   -> x0
+    v21  LocalAddr(-51)                                   -> x9
+    v22  LocalAddr(-49)                                   -> x1
+    v23  X86Simd { op=__builtin_ia32_psubsw128, imm=None, args=[v21, v22, v20] } -> -
+    v24  LocalAddr(-51)                                   -> x0
+    v25  LocalAddr(-45)                                   -> x7
+    v26  LocalAddr(-48)                                   -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  LocalAddr(-45)                                   -> x0
+    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
+    v30  LifetimeEnd(-44)                                 -> -
+    v31  LifetimeEnd(-43)                                 -> -
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=602 ---
+; name=_mm256_subs_epu8
 fn ent_pc=602 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -295,35 +448,35 @@ fn ent_pc=602 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_paddsb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_psubusb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_paddsb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_psubusb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=603 ---
-; name=_mm256_adds_epi16
+; name=_mm256_avg_epu8
 fn ent_pc=603 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -333,35 +486,35 @@ fn ent_pc=603 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_paddsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pavgb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_paddsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pavgb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=604 ---
-; name=_mm256_adds_epu8
+; name=_mm256_avg_epu16
 fn ent_pc=604 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -371,35 +524,35 @@ fn ent_pc=604 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_paddusb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pavgw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_paddusb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pavgw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=605 ---
-; name=_mm256_adds_epu16
+; name=_mm256_min_epi8
 fn ent_pc=605 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -409,35 +562,35 @@ fn ent_pc=605 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_paddusw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminsb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_paddusw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminsb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=606 ---
-; name=_mm256_subs_epi8
+; name=_mm256_min_epi16
 fn ent_pc=606 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -447,35 +600,35 @@ fn ent_pc=606 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psubsb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminsw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psubsb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminsw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=607 ---
-; name=_mm256_subs_epi16
+; name=_mm256_min_epi32
 fn ent_pc=607 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -485,35 +638,35 @@ fn ent_pc=607 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psubsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminsd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psubsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminsd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=608 ---
-; name=_mm256_subs_epu8
+; name=_mm256_min_epu8
 fn ent_pc=608 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -523,35 +676,35 @@ fn ent_pc=608 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psubusb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminub128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psubusb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminub128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=609 ---
-; name=_mm256_avg_epu8
+; name=_mm256_min_epu16
 fn ent_pc=609 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -561,35 +714,35 @@ fn ent_pc=609 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pavgb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminuw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pavgb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminuw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=610 ---
-; name=_mm256_avg_epu16
+; name=_mm256_min_epu32
 fn ent_pc=610 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -599,35 +752,35 @@ fn ent_pc=610 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pavgw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pminud128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pavgw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pminud128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=611 ---
-; name=_mm256_min_epi8
+; name=_mm256_max_epi8
 fn ent_pc=611 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -637,35 +790,35 @@ fn ent_pc=611 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminsb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxsb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminsb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxsb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=612 ---
-; name=_mm256_min_epi16
+; name=_mm256_max_epi16
 fn ent_pc=612 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -675,35 +828,35 @@ fn ent_pc=612 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxsw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxsw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=613 ---
-; name=_mm256_min_epi32
+; name=_mm256_max_epi32
 fn ent_pc=613 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -713,35 +866,35 @@ fn ent_pc=613 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminsd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxsd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminsd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxsd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=614 ---
-; name=_mm256_min_epu8
+; name=_mm256_max_epu8
 fn ent_pc=614 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -751,35 +904,35 @@ fn ent_pc=614 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminub128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxub128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminub128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxub128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=615 ---
-; name=_mm256_min_epu16
+; name=_mm256_max_epu16
 fn ent_pc=615 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -789,35 +942,35 @@ fn ent_pc=615 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminuw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxuw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminuw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxuw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=616 ---
-; name=_mm256_min_epu32
+; name=_mm256_max_epu32
 fn ent_pc=616 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -827,35 +980,35 @@ fn ent_pc=616 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pminud128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmaxud128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pminud128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmaxud128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=617 ---
-; name=_mm256_max_epi8
+; name=_mm256_mulhi_epi16
 fn ent_pc=617 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -865,35 +1018,35 @@ fn ent_pc=617 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxsb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmulhw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxsb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmulhw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=618 ---
-; name=_mm256_max_epi16
+; name=_mm256_mulhi_epu16
 fn ent_pc=618 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -903,35 +1056,35 @@ fn ent_pc=618 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmulhuw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmulhuw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=619 ---
-; name=_mm256_max_epi32
+; name=_mm256_mulhrs_epi16
 fn ent_pc=619 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -941,35 +1094,35 @@ fn ent_pc=619 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxsd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmulhrsw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxsd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmulhrsw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=620 ---
-; name=_mm256_max_epu8
+; name=_mm256_mullo_epi16
 fn ent_pc=620 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -979,35 +1132,35 @@ fn ent_pc=620 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxub128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmullw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxub128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmullw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=621 ---
-; name=_mm256_max_epu16
+; name=_mm256_mul_epi32
 fn ent_pc=621 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1017,35 +1170,35 @@ fn ent_pc=621 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxuw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pmuldq128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxuw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pmuldq128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=622 ---
-; name=_mm256_max_epu32
+; name=_mm256_sign_epi8
 fn ent_pc=622 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1055,35 +1208,35 @@ fn ent_pc=622 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmaxud128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_psignb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmaxud128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_psignb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=623 ---
-; name=_mm256_mulhi_epi16
+; name=_mm256_sign_epi16
 fn ent_pc=623 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1093,35 +1246,35 @@ fn ent_pc=623 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmulhw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_psignw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmulhw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_psignw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=624 ---
-; name=_mm256_mulhi_epu16
+; name=_mm256_sign_epi32
 fn ent_pc=624 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1131,35 +1284,35 @@ fn ent_pc=624 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmulhuw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_psignd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmulhuw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_psignd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=625 ---
-; name=_mm256_mulhrs_epi16
+; name=_mm256_hadd_epi16
 fn ent_pc=625 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1169,35 +1322,35 @@ fn ent_pc=625 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmulhrsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phaddw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmulhrsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phaddw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=626 ---
-; name=_mm256_mullo_epi16
+; name=_mm256_hadd_epi32
 fn ent_pc=626 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1207,35 +1360,35 @@ fn ent_pc=626 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmullw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phaddd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmullw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phaddd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=627 ---
-; name=_mm256_mul_epi32
+; name=_mm256_hadds_epi16
 fn ent_pc=627 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1245,35 +1398,35 @@ fn ent_pc=627 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pmuldq128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phaddsw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pmuldq128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phaddsw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=628 ---
-; name=_mm256_sign_epi8
+; name=_mm256_hsub_epi16
 fn ent_pc=628 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1283,35 +1436,35 @@ fn ent_pc=628 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psignb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phsubw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psignb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phsubw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=629 ---
-; name=_mm256_sign_epi16
+; name=_mm256_hsub_epi32
 fn ent_pc=629 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1321,35 +1474,35 @@ fn ent_pc=629 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psignw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phsubd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psignw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phsubd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=630 ---
-; name=_mm256_sign_epi32
+; name=_mm256_hsubs_epi16
 fn ent_pc=630 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1359,35 +1512,35 @@ fn ent_pc=630 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_psignd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_phsubsw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_psignd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_phsubsw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=631 ---
-; name=_mm256_hadd_epi16
+; name=_mm256_cmpgt_epi8
 fn ent_pc=631 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1397,35 +1550,35 @@ fn ent_pc=631 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phaddw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pcmpgtb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phaddw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pcmpgtb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=632 ---
-; name=_mm256_hadd_epi32
+; name=_mm256_cmpgt_epi16
 fn ent_pc=632 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1435,35 +1588,35 @@ fn ent_pc=632 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phaddd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_pcmpgtw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phaddd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_pcmpgtw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=633 ---
-; name=_mm256_hadds_epi16
+; name=_mm256_packs_epi16
 fn ent_pc=633 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1473,35 +1626,35 @@ fn ent_pc=633 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phaddsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_packsswb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phaddsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_packsswb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=634 ---
-; name=_mm256_hsub_epi16
+; name=_mm256_packs_epi32
 fn ent_pc=634 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1511,35 +1664,35 @@ fn ent_pc=634 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phsubw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_packssdw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phsubw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_packssdw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=635 ---
-; name=_mm256_hsub_epi32
+; name=_mm256_packus_epi16
 fn ent_pc=635 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1549,35 +1702,35 @@ fn ent_pc=635 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phsubd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_packuswb128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phsubd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_packuswb128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=636 ---
-; name=_mm256_hsubs_epi16
+; name=_mm256_packus_epi32
 fn ent_pc=636 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1587,35 +1740,35 @@ fn ent_pc=636 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_phsubsw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_packusdw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_phsubsw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_packusdw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=637 ---
-; name=_mm256_cmpgt_epi8
+; name=_mm256_unpacklo_epi8
 fn ent_pc=637 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1625,35 +1778,35 @@ fn ent_pc=637 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pcmpgtb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_punpcklbw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pcmpgtb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_punpcklbw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=638 ---
-; name=_mm256_cmpgt_epi16
+; name=_mm256_unpacklo_epi16
 fn ent_pc=638 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1663,35 +1816,35 @@ fn ent_pc=638 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_pcmpgtw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_punpcklwd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_pcmpgtw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_punpcklwd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=639 ---
-; name=_mm256_packs_epi16
+; name=_mm256_unpackhi_epi8
 fn ent_pc=639 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1701,35 +1854,35 @@ fn ent_pc=639 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_packsswb128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_punpckhbw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_packsswb128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_punpckhbw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=640 ---
-; name=_mm256_packs_epi32
+; name=_mm256_unpackhi_epi16
 fn ent_pc=640 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1739,149 +1892,35 @@ fn ent_pc=640 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_packssdw128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_punpckhwd128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_packssdw128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_punpckhwd128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v28  LocalAddr(-45)                                   -> x0
-    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
-    v30  LifetimeEnd(-44)                                 -> -
-    v31  LifetimeEnd(-43)                                 -> -
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=641 ---
-; name=_mm256_packus_epi16
-fn ent_pc=641 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x3
-    v2   LocalAddr(-45)                                   -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   LocalAddr(-46)                                   -> x0
-    v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  LocalAddr(-47)                                   -> x0
-    v11  LocalAddr(-48)                                   -> x1
-    v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_packuswb128, imm=None, args=[v11, v12, v10] } -> -
-    v14  LocalAddr(-48)                                   -> x0
-    v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  LocalAddr(-49)                                   -> x0
-    v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  LocalAddr(-50)                                   -> x0
-    v21  LocalAddr(-51)                                   -> x9
-    v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_packuswb128, imm=None, args=[v21, v22, v20] } -> -
-    v24  LocalAddr(-51)                                   -> x0
-    v25  LocalAddr(-45)                                   -> x7
-    v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v28  LocalAddr(-45)                                   -> x0
-    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
-    v30  LifetimeEnd(-44)                                 -> -
-    v31  LifetimeEnd(-43)                                 -> -
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=642 ---
-; name=_mm256_packus_epi32
-fn ent_pc=642 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x3
-    v2   LocalAddr(-45)                                   -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   LocalAddr(-46)                                   -> x0
-    v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  LocalAddr(-47)                                   -> x0
-    v11  LocalAddr(-48)                                   -> x1
-    v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_packusdw128, imm=None, args=[v11, v12, v10] } -> -
-    v14  LocalAddr(-48)                                   -> x0
-    v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  LocalAddr(-49)                                   -> x0
-    v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  LocalAddr(-50)                                   -> x0
-    v21  LocalAddr(-51)                                   -> x9
-    v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_packusdw128, imm=None, args=[v21, v22, v20] } -> -
-    v24  LocalAddr(-51)                                   -> x0
-    v25  LocalAddr(-45)                                   -> x7
-    v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v28  LocalAddr(-45)                                   -> x0
-    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
-    v30  LifetimeEnd(-44)                                 -> -
-    v31  LifetimeEnd(-43)                                 -> -
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=643 ---
-; name=_mm256_unpacklo_epi8
-fn ent_pc=643 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x3
-    v2   LocalAddr(-45)                                   -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   LocalAddr(-46)                                   -> x0
-    v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  LocalAddr(-47)                                   -> x0
-    v11  LocalAddr(-48)                                   -> x1
-    v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_punpcklbw128, imm=None, args=[v11, v12, v10] } -> -
-    v14  LocalAddr(-48)                                   -> x0
-    v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  LocalAddr(-49)                                   -> x0
-    v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  LocalAddr(-50)                                   -> x0
-    v21  LocalAddr(-51)                                   -> x9
-    v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_punpcklbw128, imm=None, args=[v21, v22, v20] } -> -
-    v24  LocalAddr(-51)                                   -> x0
-    v25  LocalAddr(-45)                                   -> x7
-    v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=644 ---
-; name=_mm256_unpacklo_epi16
+; name=_mm256_subs_epu16
 fn ent_pc=644 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -1891,104 +1930,28 @@ fn ent_pc=644 n_params=3 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-46)                                   -> x0
     v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=593, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-47)                                   -> x0
     v11  LocalAddr(-48)                                   -> x1
     v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_punpcklwd128, imm=None, args=[v11, v12, v10] } -> -
+    v13  X86Simd { op=__builtin_ia32_psubusw128, imm=None, args=[v11, v12, v10] } -> -
     v14  LocalAddr(-48)                                   -> x0
     v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-49)                                   -> x0
     v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=594, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-50)                                   -> x0
     v21  LocalAddr(-51)                                   -> x9
     v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_punpcklwd128, imm=None, args=[v21, v22, v20] } -> -
+    v23  X86Simd { op=__builtin_ia32_psubusw128, imm=None, args=[v21, v22, v20] } -> -
     v24  LocalAddr(-51)                                   -> x0
     v25  LocalAddr(-45)                                   -> x7
     v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v28  LocalAddr(-45)                                   -> x0
-    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
-    v30  LifetimeEnd(-44)                                 -> -
-    v31  LifetimeEnd(-43)                                 -> -
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=645 ---
-; name=_mm256_unpackhi_epi8
-fn ent_pc=645 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x3
-    v2   LocalAddr(-45)                                   -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   LocalAddr(-46)                                   -> x0
-    v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  LocalAddr(-47)                                   -> x0
-    v11  LocalAddr(-48)                                   -> x1
-    v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_punpckhbw128, imm=None, args=[v11, v12, v10] } -> -
-    v14  LocalAddr(-48)                                   -> x0
-    v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  LocalAddr(-49)                                   -> x0
-    v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  LocalAddr(-50)                                   -> x0
-    v21  LocalAddr(-51)                                   -> x9
-    v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_punpckhbw128, imm=None, args=[v21, v22, v20] } -> -
-    v24  LocalAddr(-51)                                   -> x0
-    v25  LocalAddr(-45)                                   -> x7
-    v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v28  LocalAddr(-45)                                   -> x0
-    v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
-    v30  LifetimeEnd(-44)                                 -> -
-    v31  LifetimeEnd(-43)                                 -> -
-    terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=646 ---
-; name=_mm256_unpackhi_epi16
-fn ent_pc=646 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x3
-    v2   LocalAddr(-45)                                   -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-43)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   LocalAddr(-46)                                   -> x0
-    v8   LocalAddr(-44)                                   -> x9
-    v9   Call { target_pc=599, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10  LocalAddr(-47)                                   -> x0
-    v11  LocalAddr(-48)                                   -> x1
-    v12  LocalAddr(-46)                                   -> x2
-    v13  X86Simd { op=__builtin_ia32_punpckhwd128, imm=None, args=[v11, v12, v10] } -> -
-    v14  LocalAddr(-48)                                   -> x0
-    v15  LocalAddr(-43)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v17  LocalAddr(-49)                                   -> x0
-    v18  LocalAddr(-44)                                   -> x9
-    v19  Call { target_pc=600, args=[v18], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  LocalAddr(-50)                                   -> x0
-    v21  LocalAddr(-51)                                   -> x9
-    v22  LocalAddr(-49)                                   -> x1
-    v23  X86Simd { op=__builtin_ia32_punpckhwd128, imm=None, args=[v21, v22, v20] } -> -
-    v24  LocalAddr(-51)                                   -> x0
-    v25  LocalAddr(-45)                                   -> x7
-    v26  LocalAddr(-48)                                   -> x0
-    v27  Call { target_pc=601, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v27  Call { target_pc=595, args=[v25, v26, v21], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  LocalAddr(-45)                                   -> x0
     v29  Mcpy { dst=v1, src=v28, size=32, align=32 }      -> -
     v30  LifetimeEnd(-44)                                 -> -
@@ -2005,20 +1968,20 @@ fn ent_pc=647 n_params=2 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-32)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-34)                                   -> x0
     v8   LocalAddr(-35)                                   -> x1
     v9   X86Simd { op=__builtin_ia32_pabsb128, imm=None, args=[v8, v7] } -> -
     v10  LocalAddr(-35)                                   -> x0
     v11  LocalAddr(-32)                                   -> x9
-    v12  Call { target_pc=600, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v12  Call { target_pc=594, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  LocalAddr(-36)                                   -> x0
     v14  LocalAddr(-37)                                   -> x9
     v15  X86Simd { op=__builtin_ia32_pabsb128, imm=None, args=[v14, v13] } -> -
     v16  LocalAddr(-37)                                   -> x0
     v17  LocalAddr(-33)                                   -> x7
     v18  LocalAddr(-35)                                   -> x0
-    v19  Call { target_pc=601, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=595, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-33)                                   -> x0
     v21  Mcpy { dst=v1, src=v20, size=32, align=32 }      -> -
     v22  LifetimeEnd(-32)                                 -> -
@@ -2034,20 +1997,20 @@ fn ent_pc=648 n_params=2 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-32)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-34)                                   -> x0
     v8   LocalAddr(-35)                                   -> x1
     v9   X86Simd { op=__builtin_ia32_pabsw128, imm=None, args=[v8, v7] } -> -
     v10  LocalAddr(-35)                                   -> x0
     v11  LocalAddr(-32)                                   -> x9
-    v12  Call { target_pc=600, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v12  Call { target_pc=594, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  LocalAddr(-36)                                   -> x0
     v14  LocalAddr(-37)                                   -> x9
     v15  X86Simd { op=__builtin_ia32_pabsw128, imm=None, args=[v14, v13] } -> -
     v16  LocalAddr(-37)                                   -> x0
     v17  LocalAddr(-33)                                   -> x7
     v18  LocalAddr(-35)                                   -> x0
-    v19  Call { target_pc=601, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=595, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-33)                                   -> x0
     v21  Mcpy { dst=v1, src=v20, size=32, align=32 }      -> -
     v22  LifetimeEnd(-32)                                 -> -
@@ -2063,20 +2026,20 @@ fn ent_pc=649 n_params=2 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-32)                                   -> x9
-    v6   Call { target_pc=599, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=593, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-34)                                   -> x0
     v8   LocalAddr(-35)                                   -> x1
     v9   X86Simd { op=__builtin_ia32_pabsd128, imm=None, args=[v8, v7] } -> -
     v10  LocalAddr(-35)                                   -> x0
     v11  LocalAddr(-32)                                   -> x9
-    v12  Call { target_pc=600, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v12  Call { target_pc=594, args=[v11], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  LocalAddr(-36)                                   -> x0
     v14  LocalAddr(-37)                                   -> x9
     v15  X86Simd { op=__builtin_ia32_pabsd128, imm=None, args=[v14, v13] } -> -
     v16  LocalAddr(-37)                                   -> x0
     v17  LocalAddr(-33)                                   -> x7
     v18  LocalAddr(-35)                                   -> x0
-    v19  Call { target_pc=601, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=595, args=[v17, v18, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  LocalAddr(-33)                                   -> x0
     v21  Mcpy { dst=v1, src=v20, size=32, align=32 }      -> -
     v22  LifetimeEnd(-32)                                 -> -
@@ -2150,7 +2113,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-157)                                  -> x0
     v27  LocalAddr(-158)                                  -> x1
-    v28  Call { target_pc=602, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=596, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-162)                                  -> x0
     v30  LocalAddr(-159)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -2159,7 +2122,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-157)                                  -> x9
     v36  LocalAddr(-158)                                  -> x0
-    v37  Call { target_pc=603, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=597, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-163)                                  -> x0
     v39  LocalAddr(-159)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -2169,7 +2132,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-157)                                  -> x9
     v46  LocalAddr(-158)                                  -> x0
-    v47  Call { target_pc=604, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=598, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-164)                                  -> x0
     v49  LocalAddr(-159)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -2179,7 +2142,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-157)                                  -> x9
     v56  LocalAddr(-158)                                  -> x0
-    v57  Call { target_pc=605, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=599, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-165)                                  -> x0
     v59  LocalAddr(-159)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1
@@ -2189,7 +2152,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v64  Imm(0)                                           -> x0
     v65  LocalAddr(-157)                                  -> x9
     v66  LocalAddr(-158)                                  -> x0
-    v67  Call { target_pc=606, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v67  Call { target_pc=600, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v68  LocalAddr(-166)                                  -> x0
     v69  LocalAddr(-159)                                  -> x1
     v70  BinopI { op=add, lhs=v69, rhs_imm=128 }          -> x1
@@ -2199,7 +2162,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v74  Imm(0)                                           -> x0
     v75  LocalAddr(-157)                                  -> x9
     v76  LocalAddr(-158)                                  -> x0
-    v77  Call { target_pc=607, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v77  Call { target_pc=601, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v78  LocalAddr(-167)                                  -> x0
     v79  LocalAddr(-159)                                  -> x1
     v80  BinopI { op=add, lhs=v79, rhs_imm=160 }          -> x1
@@ -2209,7 +2172,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v84  Imm(0)                                           -> x0
     v85  LocalAddr(-157)                                  -> x9
     v86  LocalAddr(-158)                                  -> x0
-    v87  Call { target_pc=608, args=[v82, v85, v86], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v87  Call { target_pc=602, args=[v82, v85, v86], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v88  LocalAddr(-168)                                  -> x0
     v89  LocalAddr(-159)                                  -> x1
     v90  BinopI { op=add, lhs=v89, rhs_imm=192 }          -> x1
@@ -2219,7 +2182,7 @@ fn ent_pc=1004 n_params=2 variadic=false locals=4
     v94  Imm(0)                                           -> x0
     v95  LocalAddr(-157)                                  -> x9
     v96  LocalAddr(-158)                                  -> x0
-    v97  Call { target_pc=584, args=[v92, v95, v96], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v97  Call { target_pc=644, args=[v92, v95, v96], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v98  LocalAddr(-169)                                  -> x0
     v99  LocalAddr(-159)                                  -> x1
     v100 BinopI { op=add, lhs=v99, rhs_imm=224 }          -> x1
@@ -3560,7 +3523,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v182 Imm(0)                                           -> x0
     v183 LocalAddr(-113)                                  -> x0
     v184 LocalAddr(-114)                                  -> x1
-    v185 Call { target_pc=609, args=[v180, v183, v178], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v185 Call { target_pc=603, args=[v180, v183, v178], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v186 LocalAddr(-117)                                  -> x9
     v187 LocalAddr(-28)                                   -> x7
     v188 Call { target_pc=1002, args=[v186, v187], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3574,7 +3537,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v194 Imm(0)                                           -> x0
     v195 LocalAddr(-113)                                  -> x9
     v196 LocalAddr(-114)                                  -> x0
-    v197 Call { target_pc=610, args=[v192, v195, v196], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v197 Call { target_pc=604, args=[v192, v195, v196], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v198 LocalAddr(-118)                                  -> x9
     v199 LocalAddr(-24)                                   -> x7
     v200 Call { target_pc=1002, args=[v198, v199], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3592,7 +3555,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v210 Imm(0)                                           -> x0
     v211 LocalAddr(-113)                                  -> x9
     v212 LocalAddr(-114)                                  -> x0
-    v213 Call { target_pc=623, args=[v208, v211, v212], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v213 Call { target_pc=617, args=[v208, v211, v212], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v214 LocalAddr(-119)                                  -> x9
     v215 LocalAddr(-20)                                   -> x7
     v216 Call { target_pc=1002, args=[v214, v215], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3610,7 +3573,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v226 Imm(0)                                           -> x0
     v227 LocalAddr(-113)                                  -> x9
     v228 LocalAddr(-114)                                  -> x0
-    v229 Call { target_pc=624, args=[v224, v227, v228], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v229 Call { target_pc=618, args=[v224, v227, v228], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v230 LocalAddr(-120)                                  -> x9
     v231 LocalAddr(-16)                                   -> x7
     v232 Call { target_pc=1002, args=[v230, v231], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3628,7 +3591,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v242 Imm(0)                                           -> x0
     v243 LocalAddr(-113)                                  -> x9
     v244 LocalAddr(-114)                                  -> x0
-    v245 Call { target_pc=625, args=[v240, v243, v244], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v245 Call { target_pc=619, args=[v240, v243, v244], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v246 LocalAddr(-121)                                  -> x9
     v247 LocalAddr(-12)                                   -> x7
     v248 Call { target_pc=1002, args=[v246, v247], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3646,7 +3609,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v258 Imm(0)                                           -> x0
     v259 LocalAddr(-113)                                  -> x9
     v260 LocalAddr(-114)                                  -> x0
-    v261 Call { target_pc=626, args=[v256, v259, v260], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v261 Call { target_pc=620, args=[v256, v259, v260], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v262 LocalAddr(-122)                                  -> x9
     v263 LocalAddr(-8)                                    -> x7
     v264 Call { target_pc=1002, args=[v262, v263], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3663,7 +3626,7 @@ fn ent_pc=1005 n_params=2 variadic=false locals=28
     v273 Imm(0)                                           -> x0
     v274 LocalAddr(-113)                                  -> x9
     v275 LocalAddr(-114)                                  -> x0
-    v276 Call { target_pc=627, args=[v271, v274, v275], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v276 Call { target_pc=621, args=[v271, v274, v275], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v277 LocalAddr(-123)                                  -> x9
     v278 LocalAddr(-4)                                    -> x7
     v279 Call { target_pc=1002, args=[v277, v278], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -3743,7 +3706,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-206)                                  -> x0
     v27  LocalAddr(-207)                                  -> x1
-    v28  Call { target_pc=611, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=605, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-211)                                  -> x0
     v30  LocalAddr(-208)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -3752,7 +3715,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-206)                                  -> x9
     v36  LocalAddr(-207)                                  -> x0
-    v37  Call { target_pc=617, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=611, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-212)                                  -> x0
     v39  LocalAddr(-208)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -3762,7 +3725,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-206)                                  -> x9
     v46  LocalAddr(-207)                                  -> x0
-    v47  Call { target_pc=612, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=606, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-213)                                  -> x0
     v49  LocalAddr(-208)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -3772,7 +3735,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-206)                                  -> x9
     v56  LocalAddr(-207)                                  -> x0
-    v57  Call { target_pc=618, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=612, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-214)                                  -> x0
     v59  LocalAddr(-208)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1
@@ -3782,7 +3745,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v64  Imm(0)                                           -> x0
     v65  LocalAddr(-206)                                  -> x9
     v66  LocalAddr(-207)                                  -> x0
-    v67  Call { target_pc=613, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v67  Call { target_pc=607, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v68  LocalAddr(-215)                                  -> x0
     v69  LocalAddr(-208)                                  -> x1
     v70  BinopI { op=add, lhs=v69, rhs_imm=128 }          -> x1
@@ -3792,7 +3755,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v74  Imm(0)                                           -> x0
     v75  LocalAddr(-206)                                  -> x9
     v76  LocalAddr(-207)                                  -> x0
-    v77  Call { target_pc=619, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v77  Call { target_pc=613, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v78  LocalAddr(-216)                                  -> x0
     v79  LocalAddr(-208)                                  -> x1
     v80  BinopI { op=add, lhs=v79, rhs_imm=160 }          -> x1
@@ -3802,7 +3765,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v84  Imm(0)                                           -> x0
     v85  LocalAddr(-206)                                  -> x9
     v86  LocalAddr(-207)                                  -> x0
-    v87  Call { target_pc=614, args=[v82, v85, v86], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v87  Call { target_pc=608, args=[v82, v85, v86], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v88  LocalAddr(-217)                                  -> x0
     v89  LocalAddr(-208)                                  -> x1
     v90  BinopI { op=add, lhs=v89, rhs_imm=192 }          -> x1
@@ -3812,7 +3775,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v94  Imm(0)                                           -> x0
     v95  LocalAddr(-206)                                  -> x9
     v96  LocalAddr(-207)                                  -> x0
-    v97  Call { target_pc=620, args=[v92, v95, v96], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v97  Call { target_pc=614, args=[v92, v95, v96], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v98  LocalAddr(-218)                                  -> x0
     v99  LocalAddr(-208)                                  -> x1
     v100 BinopI { op=add, lhs=v99, rhs_imm=224 }          -> x1
@@ -3822,7 +3785,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v104 Imm(0)                                           -> x0
     v105 LocalAddr(-206)                                  -> x9
     v106 LocalAddr(-207)                                  -> x0
-    v107 Call { target_pc=615, args=[v102, v105, v106], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v107 Call { target_pc=609, args=[v102, v105, v106], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v108 LocalAddr(-219)                                  -> x0
     v109 LocalAddr(-208)                                  -> x1
     v110 BinopI { op=add, lhs=v109, rhs_imm=256 }         -> x1
@@ -3832,7 +3795,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v114 Imm(0)                                           -> x0
     v115 LocalAddr(-206)                                  -> x9
     v116 LocalAddr(-207)                                  -> x0
-    v117 Call { target_pc=621, args=[v112, v115, v116], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v117 Call { target_pc=615, args=[v112, v115, v116], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v118 LocalAddr(-220)                                  -> x0
     v119 LocalAddr(-208)                                  -> x1
     v120 BinopI { op=add, lhs=v119, rhs_imm=288 }         -> x1
@@ -3842,7 +3805,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v124 Imm(0)                                           -> x0
     v125 LocalAddr(-206)                                  -> x9
     v126 LocalAddr(-207)                                  -> x0
-    v127 Call { target_pc=616, args=[v122, v125, v126], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v127 Call { target_pc=610, args=[v122, v125, v126], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v128 LocalAddr(-221)                                  -> x0
     v129 LocalAddr(-208)                                  -> x1
     v130 BinopI { op=add, lhs=v129, rhs_imm=320 }         -> x1
@@ -3852,7 +3815,7 @@ fn ent_pc=1006 n_params=2 variadic=false locals=4
     v134 Imm(0)                                           -> x0
     v135 LocalAddr(-206)                                  -> x9
     v136 LocalAddr(-207)                                  -> x0
-    v137 Call { target_pc=622, args=[v132, v135, v136], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v137 Call { target_pc=616, args=[v132, v135, v136], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v138 LocalAddr(-222)                                  -> x0
     v139 LocalAddr(-208)                                  -> x1
     v140 BinopI { op=add, lhs=v139, rhs_imm=352 }         -> x1
@@ -4188,7 +4151,7 @@ fn ent_pc=1007 n_params=2 variadic=false locals=8
     v53  Imm(0)                                           -> x0
     v54  LocalAddr(-130)                                  -> x9
     v55  LocalAddr(-131)                                  -> x0
-    v56  Call { target_pc=628, args=[v51, v54, v55], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v56  Call { target_pc=622, args=[v51, v54, v55], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v57  LocalAddr(-139)                                  -> x0
     v58  LocalAddr(-133)                                  -> x1
     v59  Mcpy { dst=v58, src=v57, size=32, align=32 }     -> -
@@ -4197,7 +4160,7 @@ fn ent_pc=1007 n_params=2 variadic=false locals=8
     v62  Imm(0)                                           -> x0
     v63  LocalAddr(-130)                                  -> x9
     v64  LocalAddr(-131)                                  -> x0
-    v65  Call { target_pc=629, args=[v60, v63, v64], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v65  Call { target_pc=623, args=[v60, v63, v64], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v66  LocalAddr(-140)                                  -> x0
     v67  LocalAddr(-133)                                  -> x1
     v68  BinopI { op=add, lhs=v67, rhs_imm=32 }           -> x1
@@ -4207,7 +4170,7 @@ fn ent_pc=1007 n_params=2 variadic=false locals=8
     v72  Imm(0)                                           -> x0
     v73  LocalAddr(-130)                                  -> x9
     v74  LocalAddr(-131)                                  -> x0
-    v75  Call { target_pc=630, args=[v70, v73, v74], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v75  Call { target_pc=624, args=[v70, v73, v74], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v76  LocalAddr(-141)                                  -> x0
     v77  LocalAddr(-133)                                  -> x1
     v78  BinopI { op=add, lhs=v77, rhs_imm=64 }           -> x1
@@ -4846,7 +4809,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-116)                                  -> x0
     v27  LocalAddr(-117)                                  -> x1
-    v28  Call { target_pc=631, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=625, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-121)                                  -> x0
     v30  LocalAddr(-118)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -4855,7 +4818,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-116)                                  -> x9
     v36  LocalAddr(-117)                                  -> x0
-    v37  Call { target_pc=632, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=626, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-122)                                  -> x0
     v39  LocalAddr(-118)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -4865,7 +4828,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-116)                                  -> x9
     v46  LocalAddr(-117)                                  -> x0
-    v47  Call { target_pc=634, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=628, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-123)                                  -> x0
     v49  LocalAddr(-118)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -4875,7 +4838,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-116)                                  -> x9
     v56  LocalAddr(-117)                                  -> x0
-    v57  Call { target_pc=635, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=629, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-124)                                  -> x0
     v59  LocalAddr(-118)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1
@@ -4885,7 +4848,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v64  Imm(0)                                           -> x0
     v65  LocalAddr(-116)                                  -> x9
     v66  LocalAddr(-117)                                  -> x0
-    v67  Call { target_pc=633, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v67  Call { target_pc=627, args=[v62, v65, v66], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v68  LocalAddr(-125)                                  -> x0
     v69  LocalAddr(-118)                                  -> x1
     v70  BinopI { op=add, lhs=v69, rhs_imm=128 }          -> x1
@@ -4895,7 +4858,7 @@ fn ent_pc=1009 n_params=2 variadic=false locals=4
     v74  Imm(0)                                           -> x0
     v75  LocalAddr(-116)                                  -> x9
     v76  LocalAddr(-117)                                  -> x0
-    v77  Call { target_pc=636, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v77  Call { target_pc=630, args=[v72, v75, v76], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v78  LocalAddr(-126)                                  -> x0
     v79  LocalAddr(-118)                                  -> x1
     v80  BinopI { op=add, lhs=v79, rhs_imm=160 }          -> x1
@@ -5141,7 +5104,7 @@ fn ent_pc=1010 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-99)                                   -> x0
     v27  LocalAddr(-100)                                  -> x1
-    v28  Call { target_pc=637, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=631, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-104)                                  -> x0
     v30  LocalAddr(-101)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -5150,7 +5113,7 @@ fn ent_pc=1010 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-99)                                   -> x9
     v36  LocalAddr(-100)                                  -> x0
-    v37  Call { target_pc=638, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=632, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-105)                                  -> x0
     v39  LocalAddr(-101)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -5160,7 +5123,7 @@ fn ent_pc=1010 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-99)                                   -> x9
     v46  LocalAddr(-100)                                  -> x0
-    v47  Call { target_pc=571, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=570, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-106)                                  -> x0
     v49  LocalAddr(-101)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -5170,7 +5133,7 @@ fn ent_pc=1010 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-99)                                   -> x9
     v56  LocalAddr(-100)                                  -> x0
-    v57  Call { target_pc=572, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=571, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-107)                                  -> x0
     v59  LocalAddr(-101)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1
@@ -5422,7 +5385,7 @@ fn ent_pc=1011 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-105)                                  -> x0
     v27  LocalAddr(-106)                                  -> x1
-    v28  Call { target_pc=639, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=633, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-110)                                  -> x0
     v30  LocalAddr(-107)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -5431,7 +5394,7 @@ fn ent_pc=1011 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-105)                                  -> x9
     v36  LocalAddr(-106)                                  -> x0
-    v37  Call { target_pc=640, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=634, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-111)                                  -> x0
     v39  LocalAddr(-107)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -5441,7 +5404,7 @@ fn ent_pc=1011 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-105)                                  -> x9
     v46  LocalAddr(-106)                                  -> x0
-    v47  Call { target_pc=641, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=635, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-112)                                  -> x0
     v49  LocalAddr(-107)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -5451,7 +5414,7 @@ fn ent_pc=1011 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-105)                                  -> x9
     v56  LocalAddr(-106)                                  -> x0
-    v57  Call { target_pc=642, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=636, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-113)                                  -> x0
     v59  LocalAddr(-107)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1
@@ -5751,7 +5714,7 @@ fn ent_pc=1012 n_params=2 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-103)                                  -> x0
     v27  LocalAddr(-104)                                  -> x1
-    v28  Call { target_pc=643, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v28  Call { target_pc=637, args=[v23, v26, v19], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v29  LocalAddr(-108)                                  -> x0
     v30  LocalAddr(-105)                                  -> x1
     v31  Mcpy { dst=v30, src=v29, size=32, align=32 }     -> -
@@ -5760,7 +5723,7 @@ fn ent_pc=1012 n_params=2 variadic=false locals=4
     v34  Imm(0)                                           -> x0
     v35  LocalAddr(-103)                                  -> x9
     v36  LocalAddr(-104)                                  -> x0
-    v37  Call { target_pc=644, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  Call { target_pc=638, args=[v32, v35, v36], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-109)                                  -> x0
     v39  LocalAddr(-105)                                  -> x1
     v40  BinopI { op=add, lhs=v39, rhs_imm=32 }           -> x1
@@ -5770,7 +5733,7 @@ fn ent_pc=1012 n_params=2 variadic=false locals=4
     v44  Imm(0)                                           -> x0
     v45  LocalAddr(-103)                                  -> x9
     v46  LocalAddr(-104)                                  -> x0
-    v47  Call { target_pc=645, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  Call { target_pc=639, args=[v42, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v48  LocalAddr(-110)                                  -> x0
     v49  LocalAddr(-105)                                  -> x1
     v50  BinopI { op=add, lhs=v49, rhs_imm=64 }           -> x1
@@ -5780,7 +5743,7 @@ fn ent_pc=1012 n_params=2 variadic=false locals=4
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-103)                                  -> x9
     v56  LocalAddr(-104)                                  -> x0
-    v57  Call { target_pc=646, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v57  Call { target_pc=640, args=[v52, v55, v56], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v58  LocalAddr(-111)                                  -> x0
     v59  LocalAddr(-105)                                  -> x1
     v60  BinopI { op=add, lhs=v59, rhs_imm=96 }           -> x1

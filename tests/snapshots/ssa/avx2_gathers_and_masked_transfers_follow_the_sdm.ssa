@@ -471,9 +471,9 @@ fn ent_pc=549 n_params=2 variadic=false locals=0
     v52  LifetimeEnd(-18)                                 -> -
     v53  LifetimeEnd(-17)                                 -> -
     terminator Return(v49)   (exit_acc=v49)
-; --- SSA dump (ok=true) ent_pc=592 ---
+; --- SSA dump (ok=true) ent_pc=586 ---
 ; name=_mm256_permutevar8x32_epi32
-fn ent_pc=592 n_params=3 variadic=false locals=0
+fn ent_pc=586 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -671,9 +671,9 @@ fn ent_pc=592 n_params=3 variadic=false locals=0
     v192 LifetimeEnd(-31)                                 -> -
     v193 LifetimeEnd(-30)                                 -> -
     terminator Return(v186)   (exit_acc=v186)
-; --- SSA dump (ok=true) ent_pc=593 ---
+; --- SSA dump (ok=true) ent_pc=587 ---
 ; name=_mm256_permute4x64_epi64
-fn ent_pc=593 n_params=3 variadic=false locals=0
+fn ent_pc=587 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -724,9 +724,9 @@ fn ent_pc=593 n_params=3 variadic=false locals=0
     v45  Mcpy { dst=v3, src=v41, size=32, align=32 }      -> -
     v46  LifetimeEnd(-9)                                  -> -
     terminator Return(v3)   (exit_acc=v3)
-; --- SSA dump (ok=true) ent_pc=599 ---
+; --- SSA dump (ok=true) ent_pc=593 ---
 ; name=__badc_lo_si
-fn ent_pc=599 n_params=1 variadic=false locals=0
+fn ent_pc=593 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -747,9 +747,9 @@ fn ent_pc=599 n_params=1 variadic=false locals=0
     v15  LocalAddr(-8)                                    -> x1
     v16  LifetimeEnd(-7)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=600 ---
+; --- SSA dump (ok=true) ent_pc=594 ---
 ; name=__badc_hi_si
-fn ent_pc=600 n_params=1 variadic=false locals=0
+fn ent_pc=594 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -771,9 +771,9 @@ fn ent_pc=600 n_params=1 variadic=false locals=0
     v16  LocalAddr(-8)                                    -> x1
     v17  LifetimeEnd(-7)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=601 ---
+; --- SSA dump (ok=true) ent_pc=595 ---
 ; name=__badc_join_si
-fn ent_pc=601 n_params=3 variadic=false locals=0
+fn ent_pc=595 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1025,7 +1025,7 @@ fn ent_pc=700 n_params=3 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-17)                                   -> x9
     v6   LocalAddr(-18)                                   -> x0
-    v7   Call { target_pc=601, args=[v2, v5, v6], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   Call { target_pc=595, args=[v2, v5, v6], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-16)                                   -> x0
     v9   Mcpy { dst=v1, src=v8, size=32, align=32 }       -> -
     v10  LifetimeEnd(-18)                                 -> -
@@ -1156,7 +1156,7 @@ fn ent_pc=707 n_params=3 variadic=false locals=0
     v14  LocalAddr(-23)                                   -> x0
     v15  X86Simd { op=__builtin_ia32_loaddqu, imm=None, args=[v14, v1] } -> -
     v16  LocalAddr(-23)                                   -> x1
-    v17  Call { target_pc=601, args=[v6, v10, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  Call { target_pc=595, args=[v6, v10, v14], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v18  LocalAddr(-21)                                   -> x0
     v19  Mcpy { dst=v5, src=v18, size=32, align=32 }      -> -
     terminator Return(v5)   (exit_acc=v5)
@@ -1172,7 +1172,7 @@ fn ent_pc=708 n_params=3 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   LocalAddr(-16)                                   -> x9
-    v7   Call { target_pc=599, args=[v6], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   Call { target_pc=593, args=[v6], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-17)                                   -> x1
     v9   LocalAddr(-19)                                   -> x0
     v10  Mcpy { dst=v9, src=v8, size=16, align=16 }       -> -
@@ -1181,7 +1181,7 @@ fn ent_pc=708 n_params=3 variadic=false locals=0
     v13  LifetimeEnd(-19)                                 -> -
     v14  Imm(0)                                           -> x0
     v15  LocalAddr(-16)                                   -> x9
-    v16  Call { target_pc=600, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  Call { target_pc=594, args=[v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  LocalAddr(-18)                                   -> x1
     v18  LocalAddr(-19)                                   -> x0
     v19  Mcpy { dst=v18, src=v17, size=16, align=16 }     -> -
@@ -3493,7 +3493,7 @@ fn ent_pc=892 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-16)                                   -> x9
     v8   Imm(0)                                           -> x0
-    v9   Call { target_pc=593, args=[v4, v7, v1], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v9   Call { target_pc=587, args=[v4, v7, v1], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  LocalAddr(-17)                                   -> x0
     v11  Mcpy { dst=v3, src=v10, size=32, align=32 }      -> -
     v12  LifetimeEnd(-16)                                 -> -
@@ -3510,7 +3510,7 @@ fn ent_pc=893 n_params=3 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-20)                                   -> x9
     v6   LocalAddr(-21)                                   -> x0
-    v7   Call { target_pc=592, args=[v2, v5, v6], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   Call { target_pc=586, args=[v2, v5, v6], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-22)                                   -> x0
     v9   Mcpy { dst=v1, src=v8, size=32, align=32 }       -> -
     v10  LifetimeEnd(-21)                                 -> -

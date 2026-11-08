@@ -191,15 +191,6 @@ static inline __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
     return (__m256i)(__A == __B);
 }
 
-/* VPMOVMSKB: the sign bit of each byte, byte 0 in bit 0. */
-static inline int _mm256_movemask_epi8(__m256i __A) {
-    __v32qi __a = (__v32qi)__A;
-    unsigned __r = 0;
-    for (int __i = 0; __i < 32; __i++)
-        __r |= (unsigned)((signed char)__a[__i] < 0) << __i;
-    return (int)__r;
-}
-
 static inline __m256i _mm256_set_epi64x(long long __D, long long __C, long long __B,
                                         long long __A) {
     return (__m256i){__A, __B, __C, __D};
@@ -305,50 +296,6 @@ static inline __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
     return (__m256i)((__a & 0xFFFFFFFFu) * (__b & 0xFFFFFFFFu));
 }
 
-/* VPMADDWD: adjacent signed word products summed into a doubleword, which
-** wraps when both pairs are -32768 * -32768. */
-static inline __m256i _mm256_madd_epi16(__m256i __A, __m256i __B) {
-    __v16hi __a = (__v16hi)__A, __b = (__v16hi)__B;
-    __v8si __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (int)((unsigned)(__a[2 * __i] * __b[2 * __i]) +
-                         (unsigned)(__a[2 * __i + 1] * __b[2 * __i + 1]));
-    return (__m256i)__r;
-}
-
-/* VPMADDUBSW: unsigned bytes of the first operand times signed bytes of
-** the second, adjacent products summed with signed saturation. */
-static inline __m256i _mm256_maddubs_epi16(__m256i __A, __m256i __B) {
-    __v32qu __a = (__v32qu)__A;
-    __v32qs __b = (__v32qs)__B;
-    __v16hi __r;
-    for (int __i = 0; __i < 16; __i++) {
-        int __s = __a[2 * __i] * __b[2 * __i] + __a[2 * __i + 1] * __b[2 * __i + 1];
-        __r[__i] = (short)(__s > 32767 ? 32767 : __s < -32768 ? -32768 : __s);
-    }
-    return (__m256i)__r;
-}
-
-/* VPSADBW: per quadword, the sum of the absolute byte differences. */
-static inline __m256i _mm256_sad_epu8(__m256i __A, __m256i __B) {
-    __v32qu __a = (__v32qu)__A, __b = (__v32qu)__B;
-    __m256i __r;
-    for (int __q = 0; __q < 4; __q++) {
-        long long __s = 0;
-        for (int __i = 8 * __q; __i < 8 * __q + 8; __i++)
-            __s += __a[__i] > __b[__i] ? __a[__i] - __b[__i] : __b[__i] - __a[__i];
-        __r[__q] = __s;
-    }
-    return __r;
-}
-
-static inline __m256i _mm256_subs_epu16(__m256i __A, __m256i __B) {
-    __v16hu __a = (__v16hu)__A, __b = (__v16hu)__B, __r;
-    for (int __i = 0; __i < 16; __i++)
-        __r[__i] = __a[__i] > __b[__i] ? __a[__i] - __b[__i] : 0;
-    return (__m256i)__r;
-}
-
 /* The shifts by a count: one past the lane width clears the lane. */
 static inline __m256i _mm256_slli_epi32(__m256i __A, int __N) {
     return (unsigned)__N > 31 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v8su)__A << __N);
@@ -380,15 +327,6 @@ static inline __m256i _mm256_srli_si256(__m256i __A, const int __N) {
     unsigned __n = (unsigned)__N & 0xFF;
     for (int __i = 0; __i < 32; __i++)
         __r[__i] = (__i & 15) + __n < 16 ? __a[__i + __n] : 0;
-    return (__m256i)__r;
-}
-
-/* VPSHUFB: each byte selects a byte of its own 128-bit lane, or zero when
-** its top bit is set. */
-static inline __m256i _mm256_shuffle_epi8(__m256i __A, __m256i __B) {
-    __v32qu __a = (__v32qu)__A, __b = (__v32qu)__B, __r;
-    for (int __i = 0; __i < 32; __i++)
-        __r[__i] = __b[__i] & 0x80 ? 0 : __a[(__i & 16) | (__b[__i] & 15)];
     return (__m256i)__r;
 }
 
@@ -504,7 +442,17 @@ __BADC_AVX2_BINARY(unpacklo_epi8)
 __BADC_AVX2_BINARY(unpacklo_epi16)
 __BADC_AVX2_BINARY(unpackhi_epi8)
 __BADC_AVX2_BINARY(unpackhi_epi16)
+__BADC_AVX2_BINARY(madd_epi16)
+__BADC_AVX2_BINARY(maddubs_epi16)
+__BADC_AVX2_BINARY(sad_epu8)
+__BADC_AVX2_BINARY(subs_epu16)
+__BADC_AVX2_BINARY(shuffle_epi8)
 #undef __BADC_AVX2_BINARY
+
+static inline int _mm256_movemask_epi8(__m256i __A) {
+    return (int)((unsigned)_mm_movemask_epi8(__badc_lo_si(__A)) |
+                 (unsigned)_mm_movemask_epi8(__badc_hi_si(__A)) << 16);
+}
 
 #define __BADC_AVX2_UNARY(name)                                                   \
     static inline __m256i _mm256_##name(__m256i __A) {                            \

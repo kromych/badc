@@ -1749,6 +1749,18 @@ impl Compiler {
         let class = self.symbols[id_idx].class;
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
+        // The library `memcpy`, `memmove` and `memset` lower as their
+        // builtins, as gcc and clang treat them unless `-fno-builtin`; a
+        // definition in the unit, a fortified wrapper among them, is called.
+        if !not_real_fn
+            && let Some(op) = library_mem_transfer_op(name)
+            && !self.library_name_is_opaque(name)
+            && !self.symbols[id_idx].defined_here
+            && self.current_function_name != name
+            && self.symbols[id_idx].params().len() == 3
+        {
+            return Some(BuiltinCall::MemTransfer(op));
+        }
         if not_real_fn {
             if let Some(op) = super::super::x86_simd::lookup(name) {
                 return Some(BuiltinCall::Simd(op));
@@ -7015,6 +7027,17 @@ fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
 }
 
 /// The transfer kind of a GCC memory-transfer builtin name.
+/// The transfer a library function of `name` performs.
+fn library_mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
+    use super::super::ast::MemTransferOp;
+    Some(match name {
+        "memcpy" => MemTransferOp::Copy,
+        "memmove" => MemTransferOp::Move,
+        "memset" => MemTransferOp::Fill,
+        _ => return None,
+    })
+}
+
 fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
     Some(match name {

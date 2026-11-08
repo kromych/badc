@@ -102,15 +102,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xe8
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x38               // =56
-               	bl	<addr>
+               	sub	x2, x29, #0xe8
+               	stur	xzr, [x29, #-0xe8]
+               	stur	xzr, [x29, #-0xe0]
+               	stur	xzr, [x29, #-0xd8]
+               	stur	xzr, [x29, #-0xd0]
+               	stur	xzr, [x29, #-0xc8]
+               	stur	xzr, [x29, #-0xc0]
+               	stur	xzr, [x29, #-0xb8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	sub	x2, x29, #0xe8
                	bl	<addr>
                	cbz	x0, <addr>
                	ldrb	w0, [x0]
@@ -204,11 +207,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xb0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x40               // =64
-               	bl	<addr>
                	sub	x1, x29, #0xb0
+               	stur	xzr, [x29, #-0xb0]
+               	stur	xzr, [x29, #-0xa8]
+               	stur	xzr, [x29, #-0xa0]
+               	stur	xzr, [x29, #-0x98]
+               	stur	xzr, [x29, #-0x90]
+               	stur	xzr, [x29, #-0x88]
+               	stur	xzr, [x29, #-0x80]
+               	stur	xzr, [x29, #-0x78]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0xa4]
                	sub	x2, x29, #0x130
@@ -237,12 +244,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x180
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x108
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x20               // =32
-               	bl	<addr>
-               	ldr	x0, [sp, #0x50]
                	sub	x1, x29, #0x108
+               	str	xzr, [sp, #0x78]
+               	stur	xzr, [x29, #-0x100]
+               	stur	xzr, [x29, #-0xf8]
+               	stur	xzr, [x29, #-0xf0]
+               	ldr	x0, [sp, #0x50]
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

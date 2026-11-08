@@ -18,16 +18,20 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	stp	x29, x30, [sp, #0x1d0]
                	add	x29, sp, #0x1d0
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0xf8]
-               	sub	x0, x29, #0xa0
-               	mov	x2, #0x40               // =64
-               	bl	<addr>
+               	mov	x20, #0x0               // =0
+               	stur	w20, [x29, #-0xf8]
+               	stur	x20, [x29, #-0xa0]
+               	stur	x20, [x29, #-0x98]
+               	stur	x20, [x29, #-0x90]
+               	stur	x20, [x29, #-0x88]
+               	stur	x20, [x29, #-0x80]
+               	stur	x20, [x29, #-0x78]
+               	stur	x20, [x29, #-0x70]
+               	stur	x20, [x29, #-0x68]
                	mov	x0, #0x4                // =4
                	stur	x0, [x29, #-0x98]
                	mov	x0, #0x40               // =64
                	stur	x0, [x29, #-0x90]
-               	mov	x20, #0x0               // =0
                	b	<addr>
                	bl	<addr>
                	ldrsw	x0, [x0]

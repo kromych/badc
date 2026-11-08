@@ -53,8 +53,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x8
                	sub	x1, x29, #0x10
-               	mov	x2, #0x8                // =8
-               	bl	<addr>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldur	x0, [x29, #-0x8]
                	mov	x17, #0x900000000000    // =158329674399744
                	movk	x17, #0x407f, lsl #48

@@ -183,7 +183,9 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 | `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined; `1` under `--msvc`                                          |
 
 `-ffreestanding` also implies `-fno-builtin`, which keeps library calls such as
-`strlen` calls; their `__builtin_` spellings still fold, as in gcc.
+`strlen` calls; their `__builtin_` spellings still fold, as in gcc. Without it a
+`memcpy`, `memmove` or `memset` of a constant size the unit does not define
+expands inline at every optimization level, as gcc and clang expand it.
 `--freestanding`, the link
 option that leaves out the startup runtime, does not change
 `__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` is undefined: `_Atomic` objects are

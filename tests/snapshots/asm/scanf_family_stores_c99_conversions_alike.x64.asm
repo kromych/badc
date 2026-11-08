@@ -170,11 +170,22 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r13
-               	leaq	-0x110(%rbp), %rdi
-               	movl	$0xaa, %esi
-               	movl	$0x10, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	movb	$-0x56, -0x110(%rbp)
+               	movb	$-0x56, -0x10f(%rbp)
+               	movb	$-0x56, -0x10e(%rbp)
+               	movb	$-0x56, -0x10d(%rbp)
+               	movb	$-0x56, -0x10c(%rbp)
+               	movb	$-0x56, -0x10b(%rbp)
+               	movb	$-0x56, -0x10a(%rbp)
+               	movb	$-0x56, -0x109(%rbp)
+               	movb	$-0x56, -0x108(%rbp)
+               	movb	$-0x56, -0x107(%rbp)
+               	movb	$-0x56, -0x106(%rbp)
+               	movb	$-0x56, -0x105(%rbp)
+               	movb	$-0x56, -0x104(%rbp)
+               	movb	$-0x56, -0x103(%rbp)
+               	movb	$-0x56, -0x102(%rbp)
+               	movb	$-0x56, -0x101(%rbp)
                	testq	%r13, %r13
                	je	<addr>
                	cmpl	$0x6, %ebx
@@ -205,16 +216,13 @@ Disassembly of section .text:
                	movq	%r13, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x120(%rbp), %rdi
-               	leaq	-0x110(%rbp), %rsi
-               	movl	$0x4, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x118(%rbp), %rdi
-               	leaq	-0x110(%rbp), %rsi
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	leaq	-0x120(%rbp), %rax
+               	leaq	-0x110(%rbp), %rdi
+               	movl	(%rdi), %r10d
+               	movl	%r10d, (%rax)
+               	leaq	-0x118(%rbp), %rax
+               	movq	(%rdi), %r10
+               	movq	%r10, (%rax)
                	movl	0x14(%r12), %eax
                	testl	%eax, %eax
                	jge	<addr>
@@ -283,7 +291,6 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	jmp	<addr>
-               	leaq	-0x110(%rbp), %rdi
                	movq	0x18(%r12), %rsi
                	movslq	%r13d, %rdx
                	xorl	%eax, %eax

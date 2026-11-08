@@ -70,11 +70,10 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rdi
-               	leaq	-0x10(%rbp), %rsi
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	movq	-0x8(%rbp), %rax
                	movabsq	$0x407f900000000000, %r11 # imm = 0x407F900000000000
                	cmpq	%r11, %rax

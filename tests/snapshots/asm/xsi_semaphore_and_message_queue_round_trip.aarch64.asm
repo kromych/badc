@@ -118,13 +118,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x20, x21, [sp], #0xa0
                	ret
-               	sub	x0, x29, #0x78
-               	mov	x1, #0xff               // =255
-               	mov	x2, #0x4                // =4
-               	bl	<addr>
+               	sub	x1, x29, #0x78
+               	mov	x0, #0xffff             // =65535
+               	sturh	w0, [x29, #-0x78]
+               	sturh	w0, [x29, #-0x76]
                	sub	x3, x29, #0x70
-               	sub	x0, x29, #0x78
-               	stur	x0, [x29, #-0x70]
+               	stur	x1, [x29, #-0x70]
                	mov	x1, #0x0                // =0
                	mov	x2, #0xd                // =13
                	mov	x0, x20
@@ -269,14 +268,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	b	<addr>
-               	sub	x0, x29, #0x90
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x18               // =24
-               	bl	<addr>
                	sub	x1, x29, #0x90
+               	mov	x4, #0x0                // =0
+               	stur	x4, [x29, #-0x90]
+               	stur	x4, [x29, #-0x88]
+               	stur	x4, [x29, #-0x80]
                	mov	x2, #0x10               // =16
                	mov	x3, #0x2                // =2
-               	mov	x4, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0xf
@@ -308,13 +306,12 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x24               // =36
                	b	<addr>
-               	sub	x0, x29, #0x90
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x18               // =24
-               	bl	<addr>
                	sub	x1, x29, #0x90
-               	mov	x2, #0x3                // =3
                	mov	x3, #0x0                // =0
+               	stur	x3, [x29, #-0x90]
+               	stur	x3, [x29, #-0x88]
+               	stur	x3, [x29, #-0x80]
+               	mov	x2, #0x3                // =3
                	mov	x4, #0x1000             // =4096
                	mov	x0, x20
                	bl	<addr>

@@ -403,8 +403,10 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x60
                	sub	x1, x29, #0x40
-               	mov	x2, #0x20               // =32
-               	bl	<addr>
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
                	sub	x0, x29, #0x130
                	ldurh	w1, [x29, #-0x60]
                	strh	w1, [sp, #0x40]

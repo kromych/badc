@@ -61,12 +61,25 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x90(%rbp), %rdi
-               	xorl	%esi, %esi
-               	movl	$0x90, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
                	leaq	-0x90(%rbp), %rsi
+               	movq	$0x0, -0x90(%rbp)
+               	movq	$0x0, -0x88(%rbp)
+               	movq	$0x0, -0x80(%rbp)
+               	movq	$0x0, -0x78(%rbp)
+               	movq	$0x0, -0x70(%rbp)
+               	movq	$0x0, -0x68(%rbp)
+               	movq	$0x0, -0x60(%rbp)
+               	movq	$0x0, -0x58(%rbp)
+               	movq	$0x0, -0x50(%rbp)
+               	movq	$0x0, -0x48(%rbp)
+               	movq	$0x0, -0x40(%rbp)
+               	movq	$0x0, -0x38(%rbp)
+               	movq	$0x0, -0x30(%rbp)
+               	movq	$0x0, -0x28(%rbp)
+               	movq	$0x0, -0x20(%rbp)
+               	movq	$0x0, -0x18(%rbp)
+               	movq	$0x0, -0x10(%rbp)
+               	movq	$0x0, -0x8(%rbp)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

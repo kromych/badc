@@ -336,11 +336,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x460(%rbp), %rdi
-               	xorl	%esi, %esi
-               	movl	$0x38, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x460(%rbp), %rdi
+               	movq	$0x0, -0x460(%rbp)
+               	movq	$0x0, -0x458(%rbp)
+               	movq	$0x0, -0x450(%rbp)
+               	movq	$0x0, -0x448(%rbp)
+               	movq	$0x0, -0x440(%rbp)
+               	movq	$0x0, -0x438(%rbp)
+               	movq	$0x0, -0x430(%rbp)
                	movl	$0x46, -0x44c(%rbp)
                	movl	$0x1, -0x454(%rbp)
                	movl	$0x4, -0x448(%rbp)

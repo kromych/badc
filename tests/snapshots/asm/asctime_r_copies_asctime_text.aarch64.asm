@@ -48,12 +48,35 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x58
-               	mov	x1, #0x78               // =120
-               	mov	x2, #0x1a               // =26
-               	bl	<addr>
-               	sub	x0, x29, #0x38
                	sub	x1, x29, #0x58
+               	mov	x0, #0x78               // =120
+               	sturb	w0, [x29, #-0x58]
+               	sturb	w0, [x29, #-0x57]
+               	sturb	w0, [x29, #-0x56]
+               	sturb	w0, [x29, #-0x55]
+               	sturb	w0, [x29, #-0x54]
+               	sturb	w0, [x29, #-0x53]
+               	sturb	w0, [x29, #-0x52]
+               	sturb	w0, [x29, #-0x51]
+               	sturb	w0, [x29, #-0x50]
+               	sturb	w0, [x29, #-0x4f]
+               	sturb	w0, [x29, #-0x4e]
+               	sturb	w0, [x29, #-0x4d]
+               	sturb	w0, [x29, #-0x4c]
+               	sturb	w0, [x29, #-0x4b]
+               	sturb	w0, [x29, #-0x4a]
+               	sturb	w0, [x29, #-0x49]
+               	sturb	w0, [x29, #-0x48]
+               	sturb	w0, [x29, #-0x47]
+               	sturb	w0, [x29, #-0x46]
+               	sturb	w0, [x29, #-0x45]
+               	sturb	w0, [x29, #-0x44]
+               	sturb	w0, [x29, #-0x43]
+               	sturb	w0, [x29, #-0x42]
+               	sturb	w0, [x29, #-0x41]
+               	sturb	w0, [x29, #-0x40]
+               	sturb	w0, [x29, #-0x3f]
+               	sub	x0, x29, #0x38
                	bl	<addr>
                	mov	x1, x0
                	sub	x0, x29, #0x58

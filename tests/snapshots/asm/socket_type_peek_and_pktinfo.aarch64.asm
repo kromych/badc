@@ -143,10 +143,10 @@ Disassembly of section .text:
                	mov	x1, x0
                	bl	<addr>
                	mov	x22, x0
-               	mov	x1, #0x0                // =0
-               	sub	x0, x29, #0x68
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
+               	stur	wzr, [x29, #-0x68]
+               	stur	wzr, [x29, #-0x64]
+               	stur	wzr, [x29, #-0x60]
+               	stur	wzr, [x29, #-0x5c]
                	mov	x0, #0x2                // =2
                	sturh	w0, [x29, #-0x68]
                	mov	x0, #0x1                // =1
@@ -200,22 +200,24 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x18               // =24
                	b	<addr>
+               	sub	x3, x29, #0x58
                	sub	x0, x29, #0x78
                	stur	x0, [x29, #-0x58]
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x50]
-               	sub	x0, x29, #0x38
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x38               // =56
-               	bl	<addr>
                	sub	x1, x29, #0x38
-               	sub	x0, x29, #0x58
-               	stur	x0, [x29, #-0x28]
-               	mov	x0, #0x1                // =1
+               	mov	x2, #0x0                // =0
+               	stur	x2, [x29, #-0x38]
+               	stur	x2, [x29, #-0x30]
+               	stur	x2, [x29, #-0x28]
+               	stur	x2, [x29, #-0x20]
+               	stur	x2, [x29, #-0x18]
+               	stur	x2, [x29, #-0x10]
+               	stur	x2, [x29, #-0x8]
+               	stur	x3, [x29, #-0x28]
                	stur	x0, [x29, #-0x20]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x2, #0x0                // =0
                	stur	x0, [x29, #-0x18]
                	mov	x0, #0x28               // =40
                	stur	x0, [x29, #-0x10]
@@ -238,8 +240,10 @@ Disassembly of section .text:
                	b.ne	<addr>
                	sub	x0, x29, #0x48
                	add	x1, x20, #0x10
-               	mov	x2, #0xc                // =12
-               	bl	<addr>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	ldr	w16, [x1, #0x8]
+               	str	w16, [x0, #0x8]
                	ldur	w21, [x29, #-0x40]
                	mov	x0, #0x1                // =1
                	movk	x0, #0x7f00, lsl #16

@@ -6360,29 +6360,28 @@ fn ent_pc=676 n_params=1 variadic=false locals=2
     v60  Imm(0)                                           -> x1
     terminator Bz { cond=v1, target=b10, fall=b7 }   (exit_acc=v1)
   block 7  start_pc=0
-    v68  BinopI { op=and, lhs=v33, rhs_imm=4294967295 }   -> x1
-    v69  BinopI { op=or, lhs=v33, rhs_imm=4194304 }       -> x0
-    v70  Imm(0)                                           -> x1
-    terminator Jmp(b8)   (exit_acc=v69)
+    v67  BinopI { op=and, lhs=v33, rhs_imm=4294967295 }   -> x1
+    v68  BinopI { op=or, lhs=v33, rhs_imm=4194304 }       -> x0
+    v69  Imm(0)                                           -> x1
+    terminator Jmp(b8)   (exit_acc=v68)
   block 8  start_pc=0
-    v73  Phi { incoming=[b7:v69, b10:v71], kind=I64 }     -> x0
-    v74  Imm(0)                                           -> x1
-    v75  StoreLocal { off=-2, value=v73, kind=I32 }       -> -
-    v76  BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
-    terminator Jmp(b9)   (exit_acc=v73)
+    v72  Phi { incoming=[b7:v68, b10:v70], kind=I64 }     -> x0
+    v73  Imm(0)                                           -> x1
+    v74  StoreLocal { off=-2, value=v72, kind=I32 }       -> -
+    v75  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x0
+    terminator Jmp(b9)   (exit_acc=v72)
   block 9  start_pc=0
-    v61  LocalAddr(-1)                                    -> x7
-    v62  LocalAddr(-2)                                    -> x6
-    v63  Imm(4)                                           -> x2
-    v64  CallExt { binding_idx=161, args=[v61, v62, v63], fp_arg_mask=0x0 } -> x0
-    v65  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    v66  LifetimeEnd(-1)                                  -> -
-    v67  LifetimeEnd(-2)                                  -> -
-    terminator Return(v65)   (exit_acc=v65)
+    v61  LocalAddr(-1)                                    -> x0
+    v62  LocalAddr(-2)                                    -> x1
+    v63  Mcpy { dst=v61, src=v62, size=4, align=4 }       -> -
+    v64  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v65  LifetimeEnd(-1)                                  -> -
+    v66  LifetimeEnd(-2)                                  -> -
+    terminator Return(v64)   (exit_acc=v64)
   block 10  start_pc=0
-    v71  Imm(1065353216)                                  -> x0
-    v72  Imm(0)                                           -> x1
-    terminator Jmp(b8)   (exit_acc=v71)
+    v70  Imm(1065353216)                                  -> x0
+    v71  Imm(0)                                           -> x1
+    terminator Jmp(b8)   (exit_acc=v70)
   block 11  start_pc=0
     v44  Imm(11)                                          -> x1
     v45  Imm(0)                                           -> x0
@@ -6465,28 +6464,27 @@ fn ent_pc=677 n_params=1 variadic=false locals=2
     v73  Imm(0)                                           -> x1
     terminator Bz { cond=v1, target=b10, fall=b7 }   (exit_acc=v1)
   block 7  start_pc=0
-    v81  Imm(0)                                           -> x1
-    v82  BinopI { op=or, lhs=v48, rhs_imm=2251799813685248 } -> x0
-    v83  Imm(0)                                           -> x1
-    terminator Jmp(b8)   (exit_acc=v82)
+    v80  Imm(0)                                           -> x1
+    v81  BinopI { op=or, lhs=v48, rhs_imm=2251799813685248 } -> x0
+    v82  Imm(0)                                           -> x1
+    terminator Jmp(b8)   (exit_acc=v81)
   block 8  start_pc=0
-    v86  Phi { incoming=[b7:v82, b10:v84], kind=I64 }     -> x0
-    v87  Imm(0)                                           -> x1
-    v88  StoreLocal { off=-2, value=v86, kind=I64 }       -> -
-    terminator Jmp(b9)   (exit_acc=v88)
+    v85  Phi { incoming=[b7:v81, b10:v83], kind=I64 }     -> x0
+    v86  Imm(0)                                           -> x1
+    v87  StoreLocal { off=-2, value=v85, kind=I64 }       -> -
+    terminator Jmp(b9)   (exit_acc=v87)
   block 9  start_pc=0
-    v74  LocalAddr(-1)                                    -> x7
-    v75  LocalAddr(-2)                                    -> x6
-    v76  Imm(8)                                           -> x2
-    v77  CallExt { binding_idx=161, args=[v74, v75, v76], fp_arg_mask=0x0 } -> x0
-    v78  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v79  LifetimeEnd(-1)                                  -> -
-    v80  LifetimeEnd(-2)                                  -> -
-    terminator Return(v78)   (exit_acc=v78)
+    v74  LocalAddr(-1)                                    -> x0
+    v75  LocalAddr(-2)                                    -> x1
+    v76  Mcpy { dst=v74, src=v75, size=8, align=8 }       -> -
+    v77  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v78  LifetimeEnd(-1)                                  -> -
+    v79  LifetimeEnd(-2)                                  -> -
+    terminator Return(v77)   (exit_acc=v77)
   block 10  start_pc=0
-    v84  Imm(4607182418800017408)                         -> x0
-    v85  Imm(0)                                           -> x1
-    terminator Jmp(b8)   (exit_acc=v84)
+    v83  Imm(4607182418800017408)                         -> x0
+    v84  Imm(0)                                           -> x1
+    terminator Jmp(b8)   (exit_acc=v83)
   block 11  start_pc=0
     v57  Imm(10)                                          -> x1
     v58  Imm(0)                                           -> x0

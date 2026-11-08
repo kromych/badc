@@ -99,22 +99,18 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-0x18(%rbp), %rdi
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x10(%rbp), %rdi
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x8(%rbp), %rdi
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
+               	leaq	-0x18(%rbp), %rdx
+               	leaq	<rip>, %rax # <addr>
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdx)
+               	leaq	-0x10(%rbp), %rdx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdx)
+               	leaq	-0x8(%rbp), %rdx
+               	movq	(%rax), %r10
+               	movq	%r10, (%rdx)
+               	movq	%rcx, %rax
                	movl	$0x31, %r10d
                	crc32b	%r10b, %eax
                	movl	%eax, %eax
@@ -141,44 +137,43 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movl	$0x39, %r10d
                	crc32b	%r10b, %eax
-               	movzwq	-0x18(%rbp), %rcx
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	crc32w	%cx, %edx
-               	movzwq	-0x16(%rbp), %rcx
-               	movl	%edx, %edx
-               	crc32w	%cx, %edx
-               	movzwq	-0x14(%rbp), %rcx
-               	movl	%edx, %edx
-               	crc32w	%cx, %edx
-               	movzwq	-0x12(%rbp), %rcx
-               	movl	%edx, %edx
-               	crc32w	%cx, %edx
-               	movl	-0x10(%rbp), %ecx
+               	movzwq	-0x18(%rbp), %rdx
                	movl	$0xffffffff, %esi       # imm = 0xFFFFFFFF
-               	crc32l	%ecx, %esi
-               	movl	-0xc(%rbp), %ecx
+               	crc32w	%dx, %esi
+               	movzwq	-0x16(%rbp), %rdx
                	movl	%esi, %esi
-               	crc32l	%ecx, %esi
-               	movq	-0x8(%rbp), %rcx
+               	crc32w	%dx, %esi
+               	movzwq	-0x14(%rbp), %rdx
+               	movl	%esi, %esi
+               	crc32w	%dx, %esi
+               	movzwq	-0x12(%rbp), %rdx
+               	movl	%esi, %esi
+               	crc32w	%dx, %esi
+               	movl	-0x10(%rbp), %edx
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	crc32q	%rcx, %rdi
-               	movl	%edx, %ecx
-               	movl	$0x39, %r10d
-               	crc32b	%r10b, %ecx
+               	crc32l	%edx, %edi
+               	movl	-0xc(%rbp), %edx
+               	movl	%edi, %edi
+               	crc32l	%edx, %edi
+               	movq	-0x8(%rbp), %rdx
+               	crc32q	%rdx, %rcx
                	movl	%esi, %edx
                	movl	$0x39, %r10d
                	crc32b	%r10b, %edx
                	movl	%edi, %esi
                	movl	$0x39, %r10d
                	crc32b	%r10b, %esi
+               	movl	%ecx, %ecx
+               	movl	$0x39, %r10d
+               	crc32b	%r10b, %ecx
                	xorq	$-0x1, %rax
                	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	jne	<addr>
-               	xorq	$-0x1, %rcx
-               	cmpl	$0xe3069283, %ecx       # imm = 0xE3069283
-               	jne	<addr>
                	xorq	$-0x1, %rdx
                	cmpl	$0xe3069283, %edx       # imm = 0xE3069283
+               	jne	<addr>
+               	xorq	$-0x1, %rsi
+               	cmpl	$0xe3069283, %esi       # imm = 0xE3069283
                	je	<addr>
                	movl	$0x2f, %eax
                	popq	%rbx
@@ -187,7 +182,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movq	%rsi, %rax
+               	movq	%rcx, %rax
                	xorq	$-0x1, %rax
                	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	je	<addr>

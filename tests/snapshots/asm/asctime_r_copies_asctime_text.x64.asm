@@ -57,13 +57,34 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x58(%rbp), %rdi
-               	movl	$0x78, %esi
-               	movl	$0x1a, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	-0x38(%rbp), %rdi
                	leaq	-0x58(%rbp), %rsi
+               	movb	$0x78, -0x58(%rbp)
+               	movb	$0x78, -0x57(%rbp)
+               	movb	$0x78, -0x56(%rbp)
+               	movb	$0x78, -0x55(%rbp)
+               	movb	$0x78, -0x54(%rbp)
+               	movb	$0x78, -0x53(%rbp)
+               	movb	$0x78, -0x52(%rbp)
+               	movb	$0x78, -0x51(%rbp)
+               	movb	$0x78, -0x50(%rbp)
+               	movb	$0x78, -0x4f(%rbp)
+               	movb	$0x78, -0x4e(%rbp)
+               	movb	$0x78, -0x4d(%rbp)
+               	movb	$0x78, -0x4c(%rbp)
+               	movb	$0x78, -0x4b(%rbp)
+               	movb	$0x78, -0x4a(%rbp)
+               	movb	$0x78, -0x49(%rbp)
+               	movb	$0x78, -0x48(%rbp)
+               	movb	$0x78, -0x47(%rbp)
+               	movb	$0x78, -0x46(%rbp)
+               	movb	$0x78, -0x45(%rbp)
+               	movb	$0x78, -0x44(%rbp)
+               	movb	$0x78, -0x43(%rbp)
+               	movb	$0x78, -0x42(%rbp)
+               	movb	$0x78, -0x41(%rbp)
+               	movb	$0x78, -0x40(%rbp)
+               	movb	$0x78, -0x3f(%rbp)
+               	leaq	-0x38(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x58(%rbp), %rdi

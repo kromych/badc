@@ -6842,11 +6842,10 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x400000, %rax         # imm = 0x400000
                	movl	%eax, -0x10(%rbp)
-               	leaq	-0x8(%rbp), %rdi
-               	leaq	-0x10(%rbp), %rsi
-               	movl	$0x4, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
+               	movl	(%rcx), %r10d
+               	movl	%r10d, (%rax)
                	movss	-0x8(%rbp), %xmm0
                	leave
                	retq
@@ -6906,11 +6905,10 @@ Disassembly of section .text:
                	movabsq	$0x8000000000000, %r11  # imm = 0x8000000000000
                	orq	%r11, %rax
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x8(%rbp), %rdi
-               	leaq	-0x10(%rbp), %rsi
-               	movl	$0x8, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	movsd	-0x8(%rbp), %xmm0
                	leave
                	retq

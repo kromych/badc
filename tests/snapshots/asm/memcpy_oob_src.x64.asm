@@ -37,11 +37,20 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rdi
-               	movl	$0x64, %edx
-               	movq	%rbx, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	movups	(%rbx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	0x10(%rbx), %xmm14
+               	movups	%xmm14, 0x10(%rax)
+               	movups	0x20(%rbx), %xmm14
+               	movups	%xmm14, 0x20(%rax)
+               	movups	0x30(%rbx), %xmm14
+               	movups	%xmm14, 0x30(%rax)
+               	movups	0x40(%rbx), %xmm14
+               	movups	%xmm14, 0x40(%rax)
+               	movups	0x50(%rbx), %xmm14
+               	movups	%xmm14, 0x50(%rax)
+               	movl	0x60(%rbx), %r10d
+               	movl	%r10d, 0x60(%rax)
                	xorl	%eax, %eax
                	popq	%rbx
                	leave

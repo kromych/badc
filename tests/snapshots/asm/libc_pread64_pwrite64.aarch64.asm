@@ -32,12 +32,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	sub	x0, x29, #0x38
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
                	sub	x1, x29, #0x38
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	mov	x2, #0x10               // =16
                	mov	x3, #0x0                // =0
                	mov	x0, x20
@@ -50,13 +49,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
                	sub	x1, x29, #0x28
-               	mov	x2, #0x10               // =16
                	mov	x3, #0x0                // =0
+               	sturb	w3, [x29, #-0x28]
+               	sturb	w3, [x29, #-0x27]
+               	sturb	w3, [x29, #-0x26]
+               	sturb	w3, [x29, #-0x25]
+               	sturb	w3, [x29, #-0x24]
+               	sturb	w3, [x29, #-0x23]
+               	sturb	w3, [x29, #-0x22]
+               	sturb	w3, [x29, #-0x21]
+               	sturb	w3, [x29, #-0x20]
+               	sturb	w3, [x29, #-0x1f]
+               	sturb	w3, [x29, #-0x1e]
+               	sturb	w3, [x29, #-0x1d]
+               	sturb	w3, [x29, #-0x1c]
+               	sturb	w3, [x29, #-0x1b]
+               	sturb	w3, [x29, #-0x1a]
+               	sturb	w3, [x29, #-0x19]
+               	mov	x2, #0x10               // =16
                	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x10
@@ -96,11 +107,23 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
                	sub	x1, x29, #0x28
+               	sturb	wzr, [x29, #-0x28]
+               	sturb	wzr, [x29, #-0x27]
+               	sturb	wzr, [x29, #-0x26]
+               	sturb	wzr, [x29, #-0x25]
+               	sturb	wzr, [x29, #-0x24]
+               	sturb	wzr, [x29, #-0x23]
+               	sturb	wzr, [x29, #-0x22]
+               	sturb	wzr, [x29, #-0x21]
+               	sturb	wzr, [x29, #-0x20]
+               	sturb	wzr, [x29, #-0x1f]
+               	sturb	wzr, [x29, #-0x1e]
+               	sturb	wzr, [x29, #-0x1d]
+               	sturb	wzr, [x29, #-0x1c]
+               	sturb	wzr, [x29, #-0x1b]
+               	sturb	wzr, [x29, #-0x1a]
+               	sturb	wzr, [x29, #-0x19]
                	mov	x2, #0x8                // =8
                	mov	x3, #0x10               // =16
                	mov	x0, x20

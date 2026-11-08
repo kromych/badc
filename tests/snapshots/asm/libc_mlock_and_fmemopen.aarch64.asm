@@ -46,9 +46,22 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	mov	x1, #0x78               // =120
-               	mov	x2, #0x10               // =16
-               	bl	<addr>
-               	sub	x0, x29, #0x10
+               	sturb	w1, [x29, #-0x10]
+               	sturb	w1, [x29, #-0xf]
+               	sturb	w1, [x29, #-0xe]
+               	sturb	w1, [x29, #-0xd]
+               	sturb	w1, [x29, #-0xc]
+               	sturb	w1, [x29, #-0xb]
+               	sturb	w1, [x29, #-0xa]
+               	sturb	w1, [x29, #-0x9]
+               	sturb	w1, [x29, #-0x8]
+               	sturb	w1, [x29, #-0x7]
+               	sturb	w1, [x29, #-0x6]
+               	sturb	w1, [x29, #-0x5]
+               	sturb	w1, [x29, #-0x4]
+               	sturb	w1, [x29, #-0x3]
+               	sturb	w1, [x29, #-0x2]
+               	sturb	w1, [x29, #-0x1]
                	mov	x1, #0x10               // =16
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

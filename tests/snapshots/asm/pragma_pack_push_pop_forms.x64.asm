@@ -39,6 +39,7 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jb	<addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
@@ -54,14 +55,32 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rdi
-               	xorl	%esi, %esi
-               	movl	$0x18, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
                	leaq	-0x18(%rbp), %rsi
+               	movb	$0x0, -0x18(%rbp)
+               	movb	$0x0, -0x17(%rbp)
+               	movb	$0x0, -0x16(%rbp)
+               	movb	$0x0, -0x15(%rbp)
+               	movb	$0x0, -0x14(%rbp)
+               	movb	$0x0, -0x13(%rbp)
+               	movb	$0x0, -0x12(%rbp)
+               	movb	$0x0, -0x11(%rbp)
+               	movb	$0x0, -0x10(%rbp)
+               	movb	$0x0, -0xf(%rbp)
+               	movb	$0x0, -0xe(%rbp)
+               	movb	$0x0, -0xd(%rbp)
+               	movb	$0x0, -0xc(%rbp)
+               	movb	$0x0, -0xb(%rbp)
+               	movb	$0x0, -0xa(%rbp)
+               	movb	$0x0, -0x9(%rbp)
+               	movb	$0x0, -0x8(%rbp)
+               	movb	$0x0, -0x7(%rbp)
+               	movb	$0x0, -0x6(%rbp)
+               	movb	$0x0, -0x5(%rbp)
+               	movb	$0x0, -0x4(%rbp)
+               	movb	$0x0, -0x3(%rbp)
+               	movb	$0x0, -0x2(%rbp)
+               	movb	$0x0, -0x1(%rbp)
                	movb	$0x38, -0x10(%rbp)
-               	leaq	<rip>, %rdi # <addr>
                	movl	$0x18, %edx
                	xorl	%eax, %eax
                	callq	<addr>

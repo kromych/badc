@@ -295,10 +295,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x460
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x38               // =56
-               	bl	<addr>
-               	sub	x0, x29, #0x460
+               	str	xzr, [sp, #0x40]
+               	str	xzr, [sp, #0x48]
+               	str	xzr, [sp, #0x50]
+               	str	xzr, [sp, #0x58]
+               	str	xzr, [sp, #0x60]
+               	str	xzr, [sp, #0x68]
+               	str	xzr, [sp, #0x70]
                	mov	x1, #0x46               // =70
                	str	w1, [sp, #0x54]
                	mov	x1, #0x1                // =1

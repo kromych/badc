@@ -22065,14 +22065,15 @@ fn version_manifest(text: &str) -> std::collections::BTreeMap<(String, String), 
 // pins the ABI floor, or from a library the command line named. Both
 // probes below have a newer default in any current glibc --
 // `cfgetispeed@@GLIBC_2.42`, `pow@@GLIBC_2.29` -- so a link that read
-// the host's libraries would stamp those instead, and this fails.
+// the host's libraries would stamp those instead, and this fails. The
+// `memcpy` takes a runtime size, which keeps it a call.
 const VERSIONED_IMPORT_SRC: &str = "\
 #include <termios.h>\n\
 #include <math.h>\n\
 #include <string.h>\n\
-int main(void) {\n\
+int main(int argc, char **argv) {\n\
     struct termios t; char b[4];\n\
-    memcpy(b, \"ab\", 3);\n\
+    memcpy(b, \"ab\", (size_t)argc + 2);\n\
     return (int)cfgetispeed(&t) + (int)pow(2.0, 3.0) + b[0];\n\
 }\n";
 
@@ -22138,9 +22139,9 @@ fn header_less_c_library_imports_carry_the_manifest_version() {
         "h.c",
         "extern void *memcpy(void *, const void *, unsigned long);\n\
          extern int puts(const char *);\n\
-         int main(void) {\n\
+         int main(int argc, char **argv) {\n\
              char b[4];\n\
-             memcpy(b, \"ab\", 3);\n\
+             memcpy(b, \"ab\", (unsigned long)argc + 2);\n\
              return puts(b);\n\
          }\n",
     );

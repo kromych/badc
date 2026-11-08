@@ -43,17 +43,32 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	sub	x1, x29, #0x138
                	str	x1, [x0, #0x48]
-               	sub	x0, x29, #0x130
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x98               // =152
-               	bl	<addr>
-               	sub	x0, x29, #0x130
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [sp, #0x10]
-               	mov	x1, #0x4                // =4
-               	stur	w1, [x29, #-0xa8]
-               	add	x0, x0, #0x8
+               	sub	x1, x29, #0x130
+               	str	xzr, [sp, #0x10]
+               	str	xzr, [sp, #0x18]
+               	str	xzr, [sp, #0x20]
+               	str	xzr, [sp, #0x28]
+               	str	xzr, [sp, #0x30]
+               	str	xzr, [sp, #0x38]
+               	stur	xzr, [x29, #-0x100]
+               	stur	xzr, [x29, #-0xf8]
+               	stur	xzr, [x29, #-0xf0]
+               	stur	xzr, [x29, #-0xe8]
+               	stur	xzr, [x29, #-0xe0]
+               	stur	xzr, [x29, #-0xd8]
+               	stur	xzr, [x29, #-0xd0]
+               	stur	xzr, [x29, #-0xc8]
+               	stur	xzr, [x29, #-0xc0]
+               	stur	xzr, [x29, #-0xb8]
+               	stur	xzr, [x29, #-0xb0]
+               	stur	xzr, [x29, #-0xa8]
+               	stur	xzr, [x29, #-0xa0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x0, [sp, #0x10]
+               	mov	x0, #0x4                // =4
+               	stur	w0, [x29, #-0xa8]
+               	add	x0, x1, #0x8
                	bl	<addr>
                	mov	x0, #0xa                // =10
                	sub	x1, x29, #0x130
@@ -65,13 +80,28 @@ Disassembly of section .text:
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x98
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x98               // =152
-               	bl	<addr>
-               	mov	x0, #0xa                // =10
-               	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x98
+               	mov	x1, #0x0                // =0
+               	stur	x1, [x29, #-0x98]
+               	stur	x1, [x29, #-0x90]
+               	stur	x1, [x29, #-0x88]
+               	stur	x1, [x29, #-0x80]
+               	stur	x1, [x29, #-0x78]
+               	stur	x1, [x29, #-0x70]
+               	stur	x1, [x29, #-0x68]
+               	stur	x1, [x29, #-0x60]
+               	stur	x1, [x29, #-0x58]
+               	stur	x1, [x29, #-0x50]
+               	stur	x1, [x29, #-0x48]
+               	stur	x1, [x29, #-0x40]
+               	stur	x1, [x29, #-0x38]
+               	stur	x1, [x29, #-0x30]
+               	stur	x1, [x29, #-0x28]
+               	stur	x1, [x29, #-0x20]
+               	stur	x1, [x29, #-0x18]
+               	stur	x1, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
+               	mov	x0, #0xa                // =10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

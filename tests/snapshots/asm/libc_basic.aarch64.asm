@@ -55,11 +55,17 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	sub	x1, x29, #0x80
-               	add	x0, x1, #0x2
-               	mov	x2, #0x5                // =5
-               	bl	<addr>
                	sub	x0, x29, #0x80
+               	ldurb	w1, [x29, #-0x80]
+               	ldurb	w2, [x29, #-0x7f]
+               	ldurb	w3, [x29, #-0x7e]
+               	ldurb	w4, [x29, #-0x7d]
+               	ldurb	w5, [x29, #-0x7c]
+               	sturb	w1, [x29, #-0x7e]
+               	sturb	w2, [x29, #-0x7d]
+               	sturb	w3, [x29, #-0x7c]
+               	sturb	w4, [x29, #-0x7b]
+               	sturb	w5, [x29, #-0x7a]
                	ldurb	w1, [x29, #-0x7e]
                	cmp	w1, #0x30
                	b.eq	<addr>

@@ -14136,6 +14136,56 @@ fn an_unreachable_operand_seals_its_block_with_one_trap() {
     }
 }
 
+/// The library `memcpy`, `memmove` and `memset` of a constant size lower as
+/// their builtins, at -O0 too, as gcc and clang lower them; under
+/// `-fno-builtin` they stay calls, and a variable size calls the library.
+#[test]
+fn library_memory_transfers_of_a_constant_size_expand_inline() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "#include <string.h>\n\
+        struct s { int a, b, c, d; };\n\
+        void copy(struct s *d, const struct s *s) { memcpy(d, s, sizeof *d); }\n\
+        void fill(char *p) { memset(p, 7, 24); memmove(p + 1, p, 8); }\n";
+    for (extra, no_builtin, calls) in [
+        ("", false, false),
+        ("", true, true),
+        (
+            "void *dyn(void *d, const void *s, size_t n) { return memcpy(d, s, n); }\n",
+            false,
+            true,
+        ),
+    ] {
+        for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+            let prog = crate::Compiler::with_options(
+                alloc::format!("{SRC}{extra}"),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_no_builtin(no_builtin),
+            )
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::default()
+            };
+            let obj = emit_native_with_options(&prog, target, opts).expect("emit");
+            let names = elf_symbol_shndx(&obj);
+            let named = |n: &str| names.iter().any(|(s, _)| *s == n);
+            assert_eq!(
+                named("memcpy"),
+                calls,
+                "{target:?} -fno-builtin={no_builtin} {extra:?}"
+            );
+            assert_eq!(
+                named("memset"),
+                no_builtin,
+                "{target:?} -fno-builtin={no_builtin}"
+            );
+        }
+    }
+}
+
 /// A fortified inline's compile-time overflow check reaches its error
 /// function once inlining makes the object and the length constant:
 /// `__builtin_object_size` of a parameter answers the bytes left in the

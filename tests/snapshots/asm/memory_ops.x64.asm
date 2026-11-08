@@ -38,17 +38,25 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	movl	$0x41, %esi
-               	movl	$0x9, %edx
-               	movq	%r12, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movl	$0x9, %edx
+               	movb	$0x41, (%r12)
+               	movb	$0x41, 0x1(%r12)
+               	movb	$0x41, 0x2(%r12)
+               	movb	$0x41, 0x3(%r12)
+               	movb	$0x41, 0x4(%r12)
+               	movb	$0x41, 0x5(%r12)
+               	movb	$0x41, 0x6(%r12)
+               	movb	$0x41, 0x7(%r12)
+               	movb	$0x41, 0x8(%r12)
                	movb	$0x0, 0x9(%r12)
-               	movl	$0x41, %esi
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
+               	movb	$0x41, (%rbx)
+               	movb	$0x41, 0x1(%rbx)
+               	movb	$0x41, 0x2(%rbx)
+               	movb	$0x41, 0x3(%rbx)
+               	movb	$0x41, 0x4(%rbx)
+               	movb	$0x41, 0x5(%rbx)
+               	movb	$0x41, 0x6(%rbx)
+               	movb	$0x41, 0x7(%rbx)
+               	movb	$0x41, 0x8(%rbx)
                	movb	$0x0, 0x9(%rbx)
                	movl	$0xa, %edx
                	movq	%r12, %rdi

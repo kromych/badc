@@ -33,16 +33,19 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%esi, %esi
-               	movl	%esi, -0xf8(%rbp)
-               	leaq	-0xa0(%rbp), %rdi
-               	movl	$0x40, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movq	$0x4, -0x98(%rbp)
-               	movq	$0x40, -0x90(%rbp)
-               	leaq	<rip>, %r13
                	xorl	%ebx, %ebx
+               	movl	%ebx, -0xf8(%rbp)
+               	movq	%rbx, -0xa0(%rbp)
+               	movq	%rbx, -0x98(%rbp)
+               	movq	%rbx, -0x90(%rbp)
+               	movq	%rbx, -0x88(%rbp)
+               	movq	%rbx, -0x80(%rbp)
+               	movq	%rbx, -0x78(%rbp)
+               	movq	%rbx, -0x70(%rbp)
+               	movq	%rbx, -0x68(%rbp)
+               	movq	$0x4, -0x98(%rbp)
+               	leaq	<rip>, %r13
+               	movq	$0x40, -0x90(%rbp)
                	jmp	<addr>
                	xorl	%eax, %eax
                	callq	<addr>

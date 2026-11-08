@@ -324,9 +324,9 @@ fn ent_pc=647 n_params=3 variadic=false locals=0
     v30  LifetimeEnd(-44)                                 -> -
     v31  LifetimeEnd(-43)                                 -> -
     terminator Return(v1)   (exit_acc=v1)
-; --- SSA dump (ok=true) ent_pc=1013 ---
+; --- SSA dump (ok=true) ent_pc=1024 ---
 ; name=lanes
-fn ent_pc=1013 n_params=3 variadic=false locals=1
+fn ent_pc=1024 n_params=3 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -397,9 +397,9 @@ fn ent_pc=1013 n_params=3 variadic=false locals=1
     terminator Return(v55)   (exit_acc=v55)
   block 3  start_pc=0
     terminator Jmp(b2)
-; --- SSA dump (ok=true) ent_pc=1014 ---
+; --- SSA dump (ok=true) ent_pc=1025 ---
 ; name=main
-fn ent_pc=1014 n_params=0 variadic=false locals=14
+fn ent_pc=1025 n_params=0 variadic=false locals=14
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -514,7 +514,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v109 LocalAddr(-212)                                  -> x0
     v110 X86Simd { op=__builtin_ia32_aesenc128, imm=None, args=[v109, v107, v108] } -> -
     v111 LocalAddr(-212)                                  -> x2
-    v112 Call { target_pc=1013, args=[v101, v104, v109], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v112 Call { target_pc=1024, args=[v101, v104, v109], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v113 Extend { value=v112, kind=I32 }                  -> x1
     v114 BinopI { op=eq, lhs=v112, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v112, target=b2, fall=b1 }   (low word)   (exit_acc=v114)
@@ -546,7 +546,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v137 LocalAddr(-214)                                  -> x0
     v138 X86Simd { op=__builtin_ia32_aesenclast128, imm=None, args=[v137, v135, v136] } -> -
     v139 LocalAddr(-214)                                  -> x2
-    v140 Call { target_pc=1013, args=[v129, v132, v137], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v140 Call { target_pc=1024, args=[v129, v132, v137], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v141 Extend { value=v140, kind=I32 }                  -> x1
     v142 BinopI { op=eq, lhs=v140, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v140, target=b4, fall=b3 }   (low word)   (exit_acc=v142)
@@ -578,7 +578,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v165 LocalAddr(-216)                                  -> x0
     v166 X86Simd { op=__builtin_ia32_aesdec128, imm=None, args=[v165, v163, v164] } -> -
     v167 LocalAddr(-216)                                  -> x2
-    v168 Call { target_pc=1013, args=[v157, v160, v165], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v168 Call { target_pc=1024, args=[v157, v160, v165], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v169 Extend { value=v168, kind=I32 }                  -> x1
     v170 BinopI { op=eq, lhs=v168, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v168, target=b6, fall=b5 }   (low word)   (exit_acc=v170)
@@ -610,7 +610,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v193 LocalAddr(-218)                                  -> x0
     v194 X86Simd { op=__builtin_ia32_aesdeclast128, imm=None, args=[v193, v191, v192] } -> -
     v195 LocalAddr(-218)                                  -> x2
-    v196 Call { target_pc=1013, args=[v185, v188, v193], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v196 Call { target_pc=1024, args=[v185, v188, v193], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v197 Extend { value=v196, kind=I32 }                  -> x1
     v198 BinopI { op=eq, lhs=v196, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v196, target=b8, fall=b7 }   (low word)   (exit_acc=v198)
@@ -664,7 +664,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v243 LocalAddr(-210)                                  -> x6
     v244 LocalAddr(-226)                                  -> x0
     v245 X86Simd { op=__builtin_ia32_pclmulqdq128, imm=Some(0), args=[v244, v242, v243] } -> -
-    v246 Call { target_pc=1013, args=[v237, v240, v244], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v246 Call { target_pc=1024, args=[v237, v240, v244], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v247 Extend { value=v246, kind=I32 }                  -> x1
     v248 BinopI { op=eq, lhs=v246, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v246, target=b10, fall=b9 }   (low word)   (exit_acc=v248)
@@ -718,7 +718,7 @@ fn ent_pc=1014 n_params=0 variadic=false locals=14
     v293 LocalAddr(-210)                                  -> x6
     v294 LocalAddr(-234)                                  -> x0
     v295 X86Simd { op=__builtin_ia32_pclmulqdq128, imm=Some(17), args=[v294, v292, v293] } -> -
-    v296 Call { target_pc=1013, args=[v287, v290, v294], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v296 Call { target_pc=1024, args=[v287, v290, v294], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v297 Extend { value=v296, kind=I32 }                  -> x1
     v298 BinopI { op=eq, lhs=v296, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v296, target=b12, fall=b11 }   (low word)   (exit_acc=v298)

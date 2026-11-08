@@ -32,6 +32,7 @@ typedef float __v8sf __attribute__((__vector_size__(32)));
 typedef double __v4df __attribute__((__vector_size__(32)));
 typedef float __m256_u __attribute__((__vector_size__(32), __may_alias__, __aligned__(1)));
 typedef double __m256d_u __attribute__((__vector_size__(32), __may_alias__, __aligned__(1)));
+typedef unsigned int __v4su __attribute__((__vector_size__(16)));
 #pragma pop_macro("__attribute__")
 
 static inline __m256i _mm256_loadu_si256(__m256i_u const *__P) {
@@ -1512,6 +1513,89 @@ static inline long long _xgetbv(unsigned int __A) {
 
 /* XCR0's index, as MSVC's <immintrin.h> names it. */
 #define _XCR_XFEATURE_ENABLED_MASK 0
+
+/* The SHA extensions, from the operation the SDM gives each instruction;
+** element 0 holds bits 31:0. */
+static inline unsigned __badc_rol32(unsigned __x, int __n) {
+    return __x << __n | __x >> (32 - __n);
+}
+
+static inline unsigned __badc_ror32(unsigned __x, int __n) {
+    return __x >> __n | __x << (32 - __n);
+}
+
+static inline __m128i _mm_sha1nexte_epu32(__m128i __A, __m128i __B) {
+    __v4su __b = (__v4su)__B;
+    __b[3] += __badc_rol32(((__v4su)__A)[3], 30);
+    return (__m128i)__b;
+}
+
+static inline __m128i _mm_sha1msg1_epu32(__m128i __A, __m128i __B) {
+    __v4su __a = (__v4su)__A, __b = (__v4su)__B;
+    return (__m128i)(__v4su){__b[2] ^ __a[0], __b[3] ^ __a[1], __a[0] ^ __a[2], __a[1] ^ __a[3]};
+}
+
+static inline __m128i _mm_sha1msg2_epu32(__m128i __A, __m128i __B) {
+    __v4su __a = (__v4su)__A, __b = (__v4su)__B;
+    unsigned __w16 = __badc_rol32(__a[3] ^ __b[2], 1), __w17 = __badc_rol32(__a[2] ^ __b[1], 1);
+    unsigned __w18 = __badc_rol32(__a[1] ^ __b[0], 1), __w19 = __badc_rol32(__a[0] ^ __w16, 1);
+    return (__m128i)(__v4su){__w19, __w18, __w17, __w16};
+}
+
+static inline __m128i _mm_sha1rnds4_epu32(__m128i __A, __m128i __B, int __F) {
+    static const unsigned __k[4] = {0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
+    __v4su __a = (__v4su)__A, __b = (__v4su)__B;
+    unsigned __w[4] = {__b[3], __b[2], __b[1], __b[0]};
+    unsigned __ra = __a[3], __rb = __a[2], __rc = __a[1], __rd = __a[0], __re = 0;
+    for (int __i = 0; __i < 4; __i++) {
+        unsigned __f;
+        switch (__F & 3) {
+        case 0: __f = (__rb & __rc) ^ (~__rb & __rd); break;
+        case 2: __f = (__rb & __rc) ^ (__rb & __rd) ^ (__rc & __rd); break;
+        default: __f = __rb ^ __rc ^ __rd; break;
+        }
+        unsigned __t = __f + __badc_rol32(__ra, 5) + __w[__i] + __re + __k[__F & 3];
+        __re = __rd, __rd = __rc, __rc = __badc_rol32(__rb, 30), __rb = __ra, __ra = __t;
+    }
+    return (__m128i)(__v4su){__rd, __rc, __rb, __ra};
+}
+
+static inline __m128i _mm_sha256rnds2_epu32(__m128i __A, __m128i __B, __m128i __K) {
+    __v4su __a = (__v4su)__A, __b = (__v4su)__B, __k = (__v4su)__K;
+    unsigned __ra = __b[3], __rb = __b[2], __rc = __a[3], __rd = __a[2];
+    unsigned __re = __b[1], __rf = __b[0], __rg = __a[1], __rh = __a[0];
+    for (int __i = 0; __i < 2; __i++) {
+        unsigned __s1 = __badc_ror32(__re, 6) ^ __badc_ror32(__re, 11) ^ __badc_ror32(__re, 25);
+        unsigned __s0 = __badc_ror32(__ra, 2) ^ __badc_ror32(__ra, 13) ^ __badc_ror32(__ra, 22);
+        unsigned __t = ((__re & __rf) ^ (~__re & __rg)) + __s1 + __k[__i] + __rh;
+        unsigned __maj = (__ra & __rb) ^ (__ra & __rc) ^ (__rb & __rc);
+        __rh = __rg, __rg = __rf, __rf = __re, __re = __t + __rd;
+        __rd = __rc, __rc = __rb, __rb = __ra, __ra = __t + __maj + __s0;
+    }
+    return (__m128i)(__v4su){__rf, __re, __rb, __ra};
+}
+
+static inline unsigned __badc_sha256_s0(unsigned __w) {
+    return __badc_ror32(__w, 7) ^ __badc_ror32(__w, 18) ^ (__w >> 3);
+}
+
+static inline unsigned __badc_sha256_s1(unsigned __w) {
+    return __badc_ror32(__w, 17) ^ __badc_ror32(__w, 19) ^ (__w >> 10);
+}
+
+static inline __m128i _mm_sha256msg1_epu32(__m128i __A, __m128i __B) {
+    __v4su __a = (__v4su)__A;
+    unsigned __w4 = ((__v4su)__B)[0];
+    return (__m128i)(__v4su){__a[0] + __badc_sha256_s0(__a[1]), __a[1] + __badc_sha256_s0(__a[2]),
+                                   __a[2] + __badc_sha256_s0(__a[3]), __a[3] + __badc_sha256_s0(__w4)};
+}
+
+static inline __m128i _mm_sha256msg2_epu32(__m128i __A, __m128i __B) {
+    __v4su __a = (__v4su)__A, __b = (__v4su)__B;
+    unsigned __w16 = __a[0] + __badc_sha256_s1(__b[2]), __w17 = __a[1] + __badc_sha256_s1(__b[3]);
+    unsigned __w18 = __a[2] + __badc_sha256_s1(__w16), __w19 = __a[3] + __badc_sha256_s1(__w17);
+    return (__m128i)(__v4su){__w16, __w17, __w18, __w19};
+}
 
 /* BMI1's TZCNT, which gcc's <immintrin.h> carries through <bmiintrin.h>:
 ** the operand width for a zero operand. */

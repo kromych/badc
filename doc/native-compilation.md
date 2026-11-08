@@ -128,6 +128,7 @@ members of MSVC's oldnames.lib.
 A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
 becomes the image's `.rsrc` section: the resource directory by type, name and
 language, which the loader reads for the manifest, the version and the strings.
+A cvtres object's resources (`.rsrc$01` / `.rsrc$02`) join them.
 Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 

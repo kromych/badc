@@ -7491,6 +7491,7 @@ fn minimal_native_object(
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
         mismatch_keys: alloc::vec::Vec::new(),
+        resources: Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -7812,6 +7813,7 @@ fn aarch64_data_ref_object_ex(
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
         mismatch_keys: alloc::vec::Vec::new(),
+        resources: Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -8083,6 +8085,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         comdats: alloc::vec::Vec::new(),
         default_libs: alloc::vec::Vec::new(),
         mismatch_keys: alloc::vec::Vec::new(),
+        resources: Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),

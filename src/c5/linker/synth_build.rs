@@ -163,7 +163,7 @@ pub fn write_native_image_and_pdb(
         opts,
     )?;
     build.pdb_path = pdb_path.map(alloc::string::String::from);
-    build.resources = resources.to_vec();
+    build.resources = resources.iter().chain(&merged.resources).cloned().collect();
     crate::c5::object::write_native_image_and_pdb(&program, &build, target)
 }
 
@@ -1929,6 +1929,7 @@ mod tests {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
             named_code_sections: Vec::new(),
+            resources: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],

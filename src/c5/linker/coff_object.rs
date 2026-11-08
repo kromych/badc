@@ -447,6 +447,115 @@ fn read_unwind(
     Ok(out)
 }
 
+/// cvtres's resource sections: `.rsrc$01` the directory tree, `.rsrc$02`
+/// the data its entries reach through relocations.
+fn is_rsrc(name: &str) -> bool {
+    name.starts_with(".rsrc$")
+}
+
+/// A cvtres object's resources as compiled resource file records, rc.exe's
+/// layout, which the image's `.rsrc` takes as it takes a `.res` input: the
+/// `.rsrc$01` tree walked by type, name and language, each data entry's
+/// bytes found through the relocation on its address field.
+fn read_resources(
+    bytes: &[u8],
+    machine: u16,
+    sects: &[Sect],
+    raw: &[Option<RawSym>],
+) -> Result<Vec<u8>, C5Error> {
+    let Some(tree) = sects.iter().find(|s| s.name == ".rsrc$01") else {
+        return Ok(Vec::new());
+    };
+    let content = tree.content(bytes)?;
+    let nb = match machine {
+        IMAGE_FILE_MACHINE_AMD64 => IMAGE_REL_AMD64_ADDR32NB,
+        _ => IMAGE_REL_ARM64_ADDR32NB,
+    };
+    let mut data_at: BTreeMap<u32, &[u8]> = BTreeMap::new();
+    for k in 0..tree.nrelocs as usize {
+        let p = tree.reloc_off as usize + k * RELOCATION_SIZE;
+        let (off, sym, t) = (
+            need_u32(bytes, p, "relocation")?,
+            need_u32(bytes, p + 4, "relocation")? as usize,
+            need_u16(bytes, p + 8, "relocation")?,
+        );
+        let target = (raw.get(sym).and_then(Option::as_ref))
+            .filter(|_| t == nb)
+            .and_then(|r| {
+                sects
+                    .get(usize::try_from(r.section).ok()?.checked_sub(1)?)
+                    .map(|s| (r, s))
+            });
+        let (Some((r, s)), Some(addend)) = (target, u32le(content, off as usize)) else {
+            return Err(bad(&format!(
+                "`.rsrc$01` offset {off:#x}: no resource data"
+            )));
+        };
+        let size = need_u32(content, off as usize + 4, "resource data entry")? as usize;
+        let start = (r.value + addend) as usize;
+        let data = s.content(bytes)?.get(start..start + size);
+        data_at.insert(
+            off,
+            data.ok_or_else(|| bad("resource data runs past its section"))?,
+        );
+    }
+    let rd = |off: u32, what: &str| need_u32(content, off as usize, what);
+    // The entries of the directory table at `dir`: name word, target word.
+    let entries = |dir: u32| -> Result<Vec<(u32, u32)>, C5Error> {
+        let named = need_u16(content, dir as usize + 12, "resource directory")?;
+        let ids = need_u16(content, dir as usize + 14, "resource directory")?;
+        (0..u32::from(named) + u32::from(ids))
+            .map(|i| {
+                Ok((
+                    rd(dir + 16 + 8 * i, "entry")?,
+                    rd(dir + 20 + 8 * i, "entry")?,
+                ))
+            })
+            .collect()
+    };
+    // A type or name field of a record: an ordinal, or the entry's string.
+    let key = |word: u32, out: &mut Vec<u8>| -> Result<(), C5Error> {
+        if word & 0x8000_0000 == 0 {
+            out.extend([0xff, 0xff]);
+            out.extend((word as u16).to_le_bytes());
+            return Ok(());
+        }
+        let at = (word & 0x7fff_ffff) as usize;
+        let len = need_u16(content, at, "resource name")? as usize;
+        let units = (content.get(at + 2..at + 2 + 2 * len)).ok_or_else(|| bad("resource name"))?;
+        out.extend(units);
+        out.extend([0, 0]);
+        Ok(())
+    };
+    let mut out = Vec::new();
+    for (ty, names) in entries(0)? {
+        for (name, langs) in entries(names & 0x7fff_ffff)? {
+            for (lang, entry) in entries(langs & 0x7fff_ffff)? {
+                let data = *data_at
+                    .get(&entry)
+                    .ok_or_else(|| bad("resource data entry"))?;
+                let start = out.len();
+                out.extend((data.len() as u32).to_le_bytes());
+                out.extend([0; 4]);
+                key(ty, &mut out)?;
+                key(name, &mut out)?;
+                out.resize(out.len().next_multiple_of(4), 0);
+                // DataVersion, MemoryFlags (moveable, pure), LanguageId,
+                // Version, Characteristics.
+                out.extend([0; 4]);
+                out.extend(0x0030u16.to_le_bytes());
+                out.extend((lang as u16).to_le_bytes());
+                out.extend([0; 8]);
+                let header = (out.len() - start) as u32;
+                out[start + 4..start + 8].copy_from_slice(&header.to_le_bytes());
+                out.extend(data);
+                out.resize(out.len().next_multiple_of(4), 0);
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn is_tls(name: &str) -> bool {
     name == ".tls" || name.starts_with(".tls$")
 }
@@ -458,11 +567,13 @@ fn is_tls(name: &str) -> bool {
 /// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
-    // `.pdata` is read by `read_unwind`. GNU as gives `.drectve` data flags, not LNK_INFO.
+    // `.pdata` is read by `read_unwind`, `.rsrc$*` by `read_resources`. GNU
+    // as gives `.drectve` data flags, not LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
         || s.name == ".drectve"
         || s.name.starts_with(".debug")
         || is_pdata(&s.name)
+        || is_rsrc(&s.name)
     {
         return Ok(SectionFamily::Discard);
     }
@@ -1788,6 +1899,7 @@ pub fn parse_native_coff(
     )?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
+    let resources = read_resources(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
     symbols.extend(directives.include_symbols());
     let tls_symbols = symbols
@@ -1842,6 +1954,7 @@ pub fn parse_native_coff(
         comdats,
         default_libs: directives.default_libs.clone(),
         mismatch_keys: directives.mismatch_keys.clone(),
+        resources,
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),

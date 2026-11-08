@@ -1201,6 +1201,8 @@ pub struct NativeObject {
     /// A COFF object's `/FAILIFMISMATCH:key=value` pairs: every input of a
     /// link that names a key gives it one value.
     pub mismatch_keys: Vec<(String, String)>,
+    /// A cvtres object's resources, as compiled resource file records.
+    pub resources: Vec<u8>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1467,6 +1469,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             .chain(directives.default_libs)
             .collect(),
         mismatch_keys: directives.mismatch_keys,
+        resources: Vec::new(),
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

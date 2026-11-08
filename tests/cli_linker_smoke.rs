@@ -6274,6 +6274,108 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
     }
 }
 
+/// A cvtres object's resources (rsrc_cvtres.rc beside it) become the image's
+/// `.rsrc`: an ID and a named entry reached by type, name and language, and
+/// on Windows `FindResourceW` and `LoadStringW` find them.
+#[test]
+fn a_cvtres_object_gives_the_image_its_resources() {
+    let coff = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coff");
+    let dir = tempdir("pe-cvtres");
+    let src = write_source(
+        &dir,
+        "probe.c",
+        "#include <windows.h>\n#include <string.h>\n#include <wchar.h>\n\
+         static int has(HRSRC r, const char *want)\n\
+         {\n\
+             HGLOBAL g = r ? LoadResource(NULL, r) : NULL;\n\
+             const char *p = g ? (const char *)LockResource(g) : NULL;\n\
+             return p && SizeofResource(NULL, r) == strlen(want) && !memcmp(p, want, strlen(want));\n\
+         }\n\
+         int main(void)\n\
+         {\n\
+             wchar_t buf[16];\n\
+             if (!has(FindResourceW(NULL, MAKEINTRESOURCEW(1), (LPCWSTR)RT_RCDATA), \"badc-rsrc-probe\"))\n\
+                 return 1;\n\
+             if (!has(FindResourceW(NULL, L\"ALPHA\", L\"PROBE\"), \"named-entry\"))\n\
+                 return 2;\n\
+             return LoadStringW(NULL, 7, buf, 16) == 5 && !wcscmp(buf, L\"seven\") ? 0 : 3;\n\
+         }\n",
+    );
+    for (target, arch) in [("windows-x64", "x64"), ("windows-arm64", "arm64")] {
+        let exe = dir.join(format!("probe-{arch}.exe"));
+        let obj = coff.join(format!("rsrc_cvtres.{arch}.coff"));
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args([
+                src.as_os_str(),
+                obj.as_os_str(),
+                "-o".as_ref(),
+                exe.as_os_str(),
+            ])
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+        let coff_hdr = u32_at(0x3c) + 4;
+        let opt = coff_hdr + 20;
+        // The resource directory is data directory 2 of PE32+.
+        let rsrc_rva = u32_at(opt + 112 + 2 * 8);
+        let table = opt + u16_at(coff_hdr + 16);
+        let (va, raw) = (0..u16_at(coff_hdr + 2))
+            .map(|i| table + 40 * i)
+            .map(|h| (u32_at(h + 12), u32_at(h + 20)))
+            .find(|&(va, _)| va == rsrc_rva)
+            .unwrap_or_else(|| panic!("{target}: no section at the resource directory"));
+        let at = |rva: usize| raw + rva - va;
+        // The entry of directory `dir` (offset in `.rsrc`) whose key is `id`
+        // or, for a string key, `name`; its target offset.
+        let lookup = |dir: usize, id: Option<usize>, name: &str| -> usize {
+            let n = u16_at(raw + dir + 12) + u16_at(raw + dir + 14);
+            (0..n)
+                .map(|i| raw + dir + 16 + 8 * i)
+                .find(|&e| match (u32_at(e), id) {
+                    (w, Some(id)) => w == id,
+                    (w, None) if w & 0x8000_0000 != 0 => {
+                        let s = raw + (w & 0x7fff_ffff);
+                        let units: Vec<u16> = (0..u16_at(s))
+                            .map(|k| u16_at(s + 2 + 2 * k) as u16)
+                            .collect();
+                        String::from_utf16_lossy(&units) == name
+                    }
+                    _ => false,
+                })
+                .map(|e| u32_at(e + 4) & 0x7fff_ffff)
+                .unwrap_or_else(|| panic!("{target}: no entry {id:?} {name}"))
+        };
+        let data = |entry: usize| {
+            let (rva, size) = (u32_at(raw + entry), u32_at(raw + entry + 4));
+            pe[at(rva)..at(rva) + size].to_vec()
+        };
+        let rcdata = lookup(
+            lookup(lookup(0, Some(10), ""), Some(1), ""),
+            Some(0x409),
+            "",
+        );
+        assert_eq!(data(rcdata), b"badc-rsrc-probe", "{target}");
+        let named = lookup(
+            lookup(lookup(0, None, "PROBE"), None, "ALPHA"),
+            Some(0x409),
+            "",
+        );
+        assert_eq!(data(named), b"named-entry", "{target}");
+        if cfg!(windows) && cfg!(target_arch = "aarch64") == (arch == "arm64") {
+            let run = Command::new(&exe).output().expect("run the image");
+            assert_eq!(run.status.code(), Some(0), "{target}: {run:?}");
+        }
+    }
+}
+
 /// Structured exception handling across a DLL boundary, both ways: a cl
 /// executable calls a badc DLL, and a badc executable a cl DLL (seh_host_cl.c
 /// and seh_dll_cl.c beside the images). Each side raises and the other

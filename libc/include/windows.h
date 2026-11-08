@@ -4391,6 +4391,52 @@ LPVOID GlobalLock(HGLOBAL hMem);
 BOOL GlobalUnlock(HGLOBAL hMem);
 SIZE_T GlobalSize(HGLOBAL hMem);
 
+// A module's resources (libloaderapi.h) and the predefined types (winuser.h).
+#pragma binding(kernel32::FindResourceA,   "FindResourceA")
+#pragma binding(kernel32::FindResourceW,   "FindResourceW")
+#pragma binding(kernel32::FindResourceExA, "FindResourceExA")
+#pragma binding(kernel32::FindResourceExW, "FindResourceExW")
+#pragma binding(kernel32::LoadResource,    "LoadResource")
+#pragma binding(kernel32::LockResource,    "LockResource")
+#pragma binding(kernel32::SizeofResource,  "SizeofResource")
+#pragma binding(kernel32::FreeResource,    "FreeResource")
+#pragma binding(user32::LoadStringA,       "LoadStringA")
+#pragma binding(user32::LoadStringW,       "LoadStringW")
+HRSRC FindResourceA(HMODULE hModule, LPCSTR lpName, LPCSTR lpType);
+HRSRC FindResourceW(HMODULE hModule, LPCWSTR lpName, LPCWSTR lpType);
+HRSRC FindResourceExA(HMODULE hModule, LPCSTR lpType, LPCSTR lpName, WORD wLanguage);
+HRSRC FindResourceExW(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage);
+HGLOBAL LoadResource(HMODULE hModule, HRSRC hResInfo);
+LPVOID LockResource(HGLOBAL hResData);
+DWORD SizeofResource(HMODULE hModule, HRSRC hResInfo);
+BOOL FreeResource(HGLOBAL hResData);
+int LoadStringA(HINSTANCE hInstance, UINT uID, LPSTR lpBuffer, int cchBufferMax);
+int LoadStringW(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cchBufferMax);
+#define FindResource __MINGW_NAME_AW(FindResource)
+#define FindResourceEx __MINGW_NAME_AW(FindResourceEx)
+#define LoadString __MINGW_NAME_AW(LoadString)
+#define RT_CURSOR       MAKEINTRESOURCE(1)
+#define RT_BITMAP       MAKEINTRESOURCE(2)
+#define RT_ICON         MAKEINTRESOURCE(3)
+#define RT_MENU         MAKEINTRESOURCE(4)
+#define RT_DIALOG       MAKEINTRESOURCE(5)
+#define RT_STRING       MAKEINTRESOURCE(6)
+#define RT_FONTDIR      MAKEINTRESOURCE(7)
+#define RT_FONT         MAKEINTRESOURCE(8)
+#define RT_ACCELERATOR  MAKEINTRESOURCE(9)
+#define RT_RCDATA       MAKEINTRESOURCE(10)
+#define RT_MESSAGETABLE MAKEINTRESOURCE(11)
+#define RT_GROUP_CURSOR MAKEINTRESOURCE(12)
+#define RT_GROUP_ICON   MAKEINTRESOURCE(14)
+#define RT_VERSION      MAKEINTRESOURCE(16)
+#define RT_DLGINCLUDE   MAKEINTRESOURCE(17)
+#define RT_PLUGPLAY     MAKEINTRESOURCE(19)
+#define RT_VXD          MAKEINTRESOURCE(20)
+#define RT_ANICURSOR    MAKEINTRESOURCE(21)
+#define RT_ANIICON      MAKEINTRESOURCE(22)
+#define RT_HTML         MAKEINTRESOURCE(23)
+#define RT_MANIFEST     MAKEINTRESOURCE(24)
+
 // user32.dll window, message, input, monitor, and clipboard entry points.
 #pragma binding(user32::AdjustWindowRectEx,         "AdjustWindowRectEx")
 #pragma binding(user32::BeginPaint,                 "BeginPaint")

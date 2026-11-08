@@ -405,6 +405,9 @@ pub struct MergedNative {
     pub named_sections: Vec<crate::c5::codegen::NamedSection>,
     /// The same for code, as offsets in `text`.
     pub named_code_sections: Vec<crate::c5::codegen::NamedSection>,
+    /// The inputs' resources, as compiled resource files, for a PE image's
+    /// `.rsrc`.
+    pub resources: Vec<Vec<u8>>,
 }
 
 /// One input section's placement within a merged output stream.
@@ -5279,6 +5282,10 @@ impl<'a> Link<'a> {
             bss_size: self.bss_size,
             named_sections: self.named_sections,
             named_code_sections: self.named_code_sections,
+            resources: (self.objs.iter())
+                .filter(|o| !o.resources.is_empty())
+                .map(|o| o.resources.clone())
+                .collect(),
             defined,
             tls_defined: self.tls_defined,
             imports: self.imports,
@@ -6586,6 +6593,7 @@ mod tests {
             comdats: Vec::new(),
             default_libs: Vec::new(),
             mismatch_keys: Vec::new(),
+            resources: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
             debug_line: Vec::new(),
@@ -7995,6 +8003,7 @@ mod tests {
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
                 mismatch_keys: Vec::new(),
+                resources: Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),

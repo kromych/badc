@@ -1347,6 +1347,7 @@ mod tests {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
             named_code_sections: Vec::new(),
+            resources: Vec::new(),
             text_align: 16,
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],

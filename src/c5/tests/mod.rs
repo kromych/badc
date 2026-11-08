@@ -1408,6 +1408,20 @@ pub fn link_executable_with_runtime(
     link_executable_with_runtime_as(program, target, opts, crate::ExecForm::Pie)
 }
 
+/// Link `objs` as the driver links an executable for `target`: under the
+/// target's container format.
+#[cfg(feature = "full")]
+fn link_for_target(
+    objs: &[crate::NativeObject],
+    target: crate::Target,
+) -> Result<crate::MergedNative, crate::C5Error> {
+    let opts = crate::LinkOptions {
+        format: target.binary_format(),
+        ..Default::default()
+    };
+    crate::link_native_objects_with(objs, &[], &opts)
+}
+
 /// [`link_executable_with_runtime`] for an executable of `form`.
 #[cfg(feature = "full")]
 pub fn link_executable_with_runtime_as(
@@ -1417,8 +1431,8 @@ pub fn link_executable_with_runtime_as(
     form: crate::ExecForm,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        ImageOptions, OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
-        parse_native_elf, write_native_image_from_merged_ex,
+        ImageOptions, OutputKind, embedded_runtime, emit_native_with_options, parse_native_elf,
+        write_native_image_from_merged_ex,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -1476,7 +1490,7 @@ pub fn link_executable_with_runtime_as(
 
     append_on_demand_objects(&mut objs, target, reloc)?;
 
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
     let plt =
         crate::emit_plt_for(&mut merged, target, form.placed()).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.as_deref().unwrap_or("main");
@@ -1687,8 +1701,8 @@ pub fn link_executable_with_runtime_multi(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
-        parse_native_elf, write_native_image_from_merged,
+        OutputKind, embedded_runtime, emit_native_with_options, parse_native_elf,
+        write_native_image_from_merged,
     };
     let entry = programs[0];
     let mut reloc = opts;
@@ -1726,7 +1740,7 @@ pub fn link_executable_with_runtime_multi(
         objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
     }
 
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
@@ -1752,15 +1766,14 @@ pub fn link_freestanding(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        OutputKind, emit_native_with_options, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        OutputKind, emit_native_with_options, parse_native_elf, write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
     let prog_bytes = emit_native_with_options(program, target, reloc)
         .map_err(|e| format!("emit program object: {e}"))?;
     let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
-    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,

@@ -7,13 +7,20 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](./doc/native-compilation.md)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](./doc/native-compilation.md)
 
-`badc` is a cross-platform optimizing C17 compiler, also usable as a Rust
-library. From any host it builds native executables, shared libraries and
-objects for five targets: macOS on ARM64, Linux on ARM64 and x86-64, and
-Windows on ARM64 and x86-64. It has its own preprocessor, assembler, linker,
-archiver and DWARF writer, an in-process JIT and an SSA interpreter. CI runs
-over 80 jobs and over 5,000 tests on every pull request and every push to
-`master`, and fuzzing jobs run daily.
+`badc` is a slim cross-platform optimizing C17 compiler. There is extensive
+support for the older standards and good support for the newer ones, as well
+as support for numerous extensions found in GNU C, clang, and MSVC - required
+to build the real-world software.
+
+From any host `badc` builds native images for five targets: macOS on ARM64,
+Linux on ARM64 and x86-64, and Windows on ARM64 and x86-64. It has its own
+preprocessor, assembler, linker, archiver and debug info writers (DWARF and
+PDB), also in-process JIT and an SSA interpreter. CI runs over 80 jobs and
+over 5,000 tests on every pull request and every push to `master`, and
+fuzzing jobs run daily.
+
+`badc` ships as just one binary. The project is also usable as a Rust
+library.
 
 > * `badc` was bad when the project started, and the name stuck.
 > * `--dump-ssa` prints each function's SSA IR and the register allocator's
@@ -82,20 +89,13 @@ exercises.
 ## Lineage
 
 badc started as a Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4), a C compiler in four functions. The
-dialect diverged enough to get its own name, **c5**, hence the `c5` module and
-the `C5Error` type. It has since moved from a stack IR through a three-operand
-IR to SSA with an optimizing backend.
+[c4](https://github.com/rswier/c4), a C compiler in four functions (owing to that
+c4 accepts only a subset of C). The dialect diverged enough to get its own name, **c5**,
+hence the `c5` module and the `C5Error` type. It has since moved from a stack IR
+through a three-operand IR to SSA with an optimizing backend.
 
-`c4.c` is a test fixture, and badc compiles it:
-
-```sh
-badc -O -o c4 tests/fixtures/c/c4.c           # compile c4 to a native binary
-./c4 tests/fixtures/c/c4_selfhost_hello.c     # c4 compiles and runs a program
-```
-
-c4 also runs itself. This runs the hello program under c4, under c4, under
-c4 compiled by badc's JIT:
+The venerable c4 runs itself, and here is how to run the hello program under c4,
+under c4, under c4 compiled by badc's JIT:
 
 ```sh
 badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c \
@@ -108,9 +108,6 @@ exit(0) cycle = 11
 exit(0) cycle = 37229
 exit(0) cycle = 11152710
 ```
-
-c4 accepts a subset of C. For example, it rejects a local declaration with an
-initializer.
 
 ## Documentation
 

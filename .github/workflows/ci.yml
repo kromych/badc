@@ -1685,7 +1685,8 @@ jobs:
     # linker (PE32+ EFI application, no GenFw) for X64 and AArch64. badc
     # cross-compiles both EFI images from every host, so the build runs on all
     # five runners. The OVMF/QEMU boot is a distinct dimension: it runs on the
-    # Linux lanes (where QEMU + OVMF/AAVMF come from apt); the macOS / Windows
+    # Linux lanes (QEMU from apt, the firmware from the ovmf lanes, so a runner
+    # image's own firmware never decides a boot); the macOS / Windows
     # lanes have no easy QEMU, so smoke.py auto-skips the boot there and stands
     # on the build + PE-format checks.
     name: edk2 (${{ matrix.label }})
@@ -1725,13 +1726,13 @@ jobs:
         if: matrix.qemu
         run: ./scripts/apt_resilient_install.sh qemu-system-x86 qemu-system-arm
       - name: fetch the ovmf-lane firmware (x86_64 UEFI app boot)
-        if: matrix.label == 'ubuntu-x64'
+        if: matrix.qemu
         uses: actions/download-artifact@v4
         with:
           name: ovmf-x64
           path: ${{ runner.temp }}/ovmf
       - name: fetch the ovmf-lane firmware (aarch64 UEFI app boot)
-        if: matrix.label == 'ubuntu-arm64'
+        if: matrix.qemu
         uses: actions/download-artifact@v4
         with:
           name: aavmf-arm64
@@ -1753,20 +1754,20 @@ jobs:
         # a real UEFI payload to serial. The build is the hard gate; the boot is
         # best-effort until observed green, then gated.
         env:
-          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
-          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
-          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
-          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+          OVMF_CODE: ${{ matrix.qemu && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.qemu && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.qemu && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.qemu && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
           BADC_EDK2_BOOT_OPTIONAL: "1"
         run: python demos/edk2/smoke.py
       - name: kernel smoke (badc-compiled UEFI kernel exercising inline asm; boot where QEMU is present)
         # Same firmware as the edk2 lane; the kernel boots under UEFI and its
         # inline asm (cpuid / bswap / mrs / raw bytes) runs to serial.
         env:
-          OVMF_CODE: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
-          OVMF_VARS: ${{ matrix.label == 'ubuntu-x64' && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
-          AAVMF_CODE: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
-          AAVMF_VARS: ${{ matrix.label == 'ubuntu-arm64' && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
+          OVMF_CODE: ${{ matrix.qemu && format('{0}/ovmf/OVMF_CODE.fd', runner.temp) || '' }}
+          OVMF_VARS: ${{ matrix.qemu && format('{0}/ovmf/OVMF_VARS.fd', runner.temp) || '' }}
+          AAVMF_CODE: ${{ matrix.qemu && format('{0}/aavmf/QEMU_EFI-pflash.raw', runner.temp) || '' }}
+          AAVMF_VARS: ${{ matrix.qemu && format('{0}/aavmf/QEMU_VARS-pflash.raw', runner.temp) || '' }}
         run: python demos/kernel/smoke.py
 
   firmware-x64:

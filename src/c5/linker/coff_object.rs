@@ -959,6 +959,12 @@ pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5E
                     .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
                 d.align_common.insert(name.to_string(), 1 << log2);
             }
+            // Control Flow Guard attributes of one symbol; the image carries
+            // no guard tables.
+            "guardsym"
+                if arg
+                    .split_once(',')
+                    .is_some_and(|(n, f)| !n.is_empty() && !f.is_empty()) => {}
             _ => {
                 return Err(unsupported(&format!(
                     "`.drectve` option `{tok}` is not one the linker carries out"
@@ -2380,13 +2386,13 @@ mod tests {
     }
 
     /// `.drectve`: `/alternatename:` names a stand-in, `-aligncomm:` a
-    /// common symbol's alignment, `/merge:` a section merge; an option the
-    /// linker does not carry out is refused by name.
+    /// common symbol's alignment, `/merge:` a section merge, `/GUARDSYM:`
+    /// nothing; an option the linker does not carry out is refused by name.
     #[test]
     fn directives_name_stand_ins_and_common_alignment() {
         let drectve = IMAGE_SCN_LNK_INFO | IMAGE_SCN_LNK_REMOVE;
         let text = b"   /DEFAULTLIB:\"LIBCMT\" /alternatename:__isa=__isa_default -aligncomm:c,4 \
-                     /merge:minATL=.rdata";
+                     /merge:minATL=.rdata /GUARDSYM:c,S";
         let o = parse(
             &[sec(".drectve", drectve, text)],
             &[sym("c", 3, 0, IMAGE_SYM_CLASS_EXTERNAL)],
@@ -2412,6 +2418,7 @@ mod tests {
             "/EXPORT:f,@0",
             "/EXPORT:f,NONAME",
             "/EXPORT:=g",
+            "/GUARDSYM:c",
         ] {
             let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
             assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");

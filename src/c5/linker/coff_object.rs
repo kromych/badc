@@ -11,9 +11,9 @@ use alloc::vec::Vec;
 
 use super::link_err;
 use super::object::{
-    Comdat, ExportAlias, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
-    NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE, STT_OBJECT,
-    SectionFamily, SymRef, grouped_by_name,
+    Comdat, ExportAlias, InitTable, InputSection, NativeInitFunc, NativeMachine, NativeObject,
+    NativeReloc, NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE,
+    STT_OBJECT, SectionFamily, SymRef, grouped_by_name,
 };
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
@@ -286,8 +286,8 @@ struct Sect {
     nrelocs: u32,
     flags: u32,
     family: SectionFamily,
-    /// A `.ctors` / `.CRT$XC*` table: `(destructor, priority)`.
-    init: Option<(bool, Option<u32>)>,
+    /// The table a `.ctors` / `.dtors` / `.CRT$X*` section feeds.
+    init: Option<InitTable>,
     base: u64,
     record: Option<u32>,
 }
@@ -344,19 +344,20 @@ fn read_sections(bytes: &[u8], h: &Header) -> Result<Vec<Sect>, C5Error> {
     Ok(out)
 }
 
-/// `(destructor, priority)` of a constructor / destructor table: GNU's
+/// The table of a constructor / destructor section: GNU's
 /// `.ctors[.NNNNN]` / `.dtors[.NNNNN]`, whose suffix is 65535 minus the
-/// priority, and the C runtime's `.CRT$X[CI]*` / `.CRT$X[PT]*`.
-fn init_table(name: &str) -> Option<(bool, Option<u32>)> {
-    for (prefix, dtor) in [(".ctors", false), (".dtors", true)] {
+/// priority, and the C runtime's `.CRT$X*`.
+fn init_table(name: &str) -> Option<InitTable> {
+    for (prefix, fini) in [(".ctors", false), (".dtors", true)] {
         if let Some(rest) = name.strip_prefix(prefix) {
-            return match rest {
-                "" => Some((dtor, None)),
-                _ => {
-                    let n = rest.strip_prefix('.')?.parse::<u32>().ok()?;
-                    Some((dtor, Some(65535u32.checked_sub(n)?)))
-                }
+            let priority = match rest {
+                "" => None,
+                _ => Some(65535u32.checked_sub(rest.strip_prefix('.')?.parse().ok()?)?),
             };
+            return Some(match fini {
+                true => InitTable::Fini(priority),
+                false => InitTable::Init(priority),
+            });
         }
     }
     super::object::crt_init_table(name)
@@ -572,12 +573,6 @@ fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
         || is_rsrc(&s.name)
     {
         return Ok(SectionFamily::Discard);
-    }
-    if s.name.starts_with(".CRT$XL") {
-        return Err(unsupported(&format!(
-            "section `{}` holds TLS callbacks, which the image's TLS directory does not list",
-            s.name
-        )));
     }
     if is_tls(&s.name) {
         return Ok(if f & IMAGE_SCN_CNT_UNINITIALIZED_DATA != 0 {
@@ -1526,14 +1521,13 @@ fn translate_relocs(
     // from its end.
     inits.sort_by(|a, b| a.0.cmp(b.0).then(a.1.cmp(&b.1)));
     for (name, _, mut entries) in inits {
-        let (is_destructor, priority) = init_table(name).unwrap();
+        let table = init_table(name).unwrap();
         if name.starts_with(".ctors") {
             entries.reverse();
         }
         out.init_funcs
             .extend(entries.into_iter().map(|unit_text_offset| NativeInitFunc {
-                is_destructor,
-                priority,
+                table: table.clone(),
                 unit_text_offset,
             }));
     }
@@ -2691,9 +2685,10 @@ mod tests {
         )
         .unwrap();
         let entries: Vec<_> = (o.init_funcs.iter())
-            .map(|f| (f.is_destructor, f.unit_text_offset))
+            .map(|f| (f.table.clone(), f.unit_text_offset))
             .collect();
-        assert_eq!(entries, [(false, 0), (false, 1)]);
+        let crt = InitTable::Crt("CU".into());
+        assert_eq!(entries, [(crt, 0), (InitTable::Init(None), 1)]);
         assert!(o.data.is_empty() && o.relro.is_empty());
     }
 

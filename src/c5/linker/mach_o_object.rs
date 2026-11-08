@@ -27,7 +27,7 @@ use crate::c5::object::unwind_info::{UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_
 
 use super::link_err;
 use super::object::{
-    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InputSection, NativeInitFunc,
+    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InitTable, InputSection, NativeInitFunc,
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE,
     STT_OBJECT, SectionFamily, SymRef,
 };
@@ -1306,14 +1306,16 @@ fn translate_relocs(
         }
         if is_init {
             init_entries.sort_by_key(|&(slot, _)| slot);
-            let is_destructor = kind == S_MOD_TERM_FUNC_POINTERS;
+            let table = match kind == S_MOD_TERM_FUNC_POINTERS {
+                true => InitTable::Fini(None),
+                false => InitTable::Init(None),
+            };
             out.init_funcs
                 .extend(
                     init_entries
                         .into_iter()
                         .map(|(_, unit_text_offset)| NativeInitFunc {
-                            is_destructor,
-                            priority: None,
+                            table: table.clone(),
                             unit_text_offset,
                         }),
                 );
@@ -2165,7 +2167,7 @@ mod tests {
         ))
         .expect("parse");
         assert_eq!(o.init_funcs.len(), 1);
-        assert!(!o.init_funcs[0].is_destructor);
+        assert_eq!(o.init_funcs[0].table, InitTable::Init(None));
         assert_eq!(o.init_funcs[0].unit_text_offset, 8);
         assert!(o.data.is_empty());
     }

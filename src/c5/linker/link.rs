@@ -27,8 +27,9 @@ use crate::c5::error::C5Error;
 
 use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
-    EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
+    EH_FRAME, ElfTpoffTarget, InitTable, NativeMachine, NativeObject, NativeReloc,
+    NativeSymSection, NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef,
+    reloc_desc,
 };
 use super::section_groups::SectionGroups;
 use crate::c5::codegen::{
@@ -74,6 +75,9 @@ pub(crate) use crate::c5::object::elf_reloc_types::{GOT_BASE_SYMBOL, IMAGE_BASE_
 
 /// The slot the loader writes a PE image's TLS index to.
 pub(crate) const TLS_INDEX: &str = "_tls_index";
+
+/// A PE image's `IMAGE_TLS_DIRECTORY`, as the MSVC runtime names it.
+pub(crate) const TLS_DIRECTORY: &str = "_tls_used";
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
@@ -1174,7 +1178,7 @@ pub fn link_native_objects_with<'a>(
     if let Some(d) = delayed {
         link.warnings.extend(d.warnings);
     }
-    link.lay_out_init_fini_arrays();
+    link.lay_out_init_fini_arrays()?;
     link.collect_definitions()?;
     if link.pe_image {
         link.require_pe_exports_defined();
@@ -1389,10 +1393,15 @@ struct Link<'a> {
     named_sections: Vec<crate::c5::codegen::NamedSection>,
     named_code_sections: Vec<crate::c5::codegen::NamedSection>,
     section_map: SectionMap,
-    /// Constructors and destructors as `(priority, merged text
-    /// offset)`, in run order.
-    init_entries: Vec<(Option<u32>, u64)>,
-    fini_entries: Vec<(Option<u32>, u64)>,
+    /// The merged text offsets of the init and fini array slots.
+    init_entries: Vec<u64>,
+    fini_entries: Vec<u64>,
+    /// The PE TLS callbacks in call order, and the data offset of their
+    /// null-terminated array.
+    tls_callbacks: Vec<u64>,
+    tls_callback_array: Option<u64>,
+    /// The data offset of the `_tls_used` directory a unit names.
+    tls_directory_slot: Option<u64>,
     /// The merged text offset of the `.init` and `.fini` functions.
     init_code: Option<u64>,
     fini_code: Option<u64>,
@@ -1548,6 +1557,9 @@ impl<'a> Link<'a> {
             section_map: SectionMap::default(),
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
+            tls_callbacks: Vec::new(),
+            tls_callback_array: None,
+            tls_directory_slot: None,
             init_code: None,
             fini_code: None,
             init_array: (0, 0),
@@ -2552,58 +2564,97 @@ impl<'a> Link<'a> {
     }
 
     /// `.init_array` / `.fini_array`: every unit's constructor and
-    /// destructor entries, rebased to merged `.text` offsets and
-    /// ordered prioritized ascending, then unprioritized in link order
-    /// (a stable sort over `(priority.is_none(), priority)` keeps each
-    /// unit's slot order). Two contiguous pointer arrays are appended
-    /// to `.data`; the startup runtime walks `[__init_array_start,
-    /// __init_array_end)` forward before `main` and the fini array
-    /// backward after. Each 8-byte slot is a `.text` pointer, so a
-    /// `DataAbsReloc` gives the PIE its load-time R_*_RELATIVE.
-    fn lay_out_init_fini_arrays(&mut self) {
-        for (i, obj) in self.objs.iter().enumerate() {
+    /// destructor entries, rebased to merged `.text` offsets. GNU tables
+    /// run prioritized ascending, then unprioritized, each in link order;
+    /// the C runtime's run ahead of them at startup and after them at
+    /// exit, ordered by section name, then link order. The pointer arrays
+    /// are appended to `.data`; the startup runtime walks
+    /// `[__init_array_start, __init_array_end)` forward before `main` and
+    /// the fini array backward after. A PE image's TLS callbacks and the
+    /// `_tls_used` directory a unit names follow them. Each 8-byte slot is
+    /// a `.text` pointer, so a `DataAbsReloc` gives the PIE its load-time
+    /// R_*_RELATIVE.
+    fn lay_out_init_fini_arrays(&mut self) -> Result<(), C5Error> {
+        let objs = self.objs;
+        let (mut init, mut fini, mut crt) = (Vec::new(), Vec::new(), Vec::new());
+        for (i, obj) in objs.iter().enumerate() {
             for f in &obj.init_funcs {
                 let off = self.text_map[i].at(f.unit_text_offset);
-                if f.is_destructor {
-                    self.fini_entries.push((f.priority, off));
-                } else {
-                    self.init_entries.push((f.priority, off));
+                match &f.table {
+                    InitTable::Init(p) => init.push((*p, off)),
+                    InitTable::Fini(p) => fini.push((*p, off)),
+                    InitTable::Crt(t) => crt.push((t.as_str(), off)),
                 }
             }
         }
-        self.init_entries
-            .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
-        self.fini_entries
-            .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        init.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        fini.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        crt.sort_by_key(|&(t, _)| t);
+        let table = |t: u8| {
+            (crt.iter())
+                .filter(move |e| e.0.as_bytes()[0] == t)
+                .map(|e| e.1)
+        };
         // The `.init` function runs before every constructor and the `.fini`
         // one after every destructor, as DT_INIT and DT_FINI run around
         // the arrays (gABI, Initialization and Termination Functions).
-        if let Some(off) = self.init_code {
-            self.init_entries.insert(0, (None, off));
+        self.init_entries = (self.init_code.into_iter())
+            .chain(table(b'I'))
+            .chain(table(b'C'))
+            .chain(init.iter().map(|e| e.1))
+            .collect();
+        let crt_exit: Vec<u64> = table(b'P').chain(table(b'T')).collect();
+        self.fini_entries = (self.fini_code.into_iter())
+            .chain(crt_exit.into_iter().rev())
+            .chain(fini.iter().map(|e| e.1))
+            .collect();
+        self.tls_callbacks = table(b'L').collect();
+        if !self.tls_callbacks.is_empty() && !self.pe_image {
+            let text = "a `.CRT$XL*` TLS callback applies to a PE image only";
+            return Err(link_err(Code::UNSUPPORTED, MODULE, text));
         }
-        if let Some(off) = self.fini_code {
-            self.fini_entries.insert(0, (None, off));
-        }
+        let syms = || objs.iter().flat_map(|o| &o.symbols);
+        let tls_directory = self.pe_image
+            && syms().any(|s| s.name == TLS_DIRECTORY && s.binding != 0)
+            && !syms().any(|s| {
+                s.name == TLS_DIRECTORY && s.binding != 0 && s.section != NativeSymSection::Undef
+            });
         // A program with no constructors gets no `.data` change (start
         // == end leaves the runtime's walk a no-op); only touch the
         // layout when there is something to lay out, so existing data
         // offsets are stable.
-        if self.init_entries.is_empty() && self.fini_entries.is_empty() {
-            let at = self.data.len() as u64;
-            self.init_array = (at, at);
-            self.fini_array = (at, at);
-        } else {
+        let at = self.data.len() as u64;
+        (self.init_array, self.fini_array) = ((at, at), (at, at));
+        let laid_out = !self.init_entries.is_empty()
+            || !self.fini_entries.is_empty()
+            || !self.tls_callbacks.is_empty()
+            || tls_directory;
+        if laid_out {
             align_up(&mut self.data, 8);
-            let init_start = self.data.len() as u64;
-            self.data
-                .resize(self.data.len() + self.init_entries.len() * 8, 0);
-            let init_end = self.data.len() as u64;
-            let fini_start = self.data.len() as u64;
-            self.data
-                .resize(self.data.len() + self.fini_entries.len() * 8, 0);
-            let fini_end = self.data.len() as u64;
-            self.init_array = (init_start, init_end);
-            self.fini_array = (fini_start, fini_end);
+            let data = &mut self.data;
+            let mut place = |slots: usize| {
+                let start = data.len() as u64;
+                data.resize(data.len() + slots * 8, 0);
+                (start, data.len() as u64)
+            };
+            self.init_array = place(self.init_entries.len());
+            self.fini_array = place(self.fini_entries.len());
+            let n = self.tls_callbacks.len();
+            let callbacks = (n > 0).then(|| place(n + 1));
+            let directory = tls_directory
+                .then(|| place(crate::c5::object::pe::IMAGE_TLS_DIRECTORY64_SIZE as usize / 8));
+            self.tls_callback_array = callbacks.map(|c| c.0);
+            self.tls_directory_slot = directory.map(|d| d.0);
+            for (name, place) in [(".CRT$XL", callbacks), (TLS_DIRECTORY, directory)] {
+                if let Some((start, end)) = place {
+                    self.section_map.data.push(SectionContribution {
+                        input: None,
+                        name: name.to_string(),
+                        offset: start,
+                        size: end - start,
+                    });
+                }
+            }
         }
         for (name, (start, end)) in [
             (".init_array", self.init_array),
@@ -2626,7 +2677,7 @@ impl<'a> Link<'a> {
         // `.data` and `.bss` the two addresses differ, so the walk
         // overruns the array into zero padding and calls a null
         // pointer. Keep the arrays strictly inside `.data`.
-        if self.fini_array.1 > self.init_array.0 {
+        if laid_out {
             self.data.resize(self.data.len() + 8, 0);
         }
         // The merged bss region begins at `data.len()` in the unified
@@ -2641,6 +2692,7 @@ impl<'a> Link<'a> {
                 crate::c5::layout::bss_image_align(self.data_align),
             );
         }
+        Ok(())
     }
 
     /// Every `STB_GLOBAL` symbol that lives in a `.text` / `.data` /
@@ -2964,6 +3016,17 @@ impl<'a> Link<'a> {
                     weak: false,
                 },
             );
+        }
+        if let Some(off) = self.tls_directory_slot {
+            let symbol = MergedSymbol {
+                section: NativeSymSection::Data,
+                value: off,
+                size: crate::c5::object::pe::IMAGE_TLS_DIRECTORY64_SIZE as u64,
+                kind: super::object::STT_OBJECT,
+                visibility: super::object::STV_HIDDEN,
+                weak: false,
+            };
+            self.defined.insert(Cow::Borrowed(TLS_DIRECTORY), symbol);
         }
         // crti.o's names for the two functions, hidden as it defines them.
         for (name, code) in [("_init", self.init_code), ("_fini", self.fini_code)] {
@@ -4263,19 +4326,19 @@ impl<'a> Link<'a> {
         // function pointer, so it needs the same absolute relocation as
         // a function-pointer data initializer -- an R_*_RELATIVE in the
         // PIE the final-image writer emits.
-        for (k, &(_, text_off)) in self.init_entries.iter().enumerate() {
-            self.data_abs_relocs.push(DataAbsReloc {
-                slot_offset: self.init_array.0 + (k * 8) as u64,
-                target: MergedTarget::Text(text_off as i64),
-                anchor: MergedTarget::Text(text_off as i64),
-            });
-        }
-        for (k, &(_, text_off)) in self.fini_entries.iter().enumerate() {
-            self.data_abs_relocs.push(DataAbsReloc {
-                slot_offset: self.fini_array.0 + (k * 8) as u64,
-                target: MergedTarget::Text(text_off as i64),
-                anchor: MergedTarget::Text(text_off as i64),
-            });
+        let arrays = [
+            (Some(self.init_array.0), &self.init_entries),
+            (Some(self.fini_array.0), &self.fini_entries),
+            (self.tls_callback_array, &self.tls_callbacks),
+        ];
+        for (start, entries) in arrays {
+            for (k, &text_off) in entries.iter().enumerate() {
+                self.data_abs_relocs.push(DataAbsReloc {
+                    slot_offset: start.unwrap_or_default() + (k * 8) as u64,
+                    target: MergedTarget::Text(text_off as i64),
+                    anchor: MergedTarget::Text(text_off as i64),
+                });
+            }
         }
         Ok(())
     }
@@ -5489,6 +5552,8 @@ impl<'a> Link<'a> {
                     .then_some((self.init_array.0, self.init_array.1 - self.init_array.0)),
                 fini: (self.fini_array.1 > self.fini_array.0)
                     .then_some((self.fini_array.0, self.fini_array.1 - self.fini_array.0)),
+                tls_callbacks: self.tls_callback_array,
+                tls_directory: self.tls_directory_slot,
             },
             section_map: self.section_map,
             exec_stack_input,
@@ -8005,6 +8070,47 @@ mod tests {
             .expect("x should resolve to the strong def");
         assert!(matches!(def.section, NativeSymSection::Data));
         assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
+    }
+
+    /// The C runtime's tables run in section-name order across units, link
+    /// order within a name; the exit tables run forward, so the backward
+    /// fini walk reaches them reversed. TLS callbacks need a PE image.
+    #[test]
+    fn crt_tables_order_by_section_name_across_units() {
+        use super::super::object::{InitTable, NativeInitFunc};
+        let unit = |tables: &[(&str, u64)]| {
+            let mut o = NativeObject::empty(NativeMachine::X86_64);
+            o.text = alloc::vec![0xc3; 16];
+            o.init_funcs = (tables.iter())
+                .map(|&(t, unit_text_offset)| NativeInitFunc {
+                    table: InitTable::Crt(t.into()),
+                    unit_text_offset,
+                })
+                .collect();
+            o
+        };
+        let a = unit(&[("CU", 0), ("TU", 1), ("PU", 2), ("IU", 3)]);
+        let b = unit(&[("CB", 0), ("IU", 1), ("TB", 2), ("PA", 3)]);
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let slots = |(start, len): (u64, u64)| -> Vec<i64> {
+            (0..len / 8)
+                .map(|k| {
+                    let r = (merged.data_abs_relocs.iter())
+                        .find(|r| r.slot_offset == start + k * 8)
+                        .expect("slot relocation");
+                    match r.target {
+                        MergedTarget::Text(off) => off,
+                        MergedTarget::Data(_) => panic!("a data target"),
+                    }
+                })
+                .collect()
+        };
+        let arrays = merged.init_fini_arrays;
+        assert_eq!(slots(arrays.init.unwrap()), [3, 17, 16, 0]);
+        assert_eq!(slots(arrays.fini.unwrap()), [1, 18, 2, 19]);
+        assert_eq!(arrays.tls_callbacks, None);
+        let err = link_native_objects(&[unit(&[("LB", 0)])]).expect_err("refused");
+        assert!(format!("{err}").contains("PE image only"), "{err}");
     }
 
     // STB_WEAK defined symbols from a foreign object must resolve a

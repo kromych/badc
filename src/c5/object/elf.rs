@@ -4808,6 +4808,7 @@ mod tests {
         build.init_fini_arrays = crate::c5::codegen::InitFiniArrays {
             init: Some((0, 8)),
             fini: Some((8, 8)),
+            ..Default::default()
         };
         let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
         let dyn_ = dynamic_entries(&bytes);

@@ -2017,6 +2017,10 @@ pub(crate) enum DynamicExportSection {
 pub struct InitFiniArrays {
     pub init: Option<(u64, u64)>,
     pub fini: Option<(u64, u64)>,
+    /// The PE TLS directory's null-terminated callback array.
+    pub tls_callbacks: Option<u64>,
+    /// The PE TLS directory's own place, when a unit names `_tls_used`.
+    pub tls_directory: Option<u64>,
 }
 
 /// Stream a resolved relocation's site or target lives in. `Data`

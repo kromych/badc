@@ -975,17 +975,26 @@ pub struct NativeReloc {
     pub addend: i64,
 }
 
-/// One `.init_array` / `.fini_array` entry parsed from an ET_REL
-/// object: a constructor / destructor pointer resolved to a `.text`
-/// offset within this unit. The linker adds the unit's text base to
-/// place it in the merged image and orders entries by priority.
-#[derive(Debug, Clone, Copy)]
+/// The startup table a constructor-table section's entries join.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitTable {
+    /// `.init_array[.NNNNN]` / `.ctors`: lower priority first, `None` last.
+    Init(Option<u32>),
+    /// `.fini_array[.NNNNN]` / `.dtors`, run in reverse.
+    Fini(Option<u32>),
+    /// The C runtime's `.CRT$X<t><suffix>`, holding `<t><suffix>`: every
+    /// unit's entries are ordered by it, as link.exe orders a grouped
+    /// section's contributions, and each table runs forward.
+    Crt(String),
+}
+
+/// One constructor-table entry parsed from an object: a function pointer
+/// resolved to a `.text` offset within this unit. The linker adds the
+/// unit's text base to place it in the merged image and orders entries
+/// by their table.
+#[derive(Debug, Clone)]
 pub struct NativeInitFunc {
-    /// `true` for a `.fini_array` (destructor) entry.
-    pub is_destructor: bool,
-    /// Priority from the `.init_array.NNNNN` section-name suffix;
-    /// `None` for the bare `.init_array`. Lower runs earlier.
-    pub priority: Option<u32>,
+    pub table: InitTable,
     /// Byte offset of the target function within this unit's merged
     /// `.text`.
     pub unit_text_offset: u64,
@@ -1714,8 +1723,8 @@ struct SectionRoles {
     rela_debug_line: Option<usize>,
     /// Every other `.debug_*` section, in section order.
     debug_other: Vec<usize>,
-    /// `.init_array*` / `.fini_array*`: (shndx, is_dtor, priority).
-    init_array_sections: Vec<(usize, bool, Option<u32>)>,
+    /// The constructor-table sections and the table each feeds.
+    init_array_sections: Vec<(usize, InitTable)>,
     /// Dropped content, for the link map's "Discarded input sections"
     /// report.
     discarded: Vec<(String, u64)>,
@@ -1792,8 +1801,8 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             roles.debug_other.push(i);
             continue;
         }
-        if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
-            roles.init_array_sections.push((i, is_dtor, priority));
+        if let Some(table) = parse_init_array_section_name(name) {
+            roles.init_array_sections.push((i, table));
             continue;
         }
         let family = if sh.sh_type == SHT_RELA {
@@ -2321,11 +2330,12 @@ fn decode_relocs(
 fn decode_init_arrays(
     bytes: &[u8],
     shdrs: &[Elf64Shdr],
-    init_array_sections: &[(usize, bool, Option<u32>)],
+    init_array_sections: &[(usize, InitTable)],
     symbols: &[NativeSymbol],
 ) -> Result<Vec<NativeInitFunc>, C5Error> {
     let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
-    for &(shndx, is_destructor, priority) in init_array_sections {
+    for (shndx, table) in init_array_sections {
+        let shndx = *shndx;
         let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
         for rela_sh in shdrs
             .iter()
@@ -2368,8 +2378,7 @@ fn decode_init_arrays(
         entries.sort_by_key(|&(slot, _)| slot);
         for (_, text_off) in entries {
             init_funcs.push(NativeInitFunc {
-                is_destructor,
-                priority,
+                table: table.clone(),
                 unit_text_offset: text_off,
             });
         }
@@ -2942,46 +2951,37 @@ pub enum SectionFamily {
     Discard,
 }
 
-/// Recognise `.init_array` / `.fini_array` (and their
-/// `.<name>.NNNNN` priority variants) section names, returning
-/// `(is_destructor, priority)`. Returns `None` for any other name,
-/// including the `.rela.*` companions. A non-numeric or out-of-range
-/// suffix is treated as the bare (unprioritized) form.
-fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
+/// The table of an `.init_array` / `.fini_array` section, its
+/// `.NNNNN` priority variants and the C runtime's tables. `None` for any
+/// other name, including the `.rela.*` companions. A non-numeric or
+/// out-of-range suffix is treated as the bare (unprioritized) form.
+fn parse_init_array_section_name(name: &str) -> Option<InitTable> {
     if let Some(table) = crt_init_table(name) {
         return Some(table);
     }
-    let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
-        (false, r)
-    } else {
-        let r = name.strip_prefix(".fini_array")?;
-        (true, r)
-    };
+    let (table, rest): (fn(Option<u32>) -> InitTable, _) =
+        if let Some(r) = name.strip_prefix(".init_array") {
+            (InitTable::Init, r)
+        } else {
+            (InitTable::Fini, name.strip_prefix(".fini_array")?)
+        };
     if rest.is_empty() {
-        return Some((is_dtor, None));
+        return Some(table(None));
     }
-    // A `.NNNNN` priority suffix; anything else (e.g. `.init_arrayX`
-    // would already have failed the prefix, but guard the dotted form).
     let digits = rest.strip_prefix('.')?;
     match digits.parse::<u32>() {
-        Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
-        _ => Some((is_dtor, None)),
+        Ok(p) if p <= 65535 => Some(table(Some(p))),
+        _ => Some(table(None)),
     }
 }
 
-/// The C runtime's tables, `(destructor, priority)`: its C initializers
-/// (`.CRT$XI*`) run before the constructors (`.CRT$XC*`), and its
-/// terminators (`.CRT$XT*`) after the pre-terminators (`.CRT$XP*`), as the
-/// MSVC runtime calls them. The lowest priority runs first among
-/// constructors and last among destructors.
-pub(crate) fn crt_init_table(name: &str) -> Option<(bool, Option<u32>)> {
-    match name.strip_prefix(".CRT$X")?.as_bytes().first()? {
-        b'I' => Some((false, Some(0))),
-        b'C' => Some((false, None)),
-        b'P' => Some((true, None)),
-        b'T' => Some((true, Some(0))),
-        _ => None,
-    }
+/// The C runtime's tables the image calls: its C initializers
+/// (`.CRT$XI*`), constructors (`.CRT$XC*`), pre-terminators (`.CRT$XP*`),
+/// terminators (`.CRT$XT*`) and TLS callbacks (`.CRT$XL*`).
+pub(crate) fn crt_init_table(name: &str) -> Option<InitTable> {
+    let rest = name.strip_prefix(".CRT$X")?;
+    matches!(rest.as_bytes().first()?, b'I' | b'C' | b'P' | b'T' | b'L')
+        .then(|| InitTable::Crt(rest.to_string()))
 }
 
 pub(crate) use crate::c5::ident::is_c_identifier;

@@ -63,6 +63,7 @@ const WINDOWS_GAPS: &[(&str, &str)] = &[
     ("thread_local_tentative_array.c", TLS),
     ("thread_local_tentative_completed_later.c", TLS),
     ("thread_local_zero_images.c", TLS),
+    ("tls_callbacks_run.c", TLS),
     ("weak_thread_local_definition_by_symbol.c", TLS),
     ("seh_except_constant_filter.c", SEH),
     ("seh_except_filter.c", SEH),

@@ -9108,13 +9108,25 @@ fn init_array_round_trips_through_object() {
         };
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-        let ctors: alloc::vec::Vec<_> =
-            obj.init_funcs.iter().filter(|f| !f.is_destructor).collect();
-        let dtors: alloc::vec::Vec<_> = obj.init_funcs.iter().filter(|f| f.is_destructor).collect();
+        use crate::c5::linker::object::InitTable;
+        let ctors: alloc::vec::Vec<_> = (obj.init_funcs.iter())
+            .filter(|f| matches!(f.table, InitTable::Init(_)))
+            .collect();
+        let dtors: alloc::vec::Vec<_> = (obj.init_funcs.iter())
+            .filter(|f| matches!(f.table, InitTable::Fini(_)))
+            .collect();
         assert_eq!(ctors.len(), 1, "{target:?}: one constructor");
         assert_eq!(dtors.len(), 1, "{target:?}: one destructor");
-        assert!(ctors[0].priority.is_none(), "{target:?}: bare ctor");
-        assert_eq!(dtors[0].priority, Some(101), "{target:?}: dtor priority");
+        assert_eq!(
+            ctors[0].table,
+            InitTable::Init(None),
+            "{target:?}: bare ctor"
+        );
+        assert_eq!(
+            dtors[0].table,
+            InitTable::Fini(Some(101)),
+            "{target:?}: dtor priority"
+        );
         // Each entry resolves to a real function body inside `.text`.
         assert!((ctors[0].unit_text_offset as usize) < obj.text.len());
         assert!((dtors[0].unit_text_offset as usize) < obj.text.len());

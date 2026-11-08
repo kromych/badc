@@ -3888,6 +3888,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
+    ("tls_callbacks_run.c", 0),
     ("mm_malloc_name_macros.c", 42),
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),
@@ -4806,6 +4807,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
+    ("tls_callbacks_run.c", 0),
     ("mm_malloc_name_macros.c", 42),
     ("arm_neon_halfword_lanes.c", 42),
     ("arm_neon_word_lanes_and_structure_loads.c", 0),

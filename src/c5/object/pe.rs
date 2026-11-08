@@ -194,7 +194,7 @@ const CV_RSDS_HEADER_SIZE: usize = 24;
 const STB_LOCAL: u8 = 0;
 const STT_FUNC: u8 = 2;
 
-const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
+pub(crate) const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
 const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2047 * 4;
 
@@ -547,6 +547,39 @@ impl<'a> PeWriter<'a> {
         }
     }
 
+    /// The TLS directory: the link's `_tls_used`, else the writer's place
+    /// past the index slot.
+    fn tls_directory_rva(&self) -> Option<u32> {
+        if !tls_directory_present(self.build) {
+            return None;
+        }
+        Some(match self.build.init_fini_arrays.tls_directory {
+            Some(off) => self.data_off_to_rva(off as u32),
+            None => self.layout.data_rva + self.layout.tls.directory_offset_in_data,
+        })
+    }
+
+    /// `IMAGE_TLS_DIRECTORY64`. The whole thread-local block is the
+    /// template, with no zero fill.
+    fn tls_directory(&self) -> [u8; IMAGE_TLS_DIRECTORY64_SIZE as usize] {
+        let l = &self.layout;
+        let va = |rva: u32| IMAGE_BASE + rva as u64;
+        let start = va(l.data_rva + l.tls.tls_init_offset_in_data);
+        let callbacks = (self.build.init_fini_arrays.tls_callbacks)
+            .map_or(0, |off| va(self.data_off_to_rva(off as u32)));
+        let mut out = [0; IMAGE_TLS_DIRECTORY64_SIZE as usize];
+        let fields = [
+            start,
+            start + self.build.tls_data.len() as u64,
+            va(self.tls_index_rva()),
+            callbacks,
+        ];
+        for (k, f) in fields.into_iter().enumerate() {
+            out[k * 8..k * 8 + 8].copy_from_slice(&f.to_le_bytes());
+        }
+        out
+    }
+
     /// The data families and which sections the image carries, the DWARF
     /// payloads (built first so the section-header count is known before
     /// the layout; empty blobs are dropped, since the loader rejects two
@@ -686,8 +719,8 @@ impl<'a> PeWriter<'a> {
         }
         l.rdata_present = l.rdata_size > 0;
         l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
-            || !build.tls_data.is_empty();
-        l.reloc_present = !build.tls_data.is_empty()
+            || tls_directory_present(build);
+        l.reloc_present = tls_directory_present(build)
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
             || !build.label_relocs.is_empty()
@@ -969,7 +1002,8 @@ impl<'a> PeWriter<'a> {
                 l.data_rva,
                 &|off| self.data_off_to_rva(off),
                 &l.tls,
-                !build.tls_data.is_empty(),
+                self.tls_directory_rva(),
+                build.init_fini_arrays.tls_callbacks.is_some(),
                 &build.data_relocs,
                 &build.code_relocs,
                 &build.label_relocs,
@@ -1545,13 +1579,9 @@ impl<'a> PeWriter<'a> {
             l.coff_strtab_file_off,
             self.is_dll,
         );
-        let (tls_table_rva, tls_table_size) = if !build.tls_data.is_empty() {
-            (
-                l.data_rva + l.tls.directory_offset_in_data,
-                IMAGE_TLS_DIRECTORY64_SIZE,
-            )
-        } else {
-            (0, 0)
+        let (tls_table_rva, tls_table_size) = match self.tls_directory_rva() {
+            Some(rva) => (rva, IMAGE_TLS_DIRECTORY64_SIZE),
+            None => (0, 0),
         };
         let debug_dir = if l.debug_dir.is_empty() {
             (0, 0)
@@ -1775,9 +1805,14 @@ impl<'a> PeWriter<'a> {
 
     fn emit_sections(mut self) -> Result<Vec<u8>, C5Error> {
         let build = self.build;
-        let data = self.bake_data_image()?;
+        let mut data = self.bake_data_image()?;
         let l = &self.layout;
         let ro_len = l.ro_len;
+        if let Some(off) = build.init_fini_arrays.tls_directory {
+            let at = off as usize - ro_len as usize;
+            data[at..at + IMAGE_TLS_DIRECTORY64_SIZE as usize]
+                .copy_from_slice(&self.tls_directory());
+        }
         let mut out = core::mem::take(&mut self.out);
         pad_to(&mut out, l.text_file_off as usize)?;
         out.extend_from_slice(&self.text_bytes);
@@ -1836,26 +1871,23 @@ impl<'a> PeWriter<'a> {
             let head = (l.relro_size + l.data_head_len) as usize;
             out.extend_from_slice(&data[l.relro_size as usize..head]);
             tail(&mut out, l.data_tail, l.data_file_off, &data, l.relro_size)?;
-            if !build.tls_data.is_empty() {
+            if tls_directory_present(build) {
                 pad_to(
                     &mut out,
                     (l.data_file_off + l.tls.tls_index_offset_in_data) as usize,
                 )?;
                 out.extend_from_slice(&[0u8; 4]);
+                if build.init_fini_arrays.tls_directory.is_none() {
+                    pad_to(
+                        &mut out,
+                        (l.data_file_off + l.tls.directory_offset_in_data) as usize,
+                    )?;
+                    out.extend_from_slice(&self.tls_directory());
+                }
                 pad_to(
                     &mut out,
-                    (l.data_file_off + l.tls.directory_offset_in_data) as usize,
+                    (l.data_file_off + l.tls.tls_init_offset_in_data) as usize,
                 )?;
-                let tls_init_start_va =
-                    IMAGE_BASE + (l.data_rva + l.tls.tls_init_offset_in_data) as u64;
-                let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
-                let tls_index_va = IMAGE_BASE + self.tls_index_rva() as u64;
-                out.extend_from_slice(&tls_init_start_va.to_le_bytes());
-                out.extend_from_slice(&tls_init_end_va.to_le_bytes());
-                out.extend_from_slice(&tls_index_va.to_le_bytes());
-                out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
-                out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfZeroFill
-                out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
                 let tls = image::bake_tls_template(
                     "PE",
                     "the TLS template",
@@ -2067,7 +2099,8 @@ fn build_reloc_section(
     data_rva: u32,
     data_off_to_rva: &dyn Fn(u32) -> u32,
     tls_layout: &TlsLayout,
-    tls_present: bool,
+    tls_directory_rva: Option<u32>,
+    tls_callbacks: bool,
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
@@ -2083,13 +2116,12 @@ fn build_reloc_section(
             .or_default()
             .push((rva & 0xFFF, kind));
     };
-    if tls_present {
-        let dir_rva = data_rva + tls_layout.directory_offset_in_data;
-        // Sanity: the directory's three pointer fields must share a page.
-        debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
-        add(dir_rva, IMAGE_REL_BASED_DIR64); // StartAddressOfRawData
-        add(dir_rva + 8, IMAGE_REL_BASED_DIR64); // EndAddressOfRawData
-        add(dir_rva + 16, IMAGE_REL_BASED_DIR64); // AddressOfIndex
+    if let Some(dir_rva) = tls_directory_rva {
+        // The data, index and callback addresses.
+        let fields = if tls_callbacks { 4 } else { 3 };
+        for k in 0..fields {
+            add(dir_rva + k * 8, IMAGE_REL_BASED_DIR64);
+        }
         let template_rva = data_rva + tls_layout.tls_init_offset_in_data;
         for &(off, _) in tls_sites {
             add(template_rva + off as u32, IMAGE_REL_BASED_DIR64);
@@ -2151,8 +2183,15 @@ struct TlsLayout {
     tls_init_offset_in_data: u32,
 }
 
+/// Whether the image carries a TLS directory: for its thread-local data,
+/// its TLS callbacks, or a unit naming `_tls_used`.
+fn tls_directory_present(build: &Build) -> bool {
+    let f = &build.init_fini_arrays;
+    !build.tls_data.is_empty() || f.tls_callbacks.is_some() || f.tls_directory.is_some()
+}
+
 fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
-    if build.tls_data.is_empty() {
+    if !tls_directory_present(build) {
         return TlsLayout {
             tls_blob_size: 0,
             tls_index_offset_in_data: 0,
@@ -2163,7 +2202,11 @@ fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
     let user_data_end = writable_data_size;
     let tls_index_offset = round_up(user_data_end, 4);
     let directory_offset = round_up(tls_index_offset + 4, 8);
-    let tls_init_offset = directory_offset + IMAGE_TLS_DIRECTORY64_SIZE;
+    let own_directory = match build.init_fini_arrays.tls_directory {
+        Some(_) => 0,
+        None => IMAGE_TLS_DIRECTORY64_SIZE,
+    };
+    let tls_init_offset = directory_offset + own_directory;
     // We emit the entire `tls_data` as the template (see the long comment
     // in `write` next to the IMAGE_TLS_DIRECTORY64 emission), so the .data
     // tail contributed by TLS is `tls_data.len()` bytes regardless of

@@ -103,13 +103,6 @@ fn parity() -> Vec<(&'static str, i32)> {
         .collect()
 }
 
-/// On Windows the programs this module runs take turns. TODO(#1981): two
-/// running at once in one process can crash it.
-fn turn() -> Option<std::sync::MutexGuard<'static, ()>> {
-    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    cfg!(windows).then(|| TURN.lock().unwrap_or_else(|e| e.into_inner()))
-}
-
 /// Compile `src` and run it through the JIT with `args` as argv.
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
@@ -118,7 +111,6 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    let _turn = turn();
     jit_run(&program, &argv).expect("jit_run failed")
 }
 
@@ -131,7 +123,6 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
-    let _turn = turn();
     jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
 }
 
@@ -2107,7 +2098,6 @@ fn unsupported_fixtures_are_refused() {
             Ok(p) => p,
             Err(e) => return Some(format!("{name}: compile failed: {e}")),
         };
-        let _turn = turn();
         match jit_run(&program, &[name.to_string()]) {
             Ok(exit) => Some(format!("{name}: expected a refusal, ran and exited {exit}")),
             Err(e) => {
@@ -2382,7 +2372,6 @@ fn jit_reads_binding_data_global() {
                    return n > 0 ? 0 : 1;\n\
                }\n";
     let program = Compiler::new(src.to_string()).compile().expect("compile");
-    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-environ".to_string()]).expect("jit_run"),
         0
@@ -2403,7 +2392,6 @@ fn a_declared_c_library_function_runs_without_a_binding() {
     )
     .compile()
     .expect("compile");
-    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-unbound-call".to_string()]).expect("run"),
         0
@@ -2515,7 +2503,6 @@ fn atexit_handlers_run_on_libc_exit() {
         marker.display().to_string().replace('\\', "/")
     );
     let program = Compiler::new(src).compile().expect("compile");
-    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-exit".to_string()]).expect("jit_run"),
         42
@@ -2684,7 +2671,6 @@ fn staged_indirect_call_target_reaches_its_callee() {
     for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
         let optimize = opts.optimize;
         let opts = NativeOptions { fixed_regs, ..opts };
-        let _turn = turn();
         let exit = jit_run_with_options(&program, &[], opts, &mut |_| {})
             .expect("jit_run_with_options failed");
         assert_eq!(

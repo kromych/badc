@@ -29,7 +29,7 @@
 //! A writable "fake GOT" region holds one `u64` slot per resolved
 //! import. POSIX populates it with `dlopen(NULL, RTLD_NOW)` +
 //! `dlsym` for each symbol; Windows walks each declared dylib with
-//! `GetModuleHandleA` / `LoadLibraryA` + `GetProcAddress`. The
+//! `LoadLibraryA` + `GetProcAddress`. The
 //! codegen's existing GOT relocations get patched against this
 //! region using the same instruction-encoding logic the AOT writers
 //! use. There's no `_start` libc-exit fixup -- Rust catches `main`'s
@@ -1865,7 +1865,6 @@ mod jit_impl {
         fn GetCurrentProcess() -> *mut c_void;
         fn GetSystemInfo(info: *mut SystemInfo);
         fn LoadLibraryA(name: *const c_char) -> *mut c_void;
-        fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
         fn FreeLibrary(handle: *mut c_void) -> c_int;
         fn GetProcAddress(handle: *mut c_void, name: *const c_char) -> *mut c_void;
     }
@@ -2062,13 +2061,11 @@ mod jit_impl {
         // with MEM_RELEASE requires size = 0.
         len: usize,
         /// Loader handles for both import binding and extern-data
-        /// resolution, paired with whether Drop must release the handle.
-        /// POSIX opens each with `dlopen` (owned). Windows takes a
-        /// non-owned `GetModuleHandleA` handle for an already-loaded
-        /// module and an owned `LoadLibraryA` handle otherwise; a
-        /// `GetModuleHandleA` handle carries no refcount, so it must not
-        /// be freed. Both bind and resolve search the full set.
-        lib_handles: Vec<(*mut c_void, bool)>,
+        /// resolution, each holding a reference Drop releases: `dlopen`,
+        /// `LoadLibraryA`. A program's modules stay loaded while it runs,
+        /// whatever another program's region releases. Both bind and
+        /// resolve search the full set.
+        lib_handles: Vec<*mut c_void>,
     }
 
     impl GotRegion {
@@ -2157,7 +2154,7 @@ mod jit_impl {
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
                 ));
             }
-            self.lib_handles.push((handle, true));
+            self.lib_handles.push(handle);
 
             // `dlopen(NULL)` sees only what the host process already
             // loaded, which is not every library the unit's bindings
@@ -2174,7 +2171,7 @@ mod jit_impl {
                 if let Ok(cs) = CString::new(d.path.as_str()) {
                     let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
                     if !h.is_null() {
-                        self.lib_handles.push((h, true));
+                        self.lib_handles.push(h);
                     }
                 }
             }
@@ -2200,7 +2197,7 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    for (h, _) in &self.lib_handles {
+                    for h in &self.lib_handles {
                         let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
                         if a != 0 {
                             addr = a;
@@ -2236,39 +2233,27 @@ mod jit_impl {
                         dylib.path
                     ))
                 })?;
-                // GetModuleHandleA first -- doesn't increment the
-                // refcount on already-loaded modules (kernel32, the
-                // process itself). LoadLibraryA as a fallback to
-                // bring in modules that weren't pre-loaded.
-                let mut h = unsafe { GetModuleHandleA(cs.as_ptr()) };
-                let mut owned = false;
+                // A counted reference, also to a module already loaded: an
+                // uncounted one would let another program's release unload
+                // the module under this one.
+                let h = unsafe { LoadLibraryA(cs.as_ptr()) };
                 if h.is_null() {
-                    h = unsafe { LoadLibraryA(cs.as_ptr()) };
-                    if h.is_null() {
-                        return Err(C5Error::internal(format!(
-                            "JIT: LoadLibraryA(\"{}\") failed: {}",
-                            dylib.path,
-                            std::io::Error::last_os_error()
-                        )));
-                    }
-                    owned = true;
+                    return Err(C5Error::internal(format!(
+                        "JIT: LoadLibraryA(\"{}\") failed: {}",
+                        dylib.path,
+                        std::io::Error::last_os_error()
+                    )));
                 }
                 handles.push(h);
                 // Every handle joins the shared set so extern-data
-                // resolution searches exactly what import binding used;
-                // `owned` gates release in Drop.
-                self.lib_handles.push((h, owned));
+                // resolution searches exactly what import binding used.
+                self.lib_handles.push(h);
             }
             // The C runtime joins the set as `dlopen(NULL)` does on POSIX,
             // for the calls `resolve_symbol` answers that no binding names.
-            let crt = c"msvcrt.dll".as_ptr();
-            let mut h = unsafe { GetModuleHandleA(crt) };
-            let owned = h.is_null();
-            if owned {
-                h = unsafe { LoadLibraryA(crt) };
-            }
+            let h = unsafe { LoadLibraryA(c"msvcrt.dll".as_ptr()) };
             if !h.is_null() {
-                self.lib_handles.push((h, owned));
+                self.lib_handles.push(h);
             }
             for (i, imp) in imports.imports.iter().enumerate() {
                 let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
@@ -2327,7 +2312,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &(h, _) in &self.lib_handles {
+            for &h in &self.lib_handles {
                 let a = unsafe { dlsym(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -2337,8 +2322,8 @@ mod jit_impl {
         }
 
         /// Windows resolver over the same handle set `bind_imports`
-        /// populated (both `GetModuleHandleA` and `LoadLibraryA`), so an
-        /// extern-data symbol in an already-loaded module resolves. 0
+        /// populated, so an extern-data symbol in an already-loaded module
+        /// resolves. 0
         /// means unresolved and the caller errors.
         #[cfg(target_os = "windows")]
         fn resolve_symbol(&self, name: &str) -> u64 {
@@ -2346,7 +2331,7 @@ mod jit_impl {
                 Ok(cs) => cs,
                 Err(_) => return 0,
             };
-            for &(h, _) in &self.lib_handles {
+            for &h in &self.lib_handles {
                 let a = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
                 if a != 0 {
                     return a;
@@ -2364,7 +2349,7 @@ mod jit_impl {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                     fn dlclose(handle: *mut c_void) -> c_int;
                 }
-                for &(h, _) in &self.lib_handles {
+                for &h in &self.lib_handles {
                     if !h.is_null() {
                         dlclose(h);
                     }
@@ -2373,12 +2358,8 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                // Release only owned handles; a `GetModuleHandleA` handle
-                // carries no refcount to drop.
-                for &(h, owned) in &self.lib_handles {
-                    if owned && !h.is_null() {
-                        FreeLibrary(h);
-                    }
+                for &h in &self.lib_handles {
+                    FreeLibrary(h);
                 }
                 VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }

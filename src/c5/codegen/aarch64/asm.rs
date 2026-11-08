@@ -19,6 +19,26 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+/// The lane of an operand-reference element: a literal, or `[%N]` / `[%cN]`,
+/// the constant of `i` operand N, which the emitter bounds by the element.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Lane {
+    At(u8),
+    Operand(u8),
+}
+
+/// Parse the text between the brackets of a lane: a literal below `16 >>
+/// size`, or an operand reference.
+fn parse_lane(lane: &str, size: u8) -> Option<Lane> {
+    let lane = lane.trim();
+    if let Some(r) = lane.strip_prefix('%') {
+        let digits = r.strip_prefix('c').unwrap_or(r);
+        return digits.parse().ok().map(Lane::Operand);
+    }
+    let index: u8 = lane.parse().ok()?;
+    (index < (16u8 >> size)).then_some(Lane::At(index))
+}
+
 /// One symbolic operand of a template instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AsmOpndA64 {
@@ -30,7 +50,7 @@ pub(crate) enum AsmOpndA64 {
     RefVec { idx: u8, size: u8, q: bool },
     /// `%N.T[i]` (e.g. `%1.d[0]`): one lane of operand N, the element view the
     /// lane-transfer forms take. Valid for `w`-constraint operands only.
-    RefVecElem { idx: u8, size: u8, index: u8 },
+    RefVecElem { idx: u8, size: u8, index: Lane },
     /// `%qN`: operand N's 128-bit `q` register view (`w` operands).
     RefQ(u8),
     /// `%bN` / `%hN`: operand N's byte or half view (`size` 0 or 1) of a `w`
@@ -41,7 +61,7 @@ pub(crate) enum AsmOpndA64 {
     RefVecList { idx: u8, size: u8, q: bool },
     /// `{%N.T}[i]`: a one-register lane list whose register is operand N, the
     /// operand the single-structure load/stores take.
-    RefVecListLane { idx: u8, size: u8, index: u8 },
+    RefVecListLane { idx: u8, size: u8, index: Lane },
     /// `%cN` / `%PN`: operand N substituted as a bare constant, without
     /// immediate syntax. Valid on an `i`-class operand; the emitter
     /// resolves the compile-time constant value.
@@ -1053,6 +1073,16 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return parse_mem(inner, true);
     }
+    // `#%N` / `#%cN`: the optional `#` before an operand reference, which an
+    // `i` operand substitutes as its constant.
+    if let Some(rest) = tok.strip_prefix('#')
+        && rest.starts_with('%')
+    {
+        return match parse_operand(rest)? {
+            r @ (AsmOpndA64::Ref { is64: None, .. } | AsmOpndA64::RefConst(_)) => Ok(r),
+            _ => Err(format!("inline asm: bad immediate `{tok}`")),
+        };
+    }
     // GNU as makes the `#` optional on an immediate, including one written as a
     // relocation specifier (`#:lo12:sym`), so a `:`-led remainder falls through
     // to the specifier handling below.
@@ -1134,13 +1164,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 let Some(size) = element_size(elem.trim()) else {
                     return Err(format!("inline asm: bad vector element `{tok}`"));
                 };
-                let index: u8 = lane
-                    .trim()
-                    .parse()
-                    .map_err(|_| format!("inline asm: bad lane index `{tok}`"))?;
-                if index >= (16u8 >> size) {
-                    return Err(format!("inline asm: lane index out of range `{tok}`"));
-                }
+                let Some(index) = parse_lane(lane, size) else {
+                    return Err(format!("inline asm: bad lane index `{tok}`"));
+                };
                 return Ok(AsmOpndA64::RefVecElem { idx, size, index });
             }
             let Some((size, q)) = arrangement(arr) else {
@@ -1234,14 +1260,19 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     // `{%N.T}[i]`: the same list with a lane, the single-structure operand. A
     // list of several operand references has no consecutive-register guarantee,
     // so the element letter must be the whole brace body.
-    if let Some((body, size, index)) = split_lane_list(tok)
+    if let Some((body, lane_part)) = tok.strip_prefix('{').and_then(|t| t.split_once('}'))
         && let Some((digits, letter)) = body
             .trim()
             .strip_prefix('%')
             .and_then(|r| r.split_once('.'))
         && !digits.is_empty()
         && digits.bytes().all(|c| c.is_ascii_digit())
-        && element_size(letter.trim()) == Some(size)
+        && let Some(size) = element_size(letter.trim())
+        && let Some(lane) = lane_part
+            .trim()
+            .strip_prefix('[')
+            .and_then(|l| l.strip_suffix(']'))
+        && let Some(index) = parse_lane(lane, size)
         && let Ok(idx) = digits.parse::<u8>()
     {
         return Ok(AsmOpndA64::RefVecListLane { idx, size, index });
@@ -2295,6 +2326,15 @@ mod tests {
     }
 
     #[test]
+    fn hash_before_an_operand_reference_is_the_reference() {
+        let insns =
+            parse_template(b"ushr %0.8h, %1.8h, #%2; ext %0.16b, %1.16b, %2.16b, #%c3").unwrap();
+        assert_eq!(insns[0].operands[2], AsmOpndA64::Ref { idx: 2, is64: None });
+        assert_eq!(insns[1].operands[3], AsmOpndA64::RefConst(3));
+        assert!(parse_template(b"ushr %0.8h, %1.8h, #%2.8h").is_err());
+    }
+
+    #[test]
     fn barrier_encodings() {
         // Every dmb/dsb domain option, isb, and clrex encode to their
         // constant words. Expected words from
@@ -2950,7 +2990,7 @@ mod tests {
             AsmOpndA64::RefVecListLane {
                 idx: 0,
                 size: 3,
-                index: 1
+                index: Lane::At(1)
             }
         );
         assert_eq!(
@@ -2958,9 +2998,28 @@ mod tests {
             AsmOpndA64::RefVecElem {
                 idx: 0,
                 size: 2,
-                index: 3
+                index: Lane::At(3)
             }
         );
+        // The lane may be an operand reference, bounded at emit time.
+        let insns = parse_template(b"ld1 {%0.h}[%2], [%1]; dup %0.4s, %1.s[%c3]").unwrap();
+        assert_eq!(
+            insns[0].operands[0],
+            AsmOpndA64::RefVecListLane {
+                idx: 0,
+                size: 1,
+                index: Lane::Operand(2)
+            }
+        );
+        assert_eq!(
+            insns[1].operands[1],
+            AsmOpndA64::RefVecElem {
+                idx: 1,
+                size: 2,
+                index: Lane::Operand(3)
+            }
+        );
+        assert!(parse_template(b"umov %w0, %1.s[4]").is_err());
     }
 
     #[test]

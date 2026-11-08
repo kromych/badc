@@ -627,6 +627,22 @@ impl AsmOperands<'_> {
         })
     }
 
+    /// A lane index, an `i` operand's constant bounded by the element size.
+    fn lane(&self, lane: super::asm::Lane, size: u8) -> Result<u8, alloc::string::String> {
+        match lane {
+            super::asm::Lane::At(i) => Ok(i),
+            super::asm::Lane::Operand(idx) => match self.const_of(idx) {
+                Some(v) if (0..(16i64 >> size)).contains(&v) => Ok(v as u8),
+                Some(v) => Err(alloc::format!(
+                    "aarch64 inline asm: lane {v} of operand `%{idx}` is out of range"
+                )),
+                None => Err(alloc::format!(
+                    "aarch64 inline asm: the lane `%{idx}` is not a constant"
+                )),
+            },
+        }
+    }
+
     /// Resolve one symbolic operand to a table operand; label references
     /// have no table form and are handled by the branch path.
     fn conv(
@@ -661,7 +677,7 @@ impl AsmOperands<'_> {
                 Opnd::VecElem {
                     num: r,
                     size,
-                    index,
+                    index: self.lane(index, size)?,
                 }
             }
             AsmOpndA64::RefVecList { idx, size, q } => {
@@ -679,7 +695,7 @@ impl AsmOperands<'_> {
                     first: r,
                     count: 1,
                     size,
-                    index,
+                    index: self.lane(index, size)?,
                 }
             }
             AsmOpndA64::RefQ(idx) => {

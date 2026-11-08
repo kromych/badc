@@ -1482,6 +1482,37 @@ fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     assert!(has(0xD45E_0000), "expected `hlt 0xf000` (0xD45E0000)");
 }
 
+/// `#%N` is GAS's optional `#` before an `i` operand's constant, as gcc
+/// and clang print it: `ushr v1.8h, v2.8h, #3` is 0x6F1D0441 and `ext
+/// v1.16b, v2.16b, v3.16b, #4` is 0x6E032041.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_hash_before_an_immediate_operand_encodes_its_value() {
+    use crate::{NativeOptions, Target};
+    let src = "void f(void){ __asm__ volatile(\"ushr v1.8h, v2.8h, #%0\" :: \"i\"(3)); \
+        __asm__ volatile(\"ext v1.16b, v2.16b, v3.16b, #%c0\" :: \"i\"(2 * sizeof(short))); } \
+        int main(void){ return 0; }";
+    let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit");
+    let has = |word: u32| {
+        bytes
+            .windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == word)
+    };
+    assert!(has(0x6F1D_0441), "expected `ushr v1.8h, v2.8h, #3`");
+    assert!(
+        has(0x6E03_2041),
+        "expected `ext v1.16b, v2.16b, v3.16b, #4`"
+    );
+}
+
 #[test]
 #[cfg(feature = "native-emit")]
 fn fixed_register_input_output_pair_is_accepted() {

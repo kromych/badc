@@ -2169,6 +2169,24 @@ fn unsupported_fixtures_are_refused() {
     );
 }
 
+/// The C runtime's `.CRT$X*` tables run under the JIT as in an image: the
+/// C initializers, then the constructors, each in section-name order.
+#[test]
+fn crt_tables_run_in_section_name_order() {
+    let src = "#pragma section(\".CRT$XCU\", read)\n\
+               #pragma section(\".CRT$XIU\", read)\n\
+               #pragma section(\".CRT$XCA\", read)\n\
+               static int order;\n\
+               static void c(void) { order = order * 10 + 2; }\n\
+               static void c0(void) { order = order * 10 + 3; }\n\
+               static int i(void) { order = order * 10 + 1; return 0; }\n\
+               __declspec(allocate(\".CRT$XCU\")) void (*pc)(void) = c;\n\
+               __declspec(allocate(\".CRT$XIU\")) int (*pi)(void) = i;\n\
+               __declspec(allocate(\".CRT$XCA\")) void (*pc0)(void) = c0;\n\
+               int main(void) { return order == 132 ? 0 : 1; }\n";
+    assert_eq!(jit_exit(src, &["crt"]), 0);
+}
+
 #[test]
 fn fixture_parity() {
     let table = parity();

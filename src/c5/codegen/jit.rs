@@ -568,7 +568,10 @@ mod jit_impl {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             "exit" => jit_exit_thunk as *const () as usize as u64,
-            "_exit" | "_Exit" => jit_immediate_exit_thunk as *const () as usize as u64,
+            // `ExitProcess` runs none of the program's atexit handlers.
+            "_exit" | "_Exit" | "ExitProcess" => {
+                jit_immediate_exit_thunk as *const () as usize as u64
+            }
             "quick_exit" => jit_quick_exit_thunk as *const () as usize as u64,
             "at_quick_exit" | "__cxa_at_quick_exit" => {
                 jit_at_quick_exit_thunk as *const () as usize as u64
@@ -1088,8 +1091,51 @@ mod jit_impl {
             v.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
             v.into_iter().map(|(_, addr)| addr).collect()
         };
-        let init_addrs = ordered_addrs(false);
-        let fini_addrs = ordered_addrs(true);
+        // The C runtime's `.CRT$X*` tables, ordered as link.exe orders a
+        // grouped section: by section name, then unit and slot. The
+        // initializers and constructors run ahead of the constructors above,
+        // the pre-terminators and terminators after the destructors, each
+        // table forward as the MSVC runtime calls it.
+        let mut crt: Vec<(&str, usize)> = Vec::new();
+        for (unit, at) in bound.iter().zip(&placed) {
+            let mut tables: Vec<_> = (unit.program.symbols.iter())
+                .filter(|s| s.class == crate::c5::token::Token::Glo as i64 && s.defined_here)
+                .filter_map(|s| Some((s.section_name.as_deref()?.strip_prefix(".CRT$X")?, s)))
+                .collect();
+            if let Some((t, _)) = tables.iter().find(|(t, _)| t.starts_with('L')) {
+                return Err(C5Error::hard(
+                    crate::c5::diag::Code::UNSUPPORTED,
+                    format!(
+                        "JIT: `.CRT$X{t}` holds TLS callbacks, which need an image's TLS directory"
+                    ),
+                ));
+            }
+            tables.retain(|(t, _)| matches!(t.as_bytes().first(), Some(b'I' | b'C' | b'P' | b'T')));
+            tables.sort_by_key(|(_, s)| s.val);
+            for (t, s) in tables {
+                for k in 0..s.data_byte_size.max(0) as usize / 8 {
+                    let slot = (at.data_vmaddr as usize + s.val as usize + k * 8) as *const usize;
+                    // SAFETY: the slot lies in the unit's mapped, patched data.
+                    let f = unsafe { slot.read_unaligned() };
+                    if f != 0 {
+                        crt.push((t, f));
+                    }
+                }
+            }
+        }
+        crt.sort_by_key(|&(t, _)| t);
+        let table = |t: u8| {
+            (crt.iter())
+                .filter(move |e| e.0.as_bytes()[0] == t)
+                .map(|e| e.1)
+        };
+        let init_addrs: Vec<usize> = (table(b'I').chain(table(b'C')))
+            .chain(ordered_addrs(false))
+            .collect();
+        let crt_exit: Vec<usize> = table(b'P').chain(table(b'T')).collect();
+        let fini_addrs: Vec<usize> = (crt_exit.into_iter().rev())
+            .chain(ordered_addrs(true))
+            .collect();
 
         let entry_ptr = unsafe { placed[0].code.as_ptr().add(bound[0].build.entry_offset) };
         // SAFETY: the JIT'd main was lowered with extern "C" / System V

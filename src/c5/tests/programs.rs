@@ -2171,6 +2171,11 @@ fn msvc_intrinsics_check_their_operands() {
             Target::LinuxX64,
             "unknown",
         ),
+        (
+            "#pragma function(__noop)\nvoid f(void) { __noop; }",
+            x64,
+            "undefined variable __noop",
+        ),
     ];
     for (src, t, needle) in cases {
         let src = format!("{src}\nint main(void) {{ return 0; }}\n");

@@ -230,11 +230,23 @@ impl Compiler {
             }
         }
         self.next()?;
+        self.ms_noop_value();
+        Ok(())
+    }
+
+    /// The value of `__noop`, called or named alone as MSVC accepts it: the
+    /// `int` 0.
+    pub(super) fn ms_noop_value(&mut self) {
         self.mark_emit_other();
         let int = Ty::Int as i64;
         self.ty = int;
         self.ast_acc = Some(self.ast_node(Expr::IntLit { val: 0, ty: int }));
-        Ok(())
+    }
+
+    /// Whether the undeclared identifier `name` is `__noop`.
+    pub(super) fn is_bare_noop(&self, name: &str) -> bool {
+        self.is_call_site_intrinsic(name)
+            && ms_intrinsic::lookup(name, self.target).is_some_and(|i| i.op == Op::Noop)
     }
 
     /// `__va_start(&ap, ...)`, the `(` consumed, as clang lowers it: the first

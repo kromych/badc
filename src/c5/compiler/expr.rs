@@ -2893,6 +2893,9 @@ impl Compiler {
         } else if self.symbols[id_idx].class == Token::Glo as i64 {
             self.emit_data_imm(self.symbols[id_idx].val);
             self.glo_imm_refs.push(id_idx);
+        } else if self.is_bare_noop(&self.symbols[id_idx].name) {
+            self.ms_noop_value();
+            return Ok(());
         } else {
             return Err(self.compile_err(
                 Code::UNDECLARED_IDENTIFIER,

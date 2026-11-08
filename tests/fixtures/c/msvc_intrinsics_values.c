@@ -1,9 +1,9 @@
 // MSVC's scalar intrinsics through <intrin.h>, with the values MSVC
 // documents: the bit scans, counts and rotates, the bit tests, the
 // multiply-high and 128-bit shift forms, the Interlocked family and the
-// volatile accesses. `__assume` and `__noop` evaluate nothing. Each
-// group sets its bit on a mismatch; off the PE targets the unit checks
-// nothing.
+// volatile accesses. `__assume` and `__noop`, called or bare, evaluate
+// nothing. Each group sets its bit on a mismatch; off the PE targets the
+// unit checks nothing.
 
 #ifdef _WIN32
 #include <intrin.h>
@@ -109,7 +109,8 @@ static int accesses(void) {
     if (__iso_volatile_load32(&i32) != -7 || __iso_volatile_load8(&i8) != -3) r |= 8192;
     int n = 0;
     __assume(n++ == 0);
-    if (__noop(n++, 1) != 0 || n != 0) r |= 16384;
+    __noop;
+    if (__noop(n++, 1) != 0 || __noop != 0 || n != 0) r |= 16384;
     return r;
 }
 

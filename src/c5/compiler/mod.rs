@@ -1564,8 +1564,8 @@ pub(in crate::c5::compiler) struct Pending {
     /// `register` without the suffix stays the historical no-op hint.
     pub saw_register_storage: bool,
     /// Set by an `__auto_type` base-type parse: the declaration must
-    /// hold exactly one declarator, so the declarator loop rejects a
-    /// `,` while this is set. Cleared when the declaration ends.
+    /// hold exactly one declarator. The declaration takes it after its
+    /// specifiers, before an initializer can declare anything.
     pub auto_type_single_declarator: bool,
 }
 

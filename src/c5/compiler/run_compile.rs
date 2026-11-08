@@ -564,9 +564,10 @@ impl Compiler {
             base_fn_type: self.pending.fn_ptr_type.clone(),
             spec_attrs: self.pending.attrs.clone(),
         };
+        let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
-            if self.pending.auto_type_single_declarator && declarator_count > 0 {
+            if single_declarator && declarator_count > 0 {
                 return Err(self.compile_err(
                     Code::SYNTAX,
                     "`__auto_type` declaration takes a single declarator",

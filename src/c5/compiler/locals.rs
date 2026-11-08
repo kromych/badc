@@ -490,6 +490,9 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_fn_type = self.pending.fn_ptr_type.clone();
         let spec_attrs = self.pending.attrs.clone();
+        // An initializer may hold declarations of its own (a statement
+        // expression), so the declaration takes the flag before any.
+        let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
@@ -684,7 +687,7 @@ impl Compiler {
                 self.register_cleanup_var(loc_idx, fn_sym);
             }
 
-            if self.pending.auto_type_single_declarator && self.lex.tk == ',' {
+            if single_declarator && self.lex.tk == ',' {
                 return Err(self.compile_err(
                     Code::SYNTAX,
                     "`__auto_type` declaration takes a single declarator",
@@ -693,7 +696,6 @@ impl Compiler {
             self.accept_declarator_separator()?;
         }
         self.next()?;
-        self.pending.auto_type_single_declarator = false;
         Ok(())
     }
 

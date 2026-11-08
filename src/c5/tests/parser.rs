@@ -2477,6 +2477,10 @@ fn auto_type_constraints() {
         "single declarator",
     );
     expect_compile_error(
+        "int main(void) { __auto_type r = ({ __auto_type x = 1, y = 2; x; }); return r; }",
+        "single declarator",
+    );
+    expect_compile_error(
         "int main(void) { __auto_type *p = 0; return 0; }",
         "plain identifier declarator",
     );

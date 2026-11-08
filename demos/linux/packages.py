@@ -2680,6 +2680,31 @@ def run_guest_script(args, vm: Target, failures: list[str]) -> dict:
     return out
 
 
+# Seconds systemd waits for a device before failing its unit, on the badc
+# kernel's command line under tcg: an emulated boot reaches udev's coldplug
+# a minute or more after KVM does, past systemd's default of 90 s.
+TCG_DEVICE_TIMEOUT = 600
+
+
+def tcg_device_timeout_command(distro: str, release: str) -> str:
+    """The root command that gives the badc kernel's boot entry
+    TCG_DEVICE_TIMEOUT: grubby on Fedora's BLS entry, a grub drop-in and
+    update-grub on Debian."""
+    arg = f"systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"
+    if distro == "fedora":
+        return f"grubby --update-kernel=/boot/vmlinuz-{release} --args={arg}"
+    line = f'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT {arg}"'
+    script = (f"mkdir -p /etc/default/grub.d && printf '%s\\n' {shlex.quote(line)} "
+              f"> /etc/default/grub.d/99-badc-tcg.cfg && update-grub")
+    return f"sh -c {shlex.quote(script)}"
+
+
+def stock_boot_failure(image: str, accel: str, reason: str) -> str:
+    """A failure of the stock image's own boot, which leaves the package
+    unbooted: the run measured the machine, not badc."""
+    return f"not measured: the stock image {image} did not boot under {accel}: {reason}"
+
+
 def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
     image = ensure_image(args, arch)
     accel = resolve_accel(args, arch)
@@ -2718,7 +2743,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                     "installed": [{"name": p.name, "sha256": sha256_of(p)}
                                   for p in packages]}
     try:
-        boot_id = vm.wait_ssh(args.vm_timeout)
+        try:
+            boot_id = vm.wait_ssh(args.vm_timeout)
+        except TargetError as e:
+            raise TargetError(stock_boot_failure(image.name, accel, str(e))) from e
         log("stock system up; capturing baseline")
         # Turn on core capture on the stock system; the sysctl.d / limits.d /
         # systemd drop-in make it persist into the badc kernel's boot.
@@ -2769,6 +2797,10 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                             f"{result['install_tail'][-300:]}")
             return result
 
+        if accel == "tcg":
+            vm.ssh(tcg_device_timeout_command(arch["distro"], args.release),
+                   sudo=True, check=True)
+            result["device_timeout"] = TCG_DEVICE_TIMEOUT
         # Make the new kernel the default entry. Debian's update-grub sorts
         # by version, which is asserted rather than assumed; Fedora's BLS
         # default is set explicitly.
@@ -3697,6 +3729,14 @@ def _self_test() -> int:
                         "Entering emergency mode.\r\n")[0] == "panic"
 
     _self_test_wait()
+    fedora = tcg_device_timeout_command("fedora", "7.2.9")
+    assert fedora == ("grubby --update-kernel=/boot/vmlinuz-7.2.9 "
+                      f"--args=systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"), fedora
+    debian = shlex.split(tcg_device_timeout_command("ubuntu", "7.2.9"))
+    assert debian[:2] == ["sh", "-c"], debian
+    assert debian[2].endswith("/etc/default/grub.d/99-badc-tcg.cfg && update-grub"), debian
+    assert f"device_timeout_sec={TCG_DEVICE_TIMEOUT}" in debian[2], debian
+    assert stock_boot_failure("f.qcow2", "tcg", "timed out").startswith("not measured: ")
 
     exercise.self_test()
     print("linux packages: self-test ok", flush=True)

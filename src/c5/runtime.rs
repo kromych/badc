@@ -55,6 +55,18 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_LIBC
 }
 
+/// The name an embedded source compiles under: its registry directory
+/// (`runtime`, `compiler-rt` or `libc`) and file name, joined with the
+/// target's path separator. Debug info and link maps show it.
+pub fn embedded_source_label(
+    dir: &str,
+    name: &str,
+    target: crate::c5::Target,
+) -> alloc::string::String {
+    let sep = if target.is_windows() { '\\' } else { '/' };
+    alloc::format!("{dir}{sep}{name}")
+}
+
 pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("dirent_ext.c", include_str!("../../libc/lib/dirent_ext.c")),
     ("dlfcn_ext.c", include_str!("../../libc/lib/dlfcn_ext.c")),

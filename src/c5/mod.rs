@@ -112,7 +112,7 @@ pub use linker::{read_archive_at, read_indexed_archive_at};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime};
+pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime, embedded_source_label};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

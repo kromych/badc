@@ -9,6 +9,7 @@ use crate::c5::codegen::Target;
 use crate::c5::compiler::{CompileOptions, Compiler};
 use crate::c5::error::C5Error;
 use crate::c5::program::Program;
+use crate::c5::runtime::embedded_source_label;
 
 /// One source, compiled, with the external names it defines.
 pub(crate) struct Member {
@@ -36,7 +37,7 @@ impl OnDemandSources {
                     .iter()
                     .map(|e| ("libc", e)),
             )
-            .map(|(dir, (name, body))| (alloc::format!("<{dir}/{name}>"), *body))
+            .map(|(dir, (name, body))| (embedded_source_label(dir, name, target), *body))
             .collect();
         Self {
             target,

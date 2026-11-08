@@ -411,11 +411,11 @@ impl EmbeddedSources<'_> {
         }
         // An installed runtime source (`<badc-home>/lib/<name>`) replaces
         // the embedded body on the header overlay's terms: the unit keeps
-        // the bare `<runtime/<name>>` label, so the DWARF unit name, the
-        // line table and the link map carry no path of the build machine.
+        // the embedded source's label, so the DWARF unit name, the line
+        // table and the link map carry no path of the build machine.
         let runtime_dir = self.cli.badc_home.as_ref().map(|h| h.join("lib"));
         for (name, body) in badc::embedded_runtime().iter() {
-            let label = format!("<runtime/{name}>");
+            let label = badc::embedded_source_label("runtime", name, self.cli.target);
             let installed = runtime_dir.as_ref().map(|d| d.join(name));
             let src = match &installed {
                 Some(p) if p.is_file() => match std::fs::read_to_string(p) {
@@ -467,12 +467,11 @@ impl EmbeddedSources<'_> {
     /// The pool joins `slots` as its last archive.
     fn push_pool(&mut self, slots: &mut Vec<Slot>, stats: &mut LinkStats) {
         self.pool_slot = Some(slots.len());
+        let target = self.cli.target;
+        let label = |dir, name| badc::embedded_source_label(dir, name, target);
         let sources: Vec<(String, &str)> = (badc::embedded_compiler_rt().iter())
-            .map(|(name, body)| (format!("<compiler-rt/{name}>"), *body))
-            .chain(
-                (badc::embedded_libc().iter())
-                    .map(|(name, body)| (format!("<libc/{name}>"), *body)),
-            )
+            .map(|(name, body)| (label("compiler-rt", name), *body))
+            .chain((badc::embedded_libc().iter()).map(|(name, body)| (label("libc", name), *body)))
             .collect();
         // Each source compiles alone; the objects join in source order.
         let this = &*self;

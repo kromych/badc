@@ -473,6 +473,26 @@ fn a_structure_without_members_links_with_its_pdb() {
     }
 }
 
+/// An embedded runtime source is a module named by a relative path with
+/// the target's separator, as the debugger shows a source location.
+#[test]
+fn an_embedded_source_module_is_named_by_a_relative_path() {
+    let source = "#include <stdio.h>\nint main(void) { printf(\"%5.2f\\n\", 1.5); return 0; }\n";
+    for (target, ..) in TARGETS {
+        let dir = TempDir::new(&format!("badc-pdb-embedded-{target}"));
+        link_source(&dir, target, &["-g"], source);
+        let s = streams(&std::fs::read(dir.join("a.pdb")).expect("a.pdb"));
+        let (_, mods) = modules(&s[3]);
+        let names: Vec<&str> = mods.iter().map(|m| m.name.as_str()).collect();
+        assert!(names.contains(&"runtime\\runtime.c"), "{target}: {names:?}");
+        assert!(names.contains(&"libc\\printf_ext.c"), "{target}: {names:?}");
+        assert!(
+            !names.iter().any(|n| n.contains('<')),
+            "{target}: {names:?}"
+        );
+    }
+}
+
 #[test]
 fn no_pdb_without_debug_info() {
     for (target, ..) in TARGETS {

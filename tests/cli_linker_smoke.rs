@@ -19335,6 +19335,11 @@ fn map_file_reports_sections_and_archive_members() {
         map.contains("OUTPUT(prog elf64-x86-64)"),
         "OUTPUT line missing:\n{map}"
     );
+    // The embedded runtime is named by a relative path.
+    assert!(
+        map.contains("\nLOAD runtime/runtime.c\n"),
+        "runtime LOAD line missing:\n{map}"
+    );
 
     // The two-arg `-Map FILE` form and `--print-map` (stdout) coexist.
     // `-M` is gcc's dependency-output flag, not the map.

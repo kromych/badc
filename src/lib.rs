@@ -166,8 +166,8 @@ pub use c5::is_resource_file;
 #[cfg(feature = "full")]
 pub use c5::{
     ArchiveMember, Binding, DylibSpec, IndexedArchive, Linkage, Subsystem, elf_archive_symbols,
-    embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, jit_run_with_sources,
-    read_archive, write_archive,
+    embedded_compiler_rt, embedded_libc, embedded_runtime, embedded_source_label,
+    is_arm64x_archive, jit_run_with_sources, read_archive, write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]

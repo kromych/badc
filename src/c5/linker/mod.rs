@@ -149,6 +149,7 @@ pub use link::{
     Preemption, SectionContribution, SectionMap, copy_candidates, emit_aarch64_plt, emit_plt_for,
     emit_x86_64_plt, link_native_objects, link_native_objects_with,
     link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
+    pe_link_supplies_tls_support,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

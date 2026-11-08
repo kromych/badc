@@ -7654,6 +7654,55 @@ fn seh_directives_in_an_assembly_unit_unwind_its_function() {
     );
 }
 
+/// A PE link supplies the image's TLS index slot and directory itself, so a
+/// library member defining `_tls_index` or `_tls_used` (the MSVC runtime's
+/// `tlssup.obj`) is not pulled for them: here the member also defines
+/// `main`, which would collide.
+#[test]
+fn a_library_member_is_not_pulled_for_the_tls_support() {
+    let dir = tempdir("pe-tls-support");
+    write_source(
+        &dir,
+        "tlssup.c",
+        "int _tls_index;
+int _tls_used;
+int main(void) { return 1; }
+",
+    );
+    let app = write_source(
+        &dir,
+        "app.c",
+        "__declspec(thread) int t = 3;
+\
+         #pragma comment(linker, \"/INCLUDE:_tls_used\")\n\
+         int main(void) { return t == 3 ? 0 : 2; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let lib = dir.join(format!("libtlssup-{target}.a"));
+        let out = Command::new(badc())
+            .args([&format!("--target={target}"), "--ar", "-o"])
+            .arg(&lib)
+            .arg(dir.join("tlssup.c"))
+            .output()
+            .expect("run badc --ar");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg(&app)
+            .arg(&lib)
+            .arg("-o")
+            .arg(dir.join("app.exe"))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{target}: {err}");
+    }
+}
+
 /// An `/INCLUDE:` name must be defined, as link.exe requires (LNK2001):
 /// one nothing defines is reported at its directive, and `_tls_used`
 /// names the image's TLS directory.

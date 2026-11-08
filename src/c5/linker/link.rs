@@ -1037,6 +1037,13 @@ pub fn link_resolves_symbol(name: &str) -> bool {
         || name.starts_with("__stop_")
 }
 
+/// The PE image's TLS support the link supplies itself: the index slot and
+/// the directory. A runtime library's object defining them (the MSVC
+/// runtime's `tlssup.obj`) supplies the same, so it is not pulled for them.
+pub fn pe_link_supplies_tls_support(name: &str) -> bool {
+    name == TLS_INDEX || name == TLS_DIRECTORY
+}
+
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
 /// section bases stack in the order the caller supplies; a
 /// future linker can pick a different layout (sorted by

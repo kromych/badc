@@ -1005,6 +1005,8 @@ impl Selection {
             } else if s.binding == 1
                 && !self.defined.contains(&s.name)
                 && !self.shared.contains(&s.name)
+                && !(self.target.binary_format() == badc::BinaryFormat::Pe
+                    && badc::pe_link_supplies_tls_support(&s.name))
             {
                 self.undefined
                     .entry(s.name.clone())

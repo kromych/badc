@@ -144,7 +144,9 @@ each table forward: ahead of the `.init_array` constructors at startup and
 after the destructors at exit, as the image's and `--jit`'s startup call them.
 `.CRT$XL*` entries are TLS callbacks: the image's TLS directory lists them, and
 it is emitted for them, for thread-local data, or for a unit naming
-`_tls_used`, which the link defines at it.
+`_tls_used`, which the link defines at it. The link supplies `_tls_index` and
+`_tls_used` itself, so a library member defining them, the MSVC runtime's
+`tlssup.obj`, is not pulled for them.
 On Windows x86-64, `__isa_available` and `__isa_enabled`, which code built for
 the MSVC runtime reads, come from badc's compiler runtime when a unit names
 them: the highest level of `<isa_availability.h>` the processor and the OS

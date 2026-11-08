@@ -131,7 +131,9 @@ pub fn build_rsrc(rva: u32, files: &[Vec<u8>]) -> Result<Vec<u8>, C5Error> {
         dirs_len += table(names.len());
         dirs_len += names.values().map(|langs| table(langs.len())).sum::<u32>();
     }
+    // Each name's offset, and the names in the order of their offsets.
     let mut strings: BTreeMap<&Vec<u16>, u32> = BTreeMap::new();
+    let mut string_order: Vec<&Vec<u16>> = Vec::new();
     let mut strings_len = 0u32;
     for key in tree
         .keys()
@@ -142,6 +144,7 @@ pub fn build_rsrc(rva: u32, files: &[Vec<u8>]) -> Result<Vec<u8>, C5Error> {
             && !strings.contains_key(units)
         {
             strings.insert(units, dirs_len + strings_len);
+            string_order.push(units);
             strings_len += 2 + 2 * units.len() as u32;
         }
     }
@@ -193,7 +196,7 @@ pub fn build_rsrc(rva: u32, files: &[Vec<u8>]) -> Result<Vec<u8>, C5Error> {
             data_off = (data_off + data.len() as u32).next_multiple_of(8);
         }
     }
-    for units in strings.keys() {
+    for units in string_order {
         out.extend((units.len() as u16).to_le_bytes());
         out.extend(units.iter().flat_map(|u| u.to_le_bytes()));
     }
@@ -272,5 +275,29 @@ mod tests {
         let entry = find(manifest_dir, 0x409);
         assert_eq!(data_of(entry), b"<assembly/>");
         assert_eq!((u32_(entry) - rva as usize) % 8, 0);
+    }
+
+    /// A string type and a string name each lead to their own string, which
+    /// the table lists where their entries' offsets say.
+    #[test]
+    fn a_named_type_and_name_keep_their_strings() {
+        let units = |t: &str| -> Vec<u16> { t.encode_utf16().collect() };
+        let entry = res_entry(
+            &Key::Name(units("PROBE")),
+            &Key::Name(units("ALPHA")),
+            0x409,
+            b"x",
+        );
+        let s = build_rsrc(0x1000, &[entry]).expect("build");
+        let u16_ = |o: usize| u16::from_le_bytes([s[o], s[o + 1]]) as usize;
+        let u32_ = |o: usize| u32::from_le_bytes(s[o..o + 4].try_into().unwrap()) as usize;
+        let string = |word: usize| {
+            let at = word & 0x7fff_ffff;
+            let units: Vec<u16> = (0..u16_(at)).map(|i| u16_(at + 2 + 2 * i) as u16).collect();
+            String::from_utf16(&units).unwrap()
+        };
+        assert_eq!(string(u32_(16)), "PROBE");
+        let names = u32_(20) & 0x7fff_ffff;
+        assert_eq!(string(u32_(names + 16)), "ALPHA");
     }
 }

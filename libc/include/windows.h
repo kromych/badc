@@ -3589,6 +3589,13 @@ typedef struct _IMAGE_THUNK_DATA32 {
 
 typedef VOID (WINAPI *PIMAGE_TLS_CALLBACK)(PVOID DllHandle, DWORD Reason, PVOID Reserved);
 
+// The reason a DLL entry point or a TLS callback is called for.
+#define DLL_PROCESS_DETACH   0
+#define DLL_PROCESS_ATTACH   1
+#define DLL_THREAD_ATTACH    2
+#define DLL_THREAD_DETACH    3
+#define DLL_PROCESS_VERIFIER 4
+
 typedef struct _IMAGE_TLS_DIRECTORY64 {
     ULONGLONG StartAddressOfRawData;
     ULONGLONG EndAddressOfRawData;

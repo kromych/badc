@@ -852,6 +852,24 @@ fn a_mismatched_layout_is_rejected() {
 /// `DWORD` is `unsigned long`, the string pointers are const-correct, and
 /// under `STRICT` each handle points at a struct of its own. The PE image
 /// records take winnt.h's packing.
+/// winnt.h's reasons a DLL entry point or a TLS callback is called for.
+#[test]
+fn windows_h_names_the_dll_entry_reasons() {
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        check_values(
+            target,
+            &["windows.h"],
+            &[
+                ("DLL_PROCESS_DETACH".to_string(), 0),
+                ("DLL_PROCESS_ATTACH".to_string(), 1),
+                ("DLL_THREAD_ATTACH".to_string(), 2),
+                ("DLL_THREAD_DETACH".to_string(), 3),
+                ("DLL_PROCESS_VERIFIER".to_string(), 4),
+            ],
+        );
+    }
+}
+
 #[test]
 fn windows_h_spells_the_sdk_types() {
     const H: &[&str] = &["windows.h"];

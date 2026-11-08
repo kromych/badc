@@ -34,6 +34,10 @@ fn standard_holds(to: &str, family: SectionFamily) -> bool {
 pub(crate) struct SectionGroups {
     pe: bool,
     merges: BTreeMap<String, String>,
+    /// The data family each output section is placed in: the widest of its
+    /// contributions', so one output section is one region, as GNU ld and
+    /// link.exe make one section of a name.
+    placed: BTreeMap<String, SectionFamily>,
 }
 
 impl SectionGroups {
@@ -61,7 +65,27 @@ impl SectionGroups {
                 }
             }
         }
-        let groups = SectionGroups { pe, merges };
+        let mut groups = SectionGroups {
+            pe,
+            merges,
+            placed: BTreeMap::new(),
+        };
+        let rank = |f: SectionFamily| match f {
+            SectionFamily::RoData => 0,
+            SectionFamily::RelRo => 1,
+            _ => 2,
+        };
+        for s in objs.iter().flat_map(|o| &o.sections) {
+            use SectionFamily::*;
+            if !matches!(s.family, RoData | RelRo | Data) || !grouped_by_name(&s.name) {
+                continue;
+            }
+            let out = String::from(groups.output(&s.name));
+            let at = groups.placed.entry(out).or_insert(s.family);
+            if rank(s.family) > rank(*at) {
+                *at = s.family;
+            }
+        }
         for from in groups.merges.keys() {
             let mut at = from.as_str();
             for _ in 0..=groups.merges.len() {
@@ -108,6 +132,17 @@ impl SectionGroups {
         Ok(())
     }
 
+    /// The family a grouped section is placed in: its output section's.
+    fn placed_family(&self, s: &InputSection) -> SectionFamily {
+        let at = || self.placed.get(self.output(&s.name)).copied();
+        match s.family {
+            SectionFamily::RoData | SectionFamily::RelRo | SectionFamily::Data => {
+                at().unwrap_or(s.family)
+            }
+            other => other,
+        }
+    }
+
     fn output_of<'a>(&'a self, mut name: &'a str) -> &'a str {
         while let Some(to) = self.merges.get(name) {
             name = to;
@@ -143,7 +178,7 @@ impl SectionGroups {
     ) -> Vec<(usize, &'o InputSection)> {
         let mut v: Vec<(usize, &'o InputSection)> = (objs.iter().enumerate())
             .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
-            .filter(|(_, s)| s.family == fam && grouped_by_name(&s.name))
+            .filter(|(_, s)| grouped_by_name(&s.name) && self.placed_family(s) == fam)
             .collect();
         let folded_last = fam == SectionFamily::Text;
         v.sort_by_cached_key(|&(i, s)| {

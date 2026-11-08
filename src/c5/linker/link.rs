@@ -870,12 +870,37 @@ fn named_group_aligns<'o>(
 /// Append the grouped named sections of `fam` to the merged stream `data`,
 /// recording each one's new offset in its unit's map. A PE image's named
 /// code section starts on a section boundary.
+/// The blob maps a grouping pass records moved sections in: a group placed
+/// in a wider data family than some of its contributions keeps each in its
+/// own family's map.
+enum FamilyMaps<'m> {
+    One(&'m mut [BlobMap]),
+    Data {
+        ro: &'m mut [BlobMap],
+        relro: &'m mut [BlobMap],
+        rw: &'m mut [BlobMap],
+    },
+}
+
+impl FamilyMaps<'_> {
+    fn of(&mut self, fam: SectionFamily) -> &mut [BlobMap] {
+        match self {
+            FamilyMaps::One(m) => m,
+            FamilyMaps::Data { ro, relro, rw } => match fam {
+                SectionFamily::RoData => ro,
+                SectionFamily::RelRo => relro,
+                _ => rw,
+            },
+        }
+    }
+}
+
 fn group_named_bytes(
     data: &mut Vec<u8>,
     objs: &[NativeObject],
     fam: SectionFamily,
-    blob: impl Fn(&NativeObject) -> &Vec<u8>,
-    maps: &mut [BlobMap],
+    blob: impl Fn(&NativeObject, SectionFamily) -> &Vec<u8>,
+    mut maps: FamilyMaps<'_>,
     extents: &mut Vec<NamedExtent>,
     groups: &SectionGroups,
 ) {
@@ -925,12 +950,14 @@ fn group_named_bytes(
             crate::c5::object::eh_frame::absorb_padding(data, start, end, pad);
         }
         let at = data.len() as u64;
-        let src = blob(&objs[i]);
+        let src = blob(&objs[i], s.family);
         data.extend_from_slice(&src[s.offset as usize..(s.offset + s.size) as usize]);
         if s.name == EH_FRAME {
             last_eh = Some((at as usize, data.len()));
         }
-        maps[i].moved.push(moved_section(&objs[i], s, at));
+        maps.of(s.family)[i]
+            .moved
+            .push(moved_section(&objs[i], s, at));
         note_extent(
             extents,
             NamedExtent {
@@ -2354,8 +2381,8 @@ impl<'a> Link<'a> {
                 &mut self.text,
                 objs,
                 SectionFamily::Text,
-                |o| &o.text,
-                &mut self.text_map,
+                |o, _| &o.text,
+                FamilyMaps::One(&mut self.text_map),
                 &mut named_extents,
                 &self.groups,
             );
@@ -2390,8 +2417,8 @@ impl<'a> Link<'a> {
                 &mut self.text,
                 objs,
                 SectionFamily::Text,
-                |o| &o.text,
-                &mut self.text_map,
+                |o, _| &o.text,
+                FamilyMaps::One(&mut self.text_map),
                 &mut named_extents,
                 &self.groups,
             );
@@ -2401,8 +2428,16 @@ impl<'a> Link<'a> {
             &mut self.data,
             objs,
             SectionFamily::RoData,
-            |o| &o.rodata,
-            &mut self.ro_map,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
             &self.groups,
         );
@@ -2435,8 +2470,16 @@ impl<'a> Link<'a> {
             &mut self.data,
             objs,
             SectionFamily::RelRo,
-            |o| &o.relro,
-            &mut self.relro_map,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
             &self.groups,
         );
@@ -2467,8 +2510,16 @@ impl<'a> Link<'a> {
             &mut self.data,
             objs,
             SectionFamily::Data,
-            |o| &o.data,
-            &mut self.rw_map,
+            |o, f| match f {
+                SectionFamily::RoData => &o.rodata,
+                SectionFamily::RelRo => &o.relro,
+                _ => &o.data,
+            },
+            FamilyMaps::Data {
+                ro: &mut self.ro_map,
+                relro: &mut self.relro_map,
+                rw: &mut self.rw_map,
+            },
             &mut named_extents,
             &self.groups,
         );
@@ -7062,6 +7113,55 @@ mod tests {
             "error: image.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
              against symbol `entry` [B6012] [relocation]"
         );
+    }
+
+    /// One output section takes every contribution of its name: a read-only
+    /// one and a relocated one land together in the relocated region,
+    /// rather than an extent spanning both regions and what lies between.
+    #[test]
+    fn a_named_section_with_read_only_and_relocated_parts_is_one_region() {
+        use crate::c5::linker::object::{InputSection, NativeSymbol};
+        let sec = |name: &str, family, offset, size| InputSection {
+            name: name.to_string(),
+            family,
+            offset,
+            size,
+            align: 8,
+        };
+        let sym = |name: &str, section| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value: 0,
+            size: 8,
+            binding: 1,
+            kind: 1,
+            visibility: 0,
+            input_section: None,
+        };
+        let mut a = NativeObject::empty(NativeMachine::X86_64);
+        a.rodata = alloc::vec![0x11; 8];
+        a.sections = alloc::vec![sec("grp", SectionFamily::RoData, 0, 8)];
+        a.symbols = alloc::vec![sym("a_part", NativeSymSection::RoData)];
+        let mut b = NativeObject::empty(NativeMachine::X86_64);
+        b.rodata = alloc::vec![0x22; 64];
+        b.relro = alloc::vec![0x33; 8];
+        b.sections = alloc::vec![
+            sec(".rodata", SectionFamily::RoData, 0, 64),
+            sec("grp", SectionFamily::RelRo, 0, 8),
+        ];
+        b.symbols = alloc::vec![sym("b_part", NativeSymSection::RelRo)];
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let grp = (merged.named_sections.iter())
+            .find(|n| n.name == "grp")
+            .expect("grp");
+        assert!(grp.size <= 24, "{grp:?}");
+        let relro = merged.data_ro_len as u64..merged.data_relro_len as u64;
+        for name in ["a_part", "b_part"] {
+            let at = merged.defined[name].value;
+            assert!(relro.contains(&at) && (grp.offset..grp.offset + grp.size).contains(&at));
+        }
+        let at = merged.defined["a_part"].value as usize;
+        assert_eq!(merged.data[at..at + 8], [0x11; 8]);
     }
 
     /// A section symbol has no name of its own; a diagnostic names the

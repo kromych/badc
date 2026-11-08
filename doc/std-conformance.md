@@ -766,7 +766,15 @@ structure loads, float16 and bfloat16 are not provided.
   `always_inline`.
 - On windows-x64 the string intrinsics `__stosb`, `__stosw`, `__stosd`,
   `__stosq`, `__movsb`, `__movsw`, `__movsd` and `__movsq` lower to `rep stos`
-  and `rep movs`.
+  and `rep movs`, and the system intrinsics a kernel-mode driver calls to
+  their instructions: the control, debug and model-specific registers
+  (`__readcr0`, `__writedr`, `__readmsr`, `__readpmc`, `_xsetbv`), the
+  descriptor tables, `__invlpg`, `_invpcid`, `__segmentlimit`, `__wbinvd`,
+  `_disable` and `_enable`, the VMX family (`__vmx_on` through
+  `__vmx_vmwrite`, returning 0, 1 or 2 as the instruction succeeds or fails
+  with or without a VM-instruction error), the SVM family (`__svm_clgi`
+  through `__svm_vmrun`) and port I/O (`__inbyte` through
+  `__outdwordstring`).
 - The `_Interlocked` intrinsics are each one atomic instruction:
   `lock`-prefixed on x64, and the FEAT_LSE form on arm64, with the `_acq`,
   `_rel` and `_nf` orders. cl emits the LSE form under `/arch:armv8.1`; its

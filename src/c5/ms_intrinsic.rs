@@ -157,8 +157,40 @@ pub(crate) enum Op {
     Rdtsc,
     /// `rdtscp`: the counter, and IA32_TSC_AUX stored through the pointer.
     Rdtscp,
-    /// XCR[ecx] from `xgetbv`, edx:eax as one value.
-    Xgetbv,
+    /// The edx:eax `rdmsr`, `rdpmc` or `xgetbv` leaves for the register in ecx.
+    ReadPair(&'static str),
+    /// `wrmsr` or `xsetbv`: the second argument as edx:eax to the register in ecx.
+    WritePair(&'static str),
+    /// A template taking the arguments as `%0` on, 64-bit registers.
+    Asm(&'static str),
+    /// A template leaving its value in `%0`, the arguments `%1` on, all of
+    /// the width.
+    AsmValue {
+        template: &'static str,
+        width: u8,
+    },
+    /// Debug register `n`, the constant first argument, read or written.
+    ReadDr,
+    WriteDr,
+    /// `invpcid` of the type and the descriptor's address.
+    Invpcid,
+    /// A VMX instruction, its arguments `%2` on: 0 on success, 1 when it
+    /// fails with a VM-instruction error (ZF), 2 when it fails without (CF).
+    VmxStatus(&'static str),
+    /// An SVM instruction of the address in rax.
+    RaxInsn(&'static str),
+    /// `in` or `out` of the width at the port in dx.
+    PortIn {
+        width: u8,
+    },
+    PortOut {
+        width: u8,
+    },
+    /// `rep ins` or `rep outs` of `(port, buffer, count)` elements.
+    PortString {
+        width: u8,
+        out: bool,
+    },
     /// RFLAGS, through `pushfq` and `popq`.
     ReadEflags,
     /// RFLAGS from the operand, through `pushq` and `popfq`.
@@ -255,6 +287,14 @@ const fn scan(reverse: bool, width: u8) -> Op {
     Op::BitScan { reverse, width }
 }
 
+const fn cr(template: &'static str) -> Op {
+    Op::AsmValue { template, width: 8 }
+}
+
+const fn ports(width: u8, out: bool) -> Op {
+    Op::PortString { width, out }
+}
+
 const fn crc(width: u8, castagnoli: bool) -> Op {
     Op::Crc32 { width, castagnoli }
 }
@@ -324,7 +364,58 @@ const FIXED: &[Row] = &[
     ("__rdtscp", X64, Op::Rdtscp, Some(ULLong), &[p(UInt)]),
     ("__readeflags", X64, Op::ReadEflags, Some(ULLong), &[]),
     ("__writeeflags", X64, Op::WriteEflags, None, &[V(ULLong)]),
-    ("_xgetbv", X64, Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("_xgetbv", X64, Op::ReadPair("xgetbv"), Some(ULLong), &[V(UInt)]),
+    ("_xsetbv", X64, Op::WritePair("xsetbv"), None, &[V(UInt), V(ULLong)]),
+    ("__readmsr", X64, Op::ReadPair("rdmsr"), Some(ULLong), &[V(ULong)]),
+    ("__writemsr", X64, Op::WritePair("wrmsr"), None, &[V(ULong), V(ULLong)]),
+    ("__readpmc", X64, Op::ReadPair("rdpmc"), Some(ULLong), &[V(ULong)]),
+    ("__readcr0", X64, cr("movq %%cr0, %0"), Some(ULLong), &[]),
+    ("__readcr2", X64, cr("movq %%cr2, %0"), Some(ULLong), &[]),
+    ("__readcr3", X64, cr("movq %%cr3, %0"), Some(ULLong), &[]),
+    ("__readcr4", X64, cr("movq %%cr4, %0"), Some(ULLong), &[]),
+    ("__readcr8", X64, cr("movq %%cr8, %0"), Some(ULLong), &[]),
+    ("__writecr0", X64, Op::Asm("movq %0, %%cr0"), None, &[V(ULLong)]),
+    ("__writecr3", X64, Op::Asm("movq %0, %%cr3"), None, &[V(ULLong)]),
+    ("__writecr4", X64, Op::Asm("movq %0, %%cr4"), None, &[V(ULLong)]),
+    ("__writecr8", X64, Op::Asm("movq %0, %%cr8"), None, &[V(ULLong)]),
+    ("__readdr", X64, Op::ReadDr, Some(ULLong), &[K(7)]),
+    ("__writedr", X64, Op::WriteDr, None, &[K(7), V(ULLong)]),
+    ("__lidt", X64, Op::Asm("lidt (%0)"), None, &[V(VoidPtr)]),
+    ("__sidt", X64, Op::Asm("sidt (%0)"), None, &[V(VoidPtr)]),
+    ("_lgdt", X64, Op::Asm("lgdt (%0)"), None, &[V(VoidPtr)]),
+    ("_sgdt", X64, Op::Asm("sgdt (%0)"), None, &[V(VoidPtr)]),
+    ("__invlpg", X64, Op::Asm("invlpg (%0)"), None, &[V(VoidPtr)]),
+    ("_invpcid", X64, Op::Invpcid, None, &[V(UInt), V(VoidPtr)]),
+    ("__segmentlimit", X64, Op::AsmValue { template: "lsll %1, %0", width: 4 }, Some(ULong), &[V(ULong)]),
+    ("__wbinvd", X64, Op::Insn("wbinvd"), None, &[]),
+    ("_disable", X64, Op::Insn("cli"), None, &[]),
+    ("_enable", X64, Op::Insn("sti"), None, &[]),
+    ("__vmx_on", X64, Op::VmxStatus("vmxon (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_off", X64, Op::Insn("vmxoff"), None, &[]),
+    ("__vmx_vmclear", X64, Op::VmxStatus("vmclear (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_vmptrld", X64, Op::VmxStatus("vmptrld (%2)"), Some(UChar), &[p(ULLong)]),
+    ("__vmx_vmptrst", X64, Op::Asm("vmptrst (%0)"), None, &[p(ULLong)]),
+    ("__vmx_vmlaunch", X64, Op::VmxStatus("vmlaunch"), Some(UChar), &[]),
+    ("__vmx_vmresume", X64, Op::VmxStatus("vmresume"), Some(UChar), &[]),
+    ("__vmx_vmread", X64, Op::VmxStatus("vmread %2, (%3)"), Some(UChar), &[V(ULLong), p(ULLong)]),
+    ("__vmx_vmwrite", X64, Op::VmxStatus("vmwrite %3, %2"), Some(UChar), &[V(ULLong), V(ULLong)]),
+    ("__svm_clgi", X64, Op::Insn("clgi"), None, &[]),
+    ("__svm_stgi", X64, Op::Insn("stgi"), None, &[]),
+    ("__svm_vmload", X64, Op::RaxInsn("vmload %%rax"), None, &[V(ULLong)]),
+    ("__svm_vmsave", X64, Op::RaxInsn("vmsave %%rax"), None, &[V(ULLong)]),
+    ("__svm_vmrun", X64, Op::RaxInsn("vmrun %%rax"), None, &[V(ULLong)]),
+    ("__inbyte", X64, Op::PortIn { width: 1 }, Some(UChar), &[V(UShort)]),
+    ("__inword", X64, Op::PortIn { width: 2 }, Some(UShort), &[V(UShort)]),
+    ("__indword", X64, Op::PortIn { width: 4 }, Some(ULong), &[V(UShort)]),
+    ("__outbyte", X64, Op::PortOut { width: 1 }, None, &[V(UShort), V(UChar)]),
+    ("__outword", X64, Op::PortOut { width: 2 }, None, &[V(UShort), V(UShort)]),
+    ("__outdword", X64, Op::PortOut { width: 4 }, None, &[V(UShort), V(ULong)]),
+    ("__inbytestring", X64, ports(1, false), None, &[V(UShort), p(UChar), V(ULong)]),
+    ("__inwordstring", X64, ports(2, false), None, &[V(UShort), p(UShort), V(ULong)]),
+    ("__indwordstring", X64, ports(4, false), None, &[V(UShort), p(ULong), V(ULong)]),
+    ("__outbytestring", X64, ports(1, true), None, &[V(UShort), p(UChar), V(ULong)]),
+    ("__outwordstring", X64, ports(2, true), None, &[V(UShort), p(UShort), V(ULong)]),
+    ("__outdwordstring", X64, ports(4, true), None, &[V(UShort), p(ULong), V(ULong)]),
     ("__halt", X64, Op::Insn("hlt"), None, &[]),
     ("_mm_pause", X64, Op::Pause, None, &[]),
     ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
@@ -411,7 +502,7 @@ const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__builtin_ia32_pause", Op::Pause, None, &[]),
     ("__builtin_ia32_rdtsc", Op::Rdtsc, Some(ULLong), &[]),
     ("__builtin_ia32_rdtscp", Op::Rdtscp, Some(ULLong), &[p(UInt)]),
-    ("__builtin_ia32_xgetbv", Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("__builtin_ia32_xgetbv", Op::ReadPair("xgetbv"), Some(ULLong), &[V(UInt)]),
     ("__builtin_ia32_readeflags_u64", Op::ReadEflags, Some(ULLong), &[]),
     ("__builtin_ia32_writeeflags_u64", Op::WriteEflags, None, &[V(ULLong)]),
 ];

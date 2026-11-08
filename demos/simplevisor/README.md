@@ -22,11 +22,9 @@ badc ships no WDK headers, so the demo supplies what the upstream build
 takes from the SDK/WDK:
 
 * `include/basetsd.h` -- the fixed-width typedefs.
-* `include/intrin.h` -- the MSVC VMX / control-register / MSR / descriptor
-  intrinsics, each written over badc's GNU inline asm. badc's bundled
-  `<intrin.h>` leaves these undeclared on purpose; this one is resolved
-  ahead of it via `-I`, as `demos/include/simd/intrin.h` does for
-  `__cpuid`.
+* `include/intrin.h` -- `__lgdt`, `_str` and `_sldt`, which upstream takes
+  from its MASM module, over GNU inline asm. badc lowers the MSVC VMX /
+  control-register / MSR / descriptor intrinsics the sources call itself.
 * `include/shvcompat.h` -- the SAL / `static_assert` spellings that are
   not codegen directives.
 * `shvasm_x64.c` -- the upstream MASM modules (`shvvmxhvx64.asm`,

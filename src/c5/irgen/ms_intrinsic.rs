@@ -367,9 +367,104 @@ impl<'a> Walker<'a> {
                 let aux = asm_operand(AsmConstraint::Fixed(1), true, 4);
                 edx_eax(b, "rdtscp", alloc::vec![(aux, v[0])])
             }
-            Op::Xgetbv => {
+            Op::ReadPair(insn) => {
                 let ecx = asm_operand(AsmConstraint::Fixed(1), false, 4);
-                edx_eax(b, "xgetbv", alloc::vec![(ecx, v[0])])
+                edx_eax(b, insn, alloc::vec![(ecx, v[0])])
+            }
+            Op::WritePair(insn) => {
+                let fixed = |r| asm_operand(AsmConstraint::Fixed(r), false, 4);
+                let high = b.binop_imm(BinOp::Shru, v[1], 32);
+                let operands = alloc::vec![(fixed(1), v[0]), (fixed(0), v[1]), (fixed(2), high)];
+                emit_asm(b, insn, operands, 0, true);
+                b.imm(0)
+            }
+            Op::Asm(template) => {
+                emit_asm(
+                    b,
+                    template,
+                    v.iter().map(|&x| (reg(8), x)).collect(),
+                    0,
+                    true,
+                );
+                b.imm(0)
+            }
+            Op::AsmValue { template, width } => asm_value(
+                b,
+                template,
+                v.iter().map(|&x| (reg(width), x)).collect(),
+                width,
+            ),
+            Op::ReadDr => asm_value(b, &format!("movq %%dr{imm}, %0"), Vec::new(), 8),
+            Op::WriteDr => {
+                let template = format!("movq %0, %%dr{imm}");
+                emit_asm(b, &template, alloc::vec![(reg(8), v[0])], 0, true);
+                b.imm(0)
+            }
+            Op::Invpcid => {
+                let kind = zero_extend(b, v[0], 4);
+                let operands = alloc::vec![(reg(8), kind), (reg(8), v[1])];
+                emit_asm(b, "invpcid (%1), %0", operands, 0, true);
+                b.imm(0)
+            }
+            Op::VmxStatus(insn) => {
+                let (zf, cf) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
+                let flag = asm_operand(AsmConstraint::Reg, true, 1);
+                let mut operands = alloc::vec![(flag, b.local_addr(zf)), (flag, b.local_addr(cf))];
+                operands.extend(v.iter().map(|&x| (reg(8), x)));
+                emit_asm(
+                    b,
+                    &format!("{insn}\n\tsetz %0\n\tsetc %1"),
+                    operands,
+                    0,
+                    true,
+                );
+                let zf = b.load_local(zf, LoadKind::U8);
+                let cf = b.load_local(cf, LoadKind::U8);
+                let cf = b.binop_imm(BinOp::Shl, cf, 1);
+                b.binop(BinOp::Or, cf, zf)
+            }
+            Op::RaxInsn(insn) => {
+                let rax = asm_operand(AsmConstraint::Fixed(0), false, 8);
+                emit_asm(b, insn, alloc::vec![(rax, v[0])], 0, true);
+                b.imm(0)
+            }
+            Op::PortIn { width } => {
+                let slot = b.alloc_synthetic_local();
+                let operands = alloc::vec![
+                    (
+                        asm_operand(AsmConstraint::Fixed(0), true, width),
+                        b.local_addr(slot)
+                    ),
+                    (asm_operand(AsmConstraint::Fixed(2), false, 2), v[0]),
+                ];
+                emit_asm(b, "in %1, %0", operands, 0, true);
+                b.load_local(slot, load_kind_for_width(u32::from(width)))
+            }
+            Op::PortOut { width } => {
+                let operands = alloc::vec![
+                    (asm_operand(AsmConstraint::Fixed(2), false, 2), v[0]),
+                    (asm_operand(AsmConstraint::Fixed(0), false, width), v[1]),
+                ];
+                emit_asm(b, "out %1, %0", operands, 0, true);
+                b.imm(0)
+            }
+            Op::PortString { width, out } => {
+                // dx, then rsi or rdi, then rcx, as the instruction reads them.
+                let fixed = |r, w| asm_operand(AsmConstraint::Fixed(r), false, w);
+                let buffer = if out { 6 } else { 7 };
+                let operands = alloc::vec![
+                    (fixed(2, 2), v[0]),
+                    (fixed(buffer, 8), v[1]),
+                    (fixed(1, 4), v[2]),
+                ];
+                let suffix = match width {
+                    1 => 'b',
+                    2 => 'w',
+                    _ => 'l',
+                };
+                let insn = if out { "outs" } else { "ins" };
+                emit_asm(b, &format!("rep {insn}{suffix}"), operands, 0, true);
+                b.imm(0)
             }
             Op::ReadEflags => asm_value(b, "pushfq\n\tpopq %0", Vec::new(), 8),
             Op::WriteEflags => {

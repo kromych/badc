@@ -618,6 +618,192 @@ fn the_x86_system_wrappers_emit_their_instruction() {
     }
 }
 
+/// MSVC's x64 system intrinsics a kernel-mode driver calls lower to their
+/// instruction on windows-x64, undeclared as MSVC compiles them: the
+/// control, debug and model-specific registers, the descriptor tables, the
+/// VMX instructions with their status flags, SVM and port I/O. Each function
+/// holds one call; its opcode, and the ModRM reg field naming the register
+/// or the opcode extension, appear in it, a REX prefix aside. No other
+/// target knows the names.
+#[cfg(feature = "full")]
+#[test]
+fn the_msvc_system_intrinsics_emit_their_instruction() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    // A byte whose bits under the mask are the value.
+    type Pattern = &'static [(u8, u8)];
+    const fn x(b: u8) -> (u8, u8) {
+        (b, 0xff)
+    }
+    const fn reg(r: u8) -> (u8, u8) {
+        (r << 3, 0x38)
+    }
+    const REX: (u8, u8) = (0x40, 0xf0);
+    const CASES: &[(&str, &str, &[Pattern])] = &[
+        (
+            "unsigned long long",
+            "__readcr0()",
+            &[&[x(0x0f), x(0x20), reg(0)]],
+        ),
+        (
+            "unsigned long long",
+            "__readcr2()",
+            &[&[x(0x0f), x(0x20), reg(2)]],
+        ),
+        (
+            "unsigned long long",
+            "__readcr3()",
+            &[&[x(0x0f), x(0x20), reg(3)]],
+        ),
+        (
+            "unsigned long long",
+            "__readcr4()",
+            &[&[x(0x0f), x(0x20), reg(4)]],
+        ),
+        (
+            "unsigned long long",
+            "__readcr8()",
+            &[&[(0x44, 0xf4), x(0x0f), x(0x20), reg(0)]],
+        ),
+        ("void", "__writecr0(v)", &[&[x(0x0f), x(0x22), reg(0)]]),
+        ("void", "__writecr3(v)", &[&[x(0x0f), x(0x22), reg(3)]]),
+        ("void", "__writecr4(v)", &[&[x(0x0f), x(0x22), reg(4)]]),
+        (
+            "void",
+            "__writecr8(v)",
+            &[&[(0x44, 0xf4), x(0x0f), x(0x22), reg(0)]],
+        ),
+        (
+            "unsigned long long",
+            "__readdr(7)",
+            &[&[x(0x0f), x(0x21), reg(7)]],
+        ),
+        ("void", "__writedr(3, v)", &[&[x(0x0f), x(0x23), reg(3)]]),
+        (
+            "unsigned long long",
+            "__readmsr(0xc0000080)",
+            &[&[x(0x0f), x(0x32)]],
+        ),
+        ("void", "__writemsr(0xc0000080, v)", &[&[x(0x0f), x(0x30)]]),
+        ("unsigned long long", "__readpmc(1)", &[&[x(0x0f), x(0x33)]]),
+        ("void", "_xsetbv(0, v)", &[&[x(0x0f), x(0x01), x(0xd1)]]),
+        ("void", "__lidt(p)", &[&[x(0x0f), x(0x01), reg(3)]]),
+        ("void", "__sidt(p)", &[&[x(0x0f), x(0x01), reg(1)]]),
+        ("void", "_lgdt(p)", &[&[x(0x0f), x(0x01), reg(2)]]),
+        ("void", "_sgdt(p)", &[&[x(0x0f), x(0x01), reg(0)]]),
+        ("void", "__invlpg(p)", &[&[x(0x0f), x(0x01), reg(7)]]),
+        ("void", "_invpcid(2, p)", &[&[x(0x0f), x(0x38), x(0x82)]]),
+        (
+            "unsigned long",
+            "__segmentlimit(0x10)",
+            &[&[x(0x0f), x(0x03)]],
+        ),
+        ("void", "__wbinvd()", &[&[x(0x0f), x(0x09)]]),
+        ("void", "_disable(), _enable()", &[&[x(0xfa), x(0xfb)]]),
+        (
+            "unsigned char",
+            "__vmx_on(q)",
+            &[
+                &[x(0xf3), x(0x0f), x(0xc7), reg(6)],
+                &[x(0xf3), REX, x(0x0f), x(0xc7), reg(6)],
+            ],
+        ),
+        ("void", "__vmx_off()", &[&[x(0x0f), x(0x01), x(0xc4)]]),
+        (
+            "unsigned char",
+            "__vmx_vmclear(q)",
+            &[
+                &[x(0x66), x(0x0f), x(0xc7), reg(6)],
+                &[x(0x66), REX, x(0x0f), x(0xc7), reg(6)],
+            ],
+        ),
+        (
+            "unsigned char",
+            "__vmx_vmptrld(q)",
+            &[&[x(0x0f), x(0xc7), reg(6)]],
+        ),
+        ("void", "__vmx_vmptrst(q)", &[&[x(0x0f), x(0xc7), reg(7)]]),
+        (
+            "unsigned char",
+            "__vmx_vmlaunch()",
+            &[&[x(0x0f), x(0x01), x(0xc2)]],
+        ),
+        (
+            "unsigned char",
+            "__vmx_vmresume()",
+            &[&[x(0x0f), x(0x01), x(0xc3)]],
+        ),
+        (
+            "unsigned char",
+            "__vmx_vmread(0x4400, q)",
+            &[&[x(0x0f), x(0x78)]],
+        ),
+        (
+            "unsigned char",
+            "__vmx_vmwrite(0x681e, v)",
+            &[&[x(0x0f), x(0x79)]],
+        ),
+        ("void", "__svm_clgi()", &[&[x(0x0f), x(0x01), x(0xdd)]]),
+        ("void", "__svm_stgi()", &[&[x(0x0f), x(0x01), x(0xdc)]]),
+        ("void", "__svm_vmload(v)", &[&[x(0x0f), x(0x01), x(0xda)]]),
+        ("void", "__svm_vmsave(v)", &[&[x(0x0f), x(0x01), x(0xdb)]]),
+        ("void", "__svm_vmrun(v)", &[&[x(0x0f), x(0x01), x(0xd8)]]),
+        ("unsigned short", "__inword(port)", &[&[x(0x66), x(0xed)]]),
+        ("void", "__outword(port, 7)", &[&[x(0x66), x(0xef)]]),
+        ("void", "__inbytestring(port, b, 4)", &[&[x(0xf3), x(0x6c)]]),
+        (
+            "void",
+            "__outdwordstring(port, (unsigned long *)b, 2)",
+            &[&[x(0xf3), x(0x6f)]],
+        ),
+    ];
+    let mut src = String::new();
+    for (i, (ret, call, _)) in CASES.iter().enumerate() {
+        let body = if *ret == "void" {
+            alloc::format!("{call};")
+        } else {
+            alloc::format!("return {call};")
+        };
+        src.push_str(&alloc::format!(
+            "{ret} f{i}(unsigned long long v, void *p, unsigned long long *q, \
+             unsigned short port, unsigned char *b) {{ {body} }}\n"
+        ));
+    }
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::with_options(src.clone(), Target::WindowsX64, opts)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj = crate::emit_native_with_options(&program, Target::WindowsX64, nopts)
+        .expect("emit the object");
+    let fits = |w: &[u8], p: Pattern| w.iter().zip(p).all(|(b, (v, m))| b & m == *v);
+    for (i, (ret, call, patterns)) in CASES.iter().enumerate() {
+        let bytes = super::codegen::function_bytes(&obj, &alloc::format!("f{i}"));
+        let found = (patterns.iter()).any(|p| bytes.windows(p.len()).any(|w| fits(w, p)));
+        assert!(found, "{call}: {patterns:02x?} not in {bytes:02x?}");
+        if call.starts_with("__vmx") && *ret == "unsigned char" {
+            let flags = [[0x0f, 0x94], [0x0f, 0x92]];
+            assert!(
+                flags.iter().all(|f| bytes.windows(2).any(|w| w == f)),
+                "{call}: setz and setc not in {bytes:02x?}"
+            );
+        }
+    }
+    for target in [Target::LinuxX64, Target::WindowsAarch64] {
+        let call = "void f(void) { __wbinvd(); }\nint main(void) { return 0; }\n";
+        let err = Compiler::with_target(call.to_string(), target)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{target:?}: the call compiled"));
+        assert!(
+            alloc::format!("{err}").contains("unknown function"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 /// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
 /// forms on windows-x64, whatever declares them; windows-arm64 has none.
 #[cfg(feature = "full")]

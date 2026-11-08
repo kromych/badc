@@ -146,6 +146,9 @@ Multi-TU knobs:
   --out-implib=<file>, --out-implib <file>
                            Write a PE DLL's import library to <file>,
                            as link.exe writes one beside the DLL.
+  --delayload=<dll>, --delayload <dll>
+                           Load <dll> on the first call of an import
+                           from it, as link.exe's /DELAYLOAD does.
   --stack=<reserve>[,<commit>], --stack <reserve>[,<commit>]
                            Size a PE image's initial thread stack, as
                            link.exe's /STACK does (default 8 MiB).

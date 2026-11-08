@@ -5563,16 +5563,30 @@ fn windows_x64_native_link_two_sources_with_libc() {
 }
 
 /// Each descriptor in a PE32+ image's import directory: the DLL name
-/// and the symbols imported from it, in table order. An ordinal-only
-/// import contributes an empty symbol. Empty when the image imports
-/// nothing.
+/// and the symbols imported from it, in table order, an ordinal import
+/// as `#<ordinal>`. Empty when the image imports nothing.
 fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
+    pe_import_tables(pe, false)
+}
+
+/// The same of the delay-load import directory.
+fn pe_delay_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
+    pe_import_tables(pe, true)
+}
+
+fn pe_import_tables(pe: &[u8], delay: bool) -> Vec<(String, Vec<String>)> {
+    // Data directory 1 holds `IMAGE_IMPORT_DESCRIPTOR`s (lookup table,
+    // name, address table at 0, 12, 16), 13 `ImgDelayDescr`s (4, 16, 12).
+    let (entry, size, name_at, ilt_at, iat_at) = match delay {
+        false => (1, 20, 12, 0, 16),
+        true => (13, 32, 4, 16, 12),
+    };
     let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
     let opt = pe_off + 24;
     let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
     let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
     let sec = pe_off + 24 + so_hdr;
-    let imp = opt + 112 + 8; // data directory entry 1 (Import)
+    let imp = opt + 112 + 8 * entry;
     let imp_rva = u32::from_le_bytes(pe[imp..imp + 4].try_into().unwrap());
     if imp_rva == 0 {
         return Vec::new();
@@ -5598,11 +5612,13 @@ fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
     let mut off = rva2off(imp_rva).expect("import dir rva");
     let mut dlls = Vec::new();
     loop {
-        let name_rva = u32::from_le_bytes(pe[off + 12..off + 16].try_into().unwrap());
-        // OriginalFirstThunk (the import lookup table) and FirstThunk
-        // (the address table); an all-zero descriptor ends the list.
-        let ilt = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
-        let iat = u32::from_le_bytes(pe[off + 16..off + 20].try_into().unwrap());
+        let u32_at = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+        // The lookup and address tables; an all-zero descriptor ends the list.
+        let (name_rva, ilt, iat) = (
+            u32_at(off + name_at),
+            u32_at(off + ilt_at),
+            u32_at(off + iat_at),
+        );
         if name_rva == 0 && ilt == 0 && iat == 0 {
             break;
         }
@@ -5624,7 +5640,7 @@ fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
             thunk += 8;
         }
         dlls.push((cstr(rva2off(name_rva).expect("import name rva")), symbols));
-        off += 20;
+        off += size;
         if dlls.len() > 32 {
             break;
         }
@@ -6678,6 +6694,200 @@ fn structured_exceptions_cross_a_dll_boundary() {
             );
         }
     }
+}
+
+/// Whether the host runs images of the Windows `target`.
+fn runs_windows(target: &str) -> bool {
+    cfg!(windows) && (target == "windows-arm64") == cfg!(target_arch = "aarch64")
+}
+
+/// `--delayload` binds the imports from a DLL through its delay-load
+/// descriptor rather than the import table: the DLL loads on the first
+/// call, the notify hook sees each step once, the failure hook supplies a
+/// missing export, and a missing DLL raises `VcppException(ERROR_SEVERITY_ERROR,
+/// ERROR_MOD_NOT_FOUND)` through the tail merge's frame. A DLL the link
+/// imports nothing from draws B6009.
+#[test]
+fn imports_of_a_delay_loaded_dll_resolve_on_first_call() {
+    let dir = tempdir("pe-delay-load");
+    let src = write_source(
+        &dir,
+        "delay.c",
+        "#include <delayimp.h>\n\
+         #pragma dylib(shlwapi, \"shlwapi.dll\")\n\
+         #pragma binding(shlwapi::PathIsRelativeA, \"PathIsRelativeA\")\n\
+         #pragma binding(shlwapi::shlwapi_lacks, \"BadcNoSuchExport\")\n\
+         BOOL WINAPI PathIsRelativeA(LPCSTR);\n\
+         int shlwapi_lacks(void);\n\
+         #pragma dylib(absent, \"badc_absent.dll\")\n\
+         #pragma binding(absent::absent_fn, \"absent_fn\")\n\
+         int absent_fn(void);\n\
+         static int notes[8], failures[8];\n\
+         static FARPROC WINAPI note(unsigned what, PDelayLoadInfo dli) { notes[what]++; return NULL; }\n\
+         static int substitute(void) { return 42; }\n\
+         static FARPROC WINAPI fail(unsigned what, PDelayLoadInfo dli)\n\
+         {\n\
+             failures[what]++;\n\
+             return what == dliFailGetProc ? (FARPROC)substitute : NULL;\n\
+         }\n\
+         const PfnDliHook __pfnDliNotifyHook2 = note;\n\
+         const PfnDliHook __pfnDliFailureHook2 = fail;\n\
+         int main(void)\n\
+         {\n\
+             if (GetModuleHandleA(\"shlwapi.dll\")) return 1;\n\
+             if (!PathIsRelativeA(\"a\\\\b\") || PathIsRelativeA(\"C:\\\\a\")) return 2;\n\
+             if (!GetModuleHandleA(\"shlwapi.dll\")) return 3;\n\
+             PathIsRelativeA(\"x\");\n\
+             if (notes[dliStartProcessing] != 1 || notes[dliNotePreLoadLibrary] != 1) return 4;\n\
+             if (shlwapi_lacks() != 42 || failures[dliFailGetProc] != 1) return 5;\n\
+             if (notes[dliNotePreLoadLibrary] != 1 || notes[dliNoteEndProcessing] != 2) return 6;\n\
+             DWORD code = 0;\n\
+             __try { absent_fn(); } __except (code = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER) {}\n\
+             if (code != VcppException(ERROR_SEVERITY_ERROR, ERROR_MOD_NOT_FOUND)) return 7;\n\
+             return failures[dliFailLoadLib] == 1 ? 0 : 8;\n\
+         }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let exe = dir.join(format!("delay-{target}.exe"));
+        let out = run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-Wl,--delayload=shlwapi.dll,--delayload=badc_absent.dll")
+                .args(["-Wl,--delayload", "-Wl,unused.dll"])
+                .args([src.as_os_str(), "-o".as_ref(), exe.as_os_str()]),
+            &format!("link {target}"),
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("[B6009]") && stderr.contains("`unused.dll`"),
+            "{target}: {stderr}"
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let names = |v: &[&str]| v.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            pe_delay_import_directory(&pe),
+            [
+                (
+                    "shlwapi.dll".to_string(),
+                    names(&["BadcNoSuchExport", "PathIsRelativeA"])
+                ),
+                ("badc_absent.dll".to_string(), names(&["absent_fn"])),
+            ],
+            "{target}"
+        );
+        let imported = pe_import_dll_names(&pe);
+        assert!(
+            !imported
+                .iter()
+                .any(|d| d == "shlwapi.dll" || d == "badc_absent.dll"),
+            "{target}: {imported:?}"
+        );
+        if runs_windows(target) {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "{target}: {out:?}");
+        }
+    }
+}
+
+/// A delay-loaded DLL an import library names: a `__declspec(dllimport)`
+/// reference reads its slot `__imp_X` and a plain call jumps through the
+/// thunk `X`; the cl-built DLL loads on the first of them, and an exception
+/// raised inside it reaches its `__except`. An import by ordinal takes an
+/// ordinal entry in the name table, and the DLL behind it, never called,
+/// never loads.
+#[test]
+fn a_delay_loaded_dll_of_an_import_library_loads_on_first_call() {
+    let coff = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coff");
+    let dir = tempdir("pe-delay-load-implib");
+    let src = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n\
+         __declspec(dllimport) unsigned long cl_dll_catch(void (*fn)(int *), int *flag);\n\
+         void cl_dll_through(void (*fn)(int *), int *flag);\n\
+         void ord_fn(void);\n\
+         static void raiser(int *f) { (void)f; RaiseException(0xE0000B02, 0, 0, 0); }\n\
+         static void nothing(int *f) { (void)f; }\n\
+         int main(int argc, char **argv)\n\
+         {\n\
+             int flag = 0;\n\
+             (void)argv;\n\
+             if (GetModuleHandleA(DLL)) return 1;\n\
+             if (cl_dll_catch(raiser, &flag) != 0xE0000B02 || flag != 26) return 2;\n\
+             if (!GetModuleHandleA(DLL)) return 3;\n\
+             flag = 0;\n\
+             cl_dll_through(nothing, &flag);\n\
+             if (argc > 5) ord_fn();\n\
+             return flag == 1 ? 0 : 4;\n\
+         }\n",
+    );
+    for (target, arch, machine) in [
+        ("windows-x64", "x64", 0x8664u16),
+        ("windows-arm64", "arm64", 0xaa64),
+    ] {
+        let dll = format!("seh_dll_cl.{arch}.dll");
+        let ord = dir.join(format!("ord-{arch}.lib"));
+        std::fs::write(
+            &ord,
+            short_import_library("ord.dll", &[(machine, "ord_fn", Some(7))]),
+        )
+        .expect("write the ordinal import library");
+        let run_dir = dir.join(arch);
+        std::fs::create_dir_all(&run_dir).expect("run directory");
+        std::fs::copy(
+            coff.join(format!("seh_dll_cl.{arch}.pe")),
+            run_dir.join(&dll),
+        )
+        .expect("copy the DLL");
+        let exe = run_dir.join("main.exe");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(format!("-DDLL=\"{dll}\""))
+                .arg(format!("-Wl,--delayload={dll},--delayload=ord.dll"))
+                .arg(&src)
+                .arg(coff.join(format!("seh_dll_cl.{arch}.lib")))
+                .arg(&ord)
+                .arg("-o")
+                .arg(&exe),
+            &format!("link {target}"),
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let calls = ["cl_dll_catch", "cl_dll_through"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(
+            pe_delay_import_directory(&pe),
+            [
+                (dll.clone(), calls),
+                ("ord.dll".to_string(), vec!["#7".to_string()])
+            ],
+            "{target}"
+        );
+        if runs_windows(target) {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "{target}: {out:?}");
+        }
+    }
+}
+
+/// `--delayload` names a DLL, which only a PE image loads.
+#[test]
+fn delay_loading_is_refused_outside_a_pe_image() {
+    let dir = tempdir("delay-load-elf");
+    let src = write_source(&dir, "a.c", "int main(void) { return 0; }\n");
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "-Wl,--delayload=x.dll"])
+        .arg(&src)
+        .arg("-o")
+        .arg(dir.join("a"))
+        .output()
+        .expect("run badc");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && stderr.contains("only a PE image loads"),
+        "{stderr}"
+    );
 }
 
 /// An import library of short import members (PE/COFF specification), each

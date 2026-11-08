@@ -3478,6 +3478,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_align: program.tls_align,
         tls_index_fixups: st.tls_index_fixups,
         tls_index_slot: None,
+        delay_import_table: None,
         pe_unwind: alloc::vec::Vec::new(),
         tls_got: alloc::vec::Vec::new(),
         tls_got_fields: alloc::vec::Vec::new(),

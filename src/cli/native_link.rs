@@ -193,6 +193,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         };
         slots.push(slot);
     }
+    // The delay-load helper joins as `/INCLUDE:` would make it.
+    if !cli.link.delay_load.is_empty() {
+        slots.push(Slot::Fixed(vec![badc::delay_load_root(target_machine(
+            cli.target,
+        ))]));
+    }
     // ld64 checks a bundle's references against its loader as against a
     // library on the command line.
     if let Some(path) = &cli.link.bundle_loader {
@@ -1501,6 +1507,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         export_all: cli.link.export_all || cli.exports_definitions(),
         export_data: cli.link.export_data || cli.exports_definitions(),
         format: cli.target.binary_format(),
+        delay_load: cli.link.delay_load.clone(),
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,

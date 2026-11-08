@@ -229,6 +229,7 @@ __badc_wctype.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p
+delayimp.h	-	-	-	p	p
 fibersapi.h	-	-	-	y	y
 versionhelpers.h	-	-	-	p	p
 crtdbg.h	-	-	-	y	y

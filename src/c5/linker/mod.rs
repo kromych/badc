@@ -47,6 +47,7 @@ pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
 
+mod delay_load;
 mod got_relax;
 #[cfg(feature = "std")]
 mod image;
@@ -123,6 +124,8 @@ pub use coff_object::{
     is_pe_dll, module_definition, parse_import_member, parse_native_coff, parse_pe_dll,
     traditional_imports,
 };
+#[cfg(feature = "std")]
+pub use delay_load::delay_load_root;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;

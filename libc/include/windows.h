@@ -1104,6 +1104,7 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define THREAD_QUERY_LIMITED_INFORMATION 0x0800
 #define FILE_ATTRIBUTE_VIRTUAL         0x00010000
 #define STATUS_CONTROL_C_EXIT          0xC000013A
+#define ERROR_SEVERITY_ERROR           0xC0000000
 #define CP_UTF7                        65000
 #define CP_UTF8                        65001
 #define IO_REPARSE_TAG_SYMLINK         0xA000000C

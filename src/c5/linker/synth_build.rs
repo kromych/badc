@@ -412,6 +412,9 @@ fn synth_program_and_build(
         tls_index_slot: (merged.defined.get(super::link::TLS_INDEX))
             .filter(|d| d.section == NativeSymSection::Bss)
             .map(|d| merged.data.len() as u64 + d.value),
+        delay_import_table: (merged.defined.get(super::delay_load::TABLE))
+            .filter(|d| d.section == NativeSymSection::Data)
+            .map(|d| (d.value, d.size)),
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()

@@ -135,6 +135,11 @@ A module-definition file (`.def`) among a PE link's inputs gives the image its
 library), and `LIBRARY` names the DLL in its export directory. An export
 without an ordinal takes the lowest free one in name order, as link.exe
 assigns them; `/EXPORT:` options in `.drectve` take the same forms.
+`--delayload=<dll>`, link.exe's `/DELAYLOAD`, binds the imports from `<dll>`
+through its delay-load descriptor (data directory 13) instead of the import
+table: the first call of each loads the DLL and resolves the import through
+`__delayLoadHelper2`, which `delayimp.lib` or badc's C library supplies, with
+`<delayimp.h>`'s notify and failure hooks. A data import cannot be delay-loaded.
 Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 

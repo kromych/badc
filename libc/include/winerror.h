@@ -173,3 +173,12 @@
 #define WSATRY_AGAIN                   11002
 #define WSANO_RECOVERY                 11003
 #define WSANO_DATA                     11004
+
+#define FACILITY_WIN32                 7
+#define FACILITY_VISUALCPP             109
+#ifndef S_OK
+#define S_OK ((HRESULT)0)
+#endif
+#define HRESULT_FROM_WIN32(x)                                                            \
+    ((HRESULT)(x) <= 0 ? (HRESULT)(x)                                                    \
+                       : (HRESULT)(((x) & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000))

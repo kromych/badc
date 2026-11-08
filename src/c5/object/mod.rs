@@ -943,6 +943,7 @@ pub(crate) mod test_support {
             tls_align: 8,
             tls_index_fixups: Vec::new(),
             tls_index_slot: None,
+            delay_import_table: None,
             pe_unwind: Vec::new(),
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),

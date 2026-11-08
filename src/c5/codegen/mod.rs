@@ -2375,6 +2375,8 @@ pub(crate) struct Build {
     pub tls_index_fixups: Vec<TlsIndexFixup>,
     /// The data-byte offset of a link-defined `_tls_index` the TLS directory names.
     pub tls_index_slot: Option<u64>,
+    /// The data-byte offset and size of the delay-load descriptor table.
+    pub delay_import_table: Option<(u64, u64)>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
     /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the

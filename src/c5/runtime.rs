@@ -68,6 +68,7 @@ pub fn embedded_source_label(
 }
 
 pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
+    ("delay_load.c", include_str!("../../libc/lib/delay_load.c")),
     ("dirent_ext.c", include_str!("../../libc/lib/dirent_ext.c")),
     ("dlfcn_ext.c", include_str!("../../libc/lib/dlfcn_ext.c")),
     ("fenv_ext.c", include_str!("../../libc/lib/fenv_ext.c")),

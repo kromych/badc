@@ -1076,6 +1076,36 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link_native_objects_with(objs, shared_libs, &opts)
 }
 
+/// What a reference to an import binds against.
+pub(crate) enum Supplier {
+    /// The DLL a unit's `#pragma binding` routes it to.
+    Routing,
+    /// The library at this index.
+    Library(usize),
+}
+
+/// A PE import names its DLL: an import library or DLL the link read that
+/// exports `name` supplies it ahead of a binding, as link.exe and GNU ld
+/// take the import from it. Otherwise a routed name keeps its routing and
+/// an unrouted one binds against the first library exporting it, as a
+/// system linker resolves it; `usable` admits a library by index.
+pub(crate) fn supplier(
+    name: &str,
+    routed: bool,
+    pe_image: bool,
+    libs: &[SharedLibrary],
+    usable: impl Fn(usize) -> bool,
+) -> Option<Supplier> {
+    let exports = |l: &SharedLibrary| l.exports.contains(name) || l.data_exports.contains(name);
+    let supplied = |l: &SharedLibrary| pe_image && l.from_image && exports(l);
+    if routed && !libs.iter().any(supplied) {
+        return Some(Supplier::Routing);
+    }
+    (libs.iter().enumerate())
+        .find(|&(i, l)| usable(i) && exports(l) && (!routed || supplied(l)))
+        .map(|(i, _)| Supplier::Library(i))
+}
+
 /// Which of an ELF shared library's exported default-visibility definitions
 /// its own references reach through `.dynsym`, so that one the loader finds
 /// first preempts them (System V gABI, symbol visibility): `All` by default,
@@ -1088,7 +1118,7 @@ pub enum Preemption {
     All,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LinkOptions {
     /// An unresolved reference is a load-time import the loader's global
     /// scope resolves, where the format has one: ELF and Mach-O. A PE
@@ -1103,6 +1133,8 @@ pub struct LinkOptions {
     /// The image's container: Mach-O and PE have no copy relocation, a
     /// PE link defines `__ImageBase`, and `.init` / `.fini` are ELF's.
     pub format: BinaryFormat,
+    /// The DLLs a PE image loads on the first call of an import from them.
+    pub delay_load: Vec<String>,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1112,6 +1144,22 @@ pub fn link_native_objects_with<'a>(
     opts: &LinkOptions,
 ) -> Result<MergedNative, C5Error> {
     check_mismatch_keys(objs)?;
+    let delayed = match opts.delay_load.is_empty() {
+        true => None,
+        false if opts.format != BinaryFormat::Pe => {
+            let text = "`--delayload` names a DLL, which only a PE image loads";
+            return Err(link_err(Code::LINK, MODULE, text));
+        }
+        false => Some(super::delay_load::delay_imports(
+            objs,
+            shared_libs,
+            &opts.delay_load,
+        )?),
+    };
+    let with_delayed: Option<Vec<NativeObject>> = (delayed.as_ref())
+        .and_then(|d| d.object.clone())
+        .map(|o| objs.iter().cloned().chain([o]).collect());
+    let objs = with_delayed.as_deref().unwrap_or(objs);
     let slot_reads = super::import_slots::bind_slot_reads(objs)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
     let routes = (opts.format == BinaryFormat::Pe)
@@ -1125,6 +1173,9 @@ pub fn link_native_objects_with<'a>(
         let at = |&(unit, offset): &(usize, u64)| link.text_map[unit].at(offset);
         link.slot_reads = s.sites.iter().map(at).collect();
         link.warnings.extend(s.warnings.iter().cloned());
+    }
+    if let Some(d) = delayed {
+        link.warnings.extend(d.warnings);
     }
     link.lay_out_init_fini_arrays();
     link.collect_definitions()?;
@@ -4696,33 +4747,23 @@ impl<'a> Link<'a> {
         let mut import_ordinals: BTreeMap<String, u16> = BTreeMap::new();
         let mut import_hints: BTreeMap<String, u16> = BTreeMap::new();
         for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
-            // A PE import names its DLL: an import library or a DLL the
-            // link read that exports the name supplies it ahead of a
-            // binding, as link.exe and GNU ld take the import from it.
-            let supplied = |lib: &SharedLibrary| {
-                self.pe_image
-                    && lib.from_image
-                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
-            };
-            if let Some(&idx) = routing.get(name.as_str())
-                && !self.shared_libs.iter().any(supplied)
-            {
-                bound[idx as usize] = true;
-                continue;
-            }
-            // Unrouted: the reference binds against the first shared
-            // library that exports it, as a system linker resolves it.
-            // That library becomes the import's routing -- a PE import
-            // names its DLL and nothing else states which -- and its
-            // spelling of the name is recorded where the two differ.
-            let routed = routing.contains_key(name.as_str());
-            for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
-                if let Some(at) = at
-                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
-                    && (!routed || supplied(lib))
-                {
-                    bound[*at] = true;
-                    routing.insert(name.as_str(), *at as u32);
+            let routed = routing.get(name.as_str()).copied();
+            let declared = |i: usize| shlib_declared[i].is_some();
+            match supplier(
+                name,
+                routed.is_some(),
+                self.pe_image,
+                self.shared_libs,
+                declared,
+            ) {
+                Some(Supplier::Routing) => bound[routed.unwrap_or_default() as usize] = true,
+                // The library becomes the import's routing -- a PE import
+                // names its DLL and nothing else states which -- and its
+                // spelling of the name is recorded where the two differ.
+                Some(Supplier::Library(i)) => {
+                    let (lib, at) = (&self.shared_libs[i], shlib_declared[i].unwrap_or_default());
+                    bound[at] = true;
+                    routing.insert(name.as_str(), at as u32);
                     if let Some(symbol) = lib.export_symbols.get(name) {
                         import_symbols.insert(name.clone(), symbol.clone());
                     }
@@ -4732,8 +4773,8 @@ impl<'a> Link<'a> {
                     if let Some(&hint) = lib.export_hints.get(name) {
                         import_hints.insert(name.clone(), hint);
                     }
-                    break;
                 }
+                None => {}
             }
         }
         // A name routed to a second DLL imports under its own spelling.

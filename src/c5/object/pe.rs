@@ -176,6 +176,7 @@ const DATA_DIRECTORY_BASERELOC: usize = 5;
 const DATA_DIRECTORY_DEBUG: usize = 6;
 const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
+const DATA_DIRECTORY_DELAY_IMPORT: usize = 13;
 
 /// `SizeOfStackReserve` and `SizeOfStackCommit` without `--stack`: the
 /// initial thread's reserved range, which pages in on demand. link.exe
@@ -1580,6 +1581,9 @@ impl<'a> PeWriter<'a> {
                 base_reloc_size: reloc_size,
                 iat_rva: l.idata.iat_rva_base,
                 iat_size: l.idata.iat_size,
+                delay_import: (build.delay_import_table).map_or((0, 0), |(off, size)| {
+                    (self.data_off_to_rva(off as u32), size as u32)
+                }),
                 tls_table_rva,
                 tls_table_size,
                 export_table_rva: l.edata_rva,
@@ -2377,6 +2381,8 @@ struct OptionalHeaderInputs {
     base_reloc_size: u32,
     iat_rva: u32,
     iat_size: u32,
+    /// The delay-load descriptor table's RVA and size.
+    delay_import: (u32, u32),
     tls_table_rva: u32,
     tls_table_size: u32,
     export_table_rva: u32,
@@ -2432,6 +2438,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_IAT] = DataDirectoryEntry {
         rva: inp.iat_rva,
         size: inp.iat_size,
+    };
+    data_directory[DATA_DIRECTORY_DELAY_IMPORT] = DataDirectoryEntry {
+        rva: inp.delay_import.0,
+        size: inp.delay_import.1,
     };
 
     write_struct(

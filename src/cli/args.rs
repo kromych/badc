@@ -242,6 +242,8 @@ pub(crate) struct Link {
     pub(crate) out_implib: Option<PathBuf>,
     /// `--stack reserve[,commit]`, link.exe's `/STACK`.
     pub(crate) stack: Option<(u64, u64)>,
+    /// `--delayload`, link.exe's `/DELAYLOAD`: DLLs loaded on first call.
+    pub(crate) delay_load: Vec<String>,
     /// ld64's `-bundle` and `-flat_namespace`.
     pub(crate) mach_o: badc::MachOImageOptions,
     /// ld64's `-bundle_loader`: the executable a bundle binds its imports to.
@@ -374,6 +376,7 @@ impl Default for Link {
             emit_relocs: false,
             export_all: false,
             export_data: false,
+            delay_load: Vec::new(),
             entry: None,
             subsystem: None,
             map_path: None,
@@ -2157,6 +2160,14 @@ impl Parser {
             s if s.starts_with("--stack=") => {
                 link.stack = Some(parse_stack(&s["--stack=".len()..])?)
             }
+            // lld's MinGW `--delayload`, link.exe's `/DELAYLOAD`.
+            "--delayload" | "-delayload" => link.delay_load.push(operand(
+                iter,
+                "badc: error: --delayload requires a DLL name",
+            )?),
+            s if s.starts_with("--delayload=") || s.starts_with("-delayload=") => link
+                .delay_load
+                .push(s.split_once('=').map_or("", |(_, d)| d).to_string()),
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,

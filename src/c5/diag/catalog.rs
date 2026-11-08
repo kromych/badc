@@ -323,6 +323,9 @@ catalog! {
     6008, "undefined-lookup", [], Warning, Controllable,
         [DEFAULT], Live,
         "a reference no input defines, which a Mach-O image looks up in the flat namespace at load time under `-undefined warning`";
+    6009, "unused-delay-load", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `--delayload` DLL from which the link imports nothing";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -398,6 +401,7 @@ impl Code {
     pub const LOCAL_IMPORT: Code = Code::new(6006);
     pub const TEXT_RELOCATION: Code = Code::new(6007);
     pub const UNDEFINED_LOOKUP: Code = Code::new(6008);
+    pub const UNUSED_DELAY_LOAD: Code = Code::new(6009);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);

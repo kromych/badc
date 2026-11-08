@@ -337,6 +337,7 @@ typedef struct __c5_fpos_t fpos_t;
 // wide file, directory, environment and process functions this header has
 // carried.
 #include <__badc_wstdio.h>
+#include <__badc_ucrt_stdio.h>
 #include <__badc_wio.h>
 #include <__badc_wdirect.h>
 #include <__badc_wstdlib.h>

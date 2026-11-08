@@ -350,6 +350,13 @@ environment in the entry's character width, `_crt_atexit` for the destructors
 and for the program's `atexit`, and the UCRT's `exit`; msvcrt.dll is not
 loaded beside it.
 
+An object compiled against the UCRT's headers by another toolchain calls the
+UCRT's own entry points: the inline formatters and scanners call
+`__stdio_common_*`, and the standard streams are `__acrt_iob_func`'s. The
+bundled `<stdio.h>` binds these to `ucrtbase.dll`, and a reference without a
+binding resolves to the library its name is bound to, `msvcrt.dll` or
+`ucrtbase.dll`, so such an object links without `ucrt.lib`.
+
 A bundled header declares the names mingw-w64's header of the same name
 declares. A name mingw-w64 leaves undeclared stays undeclared, so a program's
 own Windows fallback for it compiles under badc as under mingw-w64. `setenv`

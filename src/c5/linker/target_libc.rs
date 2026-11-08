@@ -52,6 +52,11 @@ fn c_library_dylib(target: Target) -> &'static str {
     }
 }
 
+/// The `#pragma dylib` name and the DLL of the UCRT, which the bundled
+/// headers bind what msvcrt.dll lacks to.
+const UCRT_DYLIB: &str = "ucrtbase";
+const UCRT_DLL: &str = "ucrtbase.dll";
+
 fn target_machine(target: Target) -> NativeMachine {
     if target.is_x86_64() {
         NativeMachine::X86_64
@@ -69,6 +74,10 @@ pub struct TargetCLibrary {
     /// kernel32.dll, whose functions a PE image loading the user-mode C
     /// runtime takes by default ([`super::kernel32`]); `None` elsewhere.
     default_dll: Option<SharedLibrary>,
+    /// ucrtbase.dll on PE: the names the bundled headers bind to it, which
+    /// msvcrt.dll lacks, such as the entry points the UCRT's own headers
+    /// call. `None` elsewhere.
+    ucrt: Option<SharedLibrary>,
     /// Headers already preprocessed for this target.
     scanned: BTreeSet<&'static str>,
     /// The header whose binding admitted each data export.
@@ -105,6 +114,7 @@ impl TargetCLibrary {
             dylib: c_library_dylib(target),
             lib: no_exports("", target),
             default_dll: pe.then(|| no_exports(super::kernel32::DLL, target)),
+            ucrt: pe.then(|| no_exports(UCRT_DLL, target)),
             scanned: BTreeSet::new(),
             data_headers: BTreeMap::new(),
             queried: BTreeSet::new(),
@@ -120,8 +130,8 @@ impl TargetCLibrary {
     /// Whether the target's C library, or else the DLL linked by default,
     /// exports `name`, admitting it to that export set when it does.
     pub fn admit(&mut self, name: &str) -> bool {
-        let default = self.default_dll.as_ref();
-        if self.lib.exports.contains(name) || default.is_some_and(|d| d.exports.contains(name)) {
+        let has = |l: &Option<SharedLibrary>| l.as_ref().is_some_and(|d| d.exports.contains(name));
+        if self.lib.exports.contains(name) || has(&self.ucrt) || has(&self.default_dll) {
             return true;
         }
         if !self.queried.insert(name.to_string()) {
@@ -134,7 +144,7 @@ impl TargetCLibrary {
             if self.scanned.insert(header) {
                 self.scan(header);
             }
-            if self.lib.exports.contains(name) {
+            if self.lib.exports.contains(name) || has(&self.ucrt) {
                 return true;
             }
         }
@@ -153,10 +163,10 @@ impl TargetCLibrary {
         &self.lib
     }
 
-    /// The C library, then the DLL linked by default, each with the
-    /// names admitted to it.
+    /// The C library, ucrtbase.dll on PE, then the DLL linked by default,
+    /// each with the names admitted to it.
     pub fn libraries(&self) -> impl Iterator<Item = &SharedLibrary> {
-        core::iter::once(&self.lib).chain(&self.default_dll)
+        (core::iter::once(&self.lib).chain(&self.ucrt)).chain(&self.default_dll)
     }
 
     /// A unit defining each of `names` the library exports as data,
@@ -200,11 +210,13 @@ impl TargetCLibrary {
             return;
         }
         for spec in &pp.dylibs {
-            if spec.name != self.dylib {
-                continue;
-            }
-            if self.lib.soname.is_empty() {
-                self.lib.soname = spec.path.clone();
+            let lib = match &mut self.ucrt {
+                Some(ucrt) if spec.name == UCRT_DYLIB => ucrt,
+                _ if spec.name == self.dylib => &mut self.lib,
+                _ => continue,
+            };
+            if lib.soname.is_empty() {
+                lib.soname = spec.path.clone();
             }
             for b in &spec.bindings {
                 // Keyed by the portable name: the spelling a reference
@@ -213,15 +225,14 @@ impl TargetCLibrary {
                 // binding's symbol is what the loader resolves, so it
                 // is recorded where the two differ; the first header
                 // binding a name states it (`strerror_r` has two).
-                self.lib.exports.insert(b.local_name.clone());
+                lib.exports.insert(b.local_name.clone());
                 if b.real_symbol != b.local_name {
-                    self.lib
-                        .export_symbols
+                    lib.export_symbols
                         .entry(b.local_name.clone())
                         .or_insert_with(|| b.real_symbol.clone());
                 }
                 if b.is_data {
-                    self.lib.data_exports.insert(b.local_name.clone());
+                    lib.data_exports.insert(b.local_name.clone());
                     self.data_headers
                         .entry(b.local_name.clone())
                         .or_insert(header);
@@ -284,7 +295,10 @@ mod tests {
         ] {
             let full = full_set(target);
             let mut lazy = TargetCLibrary::new(target);
-            let missed: Vec<&String> = full.lib.exports.iter().filter(|n| !lazy.admit(n)).collect();
+            let ucrt = full.ucrt.iter().flat_map(|l| &l.exports);
+            let missed: Vec<&String> = (full.lib.exports.iter().chain(ucrt))
+                .filter(|n| !lazy.admit(n))
+                .collect();
             assert!(
                 missed.is_empty(),
                 "{}: the header index does not reach {missed:?}",
@@ -421,6 +435,26 @@ mod tests {
         }
     }
 
+    /// On PE, a name the bundled headers bind to ucrtbase.dll, such as an
+    /// entry point the UCRT's own inline functions call, joins its set; a
+    /// name msvcrt.dll exports stays msvcrt's, and no name is bound to both.
+    #[test]
+    fn a_pe_target_takes_ucrtbase_bindings() {
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut win = TargetCLibrary::new(target);
+            for name in ["__stdio_common_vsnwprintf_s", "__acrt_iob_func", "puts"] {
+                assert!(win.admit(name), "{name}");
+            }
+            let ucrt = win.ucrt.as_ref().unwrap();
+            assert_eq!(ucrt.soname, "ucrtbase.dll");
+            assert!(ucrt.exports.contains("__stdio_common_vsnwprintf_s"));
+            assert!(ucrt.exports.contains("__acrt_iob_func") && !ucrt.exports.contains("puts"));
+            let full = full_set(target);
+            let ucrt = &full.ucrt.as_ref().unwrap().exports;
+            assert!(full.lib.exports.iter().all(|n| !ucrt.contains(n)));
+        }
+    }
+
     /// On PE, a name the C library lacks and kernel32.dll exports joins
     /// kernel32's set, unless the image cannot load it; a C library name
     /// stays msvcrt's, and no other target has the default DLL.
@@ -438,16 +472,17 @@ mod tests {
             }
             assert!(!win.admit("MessageBoxA"));
             let libs = names(&win);
-            assert_eq!(libs.len(), 2);
-            let (msvcrt, kernel32) = (&libs[0], &libs[1]);
+            assert_eq!(libs.len(), 3);
+            let (msvcrt, ucrt, kernel32) = (&libs[0], &libs[1], &libs[2]);
             assert!(msvcrt.0 == "msvcrt.dll" && msvcrt.1.contains(&"puts".to_string()));
             assert!(!msvcrt.1.contains(&"GetLastError".to_string()));
+            assert!(ucrt.0 == "ucrtbase.dll" && !ucrt.1.contains(&"GetLastError".to_string()));
             assert_eq!(kernel32.0, "kernel32.dll");
             assert_eq!(kernel32.1, ["GetLastError", "lstrlenA"]);
             let mut native = TargetCLibrary::new(target);
             native.drop_default_dll();
             assert!(native.admit("puts") && !native.admit("GetLastError"));
-            assert_eq!(names(&native).len(), 1);
+            assert_eq!(names(&native).len(), 2);
         }
         let mut linux = TargetCLibrary::new(Target::LinuxX64);
         assert!(!linux.admit("GetLastError"));

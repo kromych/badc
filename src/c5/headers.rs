@@ -433,6 +433,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("__badc_wstring.h", INTERNAL),
     header!("__badc_wstdlib.h", INTERNAL),
     header!("__badc_wstdio.h", INTERNAL),
+    header!("__badc_ucrt_stdio.h", INTERNAL),
     header!("__badc_wio.h", INTERNAL),
     header!("__badc_wdirect.h", INTERNAL),
     header!("__badc_wprocess.h", INTERNAL),

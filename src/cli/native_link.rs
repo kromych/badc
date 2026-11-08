@@ -193,6 +193,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         };
         slots.push(slot);
     }
+    // ld64 checks a bundle's references against its loader as against a
+    // library on the command line.
+    if let Some(path) = &cli.link.bundle_loader {
+        shared_libs.push(read_bundle_loader(path, cli.target));
+        slots.push(Slot::Shared(shared_libs.len() - 1));
+    }
     stats.mark("parse");
     if entry_override.is_none() && cli.mode != Mode::SharedLibrary {
         entry_override = program_entry(&mut slots, cli.target).map(str::to_string);
@@ -573,6 +579,29 @@ fn read_definition_input(
         .unwrap_or_else(|e| fail(e.to_string()));
     obj.source = path.to_string();
     Some((obj, name))
+}
+
+/// Read the executable `-bundle_loader` names, whose exports a bundle
+/// binds to the main executable.
+fn read_bundle_loader(path: &std::path::Path, target: badc::Target) -> badc::SharedLibrary {
+    let fail = |why: String| -> ! {
+        eprint_diagnostic(format!(
+            "badc: error: -bundle_loader `{}`: {why}",
+            path.display()
+        ));
+        std::process::exit(1);
+    };
+    let bytes = std::fs::read(path).unwrap_or_else(|e| fail(e.to_string()));
+    let mut lib = badc::parse_mach_o_loader(&bytes).unwrap_or_else(|e| fail(e.to_string()));
+    if lib.machine != super::inputs::target_machine(target) {
+        fail(format!(
+            "an executable for {}; the link targets {}",
+            super::inputs::machine_label(lib.machine),
+            super::inputs::machine_label(super::inputs::target_machine(target)),
+        ));
+    }
+    lib.soname = path.display().to_string();
+    lib
 }
 
 /// Read and parse a `.o` input.

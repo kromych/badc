@@ -1369,6 +1369,7 @@ mod tests {
             data_import_rva_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
+            main_executable: None,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
             import_ordinals: alloc::collections::BTreeMap::new(),

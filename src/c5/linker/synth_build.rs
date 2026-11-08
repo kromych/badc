@@ -1079,9 +1079,11 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
         merged
             .dylibs
             .iter()
-            .map(|path| ResolvedDylib {
+            .enumerate()
+            .map(|(i, path)| ResolvedDylib {
                 name: dylib_name_from_path(path),
                 path: path.clone(),
+                main_executable: merged.main_executable == Some(i as u32),
             })
             .collect()
     };
@@ -1986,6 +1988,7 @@ mod tests {
             static_tls: false,
             tls_defined: Default::default(),
             dylibs: alloc::vec![],
+            main_executable: None,
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],

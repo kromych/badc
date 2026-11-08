@@ -216,6 +216,9 @@ pub struct MergedNative {
     /// SONAME, deduped on full path with insertion order preserved
     /// across units. Holds only the libraries an import binds through.
     pub dylibs: Vec<String>,
+    /// The entry of [`Self::dylibs`] that is the executable a bundle
+    /// loads into, always the last.
+    pub main_executable: Option<u32>,
     /// Per-import dylib routing: maps an import name (as it
     /// appears in [`Self::imports`]) to its index in [`Self::dylibs`].
     /// Populated from each unit's `NT_BADC_BINDING_MAP` note with
@@ -1047,6 +1050,7 @@ pub fn link_native_objects_with_options(
 /// where it differs from the referenced name.
 struct MergedDylibs {
     dylibs: Vec<String>,
+    main_executable: Option<u32>,
     import_dylib_map: BTreeMap<String, u32>,
     import_symbols: BTreeMap<String, String>,
     import_ordinals: BTreeMap<String, u16>,
@@ -4738,14 +4742,19 @@ impl<'a> Link<'a> {
                 bound[at] = true;
             }
         }
+        // A bundle's loader goes last: it takes no load command, so the
+        // libraries ahead of it keep their ordinals.
+        let main = (self.shared_libs.iter().zip(&shlib_declared))
+            .find_map(|(l, at)| at.filter(|_| l.main_executable));
         let mut merged_idx = alloc::vec![0u32; declared.len()];
         let mut dylibs: Vec<String> = Vec::new();
-        for (i, path) in declared.iter().enumerate() {
+        for i in (0..declared.len()).filter(|&i| Some(i) != main).chain(main) {
             if bound[i] {
                 merged_idx[i] = dylibs.len() as u32;
-                dylibs.push((*path).to_string());
+                dylibs.push(declared[i].to_string());
             }
         }
+        let main_executable = main.filter(|&i| bound[i]).map(|i| merged_idx[i]);
         let import_dylib_map: BTreeMap<String, u32> = routing
             .into_iter()
             .filter(|&(_, idx)| bound[idx as usize])
@@ -4770,6 +4779,7 @@ impl<'a> Link<'a> {
         }
         Ok(MergedDylibs {
             dylibs,
+            main_executable,
             import_dylib_map,
             import_symbols,
             import_ordinals,
@@ -5339,6 +5349,7 @@ impl<'a> Link<'a> {
             data_import_rva_refs: self.data_import_rva_refs,
             machine: self.machine,
             dylibs: merged_dylibs.dylibs,
+            main_executable: merged_dylibs.main_executable,
             import_dylib_map: merged_dylibs.import_dylib_map,
             import_symbols: merged_dylibs.import_symbols,
             import_ordinals: merged_dylibs.import_ordinals,
@@ -7175,6 +7186,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),
@@ -7320,6 +7332,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),
@@ -7363,6 +7376,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),
@@ -8930,6 +8944,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),
@@ -9325,6 +9340,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),
@@ -9428,6 +9444,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            main_executable: false,
             export_ordinals: Default::default(),
             export_hints: Default::default(),
             references: Default::default(),

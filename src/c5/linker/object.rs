@@ -267,6 +267,10 @@ pub struct SharedLibrary {
     /// -- carries no version data of its own, so the link must not read
     /// the absence of a version as the library stating none.
     pub from_image: bool,
+    /// Whether this is the executable a bundle loads into
+    /// (`-bundle_loader`): an import it supplies binds to the main
+    /// executable, which the image names in no load command.
+    pub main_executable: bool,
 }
 
 /// Read a shared object's SONAME and exported dynamic symbols from its
@@ -286,6 +290,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
         export_hints: Default::default(),
         references: image.references,

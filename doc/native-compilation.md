@@ -215,8 +215,9 @@ Mach-O and ignored elsewhere.
 `-bundle` (also `-Wl,-bundle`) links a Mach-O library only `dlopen` loads,
 an `MH_BUNDLE` image with no install name; its undefined references follow
 `-undefined` as a dylib's do. `-flat_namespace` gives every import of the
-image a flat lookup and clears `MH_TWOLEVEL`. `-bundle_loader` is refused: a
-bundle reaches its loader's symbols through `-undefined dynamic_lookup`.
+image a flat lookup and clears `MH_TWOLEVEL`. `-bundle_loader <exe>` reads
+the executable's export trie as a library's: a reference it satisfies binds to
+the main executable, which no load command names.
 
 ### Unwind tables
 

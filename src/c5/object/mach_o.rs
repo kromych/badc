@@ -68,6 +68,8 @@ const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
 const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
+/// `BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE` (-1) in the opcode's low nibble.
+const BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE_IMM: u8 = 0x0F;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_SYMBOL_FLAGS_WEAK_IMPORT: u8 = 0x01;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
@@ -92,6 +94,7 @@ const N_WEAK_REF: u16 = 0x0040;
 const N_WEAK_DEF: u16 = 0x0080;
 const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
 const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
+const EXECUTABLE_ORDINAL: u8 = 0xFF;
 const SECT_INDEX_TEXT: u8 = 1;
 const SECT_INDEX_CONST: u8 = 2;
 /// Family whose region held a named section's bytes, hence the segment it
@@ -1229,12 +1232,30 @@ fn build_rebase_opcodes(
     out
 }
 
-/// Source library a bind opcode selects: the flat-lookup pseudo-dylib or a
-/// 1-based LC_LOAD_DYLIB ordinal.
+/// Source library a bind opcode selects: the flat-lookup pseudo-dylib, the
+/// main executable a bundle loads into, or a 1-based LC_LOAD_DYLIB ordinal.
 #[derive(PartialEq, Clone, Copy)]
 enum BindSource {
     Flat,
+    MainExecutable,
     Dylib(u64),
+}
+
+impl BindSource {
+    /// Where `imp` binds. A bundle's loader is the last of `dylibs`, so
+    /// every library's ordinal is its position.
+    fn of(imp: &super::ResolvedImport, dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Self {
+        if imp.flat_lookup {
+            BindSource::Flat
+        } else if dylibs
+            .get(imp.dylib_index)
+            .is_some_and(|d| d.main_executable)
+        {
+            BindSource::MainExecutable
+        } else {
+            BindSource::Dylib((imp.dylib_index + 1) as u64)
+        }
+    }
 }
 
 /// Emit the dylib-selection opcode for `source`.
@@ -1242,6 +1263,9 @@ fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     match source {
         BindSource::Flat => {
             out.push(BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM);
+        }
+        BindSource::MainExecutable => {
+            out.push(BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE_IMM);
         }
         BindSource::Dylib(ord) if ord <= 0x0F => {
             out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (ord as u8));
@@ -1274,10 +1298,9 @@ fn build_bind_opcodes(
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
     let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
-        let source = if flat_namespace || imp.flat_lookup {
-            BindSource::Flat
-        } else {
-            BindSource::Dylib((imp.dylib_index + 1) as u64)
+        let source = match flat_namespace {
+            true => BindSource::Flat,
+            false => BindSource::of(imp, &imports.dylibs),
         };
         if current_source != Some(source) {
             push_bind_source(&mut out, source);
@@ -1335,15 +1358,16 @@ fn build_bind_opcodes(
     out
 }
 
-/// The nlist library ordinal for an import, mirroring the bind stream's
-/// flat-lookup branch so the symbol table and the bind opcodes agree on the
-/// symbol's provenance: a flat-lookup import carries
-/// `DYNAMIC_LOOKUP_ORDINAL`, a two-level import its 1-based dylib ordinal.
-fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
-    if imp.flat_lookup {
-        DYNAMIC_LOOKUP_ORDINAL
-    } else {
-        (imp.dylib_index + 1) as u8
+/// The nlist library ordinal for an import, the bind stream's source, so
+/// the symbol table and the bind opcodes agree on the symbol's provenance.
+fn import_library_ordinal(
+    imp: &super::ResolvedImport,
+    dylibs: &[crate::c5::codegen::ResolvedDylib],
+) -> u8 {
+    match BindSource::of(imp, dylibs) {
+        BindSource::Flat => DYNAMIC_LOOKUP_ORDINAL,
+        BindSource::MainExecutable => EXECUTABLE_ORDINAL,
+        BindSource::Dylib(ordinal) => ordinal as u8,
     }
 }
 
@@ -1995,6 +2019,7 @@ impl<'a> MachOWriter<'a> {
             .imports
             .dylibs
             .iter()
+            .filter(|d| !d.main_executable)
             .map(|d| load_dylib(&d.path))
             .collect();
         c.build_version = build_version();
@@ -2374,7 +2399,7 @@ impl<'a> MachOWriter<'a> {
             let n_strx = str_indices[n_locals + n_exports + j];
             let ordinal = match build.mach_o.flat_namespace {
                 true => DYNAMIC_LOOKUP_ORDINAL,
-                false => import_library_ordinal(imp),
+                false => import_library_ordinal(imp, &build.imports.dylibs),
             };
             symtab.extend_from_slice(&nlist_undef(n_strx, ordinal, imp.weak));
         }
@@ -2912,6 +2937,7 @@ mod tests {
             dylibs: vec![ResolvedDylib {
                 name: "libc".into(),
                 path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
             }],
         };
         build.abi = super::super::Target::MacOSAarch64.abi();
@@ -3290,10 +3316,12 @@ mod tests {
             ResolvedDylib {
                 name: "libfoo".into(),
                 path: "/usr/lib/libfoo.dylib".into(),
+                main_executable: false,
             },
             ResolvedDylib {
                 name: "libSystem".into(),
                 path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
             },
         ];
         assert_eq!(tlv_bootstrap_ordinal(&dylibs).unwrap(), 2);
@@ -3345,6 +3373,7 @@ mod tests {
             .map(|i| ResolvedDylib {
                 name: format!("lib{i}"),
                 path: format!("/lib{i}.dylib"),
+                main_executable: false,
             })
             .collect();
         let imports = ResolvedImports {
@@ -3372,12 +3401,40 @@ mod tests {
         // stream's flat-lookup provenance (DYNAMIC_LOOKUP_ORDINAL), not a
         // two-level ordinal pointing at the first dylib.
         let flat = sample_import(0, true);
-        assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
-        let bytes = nlist_undef(0, import_library_ordinal(&flat), false);
+        assert_eq!(import_library_ordinal(&flat, &[]), DYNAMIC_LOOKUP_ORDINAL);
+        let bytes = nlist_undef(0, import_library_ordinal(&flat, &[]), false);
         let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
         assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
         let two_level = sample_import(0, false);
-        assert_eq!(import_library_ordinal(&two_level), 1);
+        assert_eq!(import_library_ordinal(&two_level, &[]), 1);
+    }
+
+    /// An import a bundle's loader supplies binds to the main executable:
+    /// `EXECUTABLE_ORDINAL` in the nlist, the special -1 in the bind stream.
+    #[test]
+    fn a_loader_import_binds_to_the_main_executable() {
+        use crate::c5::codegen::ResolvedDylib;
+        let dylibs = [
+            ResolvedDylib {
+                name: "libSystem".into(),
+                path: "/usr/lib/libSystem.B.dylib".into(),
+                main_executable: false,
+            },
+            ResolvedDylib {
+                name: "host".into(),
+                path: "host".into(),
+                main_executable: true,
+            },
+        ];
+        assert_eq!(import_library_ordinal(&sample_import(0, false), &dylibs), 1);
+        let from_host = sample_import(1, false);
+        assert_eq!(
+            import_library_ordinal(&from_host, &dylibs),
+            EXECUTABLE_ORDINAL
+        );
+        let mut out = Vec::new();
+        push_bind_source(&mut out, BindSource::of(&from_host, &dylibs));
+        assert_eq!(out, [0x3F]);
     }
 
     #[test]

@@ -1498,6 +1498,9 @@ pub(crate) struct ResolvedDylib {
     /// Loader-search-name or filesystem path. Goes verbatim into the
     /// LC_LOAD_DYLIB / DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR Name field.
     pub path: String,
+    /// The executable a Mach-O bundle loads into: its imports bind to the
+    /// main executable, and no load command names it.
+    pub main_executable: bool,
 }
 
 impl ResolvedDylib {
@@ -1514,6 +1517,7 @@ impl ResolvedDylib {
         ResolvedDylib {
             name: name.to_string(),
             path: path.to_string(),
+            main_executable: false,
         }
     }
 }
@@ -1635,6 +1639,7 @@ impl ResolvedImports {
                 self.dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
+                    main_executable: false,
                 });
                 self.dylibs.len() - 1
             }
@@ -1699,6 +1704,7 @@ impl ResolvedImports {
             .map(|s| ResolvedDylib {
                 name: s.name.clone(),
                 path: s.path.clone(),
+                main_executable: false,
             })
             .unwrap_or_else(|| ResolvedDylib::runtime_default(target));
         self.dylibs.push(dylib);
@@ -1802,6 +1808,7 @@ impl ResolvedImports {
                     dylibs.push(ResolvedDylib {
                         name: spec.name.clone(),
                         path: spec.path.clone(),
+                        main_executable: false,
                     });
                     dylibs.len() - 1
                 }
@@ -1848,6 +1855,7 @@ impl ResolvedImports {
                         dylibs.push(ResolvedDylib {
                             name: spec.name.clone(),
                             path: spec.path.clone(),
+                            main_executable: false,
                         });
                         dylibs.len() - 1
                     }
@@ -1876,6 +1884,7 @@ impl ResolvedImports {
                 dylibs.push(ResolvedDylib {
                     name: spec.name.clone(),
                     path: spec.path.clone(),
+                    main_executable: false,
                 });
             }
         }

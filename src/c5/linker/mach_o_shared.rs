@@ -41,6 +41,7 @@ use crate::c5::diag::Code;
 const MODULE: &str = "linker::mach_o_shared";
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
+const MH_EXECUTE: u32 = 0x2;
 const MH_DYLIB: u32 = 0x6;
 const MACH_HEADER_64_SIZE: usize = 32;
 
@@ -78,6 +79,30 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
             "not a 64-bit little-endian Mach-O dylib",
         ));
     }
+    parse_exports(bytes)
+}
+
+/// Read the executable a bundle loads into (ld64's `-bundle_loader`):
+/// its export trie, as a dylib's, lists what the bundle may bind to the
+/// main executable.
+pub fn parse_mach_o_loader(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
+    if bytes.len() < MACH_HEADER_64_SIZE
+        || u32le(bytes, 0) != Some(MH_MAGIC_64)
+        || u32le(bytes, 12) != Some(MH_EXECUTE)
+    {
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "not a 64-bit little-endian Mach-O executable",
+        ));
+    }
+    let mut lib = parse_exports(bytes)?;
+    lib.main_executable = true;
+    Ok(lib)
+}
+
+/// The install name and export trie of a 64-bit Mach-O image.
+fn parse_exports(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let need = |off: usize, what: &str| -> Result<u32, C5Error> {
         u32le(bytes, off).ok_or_else(|| {
             link_err(
@@ -185,6 +210,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
         export_hints: Default::default(),
         references: Default::default(),
@@ -414,6 +440,7 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
         export_symbols,
         export_versions: alloc::collections::BTreeMap::new(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
         export_hints: Default::default(),
         references: Default::default(),
@@ -785,6 +812,9 @@ mod tests {
         exe[12..16].copy_from_slice(&2u32.to_le_bytes()); // MH_EXECUTE
         assert!(!is_mach_o_dylib(&exe));
         assert!(parse_mach_o_dylib(&exe).is_err());
+        // An executable is read as a bundle's loader, and a dylib is not.
+        assert!(parse_mach_o_loader(&exe).is_ok_and(|l| l.main_executable));
+        assert!(parse_mach_o_loader(&dylib("/usr/lib/x.dylib", &[], false)).is_err());
     }
 
     /// A malformed dylib is the user's input, not badc's invariant:

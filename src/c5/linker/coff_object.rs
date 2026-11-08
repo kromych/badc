@@ -1633,6 +1633,7 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 references: Default::default(),
                 protected_exports: Default::default(),
                 from_image: true,
+                main_executable: false,
                 export_ordinals: Default::default(),
                 export_hints: Default::default(),
             });
@@ -1898,6 +1899,7 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         references: Default::default(),
         protected_exports: Default::default(),
         from_image: true,
+        main_executable: false,
         export_ordinals: Default::default(),
         export_hints: Default::default(),
     };

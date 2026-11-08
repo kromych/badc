@@ -553,12 +553,6 @@ impl Cli {
                 String::from("-bundle_loader"),
                 "it names a bundle's loader, and -bundle is absent",
             )
-        } else if link.bundle_loader.is_some() {
-            // TODO(#1903): bind the loader's exports to the main executable.
-            (
-                String::from("-bundle_loader"),
-                "a bundle binds to its loader's symbols here through -undefined dynamic_lookup",
-            )
         } else if let Some((kw, why)) = z_refusal {
             (format!("-z {}", kw.name()), why)
         } else if script {

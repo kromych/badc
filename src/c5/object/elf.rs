@@ -4494,6 +4494,7 @@ mod tests {
             dylibs: vec![ResolvedDylib {
                 name: "libc".into(),
                 path: "libc.so.6".into(),
+                main_executable: false,
             }],
         };
         build.abi = super::super::Target::LinuxAarch64.abi();

@@ -2148,9 +2148,10 @@ fn an_efi_image_with_a_try_scope_imports_nothing() {
 
 /// ld64's `-bundle` writes an `MH_BUNDLE` image that names itself by no
 /// install name and enters nowhere; `-flat_namespace` clears `MH_TWOLEVEL`
-/// and gives every import a flat lookup. A host `dlopen`s either form and
-/// the bundle reaches the host's function. A library carries no `MH_PIE`,
-/// and a non-Mach-O link refuses the options.
+/// and gives every import a flat lookup; `-bundle_loader` binds what the
+/// executable exports to the main executable, which no load command names.
+/// A host `dlopen`s each form and the bundle reaches the host's function.
+/// A library carries no `MH_PIE`, and a non-Mach-O link refuses the options.
 #[test]
 fn a_bundle_loads_into_its_host() {
     const MH_BUNDLE: u32 = 0x8;
@@ -2158,6 +2159,7 @@ fn a_bundle_loads_into_its_host() {
     const MH_PIE: u32 = 0x20_0000;
     const LC_MAIN: u32 = 0x8000_0028;
     const LC_ID_DYLIB: u32 = 0xD;
+    const LC_LOAD_DYLIB: u32 = 0xC;
     let dir = tempdir("macho-bundle");
     write_source(
         &dir,
@@ -2189,6 +2191,7 @@ fn a_bundle_loads_into_its_host() {
     for (form, flat) in [
         (&["-undefined", "dynamic_lookup"][..], false),
         (&["-flat_namespace", "-undefined", "suppress"], true),
+        (&["-bundle_loader", "host"], false),
     ] {
         build(&[&["-bundle", "plugin.c", "-o", "p.bundle"][..], form].concat());
         let image = std::fs::read(dir.join("p.bundle")).expect("read the bundle");
@@ -2203,6 +2206,10 @@ fn a_bundle_loads_into_its_host() {
                 cmd != LC_MAIN && cmd != LC_ID_DYLIB,
                 "{form:?}: command {cmd:#x}"
             );
+            if cmd == LC_LOAD_DYLIB {
+                let name = &image[off + u32le(&image, off + 8) as usize..];
+                assert!(!name.starts_with(b"host\0"), "{form:?}: loads the host");
+            }
             off += u32le(&image, off + 4) as usize;
         }
         if cfg!(target_os = "macos") {
@@ -2220,7 +2227,7 @@ fn a_bundle_loads_into_its_host() {
             "--target=macos-aarch64",
             "-bundle",
             "-bundle_loader",
-            "host",
+            "p.bundle",
         ],
     ] {
         let out = Command::new(badc())

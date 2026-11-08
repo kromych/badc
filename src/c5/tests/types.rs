@@ -412,6 +412,39 @@ fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
     }
 }
 
+/// Diagnostic pragmas inside an expression govern the conversion of the
+/// value between them, as clang resolves a call argument's and a return
+/// value's: a conversion reports at its value's position, not at the token
+/// after it. The same conversions outside the macro report.
+#[test]
+fn pragma_operators_scope_the_conversion_of_a_value_within_an_expression() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               void f(char *p);\n\
+               char *g(long v) { f(QUIET(v)); char *p = QUIET(v); p = QUIET(v); return QUIET(v); }\n\
+               char *h(long v) { f(v); return v; }\n\
+               #define NARROW(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wconstant-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               void k(signed char c);\n\
+               void m(void) { k(NARROW(300)); }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["int-conversion", "constant-conversion"]);
+    let got: alloc::vec::Vec<(u32, alloc::string::String)> = p
+        .warnings
+        .iter()
+        .map(|d| (d.loc.as_ref().map_or(0, |l| l.line), d.to_string()))
+        .collect();
+    assert_eq!(got.len(), 2, "{got:?}");
+    assert!(
+        got.iter().all(|(line, _)| *line == 4)
+            && got[0].1.contains("argument 1")
+            && got[1].1.contains("return"),
+        "{got:?}"
+    );
+}
+
 /// The MSVC spelling reaches the same rows through the catalogue's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]

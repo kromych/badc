@@ -585,8 +585,12 @@ impl Compiler {
     fn loc_at(&self, file: &str, line: usize) -> Loc {
         // On the lexer's own line the diagnostic resolves at its token, so a
         // `_Pragma` earlier on that line governs it (C99 6.10.9).
-        let here =
-            (file == self.lex.file && line == self.lex.line).then(|| self.lex.tok_start() as u32);
+        let anchored = (self.diag_anchor)
+            .filter(|&(l, _)| file == self.lex.file && l == line)
+            .map(|(_, offset)| offset);
+        let here = anchored.or_else(|| {
+            (file == self.lex.file && line == self.lex.line).then(|| self.lex.tok_start() as u32)
+        });
         match here.or_else(|| self.lex.line_offset(file, line)) {
             Some(offset) => Loc::in_unit(alloc::string::String::from(file), line as u32, offset),
             None => Loc::new(alloc::string::String::from(file), line as u32),
@@ -1147,10 +1151,27 @@ impl Compiler {
         text: alloc::string::String,
     ) -> Result<(), C5Error> {
         if m.code.default_level() == super::super::diag::Level::Error {
-            return self.report_at(m.code, line, text);
+            let outer = self.diag_anchor.replace(self.value_start);
+            let r = self.report_at(m.code, line, text);
+            self.diag_anchor = outer;
+            return r;
         }
-        self.warn_at(m.code, line, text);
+        self.warn_at_value(m.code, line, text);
         Ok(())
+    }
+
+    /// [`Self::warn_at`] for the conversion of the value just parsed, at
+    /// its own position, so a `_Pragma` around it in a macro argument
+    /// governs the report, as clang resolves it.
+    pub(super) fn warn_at_value(
+        &mut self,
+        code: Code,
+        line: usize,
+        message: alloc::string::String,
+    ) {
+        let outer = self.diag_anchor.replace(self.value_start);
+        self.warn_at(code, line, message);
+        self.diag_anchor = outer;
     }
 
     /// C99 6.7.8p11: an initializer converts to its object's type as if by
@@ -1399,7 +1420,7 @@ impl Compiler {
         } else {
             alloc::format!("`{to_s}`")
         };
-        self.warn_at(
+        self.warn_at_value(
             Code::CONSTANT_CONVERSION,
             line,
             alloc::format!(

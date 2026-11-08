@@ -1358,6 +1358,7 @@ impl Compiler {
     }
 
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
+        let start = (self.lex.line, self.lex.tok_start() as u32);
         let outer = core::mem::replace(&mut self.operand_start, self.lex.tok_start());
         let r = self.parse_unary().and_then(|()| {
             while self.lex.tk == '(' || (self.lex.tk >= lev && is_operator(self.lex.tk)) {
@@ -1366,6 +1367,7 @@ impl Compiler {
             Ok(())
         });
         self.operand_start = outer;
+        self.value_start = start;
         r
     }
 

@@ -112,6 +112,6 @@ impl Compiler {
             format_type(from, &self.structs),
             format_type(to, &self.structs)
         );
-        self.warn_at(Code::ENUM_CONVERSION, line, text);
+        self.warn_at_value(Code::ENUM_CONVERSION, line, text);
     }
 }

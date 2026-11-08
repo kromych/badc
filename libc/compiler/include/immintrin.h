@@ -313,22 +313,37 @@ static inline __m256i _mm256_srli_epi64(__m256i __A, int __N) {
     return (unsigned)__N > 63 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v4du)__A >> __N);
 }
 
-/* VPSLLDQ / VPSRLDQ: a byte shift within each 128-bit lane. */
-static inline __m256i _mm256_slli_si256(__m256i __A, const int __N) {
-    __v32qu __a = (__v32qu)__A, __r;
-    unsigned __n = (unsigned)__N & 0xFF;
-    for (int __i = 0; __i < 32; __i++)
-        __r[__i] = (unsigned)(__i & 15) >= __n ? __a[__i - __n] : 0;
-    return (__m256i)__r;
-}
-
-static inline __m256i _mm256_srli_si256(__m256i __A, const int __N) {
-    __v32qu __a = (__v32qu)__A, __r;
-    unsigned __n = (unsigned)__N & 0xFF;
-    for (int __i = 0; __i < 32; __i++)
-        __r[__i] = (__i & 15) + __n < 16 ? __a[__i + __n] : 0;
-    return (__m256i)__r;
-}
+/* The forms of an imm8 the instruction applies to each 128-bit lane (VPSLLDQ,
+** VPSRLDQ, VPSHUFD, VPSHUFHW, VPSHUFLW, VPALIGNR, VPBLENDW) are the SSE form
+** on each half; VPBLENDD gives each half four of its bits. Macros keep the
+** imm8 a literal, and each operand is evaluated once. */
+#define __BADC_AVX2_IMM1(op, A, N)                                                \
+    __extension__({                                                               \
+        __m256i __badc_a = (A);                                                   \
+        __badc_join_si(op(__badc_lo_si(__badc_a), N), op(__badc_hi_si(__badc_a), N)); \
+    })
+#define __BADC_AVX2_IMM2(op, A, B, N)                                             \
+    __extension__({                                                               \
+        __m256i __badc_a = (A), __badc_b = (B);                                   \
+        __badc_join_si(op(__badc_lo_si(__badc_a), __badc_lo_si(__badc_b), N),     \
+                       op(__badc_hi_si(__badc_a), __badc_hi_si(__badc_b), N));    \
+    })
+#define _mm256_slli_si256(A, N) __BADC_AVX2_IMM1(_mm_slli_si128, A, N)
+#define _mm256_srli_si256(A, N) __BADC_AVX2_IMM1(_mm_srli_si128, A, N)
+#define _mm256_shuffle_epi32(A, M) __BADC_AVX2_IMM1(_mm_shuffle_epi32, A, M)
+#define _mm256_shufflehi_epi16(A, M) __BADC_AVX2_IMM1(_mm_shufflehi_epi16, A, M)
+#define _mm256_shufflelo_epi16(A, M) __BADC_AVX2_IMM1(_mm_shufflelo_epi16, A, M)
+#define _mm256_alignr_epi8(A, B, N) __BADC_AVX2_IMM2(_mm_alignr_epi8, A, B, N)
+#define _mm256_blend_epi16(A, B, M) __BADC_AVX2_IMM2(_mm_blend_epi16, A, B, M)
+#define __badc_blend_epi32(X, Y, M)                                               \
+    _mm_castps_si128(_mm_blend_ps(_mm_castsi128_ps(X), _mm_castsi128_ps(Y), (M) & 15))
+#define _mm_blend_epi32(A, B, M) __badc_blend_epi32(A, B, M)
+#define _mm256_blend_epi32(A, B, M)                                               \
+    __extension__({                                                               \
+        __m256i __badc_a = (A), __badc_b = (B);                                   \
+        __badc_join_si(__badc_blend_epi32(__badc_lo_si(__badc_a), __badc_lo_si(__badc_b), M), \
+                       __badc_blend_epi32(__badc_hi_si(__badc_a), __badc_hi_si(__badc_b), (M) >> 4)); \
+    })
 
 static inline __m256i _mm256_permutevar8x32_epi32(__m256i __A, __m256i __I) {
     __v8si __a = (__v8si)__A, __i = (__v8si)__I, __r;
@@ -512,67 +527,6 @@ __BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SRL(u
 #undef __BADC_SLL
 #undef __BADC_SRL
 #undef __BADC_SRA
-
-/* VPSHUFD, VPSHUFHW, VPSHUFLW and VPALIGNR act on each 128-bit lane with
-** the one imm8. */
-static inline __m256i _mm256_shuffle_epi32(__m256i __A, const int __M) {
-    __v8si __a = (__v8si)__A, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = __a[(__i & 4) | (__M >> 2 * (__i & 3) & 3)];
-    return (__m256i)__r;
-}
-
-static inline __m256i _mm256_shufflehi_epi16(__m256i __A, const int __M) {
-    __v16hi __a = (__v16hi)__A, __r = __a;
-    for (int __i = 0; __i < 16; __i++)
-        if (__i & 4)
-            __r[__i] = __a[(__i & 12) | (__M >> 2 * (__i & 3) & 3)];
-    return (__m256i)__r;
-}
-
-static inline __m256i _mm256_shufflelo_epi16(__m256i __A, const int __M) {
-    __v16hi __a = (__v16hi)__A, __r = __a;
-    for (int __i = 0; __i < 16; __i++)
-        if (!(__i & 4))
-            __r[__i] = __a[(__i & 8) | (__M >> 2 * (__i & 3) & 3)];
-    return (__m256i)__r;
-}
-
-static inline __m256i _mm256_alignr_epi8(__m256i __A, __m256i __B, const int __N) {
-    __v32qu __a = (__v32qu)__A, __b = (__v32qu)__B, __r;
-    unsigned __n = (unsigned)__N & 0xFF;
-    for (int __i = 0; __i < 32; __i++) {
-        unsigned __k = (__i & 15) + __n;
-        __r[__i] = __k < 16 ? __b[(__i & 16) + __k] : __k < 32 ? __a[(__i & 16) + __k - 16] : 0;
-    }
-    return (__m256i)__r;
-}
-
-/* VPBLENDW repeats its imm8 over each 128-bit lane; VPBLENDD takes a bit
-** per doubleword. */
-static inline __m256i _mm256_blend_epi16(__m256i __A, __m256i __B, const int __M) {
-    __v16hi __a = (__v16hi)__A, __b = (__v16hi)__B;
-    for (int __i = 0; __i < 16; __i++)
-        if (__M >> (__i & 7) & 1)
-            __a[__i] = __b[__i];
-    return (__m256i)__a;
-}
-
-static inline __m256i _mm256_blend_epi32(__m256i __A, __m256i __B, const int __M) {
-    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
-    for (int __i = 0; __i < 8; __i++)
-        if (__M >> __i & 1)
-            __a[__i] = __b[__i];
-    return (__m256i)__a;
-}
-
-static inline __m128i _mm_blend_epi32(__m128i __A, __m128i __B, const int __M) {
-    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
-    for (int __i = 0; __i < 4; __i++)
-        if (__M >> __i & 1)
-            __a[__i] = __b[__i];
-    return (__m128i)__a;
-}
 
 static inline __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
     return __badc_join_si(_mm_blendv_epi8(__badc_lo_si(__A), __badc_lo_si(__B), __badc_lo_si(__M)),

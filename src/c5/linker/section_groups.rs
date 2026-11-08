@@ -19,6 +19,13 @@ fn standard(name: &str) -> bool {
     matches!(name, ".text" | ".rdata" | ".data" | ".bss")
 }
 
+/// A function-override table (`<f>_$fo_bdd$`, `<f>_$fo_rvas$`). link.exe's
+/// image carries none in a section of its own, so its bytes join `.rdata`.
+fn function_override_table(name: &str) -> bool {
+    name.split_once('$')
+        .is_some_and(|(_, suffix)| suffix.starts_with("fo_") || suffix == "fo$")
+}
+
 /// Whether `to` keeps its protection with `family` contents merged in.
 fn standard_holds(to: &str, family: SectionFamily) -> bool {
     use SectionFamily::*;
@@ -157,6 +164,7 @@ impl SectionGroups {
     /// The output section the grouped input section `name` joins.
     pub(crate) fn output<'a>(&'a self, name: &'a str) -> &'a str {
         match self.pe {
+            true if function_override_table(name) => ".rdata",
             true => self.output_of(coff_group_base(name).unwrap_or(name)),
             false => name,
         }
@@ -188,5 +196,23 @@ impl SectionGroups {
             (rank, String::from(out), !own, s.name.clone(), i)
         });
         v
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A function-override table joins `.rdata` in a PE image, where another
+    /// `base$suffix` section joins `base`; elsewhere a name is its own.
+    #[test]
+    fn a_function_override_table_joins_rdata() {
+        let pe = SectionGroups::new(&[], true).unwrap();
+        for name in ["memcpy_$fo_bdd$", "memcpy_$fo_rvas$", "memcpy_$fo$"] {
+            assert_eq!(pe.output(name), ".rdata", "{name}");
+        }
+        assert_eq!(pe.output("table$b"), "table");
+        let elf = SectionGroups::new(&[], false).unwrap();
+        assert_eq!(elf.output("memcpy_$fo_bdd$"), "memcpy_$fo_bdd$");
     }
 }

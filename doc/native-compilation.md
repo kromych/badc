@@ -134,6 +134,8 @@ A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
 becomes the image's `.rsrc` section: the resource directory by type, name and
 language, which the loader reads for the manifest, the version and the strings.
 A cvtres object's resources (`.rsrc$01` / `.rsrc$02`) join them.
+Each export of a PE image names a definition in the link or an import, as
+link.exe requires; a forwarder (`name=dll.export`) names another DLL's.
 A module-definition file (`.def`) among a PE link's inputs gives the image its
 `EXPORTS`, as link.exe's `/DEF:` does: an export under another name, at an
 `@ordinal`, `NONAME`, `DATA` or `PRIVATE` (kept out of `--out-implib`'s

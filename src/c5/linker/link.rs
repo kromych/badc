@@ -1176,6 +1176,9 @@ pub fn link_native_objects_with<'a>(
     }
     link.lay_out_init_fini_arrays();
     link.collect_definitions()?;
+    if link.pe_image {
+        link.require_pe_exports_defined();
+    }
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
@@ -3564,6 +3567,25 @@ impl<'a> Link<'a> {
         self.imports.push(name.to_string());
         self.import_idx_for_name.insert(name, i);
         i
+    }
+
+    /// A PE image's exports name definitions, as link.exe requires: an
+    /// export, or the target of one under another name, that nothing in the
+    /// link defines or imports is undefined. A forwarder names another DLL.
+    fn require_pe_exports_defined(&mut self) {
+        let objs = self.objs;
+        for obj in objs {
+            let targets = (obj.export_aliases.iter())
+                .filter(|a| !a.target.contains('.'))
+                .map(|a| &a.target);
+            for name in obj.exports.iter().chain(targets) {
+                if !self.defined.contains_key(name.as_str())
+                    && !self.shlib_exports.contains(name.as_str())
+                {
+                    self.note_undefined_at(name, &format!(" (an export of {})", obj.source));
+                }
+            }
+        }
     }
 
     /// Record a reference to the undefined `name`, left unpatched.

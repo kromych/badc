@@ -7450,6 +7450,59 @@ fn seh_directives_in_an_assembly_unit_unwind_its_function() {
     );
 }
 
+/// An export names a definition, as link.exe requires (LNK2001): a DLL
+/// linked from a module-definition file whose exports nothing defines, or
+/// an export under another name whose target is undefined, is refused with
+/// each name reported; a forwarder to another DLL needs no definition.
+#[test]
+fn an_export_nothing_defines_is_undefined() {
+    let dir = tempdir("pe-def-undefined");
+    let def = write_source(
+        &dir,
+        "x.def",
+        "LIBRARY x\nEXPORTS\n  add @1\n  counter DATA\n",
+    );
+    let src = write_source(&dir, "x.c", "int add(int a, int b) { return a + b; }\n");
+    let alias = write_source(
+        &dir,
+        "y.def",
+        "EXPORTS\n  add\n  plus=add\n  ticks=kernel32.GetTickCount\n  minus=sub\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let out = Command::new(badc())
+            .args([&format!("--target={target}"), "--shared"])
+            .arg(&def)
+            .arg("-o")
+            .arg(dir.join("x.dll"))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target}: {err}");
+        for name in ["add", "counter"] {
+            assert!(
+                err.contains(&format!("undefined reference to `{name}` (an export of")),
+                "{target}: {err}"
+            );
+        }
+        let out = Command::new(badc())
+            .args([&format!("--target={target}"), "--shared"])
+            .args([&src, &alias])
+            .arg("-o")
+            .arg(dir.join("y.dll"))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("undefined reference to `sub`"),
+            "{target}: {err}"
+        );
+        assert!(
+            !err.contains("`add`") && !err.contains("GetTickCount"),
+            "{target}: {err}"
+        );
+    }
+}
+
 /// A module-definition file among a PE link's inputs gives the DLL its
 /// exports as link.exe takes them: `LIBRARY` names it, an ordinal places an
 /// export, `NONAME` drops its name, `PRIVATE` keeps it out of the import

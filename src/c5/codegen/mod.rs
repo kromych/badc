@@ -2138,6 +2138,9 @@ pub(crate) struct Build {
     pub named_sections: Vec<NamedSection>,
     /// The exports an ordinal or `NONAME` shapes (PE).
     pub export_forms: Vec<ExportForm>,
+    /// A PE name import's hint by its symbol, where an import library
+    /// states one.
+    pub import_hints: alloc::collections::BTreeMap<String, u16>,
     /// The prologue steps an asm function's `.seh_*` directives give it,
     /// keyed by its name.
     pub asm_unwind: Vec<(String, UnwindSteps)>,

@@ -90,6 +90,7 @@ fn no_exports(soname: &str, target: Target) -> SharedLibrary {
         export_versions: BTreeMap::new(),
         from_image: false,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
         references: Default::default(),
         protected_exports: Default::default(),
     }

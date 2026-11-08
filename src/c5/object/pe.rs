@@ -738,7 +738,12 @@ impl<'a> PeWriter<'a> {
         l.pdata_raw_size = round_up(l.pdata_bytes.len() as u32, FILE_ALIGNMENT);
         l.idata_rva = round_up(l.pdata_rva + l.pdata_bytes.len() as u32, l.section_align);
         l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
-        l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
+        l.idata = plan_idata(
+            &self.dlls,
+            &self.imports,
+            &self.build.import_hints,
+            l.idata_rva,
+        );
         l.idata_raw_size = round_up(l.idata.bytes.len() as u32, FILE_ALIGNMENT);
         Ok(())
     }
@@ -2594,6 +2599,7 @@ struct IDataLayout {
 fn plan_idata(
     dlls: &[DllGroup],
     imports: &[(String, String, Option<u16>)],
+    hints: &alloc::collections::BTreeMap<String, u16>,
     base_rva: u32,
 ) -> IDataLayout {
     let n_dlls = dlls.len();
@@ -2689,9 +2695,11 @@ fn plan_idata(
         }
     }
 
+    // The hint the import library gives, which the loader tries first.
     for (i, (sym, _, _)) in imports.iter().enumerate().filter(|(_, i)| i.2.is_none()) {
         let off = hint_offsets[i];
-        bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        let hint = hints.get(sym).copied().unwrap_or(0);
+        bytes[off..off + 2].copy_from_slice(&hint.to_le_bytes());
         bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());
     }
 

@@ -1546,6 +1546,8 @@ pub struct ImportMember {
     pub import_name: String,
     /// `IMPORT_OBJECT_ORDINAL`: the ordinal the DLL is asked for instead of a name.
     pub ordinal: Option<u16>,
+    /// A name import's hint: the name's index in the DLL's export name table.
+    pub hint: u16,
     /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
     pub data: bool,
 }
@@ -1584,7 +1586,8 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
     let stripped = symbol
         .strip_prefix(|c| matches!(c, '?' | '@' | '_'))
         .unwrap_or(symbol);
-    let ordinal = ((kinds >> 2) & 7 == 0).then(|| u16le(bytes, 16).unwrap_or(0));
+    let ordinal_or_hint = u16le(bytes, 16).unwrap_or(0);
+    let ordinal = ((kinds >> 2) & 7 == 0).then_some(ordinal_or_hint);
     let import_name = match (kinds >> 2) & 7 {
         0 | 1 => symbol.to_string(),
         2 => stripped.to_string(),
@@ -1606,6 +1609,7 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
         dll: dll.to_string(),
         import_name,
         ordinal,
+        hint: ordinal_or_hint,
         data: kinds & 3 != 0,
     }))
 }
@@ -1630,6 +1634,7 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 protected_exports: Default::default(),
                 from_image: true,
                 export_ordinals: Default::default(),
+                export_hints: Default::default(),
             });
         lib.exports.insert(m.symbol.clone());
         lib.exports.insert(format!("__imp_{}", m.symbol));
@@ -1638,7 +1643,10 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
         }
         if let Some(ordinal) = m.ordinal {
             lib.export_ordinals.insert(m.symbol.clone(), ordinal);
-        } else if m.import_name != m.symbol {
+        } else {
+            lib.export_hints.insert(m.symbol.clone(), m.hint);
+        }
+        if m.ordinal.is_none() && m.import_name != m.symbol {
             lib.export_symbols
                 .insert(m.symbol.clone(), m.import_name.clone());
         }
@@ -1724,9 +1732,14 @@ impl Shallow<'_> {
         })?;
         let content = s.content(self.bytes).ok()?;
         let slot = u64::from_le_bytes(content.get(at as usize..at as usize + 8)?.try_into().ok()?);
-        let (import_name, ordinal) = match self.image_relative_at(s, at) {
-            Some(entry) => (self.string_at(entry, (slot as u32).checked_add(2)?)?, None),
-            None if slot >> 63 == 1 => (symbol.to_string(), Some(slot as u16)),
+        let (import_name, ordinal, hint) = match self.image_relative_at(s, at) {
+            Some(entry) => {
+                let name = self.string_at(entry, (slot as u32).checked_add(2)?)?;
+                let content = self.section_of(entry)?.content(self.bytes).ok()?;
+                let hint = u16le(content, (entry.value as usize).checked_add(slot as usize)?);
+                (name, None, hint.unwrap_or(0))
+            }
+            None if slot >> 63 == 1 => (symbol.to_string(), Some(slot as u16), 0),
             None => return None,
         };
         let references = (self.externals())
@@ -1739,6 +1752,7 @@ impl Shallow<'_> {
             dll: String::new(),
             import_name,
             ordinal,
+            hint,
             data: self.defined(symbol).is_none(),
         };
         Some((import, references))
@@ -1885,6 +1899,7 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         protected_exports: Default::default(),
         from_image: true,
         export_ordinals: Default::default(),
+        export_hints: Default::default(),
     };
     let dir_rva = need_u32(bytes, opt + 112, "export directory")?;
     let dir_size = need_u32(bytes, opt + 116, "export directory")?;

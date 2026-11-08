@@ -6274,6 +6274,75 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
     }
 }
 
+/// A name import's hint/name entry takes the hint the import library's
+/// member states, as link.exe writes it: lib.exe numbered seh_dll_cl's
+/// exports 0, 1 and 2 in name order.
+#[test]
+fn an_import_takes_its_hint_from_the_import_library() {
+    let coff = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coff");
+    let dir = tempdir("pe-import-hints");
+    let src = write_source(
+        &dir,
+        "hint.c",
+        "void cl_dll_raise(unsigned long, int *);\n\
+         unsigned long cl_dll_catch(void (*)(int *), int *);\n\
+         void cl_dll_through(void (*)(int *), int *);\n\
+         int main(void) { return !cl_dll_raise + !cl_dll_catch + !cl_dll_through; }\n",
+    );
+    let exe = dir.join("hint.exe");
+    let out = Command::new(badc())
+        .arg("--target=windows-x64")
+        .args([
+            src.as_os_str(),
+            coff.join("seh_dll_cl.x64.lib").as_os_str(),
+            "-o".as_ref(),
+            exe.as_os_str(),
+        ])
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let pe = std::fs::read(&exe).expect("read image");
+    let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+    let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+    let coff_hdr = u32_at(0x3c) + 4;
+    let opt = coff_hdr + 20;
+    let table = opt + u16_at(coff_hdr + 16);
+    let file = |rva: usize| {
+        (0..u16_at(coff_hdr + 2))
+            .map(|i| table + 40 * i)
+            .find(|&h| (u32_at(h + 12)..u32_at(h + 12) + u32_at(h + 8)).contains(&rva))
+            .map(|h| u32_at(h + 20) + rva - u32_at(h + 12))
+            .expect("RVA in a section")
+    };
+    let mut hints = std::collections::BTreeMap::new();
+    let mut desc = file(u32_at(opt + 112 + 8));
+    while u32_at(desc + 12) != 0 {
+        let mut ilt = file(u32_at(desc));
+        while u32_at(ilt) != 0 || u32_at(ilt + 4) != 0 {
+            let entry = file(u32_at(ilt));
+            let name: Vec<u8> = pe[entry + 2..]
+                .iter()
+                .take_while(|&&b| b != 0)
+                .copied()
+                .collect();
+            hints.insert(String::from_utf8(name).unwrap(), u16_at(entry));
+            ilt += 8;
+        }
+        desc += 20;
+    }
+    for (name, hint) in [
+        ("cl_dll_catch", 0),
+        ("cl_dll_raise", 1),
+        ("cl_dll_through", 2),
+    ] {
+        assert_eq!(hints.get(name), Some(&hint), "{name}: {hints:?}");
+    }
+}
+
 /// A cvtres object's resources (rsrc_cvtres.rc beside it) become the image's
 /// `.rsrc`: an ID and a named entry reached by type, name and language, and
 /// on Windows `FindResourceW` and `LoadStringW` find them.

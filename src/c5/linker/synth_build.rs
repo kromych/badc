@@ -188,6 +188,14 @@ fn synth_program_and_build(
         resolve_entry_offset(merged, entry_name)?
     };
     let imports = synth_imports(merged, target)?;
+    let import_hints = (imports.imports.iter())
+        .filter_map(|i| {
+            Some((
+                i.real_symbol.clone(),
+                *merged.import_hints.get(&i.local_name)?,
+            ))
+        })
+        .collect();
     // Slots the PLT pass left unresolved for the loader to bind.
     let data_import_binds = merged.data_import_refs.clone();
     let tls_data_import_binds = merged.tls_data_import_refs.clone();
@@ -300,6 +308,7 @@ fn synth_program_and_build(
         named_sections: merged.named_sections.clone(),
         named_code_sections: merged.named_code_sections.clone(),
         export_forms: merged.export_forms.clone(),
+        import_hints,
         asm_unwind: Vec::new(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
@@ -1955,6 +1964,7 @@ mod tests {
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
             import_ordinals: alloc::collections::BTreeMap::new(),
+            import_hints: Default::default(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),

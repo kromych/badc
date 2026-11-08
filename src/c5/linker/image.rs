@@ -1372,6 +1372,7 @@ mod tests {
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
             import_ordinals: alloc::collections::BTreeMap::new(),
+            import_hints: Default::default(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),

@@ -437,6 +437,8 @@ impl Compiler {
                     format!("`{name}` last argument must be an integer constant expression"),
                 ));
             };
+            // PALIGNR's builtin counts bits, as gcc's does.
+            let n = if row.sem == Sem::AlignR { n / 8 } else { n };
             imm = Some(n as u8);
             args.truncate(last);
         } else if row.form == Form::Shift {

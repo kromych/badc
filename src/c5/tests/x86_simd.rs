@@ -223,6 +223,43 @@ fn shuffles_carry_their_immediate() {
     );
 }
 
+/// The SSSE3 forms take the 0F38 map, `66 45 0f 38 <op> fe`; PALIGNR's
+/// builtin counts bits and the instruction bytes.
+#[cfg(feature = "full")]
+#[test]
+fn ssse3_ops_emit_their_instruction() {
+    for (builtin, opcode, unary) in [
+        ("pabsb128", 0x1cu8, true),
+        ("pabsw128", 0x1d, true),
+        ("pabsd128", 0x1e, true),
+        ("psignb128", 0x08, false),
+        ("psignw128", 0x09, false),
+        ("psignd128", 0x0a, false),
+        ("phaddw128", 0x01, false),
+        ("phaddd128", 0x02, false),
+        ("phaddsw128", 0x03, false),
+        ("phsubw128", 0x05, false),
+        ("phsubd128", 0x06, false),
+        ("phsubsw128", 0x07, false),
+        ("pmulhrsw128", 0x0b, false),
+    ] {
+        let src = if unary {
+            format!("__m128i f(__m128i a) {{ return (__m128i)__builtin_ia32_{builtin}(a); }}")
+        } else {
+            format!(
+                "__m128i f(__m128i a, __m128i b) {{ return (__m128i)__builtin_ia32_{builtin}(a, b); }}"
+            )
+        };
+        assert_emits(&src, &[0x66, 0x45, 0x0f, 0x38, opcode, 0xfe], builtin);
+    }
+    // palignr $0x5, %xmm14, %xmm15   66 45 0f 3a 0f fe 05
+    assert_emits(
+        "__m128i f(__m128i a, __m128i b) { return (__m128i)__builtin_ia32_palignr128(a, b, 40); }",
+        &[0x66, 0x45, 0x0f, 0x3a, 0x0f, 0xfe, 0x05],
+        "palignr",
+    );
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn element_access_uses_the_extract_and_insert_instructions() {
@@ -1266,6 +1303,46 @@ fn word_products_split_and_sum() {
     assert_eq!(&hu[..2], &[0xfe, 0xff]);
 }
 
+/// PABS, PSIGN, the horizontal forms, PMULHRSW and PALIGNR as the SDM
+/// defines them.
+#[test]
+fn ssse3_lanes_follow_the_instruction() {
+    let a = v([
+        0x80, 0x7f, 0xff, 0x00, 0x00, 0x80, 0x05, 0x00, 1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
+    let abs = x86_simd::eval(Sem::Abs(1), &a, &[0; 16], 0, 0);
+    assert_eq!(&abs[..4], &[0x80, 0x7f, 0x01, 0x00]);
+    let abs = x86_simd::eval(Sem::Abs(2), &a, &[0; 16], 0, 0);
+    assert_eq!(&abs[4..8], &[0x00, 0x80, 0x05, 0x00]);
+    let s = v([0xff, 0x00, 0x01, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let sign = x86_simd::eval(Sem::Sign(1), &a, &s, 0, 0);
+    // -(-128) wraps to -128; a zero selector zeroes; a positive one keeps.
+    assert_eq!(&sign[..4], &[0x80, 0x00, 0xff, 0x00]);
+    // Words of `a`: 0x7f80, 0x00ff, 0x8000, 0x0005.
+    let h = x86_simd::eval(Sem::HAdd(2, false), &a, &a, 0, 0);
+    assert_eq!(&h[..4], &[0x7f, 0x80, 0x05, 0x80]);
+    let hs = x86_simd::eval(Sem::HAdd(2, true), &a, &a, 0, 0);
+    assert_eq!(&hs[..4], &[0xff, 0x7f, 0x05, 0x80]);
+    let d = x86_simd::eval(Sem::HSub(2, true), &a, &a, 0, 0);
+    // 0x7f80 - 0x00ff = 0x7e81; -32768 - 5 saturates to -32768.
+    assert_eq!(&d[..4], &[0x81, 0x7e, 0x00, 0x80]);
+    let z = x86_simd::eval(Sem::HAdd(4, false), &[0; 16], &a, 0, 0);
+    assert_eq!(&z[..8], &[0; 8]);
+    // 0x00ff7f80 + 0x00058000 = 0x0104ff80.
+    assert_eq!(&z[8..12], &[0x80, 0xff, 0x04, 0x01]);
+    // -32768 * -32768 rounds to 0x8000; 0x4000 * 0x4000 to 0x2000.
+    let m = v([0x00, 0x80, 0x00, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let r = x86_simd::eval(Sem::MulHrs, &m, &m, 0, 0);
+    assert_eq!(&r[..4], &[0x00, 0x80, 0x00, 0x20]);
+    let lo = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    let hi = [0xaa; 16];
+    let al = x86_simd::eval(Sem::AlignR, &hi, &lo, 14, 0);
+    assert_eq!(&al[..4], &[14, 15, 0xaa, 0xaa]);
+    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[11], 0xaa);
+    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[12], 0);
+    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 32, 0), [0; 16]);
+}
+
 /// PAVG rounds the unsigned mean up; PMIN / PMAX compare as the row says.
 #[test]
 fn averages_and_extremes_read_the_lanes_as_the_instruction_does() {
@@ -1563,6 +1640,12 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::ShufHi
         | Sem::ShufLo
         | Sem::ShufB
+        | Sem::Abs(_)
+        | Sem::Sign(_)
+        | Sem::HAdd(..)
+        | Sem::HSub(..)
+        | Sem::MulHrs
+        | Sem::AlignR
         | Sem::ShufPd
         | Sem::ClMul
         | Sem::AesEnc

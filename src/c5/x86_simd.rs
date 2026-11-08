@@ -126,6 +126,17 @@ pub(crate) enum Sem {
     ShufLo,
     /// Byte shuffle by a vector index, a set index bit 7 zeroing the byte.
     ShufB,
+    /// Lane magnitude, the most negative value its own.
+    Abs(u8),
+    /// The first operand's lane negated, kept or zeroed by the second's sign.
+    Sign(u8),
+    /// Adjacent-lane sums or differences, the first operand's low; `true` saturates.
+    HAdd(u8, bool),
+    HSub(u8, bool),
+    /// Signed word products, bits 30:15 rounded at bit 14.
+    MulHrs,
+    /// The operands concatenated, the first high, shifted right by imm8 bytes.
+    AlignR,
     /// Double-precision element select from two sources.
     ShufPd,
     /// Carry-less multiply of the selected quads.
@@ -318,6 +329,21 @@ pub(crate) const OPS: &[SimdOp] = &[
     // SSSE3.
     op("__builtin_ia32_pshufb128", "pshufb", Form::Vv, Ret::V16qi, Sem::ShufB, 0),
     op("__builtin_ia32_pmaddubsw128", "pmaddubsw", Form::Vv, Ret::V8hi, Sem::MulAddBytes, 0),
+    op("__builtin_ia32_pabsb128", "pabsb", Form::V, Ret::V16qi, Sem::Abs(1), 0),
+    op("__builtin_ia32_pabsw128", "pabsw", Form::V, Ret::V8hi, Sem::Abs(2), 0),
+    op("__builtin_ia32_pabsd128", "pabsd", Form::V, Ret::V4si, Sem::Abs(4), 0),
+    op("__builtin_ia32_psignb128", "psignb", Form::Vv, Ret::V16qi, Sem::Sign(1), 0),
+    op("__builtin_ia32_psignw128", "psignw", Form::Vv, Ret::V8hi, Sem::Sign(2), 0),
+    op("__builtin_ia32_psignd128", "psignd", Form::Vv, Ret::V4si, Sem::Sign(4), 0),
+    op("__builtin_ia32_phaddw128", "phaddw", Form::Vv, Ret::V8hi, Sem::HAdd(2, false), 0),
+    op("__builtin_ia32_phaddd128", "phaddd", Form::Vv, Ret::V4si, Sem::HAdd(4, false), 0),
+    op("__builtin_ia32_phaddsw128", "phaddsw", Form::Vv, Ret::V8hi, Sem::HAdd(2, true), 0),
+    op("__builtin_ia32_phsubw128", "phsubw", Form::Vv, Ret::V8hi, Sem::HSub(2, false), 0),
+    op("__builtin_ia32_phsubd128", "phsubd", Form::Vv, Ret::V4si, Sem::HSub(4, false), 0),
+    op("__builtin_ia32_phsubsw128", "phsubsw", Form::Vv, Ret::V8hi, Sem::HSub(2, true), 0),
+    op("__builtin_ia32_pmulhrsw128", "pmulhrsw", Form::Vv, Ret::V8hi, Sem::MulHrs, 0),
+    // PALIGNR's builtin counts bits, as gcc's does.
+    op("__builtin_ia32_palignr128", "palignr", Form::VvI, Ret::V2di, Sem::AlignR, 0),
     // SSE4.1.
     op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
     op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Ret::Int, Sem::Move, 4),
@@ -846,6 +872,55 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     0
                 } else {
                     a[(b[i] & 0x0f) as usize]
+                };
+            }
+        }
+        Sem::Abs(w) => {
+            for i in 0..16 / w as usize {
+                set_lane(&mut o, w, i, slane(a, w, i).unsigned_abs() & mask(w));
+            }
+        }
+        Sem::Sign(w) => {
+            for i in 0..16 / w as usize {
+                let x = match slane(b, w, i).signum() {
+                    -1 => slane(a, w, i).wrapping_neg(),
+                    0 => 0,
+                    _ => slane(a, w, i),
+                };
+                set_lane(&mut o, w, i, x as u64 & mask(w));
+            }
+        }
+        Sem::HAdd(w, sat) | Sem::HSub(w, sat) => {
+            let bits = 8 * w as u32;
+            let pairs = 8 / w as usize;
+            for i in 0..2 * pairs {
+                let src = if i < pairs { a } else { b };
+                let k = 2 * (i % pairs);
+                let (x, y) = (slane(src, w, k), slane(src, w, k + 1));
+                let mut r = if matches!(sem, Sem::HAdd(..)) {
+                    x + y
+                } else {
+                    x - y
+                };
+                if sat {
+                    r = r.clamp(-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1);
+                }
+                set_lane(&mut o, w, i, r as u64 & mask(w));
+            }
+        }
+        Sem::MulHrs => {
+            for i in 0..8 {
+                let p = slane(a, 2, i) * slane(b, 2, i);
+                set_lane(&mut o, 2, i, (((p >> 14) + 1) >> 1) as u64 & mask(2));
+            }
+        }
+        Sem::AlignR => {
+            let n = imm as usize;
+            for (i, byte) in o.iter_mut().enumerate() {
+                *byte = match i + n {
+                    k if k < 16 => b[k],
+                    k if k < 32 => a[k - 16],
+                    _ => 0,
                 };
             }
         }

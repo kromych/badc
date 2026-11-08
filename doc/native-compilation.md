@@ -134,8 +134,21 @@ A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
 becomes the image's `.rsrc` section: the resource directory by type, name and
 language, which the loader reads for the manifest, the version and the strings.
 A cvtres object's resources (`.rsrc$01` / `.rsrc$02`) join them.
-Each export of a PE image names a definition in the link or an import, as
-link.exe requires; a forwarder (`name=dll.export`) names another DLL's.
+Each export of a PE image and each `/INCLUDE:` name names a definition in the
+link or an import, as link.exe requires; a forwarder (`name=dll.export`) names
+another DLL's.
+The C runtime's tables, `.CRT$XI*` and `.CRT$XC*` (initializers and
+constructors) and `.CRT$XP*` and `.CRT$XT*` (pre-terminators and terminators),
+run in section-name order across units, as link.exe orders a grouped section,
+each table forward: ahead of the `.init_array` constructors at startup and
+after the destructors at exit, as the image's and `--jit`'s startup call them.
+`.CRT$XL*` entries are TLS callbacks: the image's TLS directory lists them, and
+it is emitted for them, for thread-local data, or for a unit naming
+`_tls_used`, which the link defines at it.
+On Windows x86-64, `__isa_available` and `__isa_enabled`, which code built for
+the MSVC runtime reads, come from badc's compiler runtime when a unit names
+them: the highest level of `<isa_availability.h>` the processor and the OS
+support, and a bit per level from SSE2 up, set before the C initializers run.
 A module-definition file (`.def`) among a PE link's inputs gives the image its
 `EXPORTS`, as link.exe's `/DEF:` does: an export under another name, at an
 `@ordinal`, `NONAME`, `DATA` or `PRIVATE` (kept out of `--out-implib`'s

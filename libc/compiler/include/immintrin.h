@@ -1514,6 +1514,158 @@ static inline long long _xgetbv(unsigned int __A) {
 /* XCR0's index, as MSVC's <immintrin.h> names it. */
 #define _XCR_XFEATURE_ENABLED_MASK 0
 
+/* F16C, from the operation the SDM gives VCVTPS2PH and VCVTPH2PS: equal to
+** the instructions' results and MXCSR exception flags on every operand and
+** rounding control, so they run on any processor and under the
+** interpreter. Exceptions are taken as masked. */
+#define __BADC_MXCSR_IE 0x01u
+#define __BADC_MXCSR_DE 0x02u
+#define __BADC_MXCSR_OE 0x08u
+#define __BADC_MXCSR_UE 0x10u
+#define __BADC_MXCSR_PE 0x20u
+
+/* Whether rounding `__m` with the dropped bits `__r`, `__s` of them, under
+** rounding control `__rc` increments it. */
+static inline unsigned __badc_rounds_up(unsigned __m, unsigned __r, int __s, unsigned __rc,
+                                        unsigned __sign) {
+    unsigned long long __half = __s < 64 ? 1ull << (__s - 1) : ~0ull;
+    if (!__r)
+        return 0;
+    switch (__rc & 3) {
+    case 0: return __r > __half || (__r == __half && (__m & 1));
+    case 1: return __sign != 0;
+    case 2: return __sign == 0;
+    default: return 0;
+    }
+}
+
+/* Binary32 `__x` to binary16 under rounding control `__rc` (MXCSR.RC's
+** encoding), as VCVTPS2PH converts it: MXCSR.DAZ zeroes a denormal operand,
+** FTZ does not apply, and tininess is detected after rounding. Or's the
+** exception flags it raises into `*__flags`. */
+static inline unsigned short __badc_f32_to_f16(unsigned __x, unsigned __rc, unsigned __csr,
+                                               unsigned *__flags) {
+    unsigned __sign = __x >> 16 & 0x8000u, __exp = __x >> 23 & 0xffu, __man = __x & 0x7fffffu;
+    if (__exp == 0xffu) {
+        if (!__man)
+            return (unsigned short)(__sign | 0x7c00u);
+        if (!(__man & 0x400000u))
+            *__flags |= __BADC_MXCSR_IE;
+        return (unsigned short)(__sign | 0x7e00u | __man >> 13);
+    }
+    if (!__exp) {
+        if (!__man || (__csr & 0x40u))
+            return (unsigned short)__sign;
+        *__flags |= __BADC_MXCSR_DE;
+    }
+    unsigned __sig = __exp ? __man | 0x800000u : __man;
+    int __e = __exp ? (int)__exp - 150 : -149, __ue = __e + 31 - __builtin_clz(__sig);
+    int __s = (__ue >= -14 ? __ue - 10 : -24) - __e;
+    unsigned __m = __s < 32 ? __sig >> __s : 0;
+    unsigned __r = __s < 32 ? __sig & ((1u << __s) - 1) : __sig;
+    __m += __badc_rounds_up(__m, __r, __s, __rc, __sign);
+    unsigned __bits = __ue >= -14 ? (unsigned)((__ue + 15) << 10) + __m - 1024u : __m;
+    if (__bits >= 0x7c00u) {
+        *__flags |= __BADC_MXCSR_OE | __BADC_MXCSR_PE;
+        unsigned __rd = __rc & 3;
+        int __inf = __rd == 0 || (__rd == 1 && __sign) || (__rd == 2 && !__sign);
+        return (unsigned short)(__sign | (__inf ? 0x7c00u : 0x7bffu));
+    }
+    if (__r) {
+        /* Below 2^-14 once rounded to 11 bits with the exponent unbounded. */
+        unsigned __m11 = __sig >> 13;
+        int __tiny = __ue < -15 ||
+                     (__ue == -15 &&
+                      __m11 + __badc_rounds_up(__m11, __sig & 0x1fffu, 13, __rc, __sign) < 2048);
+        *__flags |= __BADC_MXCSR_PE | (__tiny ? __BADC_MXCSR_UE : 0);
+    }
+    return (unsigned short)(__sign | __bits);
+}
+
+/* Binary16 `__h` to binary32, exact and raising no exception, as VCVTPH2PS
+** converts it: a signaling NaN is quieted, a denormal kept. */
+static inline unsigned __badc_f16_to_f32(unsigned __h, unsigned __csr, unsigned *__flags) {
+    unsigned __sign = (__h & 0x8000u) << 16, __exp = __h >> 10 & 0x1fu, __man = __h & 0x3ffu;
+    (void)__csr, (void)__flags;
+    if (__exp == 0x1fu) {
+        return __sign | 0x7f800000u | (__man ? 0x400000u | __man << 13 : 0);
+    }
+    if (!__exp) {
+        if (!__man)
+            return __sign;
+        int __top = 31 - __builtin_clz(__man);
+        return __sign | (unsigned)(__top + 103) << 23 | (__man << (23 - __top) & 0x7fffffu);
+    }
+    return __sign | (__exp + 112) << 23 | __man << 13;
+}
+
+static inline unsigned __badc_f32_bits(float __f) {
+    union { float __f; unsigned __u; } __v = {__f};
+    return __v.__u;
+}
+
+static inline float __badc_bits_f32(unsigned __u) {
+    union { unsigned __u; float __f; } __v = {__u};
+    return __v.__f;
+}
+
+/* Converts `__n` lanes of `__a` under the immediate `__imm`: its bits 1:0
+** select the rounding, unless bit 2 defers to MXCSR.RC. */
+static inline void __badc_cvtps_ph(const float *__a, unsigned short *__out, int __n, int __imm) {
+    unsigned __csr = _mm_getcsr(), __flags = 0;
+    unsigned __rc = (__imm & 4) ? __csr >> 13 & 3 : (unsigned)__imm & 3;
+    for (int __i = 0; __i < __n; __i++)
+        __out[__i] = __badc_f32_to_f16(__badc_f32_bits(__a[__i]), __rc, __csr, &__flags);
+    if (__flags)
+        _mm_setcsr(__csr | __flags);
+}
+
+static inline float _cvtsh_ss(unsigned short __h) {
+    unsigned __flags = 0;
+    return __badc_bits_f32(__badc_f16_to_f32(__h, 0, &__flags));
+}
+
+static inline unsigned short _cvtss_sh(float __f, int __imm) {
+    unsigned short __h;
+    __badc_cvtps_ph(&__f, &__h, 1, __imm);
+    return __h;
+}
+
+static inline __m128 _mm_cvtph_ps(__m128i __A) {
+    __v8hi __h = (__v8hi)__A;
+    __m128 __r;
+    for (int __i = 0; __i < 4; __i++)
+        __r[__i] = _cvtsh_ss((unsigned short)__h[__i]);
+    return __r;
+}
+
+static inline __m256 _mm256_cvtph_ps(__m128i __A) {
+    __v8hi __h = (__v8hi)__A;
+    __m256 __r;
+    for (int __i = 0; __i < 8; __i++)
+        __r[__i] = _cvtsh_ss((unsigned short)__h[__i]);
+    return __r;
+}
+
+static inline __m128i _mm_cvtps_ph(__m128 __A, int __imm) {
+    float __a[4] = {__A[0], __A[1], __A[2], __A[3]};
+    unsigned short __h[8] = {0};
+    __badc_cvtps_ph(__a, __h, 4, __imm);
+    __m128i __r;
+    __builtin_memcpy(&__r, __h, sizeof __r);
+    return __r;
+}
+
+static inline __m128i _mm256_cvtps_ph(__m256 __A, int __imm) {
+    float __a[8];
+    __builtin_memcpy(__a, &__A, sizeof __a);
+    unsigned short __h[8];
+    __badc_cvtps_ph(__a, __h, 8, __imm);
+    __m128i __r;
+    __builtin_memcpy(&__r, __h, sizeof __r);
+    return __r;
+}
+
 /* The SHA extensions, from the operation the SDM gives each instruction;
 ** element 0 holds bits 31:0. */
 static inline unsigned __badc_rol32(unsigned __x, int __n) {

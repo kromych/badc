@@ -1031,8 +1031,15 @@ impl CallArgs<'_> {
                 };
                 emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
-                let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
-                    return fail("Call: stack arg not int reg / spill");
+                // A zero constant the call sets is stored from xzr / wzr.
+                let zero = self.alloc.stack_imm.get(&self.args[i]) == Some(&0);
+                let src = if zero {
+                    Reg(31)
+                } else {
+                    let Some(src) = self.arg_int(code, i, self.scratch.primary) else {
+                        return fail("Call: stack arg not int reg / spill");
+                    };
+                    src
                 };
                 let op = match bytes {
                     1 => super::encode::STRB,

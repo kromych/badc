@@ -3990,7 +3990,8 @@ fn constant_stack_arguments_take_no_register() {
     let args: String = (0..128).map(|i| format!(", {}", i % 64)).collect();
     let src = format!(
         "struct par {{ void (*w)(struct par *p, int len, ...); }};\n\
-         int init(struct par *par) {{ par->w(par, 129{args}); return 0; }}\n"
+         int init(struct par *par) {{ par->w(par, 129{args}); return 0; }}\n\
+         int zeros(struct par *par) {{ par->w(par, 9, 1, 2, 3, 4, 5, 6, 0, 0, 0); return 0; }}\n"
     );
     // x86-64: below the frame record, room for the one callee-saved push.
     let insns = x64_insns(&function_bytes(
@@ -4014,12 +4015,17 @@ fn constant_stack_arguments_take_no_register() {
         (w & 0xFF80_03FF == 0xD100_03FF)
             .then(|| ((w >> 10) & 0xFFF) << if w & (1 << 22) != 0 { 12 } else { 0 })
     };
-    let frame = a64(&src, "init")
-        .into_iter()
-        .filter_map(sub_sp)
-        .max()
-        .unwrap_or(0);
+    let words = a64(&src, "init");
+    let frame = words.iter().copied().filter_map(sub_sp).max().unwrap_or(0);
     assert!(frame <= 123 * 8 + 16, "aarch64 frame of {frame} bytes");
+    // A zero no register argument takes goes to its slot from the zero
+    // register: `str xzr / wzr, [sp, #imm]`.
+    let zr = a64(&src, "zeros");
+    let zr_stores = zr
+        .iter()
+        .filter(|&&w| w & 0xBFC0_03FF == 0xB900_03FF)
+        .count();
+    assert_eq!(zr_stores, 3, "{zr:08x?}");
 }
 
 /// Arithmetic on floating-point constants is evaluated at translation

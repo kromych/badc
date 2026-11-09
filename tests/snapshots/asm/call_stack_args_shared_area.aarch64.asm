@@ -84,8 +84,7 @@ Disassembly of section .text:
                	str	x16, [sp]
                	mov	x16, #0x1               // =1
                	str	x16, [sp, #0x8]
-               	mov	x16, #0x0               // =0
-               	str	x16, [sp, #0x10]
+               	str	xzr, [sp, #0x10]
                	blr	x9
                	add	x0, x20, x0
                	sub	x0, x0, #0x6e

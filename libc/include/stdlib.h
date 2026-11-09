@@ -127,6 +127,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
 #pragma binding(libc::putenv,  "putenv")
+#pragma binding(libc::clearenv, "clearenv")
 #pragma binding(libc::mblen,    "mblen")
 #pragma binding(libc::mbtowc,   "mbtowc")
 #pragma binding(libc::wctomb,   "wctomb")
@@ -536,6 +537,10 @@ int _putenv_s(const char *name, const char *value);
 _Noreturn void _exit(int status);
 #else
 int setenv(const char *name, const char *value, int overwrite);
+#endif
+#ifdef __linux__
+// glibc's, as its <stdlib.h> declares it: empties the environment.
+int clearenv(void);
 #endif
 #ifdef _WIN32
 int putenv(const char *string);

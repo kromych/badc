@@ -60,7 +60,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=0
     v6   Load { addr=v1, disp=0, kind=I64 }               -> x7
     v7   Imm(0)                                           -> x0
     v8   Load { addr=v3, disp=0, kind=I64 }               -> x6
-    v9   CallExt { binding_idx=156, args=[v6, v8], fp_arg_mask=0x0 } -> x0
+    v9   CallExt { binding_idx=157, args=[v6, v8], fp_arg_mask=0x0 } -> x0
     v10  Extend { value=v9, kind=I32 }                    -> x1
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=14 ---
@@ -76,7 +76,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v5   Imm(12)                                          -> x6
     v6   Imm(4)                                           -> x2
     v7   ImmCode(ent_pc=12)                               -> x1
-    v8   CallExt { binding_idx=104, args=[v1, v5, v6, v7], fp_arg_mask=0x0 } -> x0
+    v8   CallExt { binding_idx=105, args=[v1, v5, v6, v7], fp_arg_mask=0x0 } -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
@@ -232,7 +232,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v161 Imm(5)                                           -> x6
     v162 Imm(8)                                           -> x2
     v163 ImmCode(ent_pc=13)                               -> x1
-    v164 CallExt { binding_idx=104, args=[v157, v161, v162, v163], fp_arg_mask=0x0 } -> x0
+    v164 CallExt { binding_idx=105, args=[v157, v161, v162, v163], fp_arg_mask=0x0 } -> x0
     v165 ImmData(96)                                      -> x7
     v166 LocalAddr(-57)                                   -> x0
     v167 Imm(0)                                           -> x0
@@ -298,7 +298,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v221 Imm(40)                                          -> x6
     v222 Imm(8)                                           -> x2
     v223 ImmCode(ent_pc=11)                               -> x1
-    v224 CallExt { binding_idx=104, args=[v220, v221, v222, v223], fp_arg_mask=0x0 } -> x0
+    v224 CallExt { binding_idx=105, args=[v220, v221, v222, v223], fp_arg_mask=0x0 } -> x0
     v225 Imm(1)                                           -> x0
     v226 Imm(0)                                           -> x1
     v227 Imm(0)                                           -> x1
@@ -375,7 +375,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v286 Imm(11)                                          -> x2
     v287 Imm(4)                                           -> x1
     v288 ImmCode(ent_pc=12)                               -> x8
-    v289 CallExt { binding_idx=105, args=[v284, v285, v286, v287, v288], fp_arg_mask=0x0 } -> x0
+    v289 CallExt { binding_idx=106, args=[v284, v285, v286, v287, v288], fp_arg_mask=0x0 } -> x0
     v290 Imm(0)                                           -> x1
     v291 ImmData(172)                                     -> x7
     v292 LoadLocal { off=-58, kind=I32 }                  -> x6
@@ -418,7 +418,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v299 Imm(5)                                           -> x2
     v300 Imm(8)                                           -> x1
     v301 ImmCode(ent_pc=13)                               -> x8
-    v302 CallExt { binding_idx=105, args=[v297, v298, v299, v300, v301], fp_arg_mask=0x0 } -> x3
+    v302 CallExt { binding_idx=106, args=[v297, v298, v299, v300, v301], fp_arg_mask=0x0 } -> x3
     v303 Imm(0)                                           -> x0
     v304 LocalAddr(-60)                                   -> x6
     v305 ImmData(184)                                     -> x0
@@ -430,7 +430,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=62
     v311 Imm(6)                                           -> x2
     v312 Imm(4)                                           -> x1
     v313 ImmCode(ent_pc=12)                               -> x8
-    v314 CallExt { binding_idx=105, args=[v309, v304, v311, v312, v313], fp_arg_mask=0x0 } -> x0
+    v314 CallExt { binding_idx=106, args=[v309, v304, v311, v312, v313], fp_arg_mask=0x0 } -> x0
     v315 Imm(0)                                           -> x1
     v316 ImmData(208)                                     -> x7
     v317 Imm(0)                                           -> x1

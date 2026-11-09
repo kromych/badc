@@ -103,6 +103,7 @@ chdir                                    GLIBC_2.17
 chmod                                    GLIBC_2.17
 chown                                    GLIBC_2.17
 chroot                                   GLIBC_2.17
+clearenv                                 GLIBC_2.17
 clearerr                                 GLIBC_2.17
 clock                                    GLIBC_2.17
 clock_getcpuclockid                      GLIBC_2.17

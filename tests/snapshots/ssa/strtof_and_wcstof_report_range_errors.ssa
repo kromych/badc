@@ -69,7 +69,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
     v237 BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x0
     v238 ImmData(12)                                      -> x7
     v239 LocalAddr(-1)                                    -> x6
-    v240 CallExt { binding_idx=111, args=[v238, v239], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
+    v240 CallExt { binding_idx=112, args=[v238, v239], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v241 BinopI { op=add, lhs=v10, rhs_imm=16 }           -> x0
     v242 Load { addr=v10, disp=16, kind=F32 pc_rel }      -> d1 [f32]
     v243 Binop { op=feq, lhs=v240, rhs=v242 }             -> x0
@@ -157,7 +157,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
     v281 BinopI { op=add, lhs=v38, rhs_imm=8 }            -> x0
     v282 ImmData(36)                                      -> x7
     v283 LocalAddr(-1)                                    -> x6
-    v284 CallExt { binding_idx=111, args=[v282, v283], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
+    v284 CallExt { binding_idx=112, args=[v282, v283], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v285 BinopI { op=add, lhs=v38, rhs_imm=16 }           -> x0
     v286 ImmData(240)                                     -> x0
     v287 BinopI { op=add, lhs=v286, rhs_imm=24 }          -> x0
@@ -247,7 +247,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
     v327 BinopI { op=add, lhs=v65, rhs_imm=8 }            -> x0
     v328 ImmData(64)                                      -> x7
     v329 LocalAddr(-1)                                    -> x6
-    v330 CallExt { binding_idx=111, args=[v328, v329], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
+    v330 CallExt { binding_idx=112, args=[v328, v329], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v331 BinopI { op=add, lhs=v65, rhs_imm=16 }           -> x0
     v332 ImmData(240)                                     -> x0
     v333 BinopI { op=add, lhs=v332, rhs_imm=48 }          -> x0
@@ -337,7 +337,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
     v373 BinopI { op=add, lhs=v92, rhs_imm=8 }            -> x0
     v374 ImmData(96)                                      -> x7
     v375 LocalAddr(-1)                                    -> x6
-    v376 CallExt { binding_idx=111, args=[v374, v375], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
+    v376 CallExt { binding_idx=112, args=[v374, v375], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v377 BinopI { op=add, lhs=v92, rhs_imm=16 }           -> x0
     v378 ImmData(240)                                     -> x0
     v379 BinopI { op=add, lhs=v378, rhs_imm=72 }          -> x0
@@ -427,7 +427,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
     v419 BinopI { op=add, lhs=v119, rhs_imm=8 }           -> x0
     v420 ImmData(136)                                     -> x7
     v421 LocalAddr(-1)                                    -> x6
-    v422 CallExt { binding_idx=111, args=[v420, v421], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
+    v422 CallExt { binding_idx=112, args=[v420, v421], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v423 BinopI { op=add, lhs=v119, rhs_imm=16 }          -> x0
     v424 ImmData(240)                                     -> x0
     v425 BinopI { op=add, lhs=v424, rhs_imm=96 }          -> x0
@@ -533,7 +533,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=4
   block 48  start_pc=0
     v199 ImmData(208)                                     -> x7
     v200 LocalAddr(-3)                                    -> x6
-    v201 CallExt { binding_idx=112, args=[v199, v200], fp_arg_mask=0x0 } -> x0
+    v201 CallExt { binding_idx=113, args=[v199, v200], fp_arg_mask=0x0 } -> x0
     v202 LocalAddr(-24)                                   -> x0
     v203 LoadLocal { off=-24, kind=F80 }                  -> d0
     v204 Imm(4612811918334230528)                         -> x0

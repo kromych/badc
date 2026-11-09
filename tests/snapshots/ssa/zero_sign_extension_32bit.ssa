@@ -255,7 +255,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v249 Imm(16)                                          -> x0
     v250 Imm(0)                                           -> x0
     v251 Imm(0)                                           -> x0
-    v252 CallExt { binding_idx=138, args=[v237, v246], fp_arg_mask=0x0 } -> x0
+    v252 CallExt { binding_idx=139, args=[v237, v246], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v252, target=b13, fall=b12 }   (exit_acc=v252)
   block 12  start_pc=0
     v253 ImmData(96)                                      -> x1
@@ -288,7 +288,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v212 Imm(16)                                          -> x0
     v213 Imm(0)                                           -> x0
     v214 Imm(0)                                           -> x0
-    v215 CallExt { binding_idx=138, args=[v200, v209], fp_arg_mask=0x0 } -> x0
+    v215 CallExt { binding_idx=139, args=[v200, v209], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v215, target=b16, fall=b15 }   (exit_acc=v215)
   block 15  start_pc=0
     v216 ImmData(96)                                      -> x1

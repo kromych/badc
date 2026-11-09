@@ -2886,6 +2886,18 @@ fn socket_headers_abi() {
     assert_eq!(run_fixture("socket_headers_abi.c"), 0);
 }
 
+/// <stdlib.h> declares glibc's clearenv on the Linux targets; the ELF fixture
+/// tables run the fixture there.
+#[test]
+fn clearenv_is_declared_on_linux() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("clearenv_empties_the_environment.c");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let result = Compiler::with_options(src.clone(), target, Default::default()).compile();
+        assert!(result.is_ok(), "{target:?}: {:?}", result.err());
+    }
+}
+
 /// <netinet/in.h>, and on Windows <ws2tcpip.h> as mingw-w64's and the SDK's,
 /// define the IN6_IS_ADDR_* predicates and IN6_ARE_ADDR_EQUAL. The native
 /// fixture tables run the fixture on each target's host.

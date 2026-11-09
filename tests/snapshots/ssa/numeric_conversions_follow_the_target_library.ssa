@@ -69,7 +69,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v63  Store { addr=v61, disp=0, value=v62, kind=I32 }  -> -
     v64  ImmData(76)                                      -> x7
     v65  Imm(10)                                          -> x2
-    v66  CallExt { binding_idx=111, args=[v64, v62, v65], fp_arg_mask=0x0 } -> x3
+    v66  CallExt { binding_idx=112, args=[v64, v62, v65], fp_arg_mask=0x0 } -> x3
     v67  Imm(0)                                           -> x0
     v68  ImmData(79)                                      -> x0
     v69  Imm(0)                                           -> x0
@@ -94,7 +94,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v88  ImmData(117)                                     -> x0
     v89  ImmData(126)                                     -> x7
     v90  Imm(36)                                          -> x2
-    v91  CallExt { binding_idx=112, args=[v89, v86, v90], fp_arg_mask=0x0 } -> x3
+    v91  CallExt { binding_idx=113, args=[v89, v86, v90], fp_arg_mask=0x0 } -> x3
     v92  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v93  Load { addr=v92, disp=0, kind=I32 }              -> x2
     v94  ImmData(117)                                     -> x7
@@ -218,13 +218,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v212 ImmData(344)                                     -> x7
     v213 CallExt { binding_idx=1, args=[v212, v206, v208, v211], fp_arg_mask=0xe } -> x0
     v214 Imm(2048)                                        -> x7
-    v215 CallExt { binding_idx=140, args=[v214], fp_arg_mask=0x0 } -> x0
+    v215 CallExt { binding_idx=141, args=[v214], fp_arg_mask=0x0 } -> x0
     v216 ImmData(373)                                     -> x7
     v217 Imm(0)                                           -> x6
     v218 CallExt { binding_idx=87, args=[v216, v217], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v219 Imm(0)                                           -> x0
     v220 Imm(0)                                           -> x7
-    v221 CallExt { binding_idx=140, args=[v220], fp_arg_mask=0x0 } -> x0
+    v221 CallExt { binding_idx=141, args=[v220], fp_arg_mask=0x0 } -> x0
     v222 ImmData(377)                                     -> x7
     v223 Imm(0)                                           -> x0
     v224 CallExt { binding_idx=1, args=[v222, v218], fp_arg_mask=0x2 } -> x0

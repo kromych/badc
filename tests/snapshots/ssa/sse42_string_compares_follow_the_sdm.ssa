@@ -4457,7 +4457,7 @@ fn ent_pc=533 n_params=9 variadic=false locals=2
     v24  Imm(0)                                           -> x0
     v25  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x6
     v26  Imm(16)                                          -> x2
-    v27  CallExt { binding_idx=77, args=[v23, v25, v26], fp_arg_mask=0x0 } -> x0
+    v27  CallExt { binding_idx=78, args=[v23, v25, v26], fp_arg_mask=0x0 } -> x0
     v28  BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x1
     v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> x1
     v30  Imm(0)                                           -> x1

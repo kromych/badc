@@ -396,8 +396,7 @@
 /* Define to 1 if you have the <io.h> header file. */
 /* #undef HAVE_IO_H */
 
-/* Define to 1 if you have the 'isascii' function. <ctype.h> defines it as a macro, which
-   the link probe does not see: TODO(#1999). */
+/* Define to 1 if you have the 'isascii' function. */
 #define HAVE_ISASCII 1
 
 /* Define to 1 if you have the 'iscntrl' function. */
@@ -474,8 +473,7 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
-/* Define to 1 if you have the 'strlcpy' function. <string.h> defines it inline, which
-   the link probe does not see: TODO(#1999). */
+/* Define to 1 if you have the 'strlcpy' function. */
 #define HAVE_STRLCPY 1
 
 /* Define to 1 if you have the 'strncasecmp' function. */
@@ -484,12 +482,10 @@
 /* Define to 1 if you have the 'strnicmp' function. */
 /* #undef HAVE_STRNICMP */
 
-/* Define to 1 if you have the 'strnlen' function. <string.h> defines it inline, which
-   the link probe does not see: TODO(#1999). */
+/* Define to 1 if you have the 'strnlen' function. */
 #define HAVE_STRNLEN 1
 
-/* Define to 1 if you have the 'strsep' function. <string.h> defines it inline, which
-   the link probe does not see: TODO(#1999). */
+/* Define to 1 if you have the 'strsep' function. */
 #define HAVE_STRSEP 1
 
 /* Define to 1 if the system has the type 'struct stat'. */

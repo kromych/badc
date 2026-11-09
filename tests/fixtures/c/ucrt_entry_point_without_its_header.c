@@ -4,12 +4,13 @@
 // the formatter wrote "42"; elsewhere the unit checks nothing.
 
 #ifdef _WIN32
+#include <corecrt.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <wchar.h>
 
 int __stdio_common_vsnwprintf_s(unsigned long long options, wchar_t *buffer, size_t count,
-                                size_t max_count, const wchar_t *format, void *locale,
+                                size_t max_count, const wchar_t *format, _locale_t locale,
                                 va_list args);
 
 static int format(wchar_t *buffer, size_t count, const wchar_t *f, ...) {

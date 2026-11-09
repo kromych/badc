@@ -151,7 +151,7 @@ FORWARD_EXACT = {
     # a linked kernel object must do: the kernel runs with it trapped (no
     # CR4.OSFXSR on x86_64, CPACR_EL1.FPEN on aarch64) and callers do not
     # maintain the System V `al` convention.
-    "-mno-sse", "-mgeneral-regs-only",
+    "-mgeneral-regs-only",
     # ftrace's x86_64 form (CONFIG_FUNCTION_TRACER with
     # CONFIG_FTRACE_MCOUNT_USE_CC): `call __fentry__` at every function
     # entry and the `__mcount_loc` table ftrace patches from. Withheld, no
@@ -332,11 +332,9 @@ IGNORE_EXACT = {
     # Instruction-scheduling hints. badc schedules to its own model and
     # exposes no knob either names, so both ask for what a unit gets.
     "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",
-    # The positive spelling of the SSE baseline. badc's x86-64 backend
-    # emits SSE and SSE2 unconditionally -- they are the psABI baseline --
-    # so a unit re-enabling them for FPU code gets what it already had.
-    # The negative spellings are ignored above for the same reason.
-    "-msse", "-msse2", "-mhard-float",
+    # x87 for floating point, which badc's x86-64 backend never uses; the
+    # kernel's FPU units pass it beside -msse.
+    "-mhard-float",
 }
 
 IGNORE_PREFIX = (
@@ -444,6 +442,9 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
     unknown: list[str] = []
     opt: str | None = None
     debug = False
+    # gcc takes the last of -mno-sse / -msse / -msse2: an FPU unit's
+    # CC_FLAGS_FPU after the global -mno-sse gives it the SSE registers.
+    sse_off = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -460,6 +461,9 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             i += 2
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
+            i += 1
+        elif a in ("-mno-sse", "-msse", "-msse2"):
+            sse_off = a == "-mno-sse"
             i += 1
         elif a == "-g0":
             debug = False
@@ -486,6 +490,8 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
         else:
             unknown.append(a)
             i += 1
+    if sse_off:
+        out.append("-mno-sse")
     if opt is not None and opt != "-O0":
         out.append("-O")
     if debug:
@@ -699,6 +705,10 @@ def _self_test() -> int:
     # `unknown`, which fails the unit rather than compiling under a
     # configuration the build did not ask for; one badc has no equivalent
     # for is `dropped`, which is reported per unit.
+    # The last of -mno-sse / -msse / -msse2 decides, as with gcc.
+    assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
+    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
+    assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]

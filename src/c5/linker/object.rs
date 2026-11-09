@@ -1805,8 +1805,13 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             roles.debug_other.push(i);
             continue;
         }
+        // A constructor table is read for the entries the link runs, and its
+        // bytes join the relocated read-only data, where its names and the
+        // references into it resolve.
         if let Some(table) = parse_init_array_section_name(name) {
             roles.init_array_sections.push((i, table));
+            section_family[i] = SectionFamily::RelRo;
+            roles.relro.push(i);
             continue;
         }
         let family = if sh.sh_type == SHT_RELA {

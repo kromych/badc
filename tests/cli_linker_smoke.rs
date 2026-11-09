@@ -7744,6 +7744,52 @@ fn an_include_nothing_defines_is_undefined() {
     }
 }
 
+/// A name a unit defines in a `.CRT$XI*` table entry labels the entry's
+/// slot, linked from the source or from its object: an `/INCLUDE:` of it is
+/// defined, it reads the function the entry holds, and the entry runs
+/// before `main`.
+#[test]
+fn a_crt_table_entry_name_labels_its_slot() {
+    let dir = tempdir("pe-include-crt-table");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "static volatile int ran;\n\
+         static int initializer(void) { ran = 1; return 0; }\n\
+         #pragma comment(linker, \"/INCLUDE:p_initializer\")\n\
+         #pragma section(\".CRT$XIU\", long, read)\n\
+         __declspec(allocate(\".CRT$XIU\")) int (*p_initializer)(void) = initializer;\n\
+         int main(void) { return !ran ? 3 : p_initializer != initializer ? 4 : 0; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let obj = dir.join(format!("{target}.obj"));
+        let badc_for = |input: &std::path::Path, out: &std::path::Path, compile: bool| {
+            let mut cmd = Command::new(badc());
+            cmd.arg(format!("--target={target}"));
+            if compile {
+                cmd.arg("-c");
+            }
+            cmd.arg(input)
+                .arg("-o")
+                .arg(out)
+                .output()
+                .expect("run badc")
+        };
+        let out = badc_for(&src, &obj, true);
+        assert!(out.status.success(), "{target}: {out:?}");
+        for (input, name) in [(&src, "from-source"), (&obj, "from-object")] {
+            let exe = dir.join(format!("{target}-{name}.exe"));
+            let out = badc_for(input, &exe, false);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {name}: {err}");
+            if runs_windows(target) {
+                let out = Command::new(&exe).output().expect("run the image");
+                assert_eq!(out.status.code(), Some(0), "{target} {name}: {out:?}");
+            }
+        }
+    }
+}
+
 /// An export names a definition, as link.exe requires (LNK2001): a DLL
 /// linked from a module-definition file whose exports nothing defines, or
 /// an export under another name whose target is undefined, is refused with

@@ -3906,6 +3906,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
     ("tls_callbacks_run.c", 0),
+    ("constructor_table_entry_names_its_slot.c", 0),
     ("isa_availability_follows_cpuid.c", 0),
     ("interlocked_functions_out_of_line.c", 0),
     ("ucrt_entry_point_without_its_header.c", 0),
@@ -4833,6 +4834,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("crt_initializer_tables_run.c", 0),
     ("tls_callbacks_run.c", 0),
+    ("constructor_table_entry_names_its_slot.c", 0),
     ("isa_availability_follows_cpuid.c", 0),
     ("interlocked_functions_out_of_line.c", 0),
     ("ucrt_entry_point_without_its_header.c", 0),

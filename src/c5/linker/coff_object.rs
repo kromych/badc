@@ -1510,7 +1510,6 @@ fn translate_relocs(
                     )));
                 }
                 entries.push((target.value as i64 + addend) as u64);
-                continue;
             }
             let reloc = NativeReloc {
                 offset,
@@ -1987,13 +1986,14 @@ pub fn parse_native_coff(
     let assoc: BTreeMap<usize, usize> = (comdat.iter().enumerate())
         .filter_map(|(k, c)| Some((k, c.as_ref()?.parent?)))
         .collect();
-    // A constructor table is consumed as init / fini entries, whose array
-    // the link materializes, rather than merged as bytes.
+    // A constructor table is read for the entries the link runs, and its
+    // bytes join the relocated read-only data, where its names and the
+    // references into it resolve.
     for s in sects.iter_mut() {
         s.family = classify(s)?;
         s.init = init_table(&s.name).filter(|_| s.family != SectionFamily::Discard);
         if s.init.is_some() {
-            s.family = SectionFamily::Discard;
+            s.family = SectionFamily::RelRo;
         }
     }
     for (&k, &parent) in &assoc {
@@ -2707,7 +2707,9 @@ mod tests {
     }
 
     /// GNU's `.ctors` and the C runtime's `.CRT$XCU` list constructors, each
-    /// entry the address of a function; the link materializes the array.
+    /// entry the address of a function; the link materializes the array, and
+    /// the tables' bytes join the relocated read-only data, so their names
+    /// and the references into them have addresses.
     #[test]
     fn constructor_tables_become_init_entries() {
         let mut entry = alloc::vec![0u8; 8];
@@ -2726,7 +2728,8 @@ mod tests {
             .collect();
         let crt = InitTable::Crt("CU".into());
         assert_eq!(entries, [(crt, 0), (InitTable::Init(None), 1)]);
-        assert!(o.data.is_empty() && o.relro.is_empty());
+        assert!(o.data.is_empty() && o.relro.len() >= 16, "{:?}", o.relro);
+        assert_eq!(o.relro_relocs.len(), 2);
     }
 
     /// Debug tables, `.pdata`, link-time metadata and an associative section

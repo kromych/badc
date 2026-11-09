@@ -44,6 +44,7 @@ const PARITY: &[(&str, i32)] = super::fixture_tables::NATIVE_PE_ARM64_FIXTURES;
 const WINDOWS_GAPS: &[(&str, &str)] = &[
     ("winmain_command_line.c", WINMAIN),
     ("wwinmain_command_line.c", WINMAIN),
+    ("constructor_table_entry_names_its_slot.c", TLS),
     ("dlfcn_errors.c", TLS),
     ("dlopen_null_searches_the_global_scope.c", TLS),
     ("dlopen_strlen.c", TLS),

@@ -13,21 +13,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
     v9   Imm(0)                                           -> x1
-    v10  Imm(0)                                           -> x1
+    v10  LifetimeEnd(0)                                   -> -
     v11  Imm(0)                                           -> x1
+    v12  Imm(0)                                           -> x1
     terminator GotoIndirect(v3)   (exit_acc=v3)
   block 1  start_pc=0
-    v12  Imm(7)                                           -> x0
-    v13  Imm(0)                                           -> x0
+    v13  Imm(7)                                           -> x0
     v14  Imm(0)                                           -> x0
-    v15  Imm(1)                                           -> x0
-    v16  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> x0
+    v16  Imm(1)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
-    v21  LifetimeEnd(0)                                   -> -
-    terminator Return(v20)   (exit_acc=v20)
+    v21  Imm(0)                                           -> x0
+    v22  LifetimeEnd(0)                                   -> -
+    terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=ternary
 fn ent_pc=2 n_params=1 variadic=false locals=0
@@ -49,21 +50,22 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v13  Imm(0)                                           -> x1
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
-    v16  Imm(0)                                           -> x1
+    v16  LifetimeEnd(0)                                   -> -
     v17  Imm(0)                                           -> x1
+    v18  Imm(0)                                           -> x1
     terminator GotoIndirect(v6)   (exit_acc=v6)
   block 1  start_pc=0
-    v23  Imm(2)                                           -> x0
-    v24  Imm(0)                                           -> x0
+    v24  Imm(2)                                           -> x0
     v25  Imm(0)                                           -> x0
-    v26  Imm(1)                                           -> x0
-    v27  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(1)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  LifetimeEnd(0)                                   -> -
-    terminator Return(v31)   (exit_acc=v31)
+    v32  Imm(0)                                           -> x0
+    v33  LifetimeEnd(0)                                   -> -
+    terminator Return(v32)   (exit_acc=v32)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0

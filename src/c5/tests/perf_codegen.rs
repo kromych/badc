@@ -3929,6 +3929,33 @@ fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
     m.finish();
 }
 
+/// A call's aggregate result temporary ends with its full expression
+/// (C17 6.2.4p8), so the temporaries of successive statements share
+/// storage even where an address of one reaches a phi.
+#[test]
+fn call_result_temporaries_of_successive_statements_share_a_slot() {
+    const SRC: &str = "struct fx { long v; };\n\
+        struct fx mul(struct fx a, struct fx b);\n\
+        static inline struct fx max2(struct fx a, struct fx b) { return b.v <= a.v ? a : b; }\n\
+        void calc4(struct fx *x) {\n\
+          x[0] = max2(mul(x[0], x[1]), mul(x[1], x[0]));\n\
+          x[1] = max2(mul(x[1], x[2]), mul(x[2], x[1]));\n\
+          x[2] = max2(mul(x[2], x[3]), mul(x[3], x[2]));\n\
+          struct fx last = max2(mul(x[3], x[0]), mul(x[0], x[3]));\n\
+          x[3] = last;\n\
+        }\n";
+    let insns = x64_insns(&function_bytes(
+        &object_at(SRC, Target::LinuxX64, true),
+        "calc4",
+    ));
+    // The first `sub $imm, %rsp` sizes the frame: two results are live at once.
+    let frame = insns
+        .iter()
+        .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
+        .map_or(0, |i| i.imm);
+    assert!(frame <= 24, "calc4: frame of {frame} bytes");
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

@@ -47,7 +47,9 @@ impl<'a> Walker<'a> {
                     b.unreachable();
                     return Ok(true);
                 }
+                let temps = self.call_temps.len();
                 let _ = self.walk_expr_rvalue(b, e)?;
+                self.end_call_temps(b, temps);
                 // A direct call to a `noreturn` function ends the block
                 // (C11 6.7.4p8), as a non-returning intrinsic does. The seal
                 // is `Unreachable`, not a return, so `if (x) noreturn_fn();
@@ -693,6 +695,16 @@ impl<'a> Walker<'a> {
         self.scopes[depth.min(self.scopes.len())..]
             .iter()
             .any(|s| !s.ends.is_empty() || s.vla_save.is_some())
+    }
+
+    /// End the result temporaries of the calls walked since `mark`, whose
+    /// full expression the walk has just completed (C17 6.2.4p8).
+    pub(super) fn end_call_temps(&mut self, b: &mut SsaBuilder, mark: usize) {
+        for slot in self.call_temps.drain(mark..) {
+            if b.is_block_open() {
+                b.lifetime_end(slot);
+            }
+        }
     }
 
     /// Leave the scopes above `depth`: end their lifetimes and, unless

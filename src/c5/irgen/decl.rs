@@ -23,7 +23,10 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let ty = *ty;
                 let init_clone = init.clone();
-                self.emit_local_init(b, slot, ty, &init_clone)
+                let temps = self.call_temps.len();
+                self.emit_local_init(b, slot, ty, &init_clone)?;
+                self.end_call_temps(b, temps);
+                Ok(())
             }
             Decl::Vla {
                 elem_size,

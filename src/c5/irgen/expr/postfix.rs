@@ -519,7 +519,7 @@ impl<'a> Walker<'a> {
     /// single-precision (C99 6.2.5p10). `extend` widens a narrow scalar
     /// return whose high bits the callee may leave undefined.
     fn call_result(
-        &self,
+        &mut self,
         b: &mut SsaBuilder,
         call: ValueId,
         ret_temp: Option<(u32, i64)>,
@@ -528,6 +528,7 @@ impl<'a> Walker<'a> {
     ) -> ValueId {
         if let Some((ridx, slot)) = ret_temp {
             b.set_call_ret_agg(call, ridx, slot);
+            self.call_temps.push(slot);
             let addr = b.local_addr(slot);
             // A `long double` returns its image.
             if is_long_double_scalar(ty) {
@@ -861,11 +862,12 @@ impl<'a> Walker<'a> {
     /// and route its address via an integer slot so the codegen passes it in
     /// a host integer argument register the way every other pointer argument
     /// goes. Returns the object's frame slot and the argument value.
-    fn out_ptr_arg(&self, b: &mut SsaBuilder, ty: i64) -> (i64, ValueId) {
+    fn out_ptr_arg(&mut self, b: &mut SsaBuilder, ty: i64) -> (i64, ValueId) {
         // The callee writes the whole struct through the pointer, so the
         // object holds `sizeof(struct)` bytes, not a single slot.
         let result_size = self.struct_size(ty);
         let result_slot = b.alloc_synthetic_struct(result_size, i64::from(self.struct_align(ty)));
+        self.call_temps.push(result_slot);
         let addr = b.local_addr(result_slot);
         let temp = b.alloc_synthetic_local();
         b.store_local(temp, addr, StoreKind::I64);

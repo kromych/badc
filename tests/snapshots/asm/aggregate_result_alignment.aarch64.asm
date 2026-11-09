@@ -68,7 +68,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stp	x20, x21, [sp]
-               	sub	sp, sp, #0xe0
+               	sub	sp, sp, #0xc0
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
                	mov	x20, x0
@@ -111,9 +111,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x0, x20, #0xff
-               	add	x8, sp, #0xb0
+               	mov	x8, sp
                	bl	<addr>
-               	ldrb	w0, [sp, #0xcf]
+               	ldrb	w0, [sp, #0x1f]
                	and	x1, x20, #0xff
                	add	x21, x0, x1
                	add	x0, sp, #0x40

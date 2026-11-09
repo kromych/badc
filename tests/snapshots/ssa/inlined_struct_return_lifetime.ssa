@@ -160,10 +160,11 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     v30  Imm(0)                                           -> x1
     v31  BinopI { op=and, lhs=v27, rhs_imm=4294967295 }   -> x1
     v32  Store { addr=v3, disp=0, value=v27, kind=I32 pc_rel } -> -
-    v33  ImmData(32)                                      -> x1
-    v34  Extend { value=v27, kind=I32 }                   -> x0
-    v35  Extend { value=v34, kind=I32 }                   -> x1
-    terminator Return(v34)   (exit_acc=v34)
+    v33  LifetimeEnd(0)                                   -> -
+    v34  ImmData(32)                                      -> x1
+    v35  Extend { value=v27, kind=I32 }                   -> x0
+    v36  Extend { value=v35, kind=I32 }                   -> x1
+    terminator Return(v35)   (exit_acc=v35)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=check_three
 fn ent_pc=3 n_params=1 variadic=false locals=4
@@ -217,17 +218,18 @@ fn ent_pc=3 n_params=1 variadic=false locals=4
     v66  Phi { incoming=[b1:v4, b4:v4, b5:v4], kind=I64 } -> -
     v67  LocalAddr(-3)                                    -> x0
     v68  Mcpy { dst=v3, src=v67, size=24, align=8 }       -> -
-    v69  ImmData(40)                                      -> x0
-    v70  Load { addr=v69, disp=0, kind=I64 pc_rel }       -> x0
-    v71  BinopI { op=mul, lhs=v70, rhs_imm=100 }          -> x0
-    v72  BinopI { op=add, lhs=v69, rhs_imm=8 }            -> x1
-    v73  Load { addr=v69, disp=8, kind=I64 pc_rel }       -> x1
-    v74  BinopI { op=mul, lhs=v73, rhs_imm=10 }           -> x1
-    v75  Binop { op=add, lhs=v71, rhs=v74 }               -> x0
-    v76  BinopI { op=add, lhs=v69, rhs_imm=16 }           -> x1
-    v77  Load { addr=v69, disp=16, kind=I64 pc_rel }      -> x1
-    v78  Binop { op=add, lhs=v75, rhs=v77 }               -> x0
-    terminator Return(v78)   (exit_acc=v78)
+    v69  LifetimeEnd(-3)                                  -> -
+    v70  ImmData(40)                                      -> x0
+    v71  Load { addr=v70, disp=0, kind=I64 pc_rel }       -> x0
+    v72  BinopI { op=mul, lhs=v71, rhs_imm=100 }          -> x0
+    v73  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x1
+    v74  Load { addr=v70, disp=8, kind=I64 pc_rel }       -> x1
+    v75  BinopI { op=mul, lhs=v74, rhs_imm=10 }           -> x1
+    v76  Binop { op=add, lhs=v72, rhs=v75 }               -> x0
+    v77  BinopI { op=add, lhs=v70, rhs_imm=16 }           -> x1
+    v78  Load { addr=v70, disp=16, kind=I64 pc_rel }      -> x1
+    v79  Binop { op=add, lhs=v76, rhs=v78 }               -> x0
+    terminator Return(v79)   (exit_acc=v79)
   block 3  start_pc=0
     v41  ImmData(24)                                      -> x12
     v42  StoreLocal { off=-4, value=v41, kind=I64 }       -> -

@@ -338,6 +338,9 @@ struct Walker<'a> {
     named_refs: NamedRefs,
     /// `-ffreestanding`: the layout of an `_Atomic` object.
     freestanding: bool,
+    /// The aggregate result temporaries of the calls walked so far whose
+    /// full expression has not ended (C17 6.2.4p8).
+    call_temps: alloc::vec::Vec<i64>,
 }
 
 /// Which of the unit's definitions a reference names by its symbol, so the

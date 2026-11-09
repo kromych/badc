@@ -73,6 +73,7 @@ pub(crate) fn walk_function(
         label_blocks: alloc::vec![None; ast.goto_targets.len()],
         cleanup_exits: alloc::collections::BTreeMap::new(),
         switch_dispatch: alloc::vec::Vec::new(),
+        call_temps: alloc::vec::Vec::new(),
         returns_struct: fun.returns_struct,
         return_struct_size: fun.return_struct_size,
         ret_in_regs: ret.in_regs,

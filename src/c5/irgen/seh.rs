@@ -235,6 +235,7 @@ impl<'a> Walker<'a> {
             label_blocks: alloc::vec![None; self.ast.goto_targets.len()],
             cleanup_exits: alloc::collections::BTreeMap::new(),
             switch_dispatch: alloc::vec::Vec::new(),
+            call_temps: alloc::vec::Vec::new(),
             returns_struct: false,
             return_struct_size: 0,
             ret_in_regs: false,

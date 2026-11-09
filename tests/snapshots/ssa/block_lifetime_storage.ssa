@@ -145,7 +145,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
   block 6  start_pc=0
     v107 Imm(7)                                           -> x0
     v108 StoreLocal { off=-1, value=v107, kind=I32 }      -> -
-    v109 LocalAddr(-1)                                    -> x6
+    v109 LocalAddr(-1)                                    -> x1
     v110 ImmData(16)                                      -> x0
     v111 Store { addr=v81, disp=0, value=v109, kind=I64 pc_rel } -> -
     v112 ImmData(16)                                      -> x0
@@ -155,19 +155,19 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v116 Store { addr=v109, disp=0, value=v115, kind=I32 } -> -
     v117 LoadLocal { off=-1, kind=I32 }                   -> x0
     v118 LifetimeEnd(-1)                                  -> -
-    v119 Imm(1234605616436508552)                         -> x1
+    v119 Imm(1234605616436508552)                         -> x2
     v120 StoreLocal { off=-1, value=v119, kind=I64 }      -> -
-    v121 LocalAddr(-1)                                    -> x1
-    v122 ImmData(24)                                      -> x1
+    v121 LocalAddr(-1)                                    -> x2
+    v122 ImmData(24)                                      -> x2
     v123 Store { addr=v122, disp=0, value=v109, kind=I64 pc_rel } -> -
-    v124 ImmData(24)                                      -> x1
-    v125 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x1
-    v126 Load { addr=v109, disp=0, kind=I64 }             -> x1
-    v127 BinopI { op=xor, lhs=v126, rhs_imm=1 }           -> x1
+    v124 ImmData(24)                                      -> x2
+    v125 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x2
+    v126 Load { addr=v109, disp=0, kind=I64 }             -> x2
+    v127 BinopI { op=xor, lhs=v126, rhs_imm=1 }           -> x2
     v128 Store { addr=v109, disp=0, value=v127, kind=I64 } -> -
-    v129 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x1
-    v130 Load { addr=v129, disp=0, kind=I64 }             -> x1
-    v131 Binop { op=add, lhs=v117, rhs=v130 }             -> x1
+    v129 Load { addr=v122, disp=0, kind=I64 pc_rel }      -> x2
+    v130 Load { addr=v129, disp=0, kind=I64 }             -> x2
+    v131 Binop { op=add, lhs=v117, rhs=v130 }             -> x2
     v132 LifetimeEnd(-1)                                  -> -
     v133 Imm(9)                                           -> x0
     v134 StoreLocal { off=-1, value=v133, kind=I32 }      -> -
@@ -176,14 +176,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v137 Store { addr=v81, disp=0, value=v109, kind=I64 pc_rel } -> -
     v138 ImmData(16)                                      -> x0
     v139 Load { addr=v138, disp=0, kind=I64 pc_rel }      -> x0
-    v140 Load { addr=v139, disp=0, kind=I32 }             -> x2
-    v141 BinopI { op=add, lhs=v140, rhs_imm=1 }           -> x2
+    v140 Load { addr=v139, disp=0, kind=I32 }             -> x6
+    v141 BinopI { op=add, lhs=v140, rhs_imm=1 }           -> x6
     v142 Store { addr=v139, disp=0, value=v141, kind=I32 } -> -
     v143 LoadLocal { off=-1, kind=I32 }                   -> x0
     v144 Binop { op=add, lhs=v131, rhs=v143 }             -> x0
     v145 LifetimeEnd(-1)                                  -> -
-    v146 Imm(1234605616436508567)                         -> x1
-    v147 Imm(1234605616436508577)                         -> x1
+    v146 Imm(1234605616436508567)                         -> x2
+    v147 Imm(1234605616436508577)                         -> x2
     v148 BinopI { op=ne, lhs=v144, rhs_imm=1234605616436508577 } -> x0
     terminator Bz { cond=v148, target=b8, fall=b7 }   (exit_acc=v148)
   block 7  start_pc=0
@@ -195,44 +195,44 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v64  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v64)
   block 9  start_pc=0
-    v153 Extend { value=v149, kind=I32 }                  -> x1
-    v154 StoreLocal { off=-2, value=v149, kind=I32 }      -> -
-    v155 LocalAddr(-2)                                    -> x1
-    v156 ImmData(16)                                      -> x7
-    v157 Store { addr=v138, disp=0, value=v155, kind=I64 pc_rel } -> -
-    v158 ImmData(16)                                      -> x7
-    v159 Load { addr=v138, disp=0, kind=I64 pc_rel }      -> x7
-    v160 Load { addr=v155, disp=0, kind=I32 }             -> x7
-    v161 BinopI { op=add, lhs=v160, rhs_imm=1 }           -> x7
-    v162 Store { addr=v155, disp=0, value=v161, kind=I32 } -> -
-    v163 Extend { value=v150, kind=I32 }                  -> x1
-    v164 LoadLocal { off=-2, kind=I32 }                   -> x1
-    v165 Binop { op=add, lhs=v150, rhs=v164 }             -> x2
-    v166 LifetimeEnd(-2)                                  -> -
-    v167 Extend { value=v149, kind=I32 }                  -> x1
+    v153 Extend { value=v149, kind=I32 }                  -> x6
+    v154 StoreLocal { off=-1, value=v149, kind=I32 }      -> -
+    v155 LocalAddr(-1)                                    -> x6
+    v156 ImmData(16)                                      -> x6
+    v157 Store { addr=v138, disp=0, value=v109, kind=I64 pc_rel } -> -
+    v158 ImmData(16)                                      -> x6
+    v159 Load { addr=v138, disp=0, kind=I64 pc_rel }      -> x6
+    v160 Load { addr=v109, disp=0, kind=I32 }             -> x6
+    v161 BinopI { op=add, lhs=v160, rhs_imm=1 }           -> x6
+    v162 Store { addr=v109, disp=0, value=v161, kind=I32 } -> -
+    v163 Extend { value=v150, kind=I32 }                  -> x6
+    v164 LoadLocal { off=-1, kind=I32 }                   -> x6
+    v165 Binop { op=add, lhs=v150, rhs=v164 }             -> x6
+    v166 LifetimeEnd(-1)                                  -> -
+    v167 Extend { value=v149, kind=I32 }                  -> x2
     v168 StoreLocal { off=-1, value=v149, kind=I32 }      -> -
-    v169 LocalAddr(-1)                                    -> x1
-    v170 ImmData(16)                                      -> x1
-    v171 Store { addr=v138, disp=0, value=v109, kind=I64 pc_rel } -> -
-    v172 ImmData(16)                                      -> x1
-    v173 Load { addr=v172, disp=0, kind=I64 pc_rel }      -> x1
+    v169 LocalAddr(-1)                                    -> x2
+    v170 ImmData(16)                                      -> x7
+    v171 Store { addr=v138, disp=0, value=v169, kind=I64 pc_rel } -> -
+    v172 ImmData(16)                                      -> x2
+    v173 Load { addr=v172, disp=0, kind=I64 pc_rel }      -> x2
     v174 Load { addr=v173, disp=0, kind=I32 }             -> x7
     v175 BinopI { op=add, lhs=v174, rhs_imm=2 }           -> x7
     v176 Store { addr=v173, disp=0, value=v175, kind=I32 } -> -
-    v177 Extend { value=v165, kind=I32 }                  -> x1
-    v178 LoadLocal { off=-1, kind=I32 }                   -> x1
+    v177 Extend { value=v165, kind=I32 }                  -> x2
+    v178 LoadLocal { off=-1, kind=I32 }                   -> x2
     v179 Binop { op=add, lhs=v165, rhs=v178 }             -> x2
-    v180 Extend { value=v179, kind=I32, nsw }             -> x1
+    v180 Extend { value=v179, kind=I32, nsw }             -> x6
     v181 LifetimeEnd(-1)                                  -> -
-    v182 Extend { value=v149, kind=I32 }                  -> x1
+    v182 Extend { value=v149, kind=I32 }                  -> x6
     v183 BinopI { op=add, lhs=v149, rhs_imm=1 }           -> x0
-    v184 Extend { value=v183, kind=I32, nsw }             -> x1
+    v184 Extend { value=v183, kind=I32, nsw }             -> x6
     terminator Jmp(b10)   (exit_acc=v183)
   block 10  start_pc=0
     v149 Phi { incoming=[b8:v64, b9:v183], kind=I64 }     -> x0
     v150 Phi { incoming=[b8:v64, b9:v179], kind=I64 }     -> x2
-    v151 Extend { value=v149, kind=I32 }                  -> x1
-    v152 BinopI { op=lt, lhs=v149, rhs_imm=3 }            -> x1
+    v151 Extend { value=v149, kind=I32 }                  -> x6
+    v152 BinopI { op=lt, lhs=v149, rhs_imm=3 }            -> x6
     terminator Bz { cond=v152, target=b11, fall=b9 }   (exit_acc=v152)
   block 11  start_pc=0
     v185 Extend { value=v150, kind=I32 }                  -> x0

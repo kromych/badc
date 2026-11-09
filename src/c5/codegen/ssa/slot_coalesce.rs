@@ -1168,7 +1168,11 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             x_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0
                 || first_escape.get(&sg).is_some_and(|&ep| ep < pc)
         };
-        let mut live = r_out[b * gwords..(b + 1) * gwords].to_vec();
+        // A scoped group dead at the exit has no value a later read can
+        // see: past its end marker a read is of a new instance (C17 6.2.4p6).
+        let mut live: Vec<u64> = (0..gwords)
+            .map(|w| r_out[b * gwords + w] & !(scoped_mask[w] & dead_out(&dead_in, b, w)))
+            .collect();
         // A scoped group is busy at the block's exit unless dead there, once
         // escaped on a path here or with an escape ahead.
         for w in 0..gwords {
@@ -1221,6 +1225,11 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                     && escaped_before(sg, pc)
                 {
                     live[sg / 64] |= 1u64 << (sg % 64);
+                }
+                // Dead on entry, the group holds nothing before its first
+                // event in the block.
+                if dead && scoped_mask[sg / 64] & (1u64 << (sg % 64)) != 0 && first_ev[&sg] == pc {
+                    live[sg / 64] &= !(1u64 << (sg % 64));
                 }
             }
         }

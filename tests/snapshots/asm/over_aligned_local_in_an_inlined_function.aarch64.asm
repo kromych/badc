@@ -16,47 +16,47 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x40
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
-               	add	x0, sp, #0x40
+               	add	x0, sp, #0x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	add	x8, sp, #0x20
+               	mov	x8, sp
                	mov	x0, #0x0                // =0
-               	str	w0, [sp, #0x20]
+               	str	w0, [sp]
                	mov	x1, #0x1                // =1
-               	str	w1, [sp, #0x24]
+               	str	w1, [sp, #0x4]
                	mov	x2, #0x2                // =2
-               	str	w2, [sp, #0x28]
+               	str	w2, [sp, #0x8]
                	mov	x3, #0x3                // =3
-               	str	w3, [sp, #0x2c]
+               	str	w3, [sp, #0xc]
                	mov	x4, #0x4                // =4
-               	str	w4, [sp, #0x30]
+               	str	w4, [sp, #0x10]
                	mov	x5, #0x5                // =5
-               	str	w5, [sp, #0x34]
+               	str	w5, [sp, #0x14]
                	mov	x6, #0x6                // =6
-               	str	w6, [sp, #0x38]
+               	str	w6, [sp, #0x18]
                	mov	x7, #0x7                // =7
-               	str	w7, [sp, #0x3c]
+               	str	w7, [sp, #0x1c]
                	and	x8, x8, #0x1f
                	cbz	x8, <addr>
                	mov	x8, #0x3e8              // =1000
-               	ldrsw	x9, [sp, #0x24]
+               	ldrsw	x9, [sp, #0x4]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x28]
+               	ldrsw	x9, [sp, #0x8]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x2c]
+               	ldrsw	x9, [sp, #0xc]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x30]
+               	ldrsw	x9, [sp, #0x10]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x34]
+               	ldrsw	x9, [sp, #0x14]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x38]
+               	ldrsw	x9, [sp, #0x18]
                	add	x8, x8, x9
-               	ldrsw	x9, [sp, #0x3c]
+               	ldrsw	x9, [sp, #0x1c]
                	add	x8, x8, x9
                	mov	x9, sp
                	strb	w0, [sp]
@@ -71,36 +71,36 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x8, x8, x0
                	mov	x0, #0x1                // =1
-               	str	w0, [sp, #0x20]
-               	add	x0, sp, #0x20
+               	str	w0, [sp]
+               	mov	x0, sp
                	mov	x1, #0x2                // =2
-               	str	w1, [sp, #0x24]
-               	str	w3, [sp, #0x28]
-               	str	w4, [sp, #0x2c]
-               	str	w5, [sp, #0x30]
-               	str	w6, [sp, #0x34]
-               	str	w7, [sp, #0x38]
+               	str	w1, [sp, #0x4]
+               	str	w3, [sp, #0x8]
+               	str	w4, [sp, #0xc]
+               	str	w5, [sp, #0x10]
+               	str	w6, [sp, #0x14]
+               	str	w7, [sp, #0x18]
                	mov	x2, #0x8                // =8
-               	str	w2, [sp, #0x3c]
+               	str	w2, [sp, #0x1c]
                	and	x0, x0, #0x1f
                	cbz	x0, <addr>
                	mov	x0, #0x3e8              // =1000
-               	ldrsw	x1, [sp, #0x20]
+               	ldrsw	x1, [sp]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x24]
+               	ldrsw	x1, [sp, #0x4]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x28]
+               	ldrsw	x1, [sp, #0x8]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x2c]
+               	ldrsw	x1, [sp, #0xc]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x30]
+               	ldrsw	x1, [sp, #0x10]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x34]
+               	ldrsw	x1, [sp, #0x14]
                	add	x0, x0, x1
-               	add	x3, sp, #0x20
-               	ldrsw	x1, [sp, #0x38]
+               	mov	x3, sp
+               	ldrsw	x1, [sp, #0x18]
                	add	x0, x0, x1
-               	ldrsw	x1, [sp, #0x3c]
+               	ldrsw	x1, [sp, #0x1c]
                	add	x4, x0, x1
                	mov	x1, sp
                	mov	x0, #0x1                // =1
@@ -119,38 +119,38 @@ Disassembly of section .text:
                	add	x1, x1, x5
                	add	x1, x4, x1
                	add	x4, x8, x1
-               	str	w0, [sp, #0x20]
+               	str	w0, [sp]
                	mov	x1, #0x3                // =3
-               	str	w1, [sp, #0x24]
+               	str	w1, [sp, #0x4]
                	mov	x1, #0x4                // =4
-               	str	w1, [sp, #0x28]
+               	str	w1, [sp, #0x8]
                	mov	x1, #0x5                // =5
-               	str	w1, [sp, #0x2c]
+               	str	w1, [sp, #0xc]
                	mov	x1, #0x6                // =6
-               	str	w1, [sp, #0x30]
+               	str	w1, [sp, #0x10]
                	mov	x1, #0x7                // =7
-               	str	w1, [sp, #0x34]
-               	str	w2, [sp, #0x38]
+               	str	w1, [sp, #0x14]
+               	str	w2, [sp, #0x18]
                	mov	x1, #0x9                // =9
-               	str	w1, [sp, #0x3c]
+               	str	w1, [sp, #0x1c]
                	and	x1, x3, #0x1f
                	cbz	x1, <addr>
                	mov	x1, #0x3e8              // =1000
-               	ldrsw	x2, [sp, #0x20]
+               	ldrsw	x2, [sp]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x24]
+               	ldrsw	x2, [sp, #0x4]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x28]
+               	ldrsw	x2, [sp, #0x8]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x2c]
+               	ldrsw	x2, [sp, #0xc]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x30]
+               	ldrsw	x2, [sp, #0x10]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x34]
+               	ldrsw	x2, [sp, #0x14]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x38]
+               	ldrsw	x2, [sp, #0x18]
                	add	x1, x1, x2
-               	ldrsw	x2, [sp, #0x3c]
+               	ldrsw	x2, [sp, #0x1c]
                	add	x1, x1, x2
                	mov	x2, sp
                	strb	w0, [sp]
@@ -170,7 +170,7 @@ Disassembly of section .text:
                	add	x0, x4, x0
                	cmp	w0, #0x78
                	b.ne	<addr>
-               	add	x0, sp, #0x40
+               	add	x0, sp, #0x20
                	and	x0, x0, #0xf
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0

@@ -43,19 +43,19 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	movq	(%rsp), %rax
                	movq	0x8(%rsp), %rcx
-               	leaq	0x50(%rsp), %rdx
+               	leaq	0x40(%rsp), %rdx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdx)
-               	movq	%rax, 0x50(%rsp)
-               	movq	%rcx, 0x58(%rsp)
-               	movups	0x50(%rsp), %xmm0
+               	movq	%rax, 0x40(%rsp)
+               	movq	%rcx, 0x48(%rsp)
+               	movups	0x40(%rsp), %xmm0
                	leaq	0x20(%rsp), %rax
-               	leaq	0x60(%rsp), %rdx
-               	movups	%xmm0, 0x60(%rsp)
-               	leaq	0x50(%rsp), %rcx
+               	leaq	0x50(%rsp), %rdx
+               	movups	%xmm0, 0x50(%rsp)
+               	leaq	0x40(%rsp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	0x70(%rsp), %rax
+               	leaq	0x60(%rsp), %rax
                	movdqu	(%rdx), %xmm15
                	movdqu	(%rcx), %xmm14
                	pcmpeqb	%xmm14, %xmm15
@@ -80,12 +80,12 @@ Disassembly of section .text:
                	movq	%rdx, 0x48(%rsp)
                	movups	0x40(%rsp), %xmm0
                	leaq	0x30(%rsp), %rax
-               	movups	%xmm0, 0x60(%rsp)
+               	movups	%xmm0, 0x50(%rsp)
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	0x60(%rsp), %rcx
-               	leaq	0x50(%rsp), %rdx
-               	leaq	0x70(%rsp), %rax
+               	leaq	0x50(%rsp), %rcx
+               	leaq	0x40(%rsp), %rdx
+               	leaq	0x60(%rsp), %rax
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rdx), %xmm14
                	pcmpeqb	%xmm14, %xmm15

@@ -4038,10 +4038,10 @@ Disassembly of section .text:
                	divss	%xmm15, %xmm0
                	movq	%rax, %xmm14
                	vaddss	%xmm0, %xmm14, %xmm0
-               	movss	%xmm0, -0xc0(%rbp)
-               	movss	%xmm0, -0xbc(%rbp)
-               	movss	%xmm0, -0xb8(%rbp)
-               	movss	%xmm0, -0xb4(%rbp)
+               	movss	%xmm0, -0xb0(%rbp)
+               	movss	%xmm0, -0xac(%rbp)
+               	movss	%xmm0, -0xa8(%rbp)
+               	movss	%xmm0, -0xa4(%rbp)
                	leaq	-0xa0(%rbp), %rdx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdx)
@@ -4054,7 +4054,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movss	%xmm14, -0x94(%rbp)
                	leaq	-0xa0(%rbp), %rax
-               	leaq	-0xc0(%rbp), %rdx
+               	leaq	-0xb0(%rbp), %rdx
                	leaq	-0x90(%rbp), %rsi
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14

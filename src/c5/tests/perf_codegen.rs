@@ -3886,6 +3886,48 @@ fn a_frame_built_only_by_inlining_is_compacted() {
     );
 }
 
+/// Two escaped objects of disjoint blocks in a loop body share a slot,
+/// declared there or inlined there: each one's end marker ends the value a
+/// read in the next iteration could see (C17 6.2.4p6). An object read
+/// after the loop keeps its own slot.
+#[test]
+fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
+    const SRC: &str = "struct big { char buf[600]; };\n\
+        extern void use(struct big *);\n\
+        static inline int a(void) { struct big b; __builtin_memset(&b, 0, sizeof b); \
+        use(&b); return b.buf[0]; }\n\
+        static inline int c(void) { struct big d; __builtin_memset(&d, 0, sizeof d); \
+        use(&d); return d.buf[1]; }\n\
+        int inlined(int n) { int s = 0; for (int i = 0; i < n; i++) { s += a(); s += c(); } \
+        return s; }\n\
+        int blocks(int n) { int s = 0; for (int i = 0; i < n; i++) {\n\
+          { struct big b; __builtin_memset(&b, 0, sizeof b); use(&b); s += b.buf[0]; }\n\
+          { struct big d; __builtin_memset(&d, 0, sizeof d); use(&d); s += d.buf[1]; } }\n\
+          return s; }\n\
+        int kept(int n) { struct big k; __builtin_memset(&k, 1, sizeof k); use(&k);\n\
+          int s = 0; for (int i = 0; i < n; i++) {\n\
+          struct big d; __builtin_memset(&d, 0, sizeof d); use(&d); s += d.buf[1]; }\n\
+          return s + k.buf[2]; }\n";
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    // The first `sub $imm, %rsp` sizes the frame.
+    let frame = |name: &str| {
+        x64_insns(&function_bytes(&obj, name))
+            .iter()
+            .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
+            .map_or(0, |i| i.imm)
+    };
+    let mut m = Misses::default();
+    for name in ["inlined", "blocks"] {
+        let size = frame(name);
+        m.expect((600..1200).contains(&size), || {
+            format!("{name}: frame of {size} bytes")
+        });
+    }
+    let size = frame("kept");
+    m.expect(size >= 1200, || format!("kept: frame of {size} bytes"));
+    m.finish();
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

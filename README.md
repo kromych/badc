@@ -7,19 +7,24 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](./doc/native-compilation.md)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](./doc/native-compilation.md)
 
+> *If you wish to make an apple pie from scratch, you must first invent the
+> universe.*
+>
+> -- Carl Sagan, [*Cosmos*](https://en.wikiquote.org/wiki/Carl_Sagan#Cosmos_(1980)) (1980), p. 218
+
 `badc` is a slim cross-platform optimizing C17 compiler. There is extensive
 support for the older standards and good support for the newer ones, as well
-as support for numerous extensions found in GNU C, clang, and MSVC - required
-to build the real-world software.
+as support for the numerous GNU C, Clang, and MSVC extensions that real-world
+software requires.
 
-From any host `badc` builds native images for five targets: macOS on ARM64,
+From any host, `badc` builds native images for five targets: macOS on ARM64,
 Linux on ARM64 and x86-64, and Windows on ARM64 and x86-64. It has its own
-preprocessor, assembler, linker, archiver and debug info writers (DWARF and
-PDB), also in-process JIT and an SSA interpreter. CI runs over 80 jobs and
-over 5,000 tests on every pull request and every push to `master`, and
-fuzzing jobs run daily.
+preprocessor, assembler, linker, archiver, and debug-info writers (DWARF and
+PDB), as well as an in-process JIT and an SSA interpreter. CI runs more than
+80 jobs and more than 5,000 tests on every pull request and every push to
+`master`, and fuzzing jobs run daily.
 
-`badc` ships as just one binary. The project is also usable as a Rust
+`badc` ships as a single binary. The project can also be used as a Rust
 library.
 
 > * `badc` was bad when the project started, and the name stuck.
@@ -67,7 +72,7 @@ exercises.
   [Nuklear](./demos/nuklear/), [kissfft](./demos/kissfft/), and the
   [GUI](./demos/gui_hello/) demos: one windowed program per OS family, each
   cross-compiled to every target. Nuklear's demo windows, rendered without a
-  display, give the same frames under badc `-O0`, badc `-O` and the host
+  display, give the same frames under badc `-O0`, badc `-O`, and the host
   compiler.
 * _Windows system code_: the [WDM](./demos/README.md#wdm_driver) kernel
   driver; [SimpleVisor](./demos/simplevisor/), an Intel VT-x hypervisor built
@@ -76,11 +81,11 @@ exercises.
   [nt_loader](./demos/README.md#nt_loader), which starts one through
   `NtCreateUserProcess`.
 * _Coroutines_: [libmill](./demos/README.md#libmill-libdill-coroutines),
-  [libdill](./demos/README.md#libmill-libdill-coroutines) and
+  [libdill](./demos/README.md#libmill-libdill-coroutines), and
   [coroutines](./demos/README.md#libmill-libdill-coroutines), whose context
   switches run through inline asm.
 * _Editors and terminal tools_: [uemacs](./demos/uemacs/), MicroEMACS from
-  Linus Torvalds' tree; [picocom](./demos/picocom/), a serial terminal
+  Linus Torvalds's tree; [picocom](./demos/picocom/), a serial terminal
   emulator, tested between two pseudo-terminals;
   [GNU Screen](./demos/screen/), tested as both halves of its client/server
   pair; and [Vim](./demos/vim/), tested in ex mode and with keystrokes at a
@@ -89,12 +94,12 @@ exercises.
 ## Lineage
 
 badc started as a Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4), a C compiler in four functions (owing to that
-c4 accepts only a subset of C). The dialect diverged enough to get its own name, **c5**,
-hence the `c5` module and the `C5Error` type. It has since moved from a stack IR
+[c4](https://github.com/rswier/c4), a C compiler in four functions that accepts
+only a subset of C. The dialect diverged enough to get its own name, **c5**, hence
+the `c5` module and the `C5Error` type. It has since moved from a stack IR
 through a three-operand IR to SSA with an optimizing backend.
 
-The venerable c4 runs itself, and here is how to run the hello program under c4,
+The venerable c4 runs itself. Here is how to run the hello program under c4,
 under c4, under c4 compiled by badc's JIT:
 
 ```sh
@@ -122,15 +127,15 @@ exit(0) cycle = 11152710
 * [Diagnostics](./doc/diagnostics.md): every warning and error with its code
   and name, and the `-W` options and pragmas that select them.
 * [Standard conformance](./doc/std-conformance.md): implementation-defined
-  choices, divergences from C17, and the C23, POSIX, GCC and MSVC extensions
+  choices, divergences from C17, and the C23, POSIX, GCC, and MSVC extensions
   badc implements.
-* [The Linux kernel](./doc/linux-kernel.md): what badc compiles, links and
+* [The Linux kernel](./doc/linux-kernel.md): what badc compiles, links, and
   boots of the kernel, and how it is checked.
 * [`--interp` and `--jit`](./doc/interpreter.md): running C without writing
   an image, and the interpreter's pointer checks.
 * [Library and `no_std`](./doc/library-and-no-std.md): using badc from Rust.
 * [Testing](./doc/testing.md): the suites, fixtures, snapshots, fuzzing,
-  benchmarks and CI.
+  benchmarks, and CI.
 * [Tools](./doc/tools.md): the helper programs under `tools/` and `scripts/`.
 * [Performance](https://badc.dev/performance/): CI's benchmark results.
 * [Contributing](./CONTRIBUTING.md): what a pull request needs to be merged.

@@ -156,11 +156,17 @@ fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
 fn jit_exit(src: &str, args: &[&str]) -> i32 {
+    beside_others(src, || jit_exit_held(src, args))
+}
+
+/// [`jit_exit`] for a program the caller runs under its own hold on
+/// [`C_LIBRARY_STATE`].
+fn jit_exit_held(src: &str, args: &[&str]) -> i32 {
     let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    beside_others(src, || jit_run(&program, &argv)).expect("jit_run failed")
+    jit_run(&program, &argv).expect("jit_run failed")
 }
 
 /// JIT-run with the native optimizer on (the same pipeline that
@@ -234,18 +240,21 @@ fn a_program_ends_while_another_holds_a_stream() {
     use std::os::fd::{IntoRawFd, OwnedFd};
     let (reader, mut writer) = std::io::pipe().expect("pipe");
     let fd = OwnedFd::from(reader).into_raw_fd();
+    // One hold for both programs: a writer queued behind the blocked reader
+    // would hold up a second shared request until the reader ends.
+    let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
     let blocked = std::thread::spawn(move || {
         let reads = "#include <stdio.h>\n#include <stdlib.h>\n\
             int main(int argc, char **argv) {\n\
               char line[16]; FILE *f = fdopen(atoi(argv[1]), \"r\");\n\
               if (!f || !fgets(line, sizeof line, f)) return 1;\n\
               fclose(f); return line[0] == 'g' ? 0 : 2; }";
-        jit_exit(reads, &["jit-reads", &fd.to_string()])
+        jit_exit_held(reads, &["jit-reads", &fd.to_string()])
     });
     std::thread::sleep(std::time::Duration::from_millis(500));
     let (done, ended) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = done.send(jit_exit("int main(void) { return 7; }", &["jit-ends"]));
+        let _ = done.send(jit_exit_held("int main(void) { return 7; }", &["jit-ends"]));
     });
     let status = ended.recv_timeout(std::time::Duration::from_secs(20));
     writer.write_all(b"go\n").expect("write the line");

@@ -3906,12 +3906,12 @@ impl DataImportSlots {
         self.hosts.contains_key(name)
     }
 
-    /// Take `name`, which nothing binds, as the loaded libraries' export of
-    /// that name, as a dynamic linker's flat lookup finds it; false where
-    /// the lookup is not flat.
-    pub(crate) fn admit_flat(&mut self, name: &str) -> bool {
+    /// Take `name`, which nothing binds, as the loaded libraries' export
+    /// `host`, as a dynamic linker's flat lookup finds it; false where the
+    /// lookup is not flat.
+    pub(crate) fn admit_flat(&mut self, name: &str, host: &str) -> bool {
         if self.flat {
-            self.hosts.insert(name.into(), (name.into(), 0));
+            self.hosts.insert(name.into(), (host.into(), 0));
         }
         self.flat
     }

@@ -666,6 +666,14 @@ mod jit_impl {
     /// else the first weak one; the program's yields to no member's.
     type LinkTable = BTreeMap<String, (Remote, bool)>;
 
+    /// The C library's symbol for a name the program references and the
+    /// library exports under another name.
+    type Spellings = BTreeMap<String, String>;
+
+    fn spelled<'a>(spellings: &'a Spellings, name: &'a str) -> &'a str {
+        spellings.get(name).map_or(name, String::as_str)
+    }
+
     fn prepare_unit(
         program: &Program,
         target: Target,
@@ -785,23 +793,28 @@ mod jit_impl {
 
     /// The program, then the members a native link would pull for it: the
     /// pool is offered once a name stays undefined that the C library lacks.
+    /// With them, the C library's symbol for each name it exports as another.
     #[cfg(feature = "full")]
     fn join_on_demand(
         user: JitUnit,
         sources: Sources<'_>,
         target: Target,
         options: &NativeOptions,
-    ) -> Result<Vec<JitUnit>, C5Error> {
+    ) -> Result<(Vec<JitUnit>, Spellings), C5Error> {
         let mut undefined = user.undefined();
         let mut libc = crate::c5::linker::TargetCLibrary::new(target);
-        let stalled = undefined.iter().any(|n| {
-            !(n.starts_with("__imp_")
+        let mut stalled = false;
+        for n in &undefined {
+            stalled |= !(n.starts_with("__imp_")
                 || crate::c5::linker::link_resolves_symbol(n)
-                || libc.admit(n))
-        });
+                || libc.admit(n));
+        }
+        let spellings = (undefined.iter())
+            .filter_map(|n| Some((n.clone(), String::from(libc.export_symbol(n)?))))
+            .collect();
         let mut units = alloc::vec![user];
         let Some(sources) = sources.filter(|_| stalled) else {
-            return Ok(units);
+            return Ok((units, spellings));
         };
         let (strong, weak) = units[0].program.external_definitions();
         let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
@@ -814,7 +827,7 @@ mod jit_impl {
             units.push(unit);
             Ok(refs)
         })?;
-        Ok(units)
+        Ok((units, spellings))
     }
 
     fn link_table(units: &[JitUnit]) -> LinkTable {
@@ -854,6 +867,7 @@ mod jit_impl {
         index: usize,
         unit: JitUnit,
         table: &LinkTable,
+        spellings: &Spellings,
         machine: super::super::Machine,
     ) -> Result<BoundUnit, C5Error> {
         let JitUnit {
@@ -868,7 +882,7 @@ mod jit_impl {
             (r.unit != index && !internal.contains(name)).then_some(r)
         };
         let mut remote_refs = Vec::new();
-        route_jit_data_imports(&mut build, &weak, machine, &mut |r| {
+        route_jit_data_imports(&mut build, &weak, machine, spellings, &mut |r| {
             let to = remote(&r.symbol_name).filter(|_| r.direct_pcrel.is_none());
             if let Some(to) = to {
                 remote_refs.push((r.instr_offset, to));
@@ -890,7 +904,7 @@ mod jit_impl {
             let to = remote(name);
             let addr = match (to, atexit_thunk_addr(name)) {
                 (Some(_), _) => 0,
-                (None, 0) => got.resolve_symbol(name),
+                (None, 0) => got.resolve_symbol(spelled(spellings, name)),
                 (None, a) => a,
             };
             let bound = if to.is_some() || addr != 0 {
@@ -935,7 +949,7 @@ mod jit_impl {
                 remote_data.push((r.data_offset as usize, to, r.addend));
                 return Ok(true);
             }
-            let host = bound.map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
+            let host = bound.map_or(spelled(spellings, &r.symbol_name), |(_, h, _)| h);
             let addr = got.resolve_symbol(host);
             let at = r.data_offset as usize;
             match build.data.get_mut(at..at + 8) {
@@ -1016,15 +1030,15 @@ mod jit_impl {
         };
         let user = prepare_unit(program, target, &options, report)?;
         #[cfg(feature = "full")]
-        let units = join_on_demand(user, sources, target, &options)?;
+        let (units, spellings) = join_on_demand(user, sources, target, &options)?;
         #[cfg(not(feature = "full"))]
-        let units = {
+        let (units, spellings) = {
             let _ = sources;
-            alloc::vec![user]
+            (alloc::vec![user], Spellings::new())
         };
         let table = link_table(&units);
         let bound = (units.into_iter().enumerate())
-            .map(|(i, u)| bind_unit(i, u, &table, machine))
+            .map(|(i, u)| bind_unit(i, u, &table, &spellings, machine))
             .collect::<Result<Vec<_>, _>>()?;
         let mut placed = bound
             .iter()
@@ -1650,6 +1664,7 @@ mod jit_impl {
         build: &mut Build,
         weak: &BTreeSet<String>,
         machine: super::super::Machine,
+        spellings: &Spellings,
         remote: &mut dyn FnMut(&super::super::UserExternDataRef) -> bool,
     ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmSectionTarget;
@@ -1659,7 +1674,7 @@ mod jit_impl {
                 slots.route_ref(build, &r)?;
             } else if remote(&r) {
             } else if !weak.contains(r.symbol_name.as_str()) {
-                if !slots.admit_flat(&r.symbol_name) {
+                if !slots.admit_flat(&r.symbol_name, spelled(spellings, &r.symbol_name)) {
                     return Err(undefined_reference(&r.symbol_name));
                 }
                 slots.route_ref(build, &r)?;

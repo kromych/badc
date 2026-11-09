@@ -157,6 +157,14 @@ impl TargetCLibrary {
         false
     }
 
+    /// The symbol an admitted `name` is exported as where that is another
+    /// name, as msvcrt.dll exports `strdup` as `_strdup`.
+    pub fn export_symbol(&self, name: &str) -> Option<&str> {
+        (self.libraries())
+            .find_map(|l| l.export_symbols.get(name))
+            .map(String::as_str)
+    }
+
     /// The export set admitted so far, empty when no queried name
     /// belongs to the target's C library.
     pub fn library(&self) -> &SharedLibrary {
@@ -311,6 +319,22 @@ mod tests {
                 target.id_str()
             );
         }
+    }
+
+    /// A name the C library exports under another symbol reports that
+    /// symbol once admitted; one it exports as itself reports none.
+    #[test]
+    fn an_admitted_name_reports_the_symbol_the_library_exports() {
+        let mut lib = TargetCLibrary::new(Target::WindowsX64);
+        for (name, symbol) in [("isascii", Some("__isascii")), ("strdup", Some("_strdup"))] {
+            assert!(lib.admit(name), "{name}");
+            assert_eq!(lib.export_symbol(name), symbol, "{name}");
+        }
+        assert!(lib.admit("strnlen"));
+        assert_eq!(lib.export_symbol("strnlen"), None);
+        let mut lib = TargetCLibrary::new(Target::MacOSAarch64);
+        assert!(lib.admit("strsep"));
+        assert_eq!(lib.export_symbol("strsep"), Some("_strsep"));
     }
 
     /// The unit defining the copies compiles on both Linux targets and

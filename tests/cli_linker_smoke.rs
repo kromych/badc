@@ -23060,3 +23060,43 @@ fn an_init_array_entry_may_name_another_units_function() {
         );
     }
 }
+
+/// A PE link's `-l` searches the `LIB` environment variable's directories,
+/// as link.exe searches them for every library it names; another format's
+/// does not.
+#[test]
+fn a_pe_link_searches_lib_for_a_named_library() {
+    let dir = tempdir("pe-lib-env-search");
+    let libs = dir.join("libs");
+    std::fs::create_dir_all(&libs).expect("create the library directory");
+    let util = write_source(&dir, "util.c", "int doubled(int x) { return 2 * x; }\n");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "extern int doubled(int);\nint main(void) { return doubled(7); }\n",
+    );
+    for (target, archive) in [("windows-x64", "util.lib"), ("linux-x64", "libutil.a")] {
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["--ar", "-o"])
+                .arg(libs.join(archive))
+                .arg(&util),
+            "build the archive",
+        );
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .env("LIB", &libs)
+            .arg(&main)
+            .args(["-lutil", "-o"])
+            .arg(dir.join(target))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            out.status.success(),
+            target.starts_with("windows"),
+            "{target}: {err}"
+        );
+    }
+}

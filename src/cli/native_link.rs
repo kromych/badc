@@ -1319,10 +1319,7 @@ fn pull_default_libraries(
     if let Some(root) = &cli.sysroot {
         dirs.extend(super::paths::sysroot_library_paths(cli.target, root));
     }
-    if cli.target.binary_format() == badc::BinaryFormat::Pe {
-        let lib = std::env::var("LIB").unwrap_or_default();
-        dirs.extend(lib.split(';').filter(|d| !d.is_empty()).map(str::to_string));
-    }
+    dirs.extend(super::paths::pe_lib_env_paths(cli.target));
     let mut searched = std::collections::HashSet::<String>::new();
     loop {
         let named: Vec<String> = (slots.iter())

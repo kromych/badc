@@ -595,6 +595,7 @@ impl Inputs {
         if let Some(root) = &cli.sysroot {
             search_paths.extend(sysroot_library_paths(cli.target, root));
         }
+        search_paths.extend(super::paths::pe_lib_env_paths(cli.target));
         for entry in core::mem::take(&mut self.named) {
             let (name, whole) = match entry {
                 Named::Input(input) => {

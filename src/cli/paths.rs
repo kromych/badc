@@ -68,6 +68,19 @@ pub(crate) fn declared_sysroot(flag: Option<&Path>, target: Target) -> Option<Pa
     }
 }
 
+/// The directories of the `LIB` environment variable, which link.exe searches
+/// for every library a PE link names; none for another format.
+pub(crate) fn pe_lib_env_paths(target: badc::Target) -> Vec<String> {
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        return Vec::new();
+    }
+    let lib = std::env::var("LIB").unwrap_or_default();
+    lib.split(';')
+        .filter(|d| !d.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 /// The standard library directories under `sysroot` for the target's
 /// format, in search order, kept to those that exist: the FHS pair
 /// with its 64-bit and multiarch variants on ELF, ld64's `usr/lib` and

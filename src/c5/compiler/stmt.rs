@@ -3456,7 +3456,10 @@ impl Compiler {
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         let decays = self.register_decays.len();
-        self.with_nesting("statement", |c| c.stmt_inner())?;
+        let outer = self.stmt_start.replace(self.lex.tok_start() as u32);
+        let r = self.with_nesting("statement", |c| c.stmt_inner());
+        self.stmt_start = outer;
+        r?;
         self.check_register_decays(decays)
     }
 

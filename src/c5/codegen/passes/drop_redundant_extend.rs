@@ -1121,7 +1121,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -1552,7 +1552,7 @@ mod tests {
             align: 0,
             pc_rel: false,
         });
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks[0].inst_range = 0..6;
         f
@@ -1656,7 +1656,7 @@ mod tests {
                 align: 0,
                 pc_rel: false,
             });
-            f.inst_src.push((0, 0));
+            f.inst_src.push(crate::c5::ir::InstSrc::default());
             f.f32_values.push(false);
             f.blocks[0].inst_range = 0..6;
             run_one(&mut f);

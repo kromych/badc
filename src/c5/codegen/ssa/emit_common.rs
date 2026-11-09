@@ -1650,7 +1650,8 @@ pub(crate) fn record_inst_src(
     ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
 ) {
     let idx = v as usize;
-    let (line, file_idx) = func.inst_src.get(idx).copied().unwrap_or((0, 0));
+    let src = func.inst_src.get(idx).copied().unwrap_or_default();
+    let (line, file_idx) = (src.line, src.file);
     if line == 0 {
         return;
     }
@@ -1694,11 +1695,7 @@ pub(crate) fn record_block_src(
     code_len: usize,
     ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
 ) {
-    let sourced = |&v: &u32| {
-        func.inst_src
-            .get(v as usize)
-            .is_some_and(|&(line, _)| line != 0)
-    };
+    let sourced = |&v: &u32| func.inst_src.get(v as usize).is_some_and(|s| s.line != 0);
     if let Some(v) = func.blocks[block as usize].inst_range.clone().find(sourced) {
         record_inst_src(func, v, code_len, ssa_line_rows);
     }
@@ -2386,10 +2383,10 @@ fn report_call_diagnostics(
             false => (Code::ATTRIBUTE_WARNING, "warning"),
         };
         let call = (func.inst_src.get(at).copied())
-            .filter(|&(line, _)| line > 0)
-            .and_then(|(line, file)| {
-                let file = program.source_files.get(file as usize)?;
-                Some(crate::c5::diag::Loc::new(file.clone(), line))
+            .filter(|s| s.line > 0)
+            .and_then(|s| {
+                let file = program.source_files.get(s.file as usize)?.clone();
+                Some(crate::c5::diag::Loc::in_unit(file, s.line, s.offset))
             });
         sink.emit(
             code,
@@ -2416,11 +2413,15 @@ fn function_loc(
             && s.val as usize == ent_pc
             && s.binding.decl_line > 0
     })?;
-    let file = program.source_files.get(sym.binding.decl_file as usize)?;
-    Some(crate::c5::diag::Loc::new(
-        file.clone(),
-        sym.binding.decl_line as u32,
-    ))
+    let file = program
+        .source_files
+        .get(sym.binding.decl_file as usize)?
+        .clone();
+    let line = sym.binding.decl_line as u32;
+    Some(match sym.binding.decl_offset {
+        Some(offset) => crate::c5::diag::Loc::in_unit(file, line, offset),
+        None => crate::c5::diag::Loc::new(file, line),
+    })
 }
 
 /// The reports a lowering hands its caller. A row the command line
@@ -2465,7 +2466,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Where the lowering reports. A codegen diagnostic has no position in
     // the translation unit, so the pragmas never apply to one and the
     // control layer stays empty.
-    let mut sink = Sink::new(native.diag.clone(), Default::default());
+    let mut sink = Sink::new(native.diag.clone(), program.diag_control.clone());
 
     // Lift the program into SSA once and run the graph-coloring allocator
     // per function. A per-function emit bail is a hard error so any IR + emit

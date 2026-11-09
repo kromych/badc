@@ -618,7 +618,7 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks,
@@ -1097,7 +1097,7 @@ mod tests {
             fall_through: 1,
         };
         f.insts.push(Inst::Imm(0));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks.push(block(5..6, Terminator::Jmp(1)));
         f.insts[2] = phi(vec![(0, 0), (2, 4), (4, 1)]);

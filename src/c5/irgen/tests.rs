@@ -41,7 +41,11 @@ fn walk(
 #[test]
 fn return_constant_add() {
     let mut ast = Ast::new();
-    let src = SrcPos { line: 1, file: 0 };
+    let src = SrcPos {
+        line: 1,
+        file: 0,
+        offset: 0,
+    };
     let seven = ast.push_expr(Expr::IntLit { val: 7, ty: 1 }, src);
     let three = ast.push_expr(Expr::IntLit { val: 3, ty: 1 }, src);
     let add = ast.push_expr(
@@ -89,7 +93,11 @@ fn local_int_ident_loads() {
     });
 
     let mut ast = Ast::new();
-    let src = SrcPos { line: 1, file: 0 };
+    let src = SrcPos {
+        line: 1,
+        file: 0,
+        offset: 0,
+    };
     let x = ast.push_expr(
         Expr::Ident {
             sym: 0,
@@ -130,7 +138,11 @@ fn local_int_assign_emits_store() {
     });
 
     let mut ast = Ast::new();
-    let src = SrcPos { line: 1, file: 0 };
+    let src = SrcPos {
+        line: 1,
+        file: 0,
+        offset: 0,
+    };
     let lhs = ast.push_expr(
         Expr::Ident {
             sym: 0,
@@ -190,7 +202,11 @@ fn local_int_assign_emits_store() {
 #[test]
 fn unary_neg_lowers_to_one_negate() {
     let mut ast = Ast::new();
-    let src = SrcPos { line: 1, file: 0 };
+    let src = SrcPos {
+        line: 1,
+        file: 0,
+        offset: 0,
+    };
     let lit = ast.push_expr(
         Expr::IntLit {
             val: 5,
@@ -280,7 +296,11 @@ fn unary_neg_lowers_to_one_negate() {
 #[test]
 fn unsupported_stmt_returns_error() {
     let mut ast = Ast::new();
-    let src = SrcPos { line: 1, file: 0 };
+    let src = SrcPos {
+        line: 1,
+        file: 0,
+        offset: 0,
+    };
     let asm_id = ast.push_stmt(
         Stmt::Asm {
             text: alloc::string::String::new(),

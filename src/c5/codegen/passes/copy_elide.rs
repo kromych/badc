@@ -723,7 +723,7 @@ mod tests {
             locals,
             synthetic_base: 1,
             multi_cell_slots: groups,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -826,7 +826,7 @@ mod tests {
             });
         }
         f.blocks[0].inst_range = 0..f.insts.len() as u32;
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         let before = shape(&f);
         run_one(&mut f);
@@ -862,7 +862,7 @@ mod tests {
             pc_rel: false,
         });
         f.blocks[0].inst_range = 0..f.insts.len() as u32;
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         let before = shape(&f);
         run_one(&mut f);

@@ -825,6 +825,7 @@ pub(crate) mod test_support {
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            diag_control: Default::default(),
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,

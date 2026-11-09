@@ -5404,7 +5404,7 @@ int main(void) { return 0; }
         let n = 5;
         let f = FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts: vec![
                 Inst::ParamRef {
@@ -5992,7 +5992,7 @@ int main(void) { return 0; }
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -6121,7 +6121,7 @@ int main(void) { return 0; }
         }
         let n = insts.len();
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -6240,7 +6240,7 @@ int main(void) { return 0; }
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
             div32: Vec::new(),

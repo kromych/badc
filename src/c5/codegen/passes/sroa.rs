@@ -1450,12 +1450,12 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
     };
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(total);
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(total);
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(total);
     let mut new_f32: Vec<bool> = Vec::with_capacity(total);
     for (bi, range) in old_ranges.iter().enumerate() {
         let start = new_insts.len() as u32;
         for old in range.start..range.end {
-            let loc = func.inst_src.get(old as usize).copied().unwrap_or((0, 0));
+            let loc = func.inst_src.get(old as usize).copied().unwrap_or_default();
             match splits.get(&old) {
                 Some(e) => {
                     let (src, dst) = match func.insts[old as usize] {
@@ -1746,7 +1746,7 @@ mod tests {
     fn func(insts: Vec<Inst>, term: Terminator, multi_cell: Vec<(i64, i64)>) -> FunctionSsa {
         let n = insts.len() as u32;
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks: alloc::vec![Block {
@@ -3406,7 +3406,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks: alloc::vec![Block {

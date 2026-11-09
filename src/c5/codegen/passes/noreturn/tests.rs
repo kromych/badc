@@ -31,7 +31,7 @@ fn func(ent_pc: usize, insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
     FunctionSsa {
         name: alloc::format!("f{ent_pc}"),
         ent_pc,
-        inst_src: vec![(0, 0); insts.len()],
+        inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
         f32_values: vec![false; insts.len()],
         insts,
         blocks,

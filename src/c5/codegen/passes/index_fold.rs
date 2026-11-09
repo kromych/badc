@@ -715,7 +715,7 @@ mod tests {
     fn folded(insts: alloc::vec::Vec<Inst>) -> alloc::vec::Vec<Inst> {
         let n = insts.len() as u32;
         let mut funcs = vec![FunctionSsa {
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             insts,
             blocks: vec![Block {

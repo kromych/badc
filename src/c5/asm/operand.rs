@@ -688,7 +688,7 @@ mod tests {
     fn one_block(insts: alloc::vec::Vec<Inst>) -> FunctionSsa {
         let n = insts.len() as u32;
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,

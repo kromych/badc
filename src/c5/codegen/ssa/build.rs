@@ -210,7 +210,7 @@ pub(crate) struct SsaBuilder {
     /// can recover a per-statement line table for walker-produced
     /// SSA. `(0, 0)` means "no source information"; the DWARF
     /// builder skips those rows.
-    cur_src: (u32, u32),
+    cur_src: crate::c5::ir::InstSrc,
 }
 
 impl SsaBuilder {
@@ -289,7 +289,7 @@ impl SsaBuilder {
             block_terminators: Vec::new(),
             block_exit_accs: Vec::new(),
             last_def: NO_VALUE,
-            cur_src: (0, 0),
+            cur_src: Default::default(),
             split_modulo: false,
             defer_divmod: false,
         };
@@ -800,11 +800,11 @@ impl SsaBuilder {
             .unwrap_or(false)
     }
 
-    /// Set the `(line, file_idx)` source position stamped on every
-    /// subsequent [`Self::push`] until the next call. Used by the
-    /// walker to drive per-statement DWARF rows.
-    pub(crate) fn set_src(&mut self, line: u32, file_idx: u32) {
-        self.cur_src = (line, file_idx);
+    /// Set the source position stamped on every subsequent [`Self::push`]
+    /// until the next call. Used by the walker to drive per-statement
+    /// DWARF rows and to place the lowering's diagnostics.
+    pub(crate) fn set_src(&mut self, src: crate::c5::ir::InstSrc) {
+        self.cur_src = src;
     }
 
     /// `Inst::Imm`. In-block CSE: a prior `imm(v)` returns the

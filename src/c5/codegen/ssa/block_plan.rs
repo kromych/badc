@@ -572,7 +572,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             insts,
             blocks,
@@ -954,7 +954,7 @@ mod tests {
         // The returning label takes a phi of the target from another place.
         let at = f.insts.len() as u32;
         f.insts.push(phi(&[(1, 2)], LoadKind::I64));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         let a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
@@ -1019,7 +1019,7 @@ mod tests {
         // The exit block takes a phi fed by the test block from another place.
         let at = f.insts.len() as u32;
         f.insts.push(phi(&[(2, 0)], LoadKind::I64));
-        f.inst_src.push((0, 0));
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
         f.blocks[3] = block(at..at + 1, Terminator::Return(at));
         a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());

@@ -2638,7 +2638,7 @@ fn splice_multi_block(
     let caller_jt_len = original.jump_tables.len() as u32;
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
-    let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(new_insts.capacity());
+    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(new_insts.capacity());
     let mut new_f32: Vec<bool> = Vec::with_capacity(new_insts.capacity());
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
     let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
@@ -2651,7 +2651,7 @@ fn splice_multi_block(
 
     let emit_caller_inst = |pc: u32,
                             new_insts: &mut Vec<Inst>,
-                            new_inst_src: &mut Vec<(u32, u32)>,
+                            new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
                             new_f32: &mut Vec<bool>,
                             remap: &mut [ValueId],
                             original: &mut FunctionSsa| {
@@ -2659,7 +2659,7 @@ fn splice_multi_block(
             .inst_src
             .get(pc as usize)
             .copied()
-            .unwrap_or((0, 0));
+            .unwrap_or_default();
         let f32 = original
             .f32_values
             .get(pc as usize)
@@ -2903,7 +2903,7 @@ fn splice_multi_block(
             let d = &callee.agg_descs[desc as usize];
             let dst = new_insts.len() as u32;
             new_insts.push(Inst::LocalAddr(slot - region_base));
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             // The type's alignment is the bound both endpoints are known
             // to meet: the destination is a frame slot and the source is
@@ -2914,7 +2914,7 @@ fn splice_multi_block(
                 size: d.size as i64,
                 align: d.align,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
         }
         // The initializing store a materialized cell's missing prologue
@@ -2934,7 +2934,7 @@ fn splice_multi_block(
                 volatile: false,
                 nsw: false,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
         }
         let callee_entry_new_id = callee_block_base;
@@ -2964,7 +2964,7 @@ fn splice_multi_block(
             debug_assert_eq!(postfix_start, pieces_base);
             let la = new_insts.len() as u32;
             new_insts.push(Inst::LocalAddr(ret_slot));
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             let mut loaded: Vec<ValueId> = Vec::with_capacity(pieces.len());
             for &(off, size) in pieces.iter() {
@@ -2978,7 +2978,7 @@ fn splice_multi_block(
                     align: piece_align(ret_align, off, size),
                     pc_rel: false,
                 });
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
             for (&(off, size), &lv) in pieces.iter().zip(&loaded) {
@@ -2992,12 +2992,12 @@ fn splice_multi_block(
                     align: 0,
                     pc_rel: false,
                 });
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
             for &s in &held_ends {
                 new_insts.push(Inst::LifetimeEnd(s - region_base));
-                new_inst_src.push((0, 0));
+                new_inst_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
             }
         }
@@ -3086,7 +3086,7 @@ fn splice_multi_block(
                             incoming: new_incoming,
                             kind: *kind,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(
                             callee
                                 .f32_values
@@ -3106,7 +3106,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = splice_param_ref(
                             *kind,
                             arg,
-                            (0, 0),
+                            crate::c5::ir::InstSrc::default(),
                             &mut new_insts,
                             &mut new_inst_src,
                             &mut new_f32,
@@ -3126,7 +3126,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = splice_param_ref(
                             *kind,
                             arg,
-                            (0, 0),
+                            crate::c5::ir::InstSrc::default(),
                             &mut new_insts,
                             &mut new_inst_src,
                             &mut new_f32,
@@ -3156,7 +3156,7 @@ fn splice_multi_block(
                         };
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LocalAddr(slot));
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
@@ -3178,7 +3178,7 @@ fn splice_multi_block(
                             kind: *kind,
                             volatile: *volatile,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(
                             callee
                                 .f32_values
@@ -3210,14 +3210,14 @@ fn splice_multi_block(
                             volatile: *volatile,
                             nsw: false,
                         });
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
                     Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LifetimeEnd(off - region_base));
-                        new_inst_src.push((0, 0));
+                        new_inst_src.push(crate::c5::ir::InstSrc::default());
                         new_f32.push(false);
                         continue;
                     }
@@ -3240,7 +3240,7 @@ fn splice_multi_block(
                     let new_id = new_insts.len() as u32;
                     callee_remap[ce_pc as usize] = new_id;
                     new_insts.push(translated);
-                    new_inst_src.push((0, 0));
+                    new_inst_src.push(crate::c5::ir::InstSrc::default());
                     new_f32.push(
                         callee
                             .f32_values
@@ -3337,7 +3337,7 @@ fn splice_multi_block(
                 incoming: phi_incoming,
                 kind: LoadKind::I64,
             });
-            new_inst_src.push((0, 0));
+            new_inst_src.push(crate::c5::ir::InstSrc::default());
             new_f32.push(false);
             new_blocks.push(Block {
                 start_pc: 0,
@@ -3566,9 +3566,9 @@ fn splice_multi_block(
 fn splice_param_ref(
     kind: LoadKind,
     arg: ValueId,
-    src_pos: (u32, u32),
+    src_pos: crate::c5::ir::InstSrc,
     new_insts: &mut Vec<Inst>,
-    new_inst_src: &mut Vec<(u32, u32)>,
+    new_inst_src: &mut Vec<crate::c5::ir::InstSrc>,
     new_f32: &mut Vec<bool>,
 ) -> ValueId {
     let inst = match kind {
@@ -3738,7 +3738,7 @@ fn inline_caller(
         })
         .collect();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
-    let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
+    let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
     // `remap[old_id]` is the new ValueId in the spliced caller. An
     // inlined Call's slot maps to the callee's translated Return value.
@@ -3783,7 +3783,7 @@ fn inline_caller(
                     .inst_src
                     .get(old_pc as usize)
                     .copied()
-                    .unwrap_or((0, 0));
+                    .unwrap_or_default();
                 let inst = &caller.insts[old_pc as usize];
                 let inlined = match inst {
                     Inst::Call {
@@ -4666,7 +4666,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4704,7 +4704,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![
                 Block {
@@ -4739,7 +4739,7 @@ mod tests {
         FunctionSsa {
             ent_pc,
             locals,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4760,7 +4760,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let callee = FunctionSsa {
             ent_pc: 100,
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4773,7 +4773,7 @@ mod tests {
         };
         let caller = |next: Inst| FunctionSsa {
             ent_pc: 1,
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4884,7 +4884,7 @@ mod tests {
         let callee = FunctionSsa {
             ent_pc: 200,
             locals: 3,
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![
                 Block {
@@ -4928,7 +4928,7 @@ mod tests {
             ent_pc: 400,
             is_variadic: true,
             insts: alloc::vec![call_to(300), Inst::Imm(0)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -4958,7 +4958,7 @@ mod tests {
             ent_pc,
             locals,
             insts: alloc::vec![Inst::Imm(7)],
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5043,7 +5043,7 @@ mod tests {
         let optional_sites = MAX_MULTI_BLOCK_SPLICE_STEPS * INLINE_FIXPOINT_ITERS + 1;
         let mut caller = multi_call_caller(1, 2, 100, optional_sites);
         caller.insts.insert(optional_sites, call_to(200));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         let n = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..n;
@@ -5153,7 +5153,7 @@ mod tests {
         insts.append(&mut caller.insts);
         caller.insts = insts;
         let total = caller.insts.len() as u32;
-        caller.inst_src = alloc::vec![(0, 0); total as usize];
+        caller.inst_src = alloc::vec![crate::c5::ir::InstSrc::default(); total as usize];
         caller.f32_values = alloc::vec![false; total as usize];
         caller.blocks[0].inst_range = 0..total;
         caller.blocks[0].terminator = Terminator::Return(total - 1);
@@ -5172,7 +5172,7 @@ mod tests {
         let half = CALLER_FRAME_ABS_SLOTS / 2 + 44;
         let mut caller = multi_call_caller(1, 0, 500, 1);
         caller.insts.insert(1, call_to(501));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         caller.blocks[0].inst_range = 0..3;
         caller.blocks[0].terminator = Terminator::Return(2);
@@ -5241,7 +5241,7 @@ mod tests {
             let leaf = FunctionSsa {
                 ent_pc: 600,
                 insts: alloc::vec![Inst::Imm(7)],
-                inst_src: alloc::vec![(0, 0)],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
                 f32_values: alloc::vec![false],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -5291,7 +5291,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let mut caller = multi_call_caller(1, 2, 100, 2);
         caller.insts.insert(0, call_to(999));
-        caller.inst_src.push((0, 0));
+        caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         let end = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..end;
@@ -5376,7 +5376,7 @@ mod tests {
         let f = FunctionSsa {
             ent_pc: 5,
             insts: alloc::vec![call_self, Inst::Imm(0)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5444,7 +5444,7 @@ mod tests {
         let n = insts.len() as u32;
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5539,7 +5539,7 @@ mod tests {
                 FunctionSsa {
                     ent_pc: 1,
                     insts: alloc::vec![call_to(100)],
-                    inst_src: alloc::vec![(0, 0); 1],
+                    inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 1],
                     f32_values: alloc::vec![false; 1],
                     blocks: alloc::vec![Block {
                         start_pc: 0,
@@ -5580,7 +5580,7 @@ mod tests {
         let mid = FunctionSsa {
             ent_pc: 2,
             insts: alloc::vec![call_to(1), call_to(1)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5615,7 +5615,7 @@ mod tests {
         let mutual = |ent_pc: usize, target: usize| FunctionSsa {
             ent_pc,
             insts: alloc::vec![Inst::Imm(0), call_to(target)],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5645,7 +5645,7 @@ mod tests {
             let insts: Vec<Inst> = (0..n).map(|i| Inst::Imm(i as i64)).collect();
             FunctionSsa {
                 ent_pc: 5,
-                inst_src: alloc::vec![(0, 0); n],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
                 f32_values: alloc::vec![false; n],
                 blocks: (0..n as u32)
                     .map(|i| Block {
@@ -5685,7 +5685,7 @@ mod tests {
         let caller = FunctionSsa {
             ent_pc: 1,
             insts: alloc::vec![arg, call],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5724,7 +5724,7 @@ mod tests {
             incoming: alloc::vec![(0, 2)],
             kind: LoadKind::I64,
         });
-        callee.inst_src.push((0, 0));
+        callee.inst_src.push(crate::c5::ir::InstSrc::default());
         callee.f32_values.push(false);
         callee.blocks = alloc::vec![
             Block {
@@ -5751,7 +5751,7 @@ mod tests {
         let caller = FunctionSsa {
             ent_pc: 1,
             insts: alloc::vec![Inst::Imm(0), call],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -5801,7 +5801,7 @@ mod tests {
             n_params: 1,
             ret_is_fp,
             insts: alloc::vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(2)],
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![
                 Block {
@@ -5878,7 +5878,7 @@ mod tests {
         let abi = Target::LinuxX64.abi();
         let single = |insts: Vec<Inst>, ret: ValueId| FunctionSsa {
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6013,7 +6013,7 @@ mod tests {
             FunctionSsa {
                 locals: if slot < 0 { -slot } else { 0 },
                 n_params: usize::from(spill),
-                inst_src: alloc::vec![(0, 0); n as usize],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: alloc::vec![false; n as usize],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6070,7 +6070,7 @@ mod tests {
                 },
                 Inst::Imm(0),
             ],
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6120,7 +6120,7 @@ mod tests {
                     seg: AsmSeg::Gs,
                 },
             ],
-            inst_src: alloc::vec![(0, 0); 4],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: alloc::vec![false; 4],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6164,7 +6164,7 @@ mod tests {
                     seg: AsmSeg::Fs,
                 },
             ],
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6220,7 +6220,7 @@ mod tests {
                 },
                 Inst::Imm(0),
             ],
-            inst_src: alloc::vec![(0, 0); 2],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 2],
             f32_values: alloc::vec![false; 2],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6252,7 +6252,7 @@ mod tests {
                 is_always_inline,
                 ret_type_tag: Some(crate::c5::compiler::types::void_ty()),
                 insts: alloc::vec![Inst::Imm(0)],
-                inst_src: alloc::vec![(0, 0)],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
                 f32_values: alloc::vec![false],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6484,7 +6484,7 @@ mod tests {
             let n = insts.len() as u32;
             FunctionSsa {
                 n_params: 2,
-                inst_src: alloc::vec![(0, 0); n as usize],
+                inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: alloc::vec![false; n as usize],
                 blocks: alloc::vec![Block {
                     start_pc: 0,
@@ -6523,7 +6523,14 @@ mod tests {
                 alloc::vec::Vec::new(),
                 alloc::vec::Vec::new(),
             );
-            let v = splice_param_ref(kind, 5, (0, 0), &mut i, &mut s, &mut f);
+            let v = splice_param_ref(
+                kind,
+                5,
+                crate::c5::ir::InstSrc::default(),
+                &mut i,
+                &mut s,
+                &mut f,
+            );
             assert_eq!(i.len(), param_read_insts(kind) as usize);
             (v, i)
         };
@@ -6647,7 +6654,7 @@ mod tests {
         let callee = FunctionSsa {
             ent_pc: 100,
             n_params: 1,
-            inst_src: alloc::vec![(0, 0); 4],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: alloc::vec![false; 4],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6691,7 +6698,7 @@ mod tests {
         ];
         let caller = FunctionSsa {
             ent_pc: 1,
-            inst_src: alloc::vec![(0, 0); 5],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: alloc::vec![false; 5],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6748,7 +6755,7 @@ mod tests {
         let insts = alloc::vec![Inst::Imm(ent_pc as i64)];
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); 1],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 1],
             f32_values: alloc::vec![false; 1],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6767,7 +6774,7 @@ mod tests {
         let n = insts.len() as u32;
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6901,7 +6908,7 @@ mod tests {
         ];
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0); 3],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: alloc::vec![false; 3],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -6917,7 +6924,7 @@ mod tests {
     fn leaf(ent_pc: usize) -> FunctionSsa {
         FunctionSsa {
             ent_pc,
-            inst_src: alloc::vec![(0, 0)],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default()],
             f32_values: alloc::vec![false],
             blocks: alloc::vec![Block {
                 start_pc: 0,

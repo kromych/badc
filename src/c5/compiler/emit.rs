@@ -1212,6 +1212,7 @@ impl Compiler {
         SrcPos {
             line: self.lex.line as u32,
             file,
+            offset: (self.stmt_start).unwrap_or(self.lex.tok_start() as u32),
         }
     }
 

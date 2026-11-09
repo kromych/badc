@@ -680,7 +680,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
     let mut acc_back = vec![NO_VALUE; plan.tail.len()];
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + 8);
-    let mut new_src: Vec<(u32, u32)> = Vec::new();
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::new();
     let mut new_f32: Vec<bool> = Vec::new();
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_blocks + 1);
 
@@ -709,7 +709,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                 }
                 let id = new_insts.len() as u32;
                 new_insts.push(inst);
-                new_src.push(func.inst_src.get(pc as usize).copied().unwrap_or((0, 0)));
+                new_src.push(func.inst_src.get(pc as usize).copied().unwrap_or_default());
                 new_f32.push(func.f32_values.get(pc as usize).copied().unwrap_or(false));
                 remap[pc as usize] = id;
                 id
@@ -719,7 +719,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             ($inst:expr) => {{
                 let id = new_insts.len() as u32;
                 new_insts.push($inst);
-                new_src.push((0, 0));
+                new_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(false);
                 id
             }};

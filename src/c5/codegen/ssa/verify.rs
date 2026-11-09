@@ -205,7 +205,7 @@ mod tests {
         let n = insts.len();
         FunctionSsa {
             name: "f".into(),
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             insts,
             blocks,

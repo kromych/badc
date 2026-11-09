@@ -980,7 +980,7 @@ fn rebuild_tape(
     }
     let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; func.insts.len()];
     let mut new_insts: Vec<Inst> = Vec::with_capacity(order.len());
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(order.len());
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(order.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(order.len());
     for item in order {
         match item {
@@ -988,12 +988,12 @@ fn rebuild_tape(
                 let o = old_id as usize;
                 value_remap[o] = new_insts.len() as ValueId;
                 new_insts.push(func.insts[o].clone());
-                new_src.push(func.inst_src.get(o).copied().unwrap_or((0, 0)));
+                new_src.push(func.inst_src.get(o).copied().unwrap_or_default());
                 new_f32.push(func.f32_values.get(o).copied().unwrap_or(false));
             }
             Item::Head(inst, f32) => {
                 new_insts.push(inst);
-                new_src.push((0, 0));
+                new_src.push(crate::c5::ir::InstSrc::default());
                 new_f32.push(f32);
             }
         }
@@ -1998,7 +1998,7 @@ mod tests {
             is_weak: false,
             is_internal: false,
             const_params: 0,
-            inst_src: alloc::vec![(0, 0); insts.len()],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
             div32: Vec::new(),
@@ -3310,7 +3310,7 @@ mod tests {
             ret_agg: None,
             ret_slot_local: -1,
         });
-        result.inst_src.push((0, 0));
+        result.inst_src.push(crate::c5::ir::InstSrc::default());
         result.f32_values.push(false);
         result.blocks[2].inst_range = 3..5;
         assert!(run(&mut result).is_empty());

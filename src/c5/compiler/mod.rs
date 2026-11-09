@@ -2522,6 +2522,9 @@ pub struct Compiler {
     operand_start: usize,
     /// Where the last expression parsed began.
     value_start: diag::Site,
+    /// Where the innermost statement being parsed began, the position its
+    /// AST nodes give the diagnostic pragmas.
+    stmt_start: Option<u32>,
     /// The function type the elements of the array being initialized lead
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
@@ -3247,6 +3250,7 @@ impl Compiler {
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             value_start: diag::Site::default(),
+            stmt_start: None,
             array_elem_fn: None,
             measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
@@ -3990,6 +3994,7 @@ impl Compiler {
             data_align_marks: self.data_align_marks,
             entry_pc,
             warnings: self.sink.take(),
+            diag_control: self.sink.control().clone(),
             notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,

@@ -55,6 +55,19 @@ pub(crate) struct SrcPos {
     pub line: u32,
     /// Index into the translation unit's source-file table.
     pub file: u16,
+    /// Unit offset of the first token of the statement the node belongs
+    /// to, where the diagnostic pragmas governing its reports resolve.
+    pub offset: u32,
+}
+
+impl SrcPos {
+    pub(crate) fn inst_src(self) -> crate::c5::ir::InstSrc {
+        crate::c5::ir::InstSrc {
+            line: self.line,
+            file: u32::from(self.file),
+            offset: self.offset,
+        }
+    }
 }
 
 /// Short-circuit logical operator. C99 6.5.13 / 6.5.14:
@@ -1472,7 +1485,11 @@ mod tests {
     #[test]
     fn return_a_plus_one() {
         let mut ast = Ast::new();
-        let src = SrcPos { line: 7, file: 0 };
+        let src = SrcPos {
+            line: 7,
+            file: 0,
+            offset: 0,
+        };
         let a = ast.push_expr(
             Expr::Ident {
                 sym: 42,
@@ -1519,7 +1536,11 @@ mod tests {
         let l1 = ast.alloc_label();
         let l2 = ast.alloc_label();
         assert_eq!(ast.goto_targets, alloc::vec![None, None]);
-        let src = SrcPos { line: 1, file: 0 };
+        let src = SrcPos {
+            line: 1,
+            file: 0,
+            offset: 0,
+        };
         let body1 = ast.push_stmt(Stmt::Break, src);
         ast.resolve_label(l1, body1);
         assert_eq!(ast.goto_targets[l1 as usize], Some(body1));

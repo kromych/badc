@@ -1598,7 +1598,7 @@ mod tests {
         FunctionSsa {
             locals,
             synthetic_base: 1,
-            inst_src: alloc::vec![(0, 0); n as usize],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: alloc::vec![false; n as usize],
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -2305,7 +2305,7 @@ mod tests {
         FunctionSsa {
             locals,
             synthetic_base: 1,
-            inst_src: alloc::vec![(0, 0); n],
+            inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: alloc::vec![false; n],
             blocks: blocks
                 .into_iter()

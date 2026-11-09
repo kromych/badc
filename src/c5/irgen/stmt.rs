@@ -17,7 +17,7 @@ impl<'a> Walker<'a> {
     /// would otherwise emit dead code.
     pub(super) fn walk_stmt(&mut self, b: &mut SsaBuilder, id: StmtId) -> Result<bool, WalkError> {
         let src = self.ast.stmt_src[id as usize];
-        b.set_src(src.line, src.file as u32);
+        b.set_src(src.inst_src());
         match self.ast.stmt(id) {
             Stmt::SehTry {
                 body,
@@ -1069,7 +1069,7 @@ impl<'a> Walker<'a> {
     /// step are walked apart from the statement that holds them.
     fn stamp_expr(&self, b: &mut SsaBuilder, e: ExprId) {
         if let Some(src) = self.ast.expr_src.get(e as usize) {
-            b.set_src(src.line, src.file as u32);
+            b.set_src(src.inst_src());
         }
     }
 

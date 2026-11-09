@@ -295,6 +295,9 @@ pub struct Program {
     /// level it resolved to. `Diagnostic` prints itself, so a caller
     /// that only dumps them needs to know nothing more.
     pub warnings: Vec<super::diag::Diagnostic>,
+    /// The unit's diagnostic pragmas, which govern the lowering's reports
+    /// at the positions its instructions carry.
+    pub diag_control: super::diag::Control,
     /// The auto-include notes, `info:` lines the driver prints ahead
     /// of `warnings`.
     pub notes: Vec<String>,
@@ -798,6 +801,7 @@ impl DataOffsets for Program {
             data_align_marks,
             entry_pc: _,
             warnings: _,
+            diag_control: _,
             notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
@@ -944,6 +948,7 @@ mod data_offset_tests {
             data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            diag_control: Default::default(),
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,

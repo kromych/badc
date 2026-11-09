@@ -483,6 +483,38 @@ fn pragma_operators_scope_the_construct_a_diagnostic_reports() {
     assert_eq!(got, [9, 12, 15, 17], "{:?}", p.warnings);
 }
 
+/// The fall-through check walks the AST once the switch is parsed. A
+/// statement's report resolves the pragmas at its first token, so pragma
+/// lines and a `_Pragma` macro around the statement govern it, as in gcc.
+#[test]
+fn pragmas_around_a_statement_govern_its_fall_through() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wimplicit-fallthrough=5\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               int f(int c, int x) {\n\
+                   switch (c) {\n\
+                   case 1:\n\
+                       x++;\n\
+                   case 2:\n\
+               #pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wimplicit-fallthrough=5\"\n\
+                       x += 2;\n\
+               #pragma GCC diagnostic pop\n\
+                   case 3:\n\
+                       QUIET(x += 3;)\n\
+                   case 4:\n\
+                       x += 4;\n\
+                   }\n\
+                   return x;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["implicit-fallthrough=5"]);
+    let lines: alloc::vec::Vec<u32> = (p.warnings.iter())
+        .map(|d| d.loc.as_ref().map_or(0, |l| l.line))
+        .collect();
+    assert_eq!(lines, [5], "{:?}", p.warnings);
+}
+
 /// The MSVC spelling reaches the same rows through the catalogue's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]

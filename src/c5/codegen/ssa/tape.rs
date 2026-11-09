@@ -16,7 +16,7 @@ use super::super::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 /// The parts of a [`FunctionSsa`] keyed by value id.
 struct Keyed<'a> {
     insts: &'a mut Vec<Inst>,
-    inst_src: &'a mut Vec<(u32, u32)>,
+    inst_src: &'a mut Vec<crate::c5::ir::InstSrc>,
     f32_values: &'a mut Vec<bool>,
     cmp32: &'a mut Vec<bool>,
     div32: &'a mut Vec<bool>,
@@ -186,7 +186,7 @@ pub(crate) struct Rewrite {
 /// that does not pay for itself can be undone exactly.
 pub(crate) struct Undo {
     insts: Vec<Inst>,
-    inst_src: Vec<(u32, u32)>,
+    inst_src: Vec<crate::c5::ir::InstSrc>,
     f32_values: Vec<bool>,
     cmp32: Vec<bool>,
     div32: Vec<bool>,
@@ -308,7 +308,7 @@ fn insert_keeping(
         .collect();
     empties.sort_unstable();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + ins.len());
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + ins.len());
+    let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(n_old + ins.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     // An inserted value is a copy or a materialization, never a
     // comparison or division, so it carries no narrow-op mark.
@@ -326,14 +326,14 @@ fn insert_keeping(
     let mut cur = 0usize;
     let mut next_empty = 0usize;
     for old in 0..=n_old {
-        let src = inst_src.get(old).copied().unwrap_or((0, 0));
+        let src = inst_src.get(old).copied().unwrap_or_default();
         let mut take = |rank: u8, block: BlockId, new_insts: &mut Vec<Inst>| {
             while cur < ins.len() && order(&ins[cur]) == (old as u32, rank, block) {
                 ids[cur] = new_insts.len() as ValueId;
                 new_insts.push(ins[cur].inst.clone());
                 new_src.push(match ins[cur].at {
                     At::Before(k) | At::After(k) => {
-                        inst_src.get(k as usize).copied().unwrap_or((0, 0))
+                        inst_src.get(k as usize).copied().unwrap_or_default()
                     }
                     At::Empty(_) => src,
                 });
@@ -535,7 +535,7 @@ mod tests {
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks,
@@ -790,7 +790,11 @@ mod tests {
             ],
         );
         f.blocks[2].exit_acc = 4;
-        f.inst_src = alloc::vec![(10, 0), (11, 0), (12, 0), (13, 0), (14, 0)];
+        let at = |line| crate::c5::ir::InstSrc {
+            line,
+            ..Default::default()
+        };
+        f.inst_src = alloc::vec![at(10), at(11), at(12), at(13), at(14)];
         f.f32_values = alloc::vec![false, true, false, false, false];
         f.cmp32 = alloc::vec![false, false, false, false, true];
         f.extern_imm_data_refs = alloc::vec![(3, 9)];
@@ -810,7 +814,7 @@ mod tests {
         assert_eq!(f.blocks[2].exit_acc, 2);
         assert_eq!(
             f.inst_src,
-            alloc::vec![(10, 0), (13, 0), (14, 0), (11, 0), (12, 0)]
+            alloc::vec![at(10), at(13), at(14), at(11), at(12)]
         );
         assert_eq!(f.f32_values, alloc::vec![false, false, false, true, false]);
         assert_eq!(f.cmp32, alloc::vec![false, false, true, false, false]);

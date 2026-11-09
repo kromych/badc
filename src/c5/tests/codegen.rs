@@ -18902,7 +18902,7 @@ fn loop_conditions_and_steps_take_their_own_lines() {
         let f = funcs.iter().find(|f| f.name == name).expect(name);
         (0..f.insts.len())
             .filter(|&v| want(&f.insts[v]))
-            .map(|v| f.inst_src[v].0)
+            .map(|v| f.inst_src[v].line)
             .collect()
     };
     let is = |want: BinOp| move |i: &Inst| matches!(i, Inst::BinopI { op, .. } | Inst::Binop { op, .. } if *op == want);
@@ -19322,7 +19322,8 @@ fn a_call_left_to_an_error_or_warning_function_is_diagnosed() {
 }
 
 /// A call to a `warning` function reports at the call, as gcc does, not at
-/// the function making it.
+/// the function making it, and the diagnostic pragmas around the call
+/// govern the report.
 #[test]
 fn an_attribute_warning_reports_at_the_call() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -19330,6 +19331,13 @@ fn an_attribute_warning_reports_at_the_call() {
                void use(int a) {\n\
                    if (a)\n\
                        old();\n\
+               }\n\
+               void quiet(int a) {\n\
+               #pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wattribute-warning\"\n\
+                   if (a)\n\
+                       old();\n\
+               #pragma GCC diagnostic pop\n\
                }\n";
     let opts = CompileOptions::default().with_no_entry_point(true);
     let program = Compiler::with_options(src.into(), Target::LinuxX64, opts)

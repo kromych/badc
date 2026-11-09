@@ -2169,7 +2169,7 @@ mod tests {
         let n = insts.len();
         FunctionSsa {
             n_params,
-            inst_src: vec![(0, 0); n],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n],
             f32_values: vec![false; n],
             insts,
             blocks: vec![Block {
@@ -2285,7 +2285,7 @@ mod tests {
                 exit_acc: 0,
             };
             FunctionSsa {
-                inst_src: vec![(0, 0); n as usize],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
                 f32_values: vec![false; n as usize],
                 insts,
                 blocks: vec![
@@ -2437,7 +2437,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); n as usize],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
             f32_values: vec![false; n as usize],
             insts,
             blocks: vec![
@@ -2518,7 +2518,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![
@@ -2585,7 +2585,7 @@ mod tests {
             exit_acc: 0,
         };
         let mut f = FunctionSsa {
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![
@@ -2635,7 +2635,7 @@ mod tests {
             exit_acc: 0,
         };
         let f = FunctionSsa {
-            inst_src: vec![(0, 0); 4],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 4],
             f32_values: vec![false; 4],
             insts,
             blocks: vec![block(0..1), block(1..4)],
@@ -2697,7 +2697,7 @@ mod tests {
         };
         let f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 5],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
             f32_values: vec![false; 5],
             insts,
             blocks: vec![block(0..1), block(1..5)],
@@ -2752,7 +2752,7 @@ mod tests {
         };
         let mut f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 7],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 7],
             f32_values: vec![false; 7],
             insts,
             blocks: vec![
@@ -2917,7 +2917,7 @@ mod tests {
         cmp32[4] = raw;
         FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); insts.len()],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); insts.len()],
             f32_values: vec![false; insts.len()],
             cmp32,
             div32: Vec::new(),
@@ -3075,7 +3075,7 @@ mod tests {
         };
         let f = FunctionSsa {
             n_params: 2,
-            inst_src: vec![(0, 0); 6],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 6],
             f32_values: vec![false; 6],
             insts,
             blocks: vec![
@@ -3151,7 +3151,7 @@ mod tests {
             };
             FunctionSsa {
                 n_params: 2,
-                inst_src: vec![(0, 0); 8],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); 8],
                 f32_values: vec![false; 8],
                 insts,
                 blocks: vec![
@@ -3391,7 +3391,7 @@ mod tests {
             };
             FunctionSsa {
                 n_params: 1,
-                inst_src: vec![(0, 0); 5],
+                inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
                 f32_values: vec![false; 5],
                 insts,
                 blocks: vec![
@@ -3458,7 +3458,7 @@ mod tests {
         };
         let mut f = FunctionSsa {
             n_params: 1,
-            inst_src: vec![(0, 0); 3],
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 3],
             f32_values: vec![false; 3],
             insts,
             blocks: vec![

@@ -15,6 +15,45 @@ use alloc::vec::Vec;
 use super::tape::{self, At, Insertion};
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, LoadKind, ValueId};
 
+/// A reader of a value: an instruction, or a block's end (its exit value
+/// and terminator).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Reader {
+    Inst(ValueId),
+    End(BlockId),
+}
+
+/// The readers of each value. An entry may name a reader that no longer
+/// reads the value, so a consumer checks the read; every read is listed.
+pub(crate) struct Readers(Vec<Vec<Reader>>);
+
+impl Readers {
+    pub(crate) fn of_function(func: &FunctionSsa) -> Self {
+        let mut readers = Readers(alloc::vec![Vec::new(); func.insts.len()]);
+        for (i, inst) in func.insts.iter().enumerate() {
+            inst.for_each_operand(|v| readers.add(v, Reader::Inst(i as ValueId)));
+        }
+        for (b, block) in func.blocks.iter().enumerate() {
+            let end = Reader::End(b as BlockId);
+            readers.add(block.exit_acc, end);
+            block.terminator.for_each_operand(|v| readers.add(v, end));
+        }
+        readers
+    }
+
+    pub(crate) fn add(&mut self, v: ValueId, reader: Reader) {
+        if let Some(list) = self.0.get_mut(v as usize)
+            && list.last() != Some(&reader)
+        {
+            list.push(reader);
+        }
+    }
+
+    pub(crate) fn of(&self, v: ValueId) -> &[Reader] {
+        self.0.get(v as usize).map_or(&[], Vec::as_slice)
+    }
+}
+
 /// A value that is the definition at the end of each `home` block, while
 /// each edge in `edges` carries its own value.
 pub(crate) struct Redefined {
@@ -55,20 +94,20 @@ pub(crate) struct Plan {
 /// definition.
 pub(crate) fn plan(
     func: &FunctionSsa,
-    preds: &[Vec<BlockId>],
-    live: &[bool],
+    (preds, live): (&[Vec<BlockId>], &[bool]),
+    (readers, block_of): (&Readers, &[BlockId]),
     items: &[Redefined],
 ) -> Option<Vec<Plan>> {
     items
         .iter()
-        .map(|r| plan_one(func, preds, live, r))
+        .map(|r| plan_one(func, (preds, live), (readers, block_of), r))
         .collect()
 }
 
 fn plan_one(
     func: &FunctionSsa,
-    preds: &[Vec<BlockId>],
-    live: &[bool],
+    (preds, live): (&[Vec<BlockId>], &[bool]),
+    (readers, block_of): (&Readers, &[BlockId]),
     r: &Redefined,
 ) -> Option<Plan> {
     let home = |b: BlockId| r.home.contains(&b);
@@ -79,47 +118,60 @@ fn plan_one(
     };
     let mut reads = Vec::new();
     let mut want: Vec<BlockId> = Vec::new();
-    for (b, block) in func.blocks.iter().enumerate() {
-        let b = b as BlockId;
-        if !live[b as usize] {
+    // In block order, each block's instructions before its end.
+    let mut users: Vec<Reader> = readers.of(r.value).to_vec();
+    users.sort_by_key(|&u| match u {
+        Reader::Inst(i) => (
+            block_of.get(i as usize).copied().unwrap_or(BlockId::MAX),
+            0,
+            i,
+        ),
+        Reader::End(b) => (b, 1, 0),
+    });
+    users.dedup();
+    for user in users {
+        let (b, i) = match user {
+            Reader::Inst(i) => (block_of.get(i as usize).copied().unwrap_or(BlockId::MAX), i),
+            Reader::End(b) => (b, ValueId::MAX),
+        };
+        if !live.get(b as usize).copied().unwrap_or(false) {
             continue;
         }
-        for i in block.inst_range.clone() {
-            match &func.insts[i as usize] {
-                // Read at the end of the predecessor, a home phi's too.
-                Inst::Phi { incoming, .. } => {
-                    for &(q, v) in incoming {
-                        if v != r.value || home(q) || !live[q as usize] {
-                            continue;
-                        }
-                        let src = on_edge(q, b);
-                        if let Src::Entry(e) = src {
-                            want.push(e);
-                        }
-                        reads.push(Read::Incoming(i, q, src));
+        if let Reader::End(b) = user {
+            let block = &func.blocks[b as usize];
+            let mut reads_it = block.exit_acc == r.value;
+            block
+                .terminator
+                .for_each_operand(|v| reads_it |= v == r.value);
+            if reads_it && !home(b) {
+                want.push(b);
+                reads.push(Read::End(b, Src::Entry(b)));
+            }
+            continue;
+        }
+        match &func.insts[i as usize] {
+            // Read at the end of the predecessor, a home phi's too.
+            Inst::Phi { incoming, .. } => {
+                for &(q, v) in incoming {
+                    if v != r.value || home(q) || !live[q as usize] {
+                        continue;
                     }
-                }
-                _ if home(b) => {}
-                inst => {
-                    let mut reads_it = false;
-                    inst.for_each_operand(|v| reads_it |= v == r.value);
-                    if reads_it {
-                        want.push(b);
-                        reads.push(Read::Operand(i, Src::Entry(b)));
+                    let src = on_edge(q, b);
+                    if let Src::Entry(e) = src {
+                        want.push(e);
                     }
+                    reads.push(Read::Incoming(i, q, src));
                 }
             }
-        }
-        if home(b) {
-            continue;
-        }
-        let mut reads_it = block.exit_acc == r.value;
-        block
-            .terminator
-            .for_each_operand(|v| reads_it |= v == r.value);
-        if reads_it {
-            want.push(b);
-            reads.push(Read::End(b, Src::Entry(b)));
+            _ if home(b) => {}
+            inst => {
+                let mut reads_it = false;
+                inst.for_each_operand(|v| reads_it |= v == r.value);
+                if reads_it {
+                    want.push(b);
+                    reads.push(Read::Operand(i, Src::Entry(b)));
+                }
+            }
         }
     }
     // The sources each block's start merges, from its predecessors.
@@ -205,7 +257,12 @@ fn resolve(same: &BTreeMap<BlockId, Src>, mut s: Src) -> Src {
 
 /// Insert the phis of `plans` and rename the reads, in the CFG the plans
 /// were made over.
-pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan]) {
+pub(crate) fn apply(
+    func: &mut FunctionSsa,
+    items: &[Redefined],
+    plans: &[Plan],
+    readers: &mut Readers,
+) {
     let mut placed: Vec<(usize, BlockId, Insertion)> = Vec::new();
     for (k, (r, p)) in items.iter().zip(plans).enumerate() {
         for &b in p.phis.keys() {
@@ -262,6 +319,7 @@ pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan])
                 Read::Operand(i, s) => {
                     let new = id_of(k, s);
                     func.insts[remap(i) as usize].for_each_operand_mut(|v| rename(v, new));
+                    readers.add(new, Reader::Inst(remap(i)));
                 }
                 Read::Incoming(i, q, s) => {
                     let new = id_of(k, s);
@@ -272,14 +330,20 @@ pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan])
                             }
                         }
                     }
+                    readers.add(new, Reader::Inst(remap(i)));
                 }
                 Read::End(b, s) => {
                     let new = id_of(k, s);
                     let block = &mut func.blocks[b as usize];
                     rename(&mut block.exit_acc, new);
                     block.terminator.for_each_operand_mut(|v| rename(v, new));
+                    readers.add(new, Reader::End(b));
                 }
             }
         }
+    }
+    // Placed phis moved every value.
+    if rw.is_some() {
+        *readers = Readers::of_function(func);
     }
 }

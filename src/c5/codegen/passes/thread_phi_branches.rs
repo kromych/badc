@@ -56,6 +56,7 @@ struct Site {
 /// predecessors.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     let mut block_of = block_index(func);
+    let mut readers = repair::Readers::of_function(func);
     let mut preds = predecessors(func);
     let mut succs = successor_lists(&preds);
     let mut changed = false;
@@ -79,11 +80,11 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             b += 1;
             continue;
         }
-        let escaping = escaping_phis(func, &block_of, &site);
+        let escaping = escaping_phis(func, &block_of, &readers, &site);
         let contained = escaping.as_ref().is_some_and(BTreeSet::is_empty);
         for (p, succ) in decided {
             if contained {
-                if thread(func, &block_of, &site, p, succ) {
+                if thread(func, &block_of, &mut readers, &site, p, succ) {
                     move_edge(&mut preds, &mut succs, p, site.head, succ);
                     changed = true;
                 }
@@ -93,7 +94,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             // The line dies: the next round reads the function the prune left.
             if !live[site.head as usize]
                 && let Some(to) = dying_line(func, &block_of, &site, p, succ, &live)
-                && thread(func, &block_of, &site, p, succ)
+                && thread(func, &block_of, &mut readers, &site, p, succ)
             {
                 forward(func, &to);
                 return true;
@@ -102,7 +103,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             if let Some(phis) = &escaping
                 && rethread(
                     func,
-                    &block_of,
+                    (&block_of, &mut readers),
                     (&mut preds, &mut succs),
                     &live,
                     &site,
@@ -132,7 +133,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// `preds` follows the edge when it moves.
 fn rethread(
     func: &mut FunctionSsa,
-    block_of: &[BlockId],
+    (block_of, readers): (&[BlockId], &mut repair::Readers),
     (preds, succs): (&mut [Vec<BlockId>], &mut [Vec<BlockId>]),
     live: &[bool],
     site: &Site,
@@ -166,14 +167,14 @@ fn rethread(
     // An edge into a cycle through the head would enter the loop past its
     // header.
     let plans = (!reaches(preds, succ, site.head))
-        .then(|| repair::plan(func, preds, live, &items))
+        .then(|| repair::plan(func, (preds, live), (readers, block_of), &items))
         .flatten();
-    let Some(plans) = plans.filter(|_| thread(func, block_of, site, p, succ)) else {
+    let Some(plans) = plans.filter(|_| thread(func, block_of, readers, site, p, succ)) else {
         move_edge(preds, succs, p, succ, site.head);
         preds[site.head as usize] = head_preds;
         return false;
     };
-    repair::apply(func, &items, &plans);
+    repair::apply(func, &items, &plans, readers);
     true
 }
 
@@ -372,60 +373,65 @@ fn phi_condition(func: &FunctionSsa, cond: ValueId) -> Option<(ValueId, bool)> {
 fn escaping_phis(
     func: &FunctionSsa,
     block_of: &[BlockId],
+    readers: &repair::Readers,
     site: &Site,
 ) -> Option<BTreeSet<ValueId>> {
     let ranges: Vec<core::ops::Range<ValueId>> = (site.chain.iter())
         .map(|&c| func.blocks[c as usize].inst_range.clone())
         .collect();
-    let defined = |v: ValueId| ranges.iter().any(|r| r.contains(&v));
     let in_chain = |b: BlockId| site.chain.contains(&b);
     let head_phi = |v: ValueId| {
         block_of.get(v as usize) == Some(&site.head)
             && matches!(func.insts.get(v as usize), Some(Inst::Phi { .. }))
     };
     let mut phis = BTreeSet::new();
-    let mut read = |v: ValueId| {
-        if !defined(v) {
-            true
-        } else if head_phi(v) {
-            phis.insert(v);
-            true
-        } else {
-            false
-        }
-    };
-    for (i, inst) in func.insts.iter().enumerate() {
-        let b = block_of[i];
-        if b == BlockId::MAX {
-            continue;
-        }
-        let mut stays = true;
-        if let Inst::Phi { incoming, .. } = inst {
-            // Read at the end of the predecessor, the chain's own phis
-            // from a latch included.
-            let patched = b == site.zero || b == site.nonzero;
-            for &(pred, v) in incoming {
-                if pred == site.branch && patched {
-                    stays &= !defined(v) || head_phi(v);
-                } else if !in_chain(pred) {
-                    stays &= read(v);
+    // Each reader of a chain value outside the chain.
+    for v in ranges.iter().flat_map(Clone::clone) {
+        for &reader in readers.of(v) {
+            let outside = match reader {
+                repair::Reader::End(b) if in_chain(b) => false,
+                repair::Reader::End(b) => {
+                    let block = &func.blocks[b as usize];
+                    let mut reads = block.exit_acc == v;
+                    block.terminator.for_each_operand(|w| reads |= w == v);
+                    reads
                 }
+                repair::Reader::Inst(i) => {
+                    let b = block_of[i as usize];
+                    match &func.insts[i as usize] {
+                        _ if b == BlockId::MAX => false,
+                        // Read at the end of the predecessor, the chain's own
+                        // phis from a latch included.
+                        Inst::Phi { incoming, .. } => {
+                            let patched = b == site.zero || b == site.nonzero;
+                            let mut outside = false;
+                            for &(pred, w) in incoming.iter().filter(|&&(_, w)| w == v) {
+                                if pred == site.branch && patched {
+                                    if !head_phi(w) {
+                                        return None;
+                                    }
+                                } else if !in_chain(pred) {
+                                    outside = true;
+                                }
+                            }
+                            outside
+                        }
+                        _ if in_chain(b) => false,
+                        inst => {
+                            let mut reads = false;
+                            inst.for_each_operand(|w| reads |= w == v);
+                            reads
+                        }
+                    }
+                }
+            };
+            if !outside {
+                continue;
             }
-        } else if !in_chain(b) {
-            inst.for_each_operand(|v| stays &= read(v));
-        }
-        if !stays {
-            return None;
-        }
-    }
-    for (b, block) in func.blocks.iter().enumerate() {
-        if in_chain(b as BlockId) {
-            continue;
-        }
-        let mut stays = read(block.exit_acc);
-        block.terminator.for_each_operand(|v| stays &= read(v));
-        if !stays {
-            return None;
+            if !head_phi(v) {
+                return None;
+            }
+            phis.insert(v);
         }
     }
     Some(phis)
@@ -544,6 +550,7 @@ fn forward(func: &mut FunctionSsa, to: &[(ValueId, ValueId)]) {
 fn thread(
     func: &mut FunctionSsa,
     block_of: &[BlockId],
+    readers: &mut repair::Readers,
     site: &Site,
     p: BlockId,
     succ: BlockId,
@@ -603,6 +610,7 @@ fn thread(
     for (phi, v) in pushes {
         if let Inst::Phi { incoming, .. } = &mut func.insts[phi as usize] {
             incoming.push((p, v));
+            readers.add(v, repair::Reader::Inst(phi));
         }
     }
     for i in func.blocks[site.head as usize].inst_range.clone() {
@@ -834,6 +842,19 @@ mod tests {
                 block(7..7, Terminator::Return(3)),
             ],
         )
+    }
+
+    /// The reader index lists each instruction and block end reading a
+    /// value, phis' incomings included.
+    #[test]
+    fn the_reader_index_lists_every_read() {
+        use repair::Reader::{End, Inst as Reads};
+        let f = run_once();
+        let readers = repair::Readers::of_function(&f);
+        assert_eq!(readers.of(3), &[Reads(6), End(3)]);
+        assert_eq!(readers.of(2), &[End(1)]);
+        assert_eq!(readers.of(5), &[Reads(2)]);
+        assert!(readers.of(4).is_empty());
     }
 
     #[test]

@@ -27,7 +27,7 @@ use crate::c5::error::C5Error;
 
 use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
-    EH_FRAME, ElfTpoffTarget, InitTable, NativeMachine, NativeObject, NativeReloc,
+    EH_FRAME, ElfTpoffTarget, InitTable, InitTarget, NativeMachine, NativeObject, NativeReloc,
     NativeSymSection, NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef,
     reloc_desc,
 };
@@ -1228,6 +1228,7 @@ pub fn link_native_objects_with<'a>(
     }
     link.lay_out_init_fini_arrays()?;
     link.collect_definitions()?;
+    link.resolve_named_init_entries()?;
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
@@ -1362,6 +1363,14 @@ enum TlsBinding<'a> {
     Library(&'a SharedLibrary),
 }
 
+/// The arrays the link lays out of constructor table entries.
+#[derive(Clone, Copy, Debug)]
+enum InitArray {
+    Init,
+    Fini,
+    TlsCallbacks,
+}
+
 /// The state one native link accumulates. Each pass is a method;
 /// [`link_native_objects_with_shared_libs`] states their order.
 ///
@@ -1447,6 +1456,9 @@ struct Link<'a> {
     /// The PE TLS callbacks in call order, and the data offset of their
     /// null-terminated array.
     tls_callbacks: Vec<u64>,
+    /// The entries naming another unit's function, by array and index,
+    /// which take its address once the definitions are collected.
+    named_init_entries: Vec<(InitArray, usize, &'a str)>,
     tls_callback_array: Option<u64>,
     /// The data offset of the `_tls_used` directory a unit names.
     tls_directory_slot: Option<u64>,
@@ -1606,6 +1618,7 @@ impl<'a> Link<'a> {
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
             tls_callbacks: Vec::new(),
+            named_init_entries: Vec::new(),
             tls_callback_array: None,
             tls_directory_slot: None,
             init_code: None,
@@ -2646,12 +2659,39 @@ impl<'a> Link<'a> {
     /// `_tls_used` directory a unit names follow them. Each 8-byte slot is
     /// a `.text` pointer, so a `DataAbsReloc` gives the PIE its load-time
     /// R_*_RELATIVE.
+    /// Point each entry naming another unit's function at its definition,
+    /// as GNU ld resolves an `.init_array` slot's relocation.
+    fn resolve_named_init_entries(&mut self) -> Result<(), C5Error> {
+        for (array, k, name) in core::mem::take(&mut self.named_init_entries) {
+            let at = match self.defined.get(name) {
+                Some(d) if d.section == NativeSymSection::Text => d.value,
+                _ => {
+                    let text = format!(
+                        "a constructor table entry names `{name}`, which no unit defines \
+                         as a function"
+                    );
+                    return Err(link_err(Code::UNDEFINED_SYMBOL, MODULE, &text));
+                }
+            };
+            let entries = match array {
+                InitArray::Init => &mut self.init_entries,
+                InitArray::Fini => &mut self.fini_entries,
+                InitArray::TlsCallbacks => &mut self.tls_callbacks,
+            };
+            entries[k] = at;
+        }
+        Ok(())
+    }
+
     fn lay_out_init_fini_arrays(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
         let (mut init, mut fini, mut crt) = (Vec::new(), Vec::new(), Vec::new());
         for (i, obj) in objs.iter().enumerate() {
             for f in &obj.init_funcs {
-                let off = self.text_map[i].at(f.unit_text_offset);
+                let off = match &f.target {
+                    InitTarget::Text(at) => Ok(self.text_map[i].at(*at)),
+                    InitTarget::Named(name) => Err(name.as_str()),
+                };
                 match &f.table {
                     InitTable::Init(p) => init.push((*p, off)),
                     InitTable::Fini(p) => fini.push((*p, off)),
@@ -2670,17 +2710,33 @@ impl<'a> Link<'a> {
         // The `.init` function runs before every constructor and the `.fini`
         // one after every destructor, as DT_INIT and DT_FINI run around
         // the arrays (gABI, Initialization and Termination Functions).
-        self.init_entries = (self.init_code.into_iter())
+        let init_entries: Vec<_> = (self.init_code.map(Ok).into_iter())
             .chain(table(b'I'))
             .chain(table(b'C'))
             .chain(init.iter().map(|e| e.1))
             .collect();
-        let crt_exit: Vec<u64> = table(b'P').chain(table(b'T')).collect();
-        self.fini_entries = (self.fini_code.into_iter())
+        let crt_exit: Vec<_> = table(b'P').chain(table(b'T')).collect();
+        let fini_entries: Vec<_> = (self.fini_code.map(Ok).into_iter())
             .chain(crt_exit.into_iter().rev())
             .chain(fini.iter().map(|e| e.1))
             .collect();
-        self.tls_callbacks = table(b'L').collect();
+        let tls_callbacks: Vec<_> = table(b'L').collect();
+        let mut placed = |array: InitArray, entries: Vec<Result<u64, &'a str>>| {
+            for (k, e) in entries.iter().enumerate() {
+                if let &Err(name) = e {
+                    self.named_init_entries.push((array, k, name));
+                }
+            }
+            entries
+                .into_iter()
+                .map(|e| e.unwrap_or(0))
+                .collect::<Vec<u64>>()
+        };
+        let init_entries = placed(InitArray::Init, init_entries);
+        let fini_entries = placed(InitArray::Fini, fini_entries);
+        let tls_callbacks = placed(InitArray::TlsCallbacks, tls_callbacks);
+        (self.init_entries, self.fini_entries) = (init_entries, fini_entries);
+        self.tls_callbacks = tls_callbacks;
         if !self.tls_callbacks.is_empty() && !self.pe_image {
             let text = "a `.CRT$XL*` TLS callback applies to a PE image only";
             return Err(link_err(Code::UNSUPPORTED, MODULE, text));
@@ -8213,9 +8269,9 @@ mod tests {
             let mut o = NativeObject::empty(NativeMachine::X86_64);
             o.text = alloc::vec![0xc3; 16];
             o.init_funcs = (tables.iter())
-                .map(|&(t, unit_text_offset)| NativeInitFunc {
+                .map(|&(t, at)| NativeInitFunc {
                     table: InitTable::Crt(t.into()),
-                    unit_text_offset,
+                    target: InitTarget::Text(at),
                 })
                 .collect();
             o

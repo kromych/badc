@@ -9111,7 +9111,7 @@ fn init_array_round_trips_through_object() {
         };
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-        use crate::c5::linker::object::InitTable;
+        use crate::c5::linker::object::{InitTable, InitTarget};
         let ctors: alloc::vec::Vec<_> = (obj.init_funcs.iter())
             .filter(|f| matches!(f.table, InitTable::Init(_)))
             .collect();
@@ -9131,8 +9131,12 @@ fn init_array_round_trips_through_object() {
             "{target:?}: dtor priority"
         );
         // Each entry resolves to a real function body inside `.text`.
-        assert!((ctors[0].unit_text_offset as usize) < obj.text.len());
-        assert!((dtors[0].unit_text_offset as usize) < obj.text.len());
+        for f in [ctors[0], dtors[0]] {
+            let InitTarget::Text(at) = f.target else {
+                panic!("{target:?}: {f:?}");
+            };
+            assert!((at as usize) < obj.text.len());
+        }
     }
 }
 

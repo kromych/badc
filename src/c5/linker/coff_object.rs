@@ -11,9 +11,9 @@ use alloc::vec::Vec;
 
 use super::link_err;
 use super::object::{
-    Comdat, ExportAlias, InitTable, InputSection, NativeInitFunc, NativeMachine, NativeObject,
-    NativeReloc, NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE,
-    STT_OBJECT, SectionFamily, SymRef, grouped_by_name,
+    Comdat, ExportAlias, InitTable, InitTarget, InputSection, NativeInitFunc, NativeMachine,
+    NativeObject, NativeReloc, NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry,
+    STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily, SymRef, grouped_by_name,
 };
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
@@ -1444,7 +1444,7 @@ fn translate_relocs(
     symbols: &[NativeSymbol],
 ) -> Result<Relocs, C5Error> {
     let mut out = Relocs::default();
-    let mut inits: Vec<(&str, u32, Vec<u64>)> = Vec::new();
+    let mut inits: Vec<(&str, u32, Vec<InitTarget>)> = Vec::new();
     for s in sects {
         if (s.family == SectionFamily::Discard && s.init.is_none()) || s.nrelocs == 0 {
             continue;
@@ -1501,15 +1501,20 @@ fn translate_relocs(
                 }
             };
             if s.init.is_some() {
+                let named = target.section == NativeSymSection::Undef
+                    && !target.name.is_empty()
+                    && addend == 0;
                 if !matches!(rtype, R_X86_64_64 | R_AARCH64_ABS64)
-                    || target.section != NativeSymSection::Text
+                    || (target.section != NativeSymSection::Text && !named)
                 {
                     return Err(unsupported(&format!(
-                        "{site}: a constructor table entry must be the address of a function \
-                         this object defines"
+                        "{site}: a constructor table entry must be the address of a function"
                     )));
                 }
-                entries.push((target.value as i64 + addend) as u64);
+                entries.push(match named {
+                    true => InitTarget::Named(target.name.clone()),
+                    false => InitTarget::Text((target.value as i64 + addend) as u64),
+                });
             }
             let reloc = NativeReloc {
                 offset,
@@ -1542,9 +1547,9 @@ fn translate_relocs(
             entries.reverse();
         }
         out.init_funcs
-            .extend(entries.into_iter().map(|unit_text_offset| NativeInitFunc {
+            .extend(entries.into_iter().map(|target| NativeInitFunc {
                 table: table.clone(),
-                unit_text_offset,
+                target,
             }));
     }
     out.text.sort_by_key(|r| r.offset);
@@ -2724,10 +2729,11 @@ mod tests {
         )
         .unwrap();
         let entries: Vec<_> = (o.init_funcs.iter())
-            .map(|f| (f.table.clone(), f.unit_text_offset))
+            .map(|f| (f.table.clone(), f.target.clone()))
             .collect();
         let crt = InitTable::Crt("CU".into());
-        assert_eq!(entries, [(crt, 0), (InitTable::Init(None), 1)]);
+        let text = InitTarget::Text;
+        assert_eq!(entries, [(crt, text(0)), (InitTable::Init(None), text(1))]);
         assert!(o.data.is_empty() && o.relro.len() >= 16, "{:?}", o.relro);
         assert_eq!(o.relro_relocs.len(), 2);
     }

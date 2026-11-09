@@ -27,9 +27,9 @@ use crate::c5::object::unwind_info::{UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_
 
 use super::link_err;
 use super::object::{
-    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InitTable, InputSection, NativeInitFunc,
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE,
-    STT_OBJECT, SectionFamily, SymRef,
+    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InitTable, InitTarget, InputSection,
+    NativeInitFunc, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily, SymRef,
 };
 use crate::c5::diag::Code;
 
@@ -1312,14 +1312,10 @@ fn translate_relocs(
                 false => InitTable::Init(None),
             };
             out.init_funcs
-                .extend(
-                    init_entries
-                        .into_iter()
-                        .map(|(_, unit_text_offset)| NativeInitFunc {
-                            table: table.clone(),
-                            unit_text_offset,
-                        }),
-                );
+                .extend(init_entries.into_iter().map(|(_, offset)| NativeInitFunc {
+                    table: table.clone(),
+                    target: InitTarget::Text(offset),
+                }));
         }
     }
     Ok(out)
@@ -2173,7 +2169,7 @@ mod tests {
         .expect("parse");
         assert_eq!(o.init_funcs.len(), 1);
         assert_eq!(o.init_funcs[0].table, InitTable::Init(None));
-        assert_eq!(o.init_funcs[0].unit_text_offset, 8);
+        assert_eq!(o.init_funcs[0].target, InitTarget::Text(8));
         assert!(o.data.is_empty());
     }
 

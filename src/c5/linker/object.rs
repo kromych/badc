@@ -988,16 +988,22 @@ pub enum InitTable {
     Crt(String),
 }
 
-/// One constructor-table entry parsed from an object: a function pointer
-/// resolved to a `.text` offset within this unit. The linker adds the
-/// unit's text base to place it in the merged image and orders entries
-/// by their table.
+/// One constructor-table entry parsed from an object: the function it
+/// runs, which the linker places in the merged image, ordering entries by
+/// their table.
 #[derive(Debug, Clone)]
 pub struct NativeInitFunc {
     pub table: InitTable,
-    /// Byte offset of the target function within this unit's merged
-    /// `.text`.
-    pub unit_text_offset: u64,
+    pub target: InitTarget,
+}
+
+/// The function a constructor-table entry runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitTarget {
+    /// A byte offset within this unit's merged `.text`.
+    Text(u64),
+    /// A function another unit defines, which the link resolves by name.
+    Named(String),
 }
 
 /// Target of a TLS access fixup (`NT_BADC_ELF_TPOFF`). The linker
@@ -2345,7 +2351,7 @@ fn decode_init_arrays(
     let mut init_funcs: Vec<NativeInitFunc> = Vec::new();
     for (shndx, table) in init_array_sections {
         let shndx = *shndx;
-        let mut entries: Vec<(u64, u64)> = Vec::new(); // (slot_offset, text_offset)
+        let mut entries: Vec<(u64, InitTarget)> = Vec::new();
         for rela_sh in shdrs
             .iter()
             .filter(|s| s.sh_type == SHT_RELA && s.sh_info as usize == shndx)
@@ -2374,21 +2380,29 @@ fn decode_init_arrays(
                         ),
                     )
                 })?;
-                if !matches!(sym.section, NativeSymSection::Text) {
-                    return Err(link_err(
-                        Code::MALFORMED_INPUT,
-                        MODULE,
-                        "init/fini array entry must reference a defined function (.text symbol)",
-                    ));
-                }
-                entries.push((rela.r_offset, (sym.value as i64 + rela.r_addend) as u64));
+                let target = match sym.section {
+                    NativeSymSection::Text => {
+                        InitTarget::Text((sym.value as i64 + rela.r_addend) as u64)
+                    }
+                    NativeSymSection::Undef if !sym.name.is_empty() && rela.r_addend == 0 => {
+                        InitTarget::Named(sym.name.clone())
+                    }
+                    _ => {
+                        return Err(link_err(
+                            Code::MALFORMED_INPUT,
+                            MODULE,
+                            "init/fini array entry must name a function",
+                        ));
+                    }
+                };
+                entries.push((rela.r_offset, target));
             }
         }
         entries.sort_by_key(|&(slot, _)| slot);
-        for (_, text_off) in entries {
+        for (_, target) in entries {
             init_funcs.push(NativeInitFunc {
                 table: table.clone(),
-                unit_text_offset: text_off,
+                target,
             });
         }
     }

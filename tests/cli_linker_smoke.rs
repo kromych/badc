@@ -23000,3 +23000,63 @@ fn script_links_read_only_the_members_the_index_pulls() {
         assert!(out.status.success(), "{front}: {err}");
     }
 }
+
+/// An `.init_array` entry may name a function another unit defines, which
+/// the link resolves as GNU ld resolves the slot's relocation; one naming
+/// a function nothing defines is refused.
+#[test]
+fn an_init_array_entry_may_name_another_units_function() {
+    let dir = tempdir("init-array-named-entry");
+    let c = write_source(
+        &dir,
+        "m.c",
+        "#include <stdio.h>\n\
+         int ran;\n\
+         void c_from_asm(void) { ran = 1; }\n\
+         int main(void) { printf(\"%d\\n\", ran); return ran ? 0 : 1; }\n",
+    );
+    let entry =
+        |name: &str| format!("\t.section .init_array,\"aw\"\n\t.p2align 3\n\t.quad {name}\n");
+    let host_entry = host_c_symbols(&entry("c_from_asm"), &["c_from_asm"]);
+    let s = write_source(&dir, "host.s", &host_entry);
+    let exe = dir.join("host");
+    let out = Command::new(badc())
+        .args([&c, &s])
+        .arg("-o")
+        .arg(&exe)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let run = Command::new(&exe).output().expect("run the image");
+    assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "1", "{run:?}");
+    let s = write_source(&dir, "e.s", &entry("c_from_asm"));
+    let missing = write_source(&dir, "missing.s", &entry("missing_fn"));
+    for target in ["linux-x64", "linux-aarch64"] {
+        let link = |asm: &Path| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args([&c, asm])
+                .arg("-o")
+                .arg(dir.join(target))
+                .output()
+                .expect("run badc")
+        };
+        let out = link(&s);
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let out = link(&missing);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target}: {err}");
+        assert!(
+            err.contains("names `missing_fn`, which no unit defines as a function"),
+            "{target}: {err}"
+        );
+    }
+}

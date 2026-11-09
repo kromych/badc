@@ -564,7 +564,7 @@ struct SectionInsn<'a> {
     mode: super::table::Mode,
     insn: &'a super::asm::AsmInsn,
     prefix: &'a [u8],
-    /// The catalogue mnemonic, empty for the other mnemonic kinds.
+    /// The catalog mnemonic, empty for the other mnemonic kinds.
     mnem: &'a str,
     refs: &'a SectionOperandRefs<'a>,
 }
@@ -680,7 +680,7 @@ impl SectionInsn<'_> {
                 short: None,
             }));
         }
-        // `jcxz` / `jecxz` have no catalogue row to fall back to.
+        // `jcxz` / `jecxz` have no catalog row to fall back to.
         if matches!(self.mnem, "jcxz" | "jecxz") {
             return Err(alloc::format!(
                 "inline asm: `{}` takes a label target",
@@ -1368,7 +1368,7 @@ impl SectionInsn<'_> {
                 // An absolute disp32 is sign-extended into a 64-bit address,
                 // so it takes `R_X86_64_32S`; under a 32- or 16-bit address
                 // size the field is the whole address and takes the
-                // zero-extended flavour.
+                // zero-extended flavor.
                 signed: !pcrel && width == 4 && addr == 8,
                 target,
                 addend,

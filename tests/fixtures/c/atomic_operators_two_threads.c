@@ -38,7 +38,7 @@ static _Atomic long double half;
 static _Atomic __int128 wide;
 #endif
 static _Atomic _Bool flag;
-static _Atomic struct rgb colour;
+static _Atomic struct rgb color;
 static _Atomic int torn;
 
 static void *worker(void *arg) {
@@ -58,8 +58,8 @@ static void *worker(void *arg) {
         wide += (__int128)1 << 64 | 1;
 #endif
         flag ^= 1;
-        colour = mine;
-        struct rgb seen = colour;
+        color = mine;
+        struct rgb seen = color;
         if (seen.r != seen.g || seen.g != seen.b)
             torn += 1;
     }

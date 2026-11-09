@@ -144,7 +144,7 @@ impl Compiler {
     /// Consume a pending `__attribute__((aligned(N)))` / `_Alignas(N)`
     /// carried by a member and validate it. Struct layout honors any
     /// power-of-two alignment up to `MAX_STATIC_ALIGN`, which is what the
-    /// data section and static-object placement can realise; an automatic
+    /// data section and static-object placement can realize; an automatic
     /// object of such a type is diagnosed at its declaration instead.
     fn take_member_align(&mut self) -> Result<i64, C5Error> {
         let m_align = core::mem::take(&mut self.pending.attrs.align);
@@ -439,7 +439,7 @@ impl Compiler {
             // declarator (set by the function-pointer branch
             // of `parse_declarator`) into the field record so
             // a later `s.cb(...)` / `(*s.cb)(...)` access can
-            // recognise the C99 6.3.2.1p4 decay no-op. Always
+            // recognize the C99 6.3.2.1p4 decay no-op. Always
             // consume the side-channel: leaking it across the
             // closing `}` would mistreat the typedef name in
             // `typedef struct { ... } T;` as a fn-pointer
@@ -1082,7 +1082,7 @@ impl Compiler {
         let nested_packed = self.skip_attribute_specifiers()?;
         // Three shapes: `struct Foo { ... }` (named definition),
         // `struct Foo` (type use), and `struct { ... }` (no tag,
-        // registered under a synthesised unique tag). Any of them
+        // registered under a synthesized unique tag). Any of them
         // with no declarator -- next token `;` -- is an unnamed
         // member whose fields promote into the enclosing
         // aggregate.

@@ -2,7 +2,7 @@
 //!
 //! Used during declarator parsing where the value has to be known
 //! before any IR-building emit: array dimensions (`int xs[N]`),
-//! bitfield widths (`int x: N`), `enum E { K = N }` initialisers,
+//! bitfield widths (`int x: N`), `enum E { K = N }` initializers,
 //! `_Static_assert` operands, and the rvalues of static / global
 //! integer initializers. Supports the C99 constant-expression
 //! grammar -- literals (integer + floating), identifiers bound to
@@ -2641,7 +2641,7 @@ impl Compiler {
                     self.array_desig_ty(elem, &dims, count)
                 };
                 // A libc-bound name has no code address of its own; its
-                // relocation target is the synthesised trampoline.
+                // relocation target is the synthesized trampoline.
                 if class == Token::Sys as i64 {
                     idx = self.ensure_sys_trampoline_sym(idx);
                 }
@@ -3348,7 +3348,7 @@ impl Compiler {
                     self.restore_lex(snap);
                 } else {
                     // A libc-bound name has no code address of its own; its
-                    // relocation target is the synthesised trampoline.
+                    // relocation target is the synthesized trampoline.
                     let idx = if class == Token::Sys as i64 {
                         self.ensure_sys_trampoline_sym(idx)
                     } else {

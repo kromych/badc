@@ -279,7 +279,7 @@ pub(super) enum Directive<'a> {
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
-    /// `#warning <message>` -- gcc/clang extension, standardised in
+    /// `#warning <message>` -- gcc/clang extension, standardized in
     /// C23. Emits a `warning:` diagnostic but, unlike `#error`,
     /// compilation continues. Matches the diagnostic format every
     /// other warning site uses, so downstream tooling can scrape it.

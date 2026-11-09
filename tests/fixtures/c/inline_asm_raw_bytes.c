@@ -1,5 +1,5 @@
 /* Raw-byte inline asm: an instruction spelled as literal machine bytes, the
- * escape hatch for anything the mnemonic catalogue does not cover. Both the
+ * escape hatch for anything the mnemonic catalog does not cover. Both the
  * `.byte` directive and the bare 2-hex-digit run are exercised, per target. The
  * bytes encode a no-op on each architecture, so the result is target-neutral
  * and the SSA interpreter (which models raw bytes as opaque) agrees with native

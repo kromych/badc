@@ -1352,7 +1352,7 @@ fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, All
 }
 
 /// A `return 42;` function emits a small, well-formed
-/// aarch64 sequence: prologue, materialise 42, mov to x0,
+/// aarch64 sequence: prologue, materialize 42, mov to x0,
 /// epilogue, ret. The exact length isn't load-bearing here
 /// -- the test exists to lock in that the thin slice
 /// completes without falling back.

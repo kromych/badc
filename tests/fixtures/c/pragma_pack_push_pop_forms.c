@@ -1,5 +1,5 @@
 // `#pragma pack(push)` with no value saves the value in effect, so the
-// `pack(1)` that follows it ends at the `pack(pop)`; a labelled push is
+// `pack(1)` that follows it ends at the `pack(pop)`; a labeled push is
 // popped by name; `pack(pop, N)` restores and then sets N. The sizes are
 // what gcc and clang give. The fuzzer's shape was a union whose struct
 // member was declared after such a sequence: the member's 64-bit field

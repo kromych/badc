@@ -55,7 +55,7 @@ BUILD_DEFINES = (
 
 
 def resolve_badc() -> Path:
-    """Locate the badc binary, honouring `$BADC` then falling
+    """Locate the badc binary, honoring `$BADC` then falling
     back to ``target/release/badc[.exe]``."""
     env = os.environ.get("BADC")
     candidates = []
@@ -183,7 +183,7 @@ def main() -> int:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
-        # Separate-compilation flavour: each .c through `-c`,
+        # Separate-compilation flavor: each .c through `-c`,
         # then link the two objects.
         tu_dir = work / "tu"
         tu_dir.mkdir()
@@ -207,7 +207,7 @@ def main() -> int:
                 print(f"smoke FAIL: TU build ({tag}) failed", file=sys.stderr)
                 return 1
 
-        # Archive flavour: bundle miniz.c into libminiz.a, link
+        # Archive flavor: bundle miniz.c into libminiz.a, link
         # the driver against it via -l.
         ar_dir = work / "ar"
         ar_dir.mkdir()

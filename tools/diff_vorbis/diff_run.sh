@@ -12,7 +12,7 @@
 #   4. Diff the two trace streams.
 #
 # The first diverging trace line localizes the function where c5's
-# bytecode / codegen drifts off the reference behaviour. From there
+# bytecode / codegen drifts off the reference behavior. From there
 # the per-function bytecode dump (`badc --dump-asm`) and the lldb
 # local-dump comparison can drill into the specific op that
 # misbehaved.

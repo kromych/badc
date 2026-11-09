@@ -3,7 +3,7 @@
 //! Every expected byte string is what GNU as 2.46.1 emits for the AT&T text on
 //! the left, taken from `objdump -d` of an assembled object. The `disp8*N`
 //! cases carry, per tuple type, a displacement that compresses, the largest and
-//! smallest that do, and the neighbours that must fall back to disp32: a wrong
+//! smallest that do, and the neighbors that must fall back to disp32: a wrong
 //! scale factor encodes cleanly and addresses the wrong memory, so the boundary
 //! is where it shows.
 
@@ -1868,7 +1868,7 @@ mod differential {
     }
 
     /// The displacements worth encoding for a scale of `n`: zero, one step,
-    /// the extremes a signed byte holds, and the neighbours that must fall
+    /// the extremes a signed byte holds, and the neighbors that must fall
     /// back to disp32.
     fn disps(n: i32) -> Vec<i32> {
         alloc::vec![0, n, 127 * n, 128 * n, -128 * n, -129 * n, n + 1]

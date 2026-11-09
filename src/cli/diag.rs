@@ -55,7 +55,7 @@ pub(crate) fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<
     std::borrow::Cow::Borrowed(line)
 }
 
-/// One diagnostic as this driver prints it: its own colour when stderr
+/// One diagnostic as this driver prints it: its own color when stderr
 /// is a terminal, keyed on the level rather than on a scan of the text.
 pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String {
     let mut out = String::new();
@@ -64,8 +64,8 @@ pub(crate) fn rendered(diagnostic: &badc::diag::Diagnostic, tty: bool) -> String
 }
 
 /// A failed phase's error as this driver prints it: one line per
-/// diagnostic it carries, each coloured by its own level, every line
-/// under `prefix`. A runtime fault has one line, coloured by its text.
+/// diagnostic it carries, each colored by its own level, every line
+/// under `prefix`. A runtime fault has one line, colored by its text.
 pub(crate) fn error_lines(prefix: &str, e: &badc::C5Error, tty: bool) -> Vec<String> {
     match e {
         badc::C5Error::Compile(diagnostics) => diagnostics
@@ -98,7 +98,7 @@ pub(crate) fn report_unit_diagnostics(
     report_diagnostics(log, tty, &program.warnings)
 }
 
-/// Print a phase's catalogued diagnostics and report whether the unit may
+/// Print a phase's cataloged diagnostics and report whether the unit may
 /// go on: one at the error level fails it here, at the phase boundary, and
 /// one a warning raised says so, as gcc's `-Werror` note does.
 pub(crate) fn report_diagnostics(

@@ -812,7 +812,7 @@ fn parity_failures_hold_the_concurrency_bound() {
 /// Standard-library prelude prepended to every inline-source test.
 /// Replaces the auto-prepend the compiler used to do via the
 /// per-target umbrella header. Keeping it in the test helper means
-/// each test body stays focused on the behaviour under test instead
+/// each test body stays focused on the behavior under test instead
 /// of repeating five `#include` lines per snippet. Idempotent:
 /// fixtures that already pull headers in via their own
 /// `#include` lines just re-enter `#pragma once` and emit nothing.
@@ -1848,7 +1848,7 @@ pub fn compile_fixture(name: &str) -> Program {
 pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
     let mut config = crate::diag::Config::new();
     for sel in selectors {
-        match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
+        match crate::diag::Selector::parse(sel).expect("a catalog selector") {
             crate::diag::Selector::Group(g) => config.enable_group(g),
             sel => {
                 for c in sel.codes() {

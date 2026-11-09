@@ -406,7 +406,7 @@ typedef struct __c5_fpos_t fpos_t;
 // doesn't export those as data symbols.
 // `__iob_func()` is the pre-UCRT spelling msvcrt.dll exports;
 // `__acrt_iob_func(int)` is the UCRT replacement. Wine's bundled
-// msvcrt is the legacy flavour, so bind the legacy spelling and
+// msvcrt is the legacy flavor, so bind the legacy spelling and
 // teach `__c5_lazy_stream` to walk the returned FILE-array slot.
 #pragma binding(msvcrt::__iob_func, "__iob_func")
 #endif
@@ -472,7 +472,7 @@ int fgetc(FILE *stream);
 // C99 7.19.7.5 / 7.19.7.8: `getc` / `putc` are functionally
 // equivalent to `fgetc` / `fputc`. Spec permits multiple
 // evaluations of the `stream` argument; libc implementations
-// honour the same signature, so the binding is a direct alias.
+// honor the same signature, so the binding is a direct alias.
 int getc(FILE *stream);
 int putc(int c, FILE *stream);
 // C99 7.19.7.11: push one byte back onto an input stream.

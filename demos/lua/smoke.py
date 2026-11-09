@@ -121,7 +121,7 @@ LUA_TUS = (
 
 
 def resolve_badc() -> Path:
-    """Locate the badc binary, honouring `$BADC` then falling back
+    """Locate the badc binary, honoring `$BADC` then falling back
     to ``target/release/badc[.exe]``."""
     env = os.environ.get("BADC")
     candidates = []

@@ -165,7 +165,7 @@ pub struct DataReloc {
 /// `static const VTable v = { .xClose = my_close };`. The VM
 /// reads the data slot directly because its function pointers
 /// carry the small `CODE_BASE + ent_pc` bias and the indirect-
-/// call lowering recognises that range. Native writers replace
+/// call lowering recognizes that range. Native writers replace
 /// the slot's
 /// contents at write time (ELF) or via a dynamic relocation
 /// (Mach-O rebase, PE `.reloc DIR64`).
@@ -195,7 +195,7 @@ pub struct AutoInclude {
 /// Compiled program ready for the VM.
 ///
 /// `data` is the static data segment (string literals plus zero-
-/// initialised globals), `entry_pc` is an integer identifier for
+/// initialized globals), `entry_pc` is an integer identifier for
 /// the program's entry function (codegen and the VM look it up
 /// against `FunctionSsa::ent_pc`), and `warnings` carries any
 /// non-fatal diagnostics the compiler emitted (type mismatches,
@@ -291,7 +291,7 @@ pub struct Program {
     /// at scope exit).
     pub data_align_marks: Vec<(i64, i64)>,
     pub entry_pc: usize,
-    /// Every catalogued diagnostic the front end reported, with the
+    /// Every cataloged diagnostic the front end reported, with the
     /// level it resolved to. `Diagnostic` prints itself, so a caller
     /// that only dumps them needs to know nothing more.
     pub warnings: Vec<super::diag::Diagnostic>,
@@ -301,16 +301,16 @@ pub struct Program {
     /// The auto-include notes, `info:` lines the driver prints ahead
     /// of `warnings`.
     pub notes: Vec<String>,
-    /// Initialised + zero-init thread-local data. Layout matches
+    /// Initialized + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Inst::TlsAddr`'s operand. The image writers copy
-    /// this into `.tdata` (initialised slice = `tls_data[..tls_init_size]`)
+    /// this into `.tdata` (initialized slice = `tls_data[..tls_init_size]`)
     /// and `.tbss` (zero-fill remainder = `tls_data[tls_init_size..]`).
-    /// A `_Thread_local int x = 5;` initialiser raises
+    /// A `_Thread_local int x = 5;` initializer raises
     /// `tls_init_size` so its bytes land in `.tdata`; an
     /// uninitialised variable keeps its slice zero and in `.tbss`.
     pub tls_data: Vec<u8>,
-    /// Number of bytes of `tls_data` that are statically initialised
+    /// Number of bytes of `tls_data` that are statically initialized
     /// (i.e., emitted into `.tdata`). The remainder
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
@@ -482,7 +482,7 @@ pub struct Program {
     /// when present, otherwise whichever of `main` / `wmain` /
     /// `WinMain` / `wWinMain` the source defines. `None` for
     /// entry-less images (DLL with exports). The PE writer
-    /// reads this to pick the stub flavour (`wmain` swaps
+    /// reads this to pick the stub flavor (`wmain` swaps
     /// `__getmainargs` for `__wgetmainargs`); other writers
     /// ignore it.
     pub entry_name: Option<String>,
@@ -524,7 +524,7 @@ pub struct Program {
     /// `Decl::Local` width selection) off this slice. Empty for
     /// `Program` shapes built outside the parser pipeline.
     pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
-    /// Synthesised `FunctionSsa` entries the parser produces
+    /// Synthesized `FunctionSsa` entries the parser produces
     /// outside the AST walker (sys-trampolines + the synthetic
     /// CRT entry). The codegen reads these directly through
     /// `produce_ssa_funcs`.

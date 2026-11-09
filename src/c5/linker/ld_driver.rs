@@ -53,7 +53,7 @@ enum InputItem {
 }
 
 /// Binutils compatibility level reported by `--version`. Raise it only
-/// alongside the behaviour a consumer gates on that version.
+/// alongside the behavior a consumer gates on that version.
 ///
 /// 2.33.1 is the first GNU ld that reads the AArch64 `.note.gnu.property`
 /// PAC note, so a build gates `-mbranch-protection=pac-ret` on it. Both
@@ -189,7 +189,7 @@ fn split_response(text: &str) -> Vec<String> {
     split_response_on(text, cfg!(windows))
 }
 
-/// `split_response` with the host rule stated, so both behaviours are
+/// `split_response` with the host rule stated, so both behaviors are
 /// testable from either host. With `path_sep_backslash`, a backslash is
 /// a path separator -- `C:\dir\file.o` is what the native toolchains
 /// write into a response file -- and escapes only a double quote, as

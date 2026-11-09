@@ -795,7 +795,7 @@ impl Compiler {
             )
     }
 
-    /// Materialise the enclosing function's name as the bytes of an implicit
+    /// Materialize the enclosing function's name as the bytes of an implicit
     /// `static const char[]` (C99 6.4.2.2) in the data segment and return the
     /// offset of the first byte. The caller advances past the identifier,
     /// which must be the one `is_func_name_ident` accepted.
@@ -5122,7 +5122,7 @@ impl Compiler {
             // whatever was in the slot, which would surface on
             // a later 8-byte Li -- but no caller of this helper
             // re-reads via Li, so the wide store is fine and the
-            // existing optimizer recognises Si patterns.
+            // existing optimizer recognizes Si patterns.
             self.ast_assign();
         }
         Ok(())
@@ -5158,7 +5158,7 @@ impl Compiler {
 
     /// True when `self.lex.tk` is `+ / - / * / /` -- the binary
     /// float operators the constant-initializer evaluator
-    /// recognises. Whitespace-only check; doesn't consume.
+    /// recognizes. Whitespace-only check; doesn't consume.
     fn tk_is_float_arith_op(&self) -> bool {
         self.lex.tk == Token::AddOp
             || self.lex.tk == Token::SubOp

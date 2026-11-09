@@ -61,7 +61,7 @@ pub(crate) mod types;
 /// Largest alignment (in bytes) honored on a static object via C11
 /// `_Alignas` / the GCC `aligned` attribute, whether the request comes
 /// from the declarator or the object's type. Static objects (file-scope,
-/// block-scope static, and initialised or zero-init alike) are placed at
+/// block-scope static, and initialized or zero-init alike) are placed at
 /// this alignment in `.data` / `.bss`; automatic objects stay capped at
 /// `MAX_FRAME_ALIGN`. 64 KiB is the largest page size in common use and the
 /// granularity a PE image loads at; a Mach-O image keeps less
@@ -456,7 +456,7 @@ pub struct StructField {
     /// convention: 1 means the field IS the fn-pointer, 2 means
     /// it's a pointer-to-fn-pointer, etc. The post-load handler
     /// in member access seeds `pending.fn_ptr_chain_depth` from
-    /// this so a following unary `*` recognises the C99 6.3.2.1
+    /// this so a following unary `*` recognizes the C99 6.3.2.1
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
@@ -1505,7 +1505,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// assignment / address-of
     /// callers consult this when they pop or rewrite that
     /// trailing load: if the load is removed before the
-    /// program text is finalised, the symbol's was_read flag
+    /// program text is finalized, the symbol's was_read flag
     /// must be reverted to its prior state -- the load never
     /// ran, but the symbol may still have been read by an
     /// earlier expression. Cleared by `mark_emit_scalar_load`
@@ -1639,7 +1639,7 @@ pub(super) struct DeclAttrs {
     pub uninitialized: bool,
     pub weak: bool,
     pub selectany: bool,
-    /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
+    /// `ms_abi` / `sysv_abi`, normalized against the target: `Target` is the
     /// target's own, including where the attribute is inert.
     pub call_conv: Option<crate::c5::codegen::CallConv>,
     /// `used`: the definition stays in the object unreferenced.
@@ -1868,10 +1868,10 @@ impl Default for Pending {
 
 /// Per-function state of one label name, held in `Compiler::labels`.
 pub(super) struct LabelState {
-    /// AST slot shared by the label's references and its labelled
+    /// AST slot shared by the label's references and its labeled
     /// statement, allocated on the first mention either way.
     id: super::ast::LabelId,
-    /// Set once the labelled statement is parsed. A second one for
+    /// Set once the labeled statement is parsed. A second one for
     /// the same name violates C99 6.8.1p3.
     defined: bool,
 }
@@ -2197,7 +2197,7 @@ pub struct Compiler {
     /// matches function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
-    /// Synthesised `FunctionSsa` entries for parser-emitted
+    /// Synthesized `FunctionSsa` entries for parser-emitted
     /// helpers that aren't built from source (sys-trampolines).
     /// The codegen reads these directly via `produce_ssa_funcs`.
     pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
@@ -2297,7 +2297,7 @@ pub struct Compiler {
 
     /// Diagnostics still formatted as text at their site: the
     /// preprocessor's warnings and the auto-include notes.
-    /// TODO: fold into `sink` when those sites take catalogue rows.
+    /// TODO: fold into `sink` when those sites take catalog rows.
     notes: Vec<String>,
 
     /// File-scope `asm("...")` templates, validated at parse time
@@ -2369,12 +2369,12 @@ pub struct Compiler {
     /// the .tls$ callback chain on Win64). Each `_Thread_local`
     /// global gets `slots_of_type(ty) * 8` bytes here, with
     /// `Symbol::val` holding the byte offset within `tls_data`.
-    /// A `_Thread_local int x = 5;` initialiser fills its slice and
+    /// A `_Thread_local int x = 5;` initializer fills its slice and
     /// raises `tls_init_size` so its bytes go into .tdata; an
     /// uninitialised variable stays zero-filled in .tbss.
     tls_data: Vec<u8>,
     /// Number of bytes at the start of [`Self::tls_data`] that
-    /// are statically initialised by an explicit
+    /// are statically initialized by an explicit
     /// `_Thread_local int x = 5;` initializer. The remainder
     /// (`tls_data.len() - tls_init_size`) is zero-fill. Today
     /// only TLS initializer variants supported by the parser
@@ -2400,7 +2400,7 @@ pub struct Compiler {
     /// writers patch the slot to the real code address at write or
     /// load time. The VM reads the slot directly because c5
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
-    /// and the indirect-call lowering recognises that range.
+    /// and the indirect-call lowering recognizes that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Address-constant initializers of `_Thread_local` objects. Slots are
     /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
@@ -2770,7 +2770,7 @@ pub struct Compiler {
     staged_literal_syms: Vec<(i64, usize)>,
 
     /// `(function, spelling, data offset)` of every `__func__` object
-    /// already materialised. C99 6.4.2.2 declares one object per
+    /// already materialized. C99 6.4.2.2 declares one object per
     /// function, so a second reference resolves to the same storage.
     func_name_objects: Vec<(String, String, i64)>,
     /// Per-TU counter for the `__func__.<n>` backing symbols, shared
@@ -2848,7 +2848,7 @@ impl Compiler {
         &self.notes
     }
 
-    /// Catalogued diagnostics reported so far. Construction reports the
+    /// Cataloged diagnostics reported so far. Construction reports the
     /// ones that come out of the `#pragma` set, before any parse.
     pub fn diagnostics(&self) -> &[crate::c5::diag::Diagnostic] {
         self.sink.diagnostics()
@@ -3504,7 +3504,7 @@ impl Compiler {
     }
 
     /// Resolve `#pragma export(<name>)` directives against the
-    /// now-finalised symbol table: the functions, and the names of the
+    /// now-finalized symbol table: the functions, and the names of the
     /// objects with external linkage, this unit defines. Anything else
     /// gets a clear diagnostic so a misspelled export doesn't silently
     /// produce a shared object missing the symbol the user expected.
@@ -3633,7 +3633,7 @@ impl Compiler {
             let e = match result {
                 Ok(mut prog) => {
                     // Surface each recovery through the same diagnostic
-                    // pipeline the CLI colourises (`info:` -> bold
+                    // pipeline the CLI colourizes (`info:` -> bold
                     // green), oldest first above the retry pass's own
                     // warnings.
                     for info in infos.into_iter().rev() {
@@ -4039,7 +4039,7 @@ impl Compiler {
             enums: self.enums,
             // Resolved entry name. Includes the value from a
             // source-level `#pragma entrypoint(<name>)` plus the
-            // CRT-recognised fallbacks (`wmain`, `WinMain`,
+            // CRT-recognized fallbacks (`wmain`, `WinMain`,
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             entry_pragma: self.pp_entrypoint.clone(),

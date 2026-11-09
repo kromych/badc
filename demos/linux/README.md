@@ -442,7 +442,7 @@ except what `$BADC_LD_FALLBACK` names:
   accepted and ignored.
 
 badc's `--version` prints `GNU ld (badc <version>) 2.33.1`, which
-`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.33.1 --
+`scripts/ld-version.sh` reads as a BFD-flavor linker at binutils 2.33.1 --
 the level at which `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL`, and
 deliberately no higher, so nothing gated on a newer linker is claimed.
 `CONFIG_LD_VERSION` records 23301 as a result. On the pinned release that is
@@ -767,7 +767,7 @@ machine happens to draw catch that by luck, so the gate picks the
 displacements instead:
 
 * aarch64 -- the early boot code takes the displacement from
-  `/chosen/kaslr-seed` in the device tree, and `-M virt` honours a tree
+  `/chosen/kaslr-seed` in the device tree, and `-M virt` honors a tree
   passed with `-dtb`. The gate dumps the machine's own tree
   (`-M virt,dumpdtb=`), writes the seed into it (`kaslr.py`, no external
   device-tree tools), and boots against the result. The default plan is the

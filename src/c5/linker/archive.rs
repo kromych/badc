@@ -41,7 +41,7 @@ const MODULE: &str = "";
 
 /// ar(5) member header: a fixed 60-byte record of space-padded ASCII
 /// fields, identical in the regular `!<arch>` and thin `!<thin>`
-/// flavours. All fields are byte arrays, so the layout is align-1 and
+/// flavors. All fields are byte arrays, so the layout is align-1 and
 /// the on-disk bytes map directly onto this struct.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -115,8 +115,8 @@ struct Walk<'a> {
 }
 
 /// Walk an archive's member headers, handling both the regular
-/// `!<arch>` flavour (member bodies stored inline) and the GNU thin
-/// `!<thin>` flavour (member bodies live in external files; only the
+/// `!<arch>` flavor (member bodies stored inline) and the GNU thin
+/// `!<thin>` flavor (member bodies live in external files; only the
 /// `/` symbol index and `//` name table are stored inline). The GNU
 /// string table is consumed; the first symbol index is returned beside
 /// the members.
@@ -155,7 +155,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Walk<'_>, C5Error> {
         cursor += AR_HEADER_SIZE;
 
         // The `/` symbol index and `//` name table are stored inline in
-        // both flavours; a regular member is inline, a thin member's
+        // both flavors; a regular member is inline, a thin member's
         // body lives in an external file (the header records its size
         // but no bytes follow). `is_meta` singles out the two inline
         // metadata members so a thin archive still skips their bodies.
@@ -223,7 +223,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Walk<'_>, C5Error> {
             raw_name
         };
         // The BSD symbol index is a named member, so it is only
-        // recognisable once the name is decoded.
+        // recognizable once the name is decoded.
         if is_bsd_symbol_index(&name) {
             if index.is_none() {
                 let wide = name.starts_with("__.SYMDEF_64");

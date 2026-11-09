@@ -741,7 +741,7 @@ fn stored_const(
 ///
 /// This is the memory half of constant propagation: the value a load
 /// yields is decided by the store that last wrote the location, so a
-/// location the function itself initialised with a constant makes the
+/// location the function itself initialized with a constant makes the
 /// load a constant (C99 6.5p2 -- the store and the load are separated
 /// by a sequence point and nothing between them writes the object).
 /// It runs inside the [`super::simplify_branches`] fixed point beside

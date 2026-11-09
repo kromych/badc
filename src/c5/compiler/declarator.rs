@@ -1063,7 +1063,7 @@ impl Compiler {
         // commonly seen as the unnamed-fp shape `(*)(args)` whose
         // inner-recursion lands here, and as an unnamed parameter
         // closing-out (`,` / `)`). Return `usize::MAX` so callers
-        // recognise "no symbol to bind"; only `parse_function_params`
+        // recognize "no symbol to bind"; only `parse_function_params`
         // is in a context that should accept this.
         if self.lex.tk == ')' || self.lex.tk == ',' {
             return Ok((usize::MAX, ty, 0, own_levels));

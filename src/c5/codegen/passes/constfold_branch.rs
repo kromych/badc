@@ -6,9 +6,9 @@
 //! `Terminator::Jmp` to whichever successor that selects. An
 //! `Inst::Imm` decides directly; a phi decides when every predecessor
 //! agrees, counting the edge a short-circuit operand arrives on (see
-//! `truthy`), which needs no constant to be materialised.
+//! `truthy`), which needs no constant to be materialized.
 //!
-//! The per-arch emit otherwise materialises the constant condition
+//! The per-arch emit otherwise materializes the constant condition
 //! into a register and emits a conditional branch; when the
 //! parallel-copy phi-moves emitted at the predecessor exit happen
 //! to target the same register the condition occupies, the

@@ -72,7 +72,7 @@ const PERMISSIVE: [Code; 4] = [
 ];
 
 impl Config {
-    /// The empty configuration: every row at its catalogue default.
+    /// The empty configuration: every row at its catalog default.
     /// `const` so an options struct carrying one has a `const`
     /// constructor.
     pub const fn new() -> Self {
@@ -191,7 +191,7 @@ impl Config {
 }
 
 /// Whether an option or a pragma may move this row's level. A hard or
-/// a retired row keeps its catalogue level whatever the source asks.
+/// a retired row keeps its catalog level whatever the source asks.
 fn is_settable(code: Code) -> bool {
     code.class() == Class::Controllable && code.status() == Status::Live
 }

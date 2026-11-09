@@ -1357,7 +1357,7 @@ fn strict_align_aggregate_copy_moves_every_byte_aarch64() {
 /// A frame past the 24-bit reach of the immediate `ADD`/`SUB`, driven
 /// through an `always_inline` helper (no size or frame budget applies to
 /// one). The probed prologue, the register-form teardown and the
-/// materialised slot addresses must all agree. The indices come from
+/// materialized slot addresses must all agree. The indices come from
 /// `argc` so the buffer survives store forwarding. Runs under a raised
 /// stack limit so the frame fits.
 #[test]

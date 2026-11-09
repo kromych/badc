@@ -37,7 +37,7 @@ pub(super) fn emit_x86_simd(
         size,
     };
     // The x86 assembler's own tables encode every form; a name it does
-    // not special-case resolves in the generated catalogue.
+    // not special-case resolves in the generated catalog.
     let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> Emit {
         let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
         if let Err(e) = super::asm::encode(code, 8, m, None, ops) {

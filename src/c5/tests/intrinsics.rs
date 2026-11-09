@@ -148,7 +148,7 @@ fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
 fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
     // VM mode has no FFI -- decode_pc only accepts CODE_BASE-biased
     // c5 PCs, so jumping through a real libc address must error. The
-    // documented behaviour is "Runtime Error: jump to non-code
+    // documented behavior is "Runtime Error: jump to non-code
     // address ...".
     let src = r#"
         int main() {
@@ -165,7 +165,7 @@ fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
     let err = crate::Vm::new(p).run().unwrap_err();
     let msg = format!("{err}");
     // The forged-pointer diagnostic surfaces as a runtime error;
-    // the jump target wasn't a recognised code address.
+    // the jump target wasn't a recognized code address.
     assert!(
         msg.contains("non-code address")
             || msg.contains("is not a code pointer")

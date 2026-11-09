@@ -21,7 +21,7 @@ static const char *via_table(void) {
 static char doc[] = "a docstring far longer than one byte";
 
 int main(void) {
-    // The larger initializer must not have clobbered the neighbours placed
+    // The larger initializer must not have clobbered the neighbors placed
     // after the one-element tentative.
     if (neigh1 != 0x1111111111111111L) {
         return 1;

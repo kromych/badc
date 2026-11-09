@@ -576,7 +576,7 @@ pub(super) fn pc_extent_for_lowering(
     // Cross-TU function-import placeholders sit past the
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to
-    // recognise them as out-of-range, so the table has to
+    // recognize them as out-of-range, so the table has to
     // cover the placeholder range too.
     let from_imports = program
         .extern_function_imports
@@ -2181,7 +2181,7 @@ pub(crate) struct Build {
     /// export at a local data/bss slot the image defines, bound with an
     /// `R_*_COPY` relocation. Empty on the single-TU and non-ELF paths.
     pub copy_relocs: Vec<CopyRelocReq>,
-    /// Initialised data segment: string literals + zero-initialised
+    /// Initialized data segment: string literals + zero-initialized
     /// globals. Copied into `__DATA,__data` by the writer; offsets
     /// into this buffer match the SSA emit's view of the data
     /// segment, so a `DataFixup { data_offset: K }` resolves to
@@ -2213,7 +2213,7 @@ pub(crate) struct Build {
     /// alignment padding holds absolutely. At the default 16 the
     /// writers keep their established placement byte-identically.
     pub text_align: usize,
-    /// Bytes of zero-initialised data placed past the file image, in the
+    /// Bytes of zero-initialized data placed past the file image, in the
     /// `[data.len(), data.len() + bss_size)` offset range. Carries no file
     /// storage: the loader zero-fills it (ELF `p_memsz > p_filesz`, PE
     /// `VirtualSize > SizeOfRawData`, Mach-O `vmsize > filesize`). A data
@@ -2264,7 +2264,7 @@ pub(crate) struct Build {
     /// Sparse map from SSA-tier PC (ent_pc / end_pc /
     /// block_start_pc / sentinel) to the byte offset within
     /// `Build::text` where that PC's emitted instructions start.
-    /// `usize::MAX` for indices that aren't a recognised PC. The
+    /// `usize::MAX` for indices that aren't a recognized PC. The
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length covered between PCs `i` and `i+1`.
     pub pc_to_native: Vec<usize>,
@@ -2354,10 +2354,10 @@ pub(crate) struct Build {
     pub abi: Abi,
     /// Thread-local data segment, byte-for-byte copy of
     /// `Program::tls_data`. The writer routes the first
-    /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
+    /// `tls_init_size` bytes to `.tdata` (initialized TLS image)
     /// and the remainder to `.tbss` (zero-fill TLS bss).
     pub tls_data: Vec<u8>,
-    /// Number of `tls_data` bytes that are statically initialised.
+    /// Number of `tls_data` bytes that are statically initialized.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
     /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
@@ -2568,7 +2568,7 @@ pub(crate) struct Build {
     /// `DW_CFA_advance_loc` so the post-prologue CFA / saved-reg
     /// rule installs at the right PC. Keyed by the function's own
     /// `ent_pc` (unique per function) rather than a derived PC slot
-    /// in `pc_to_native`, which a neighbouring function's PC can
+    /// in `pc_to_native`, which a neighboring function's PC can
     /// alias when both are small.
     pub func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     /// Frame slots mem2reg promoted to registers, keyed by the
@@ -3014,7 +3014,7 @@ pub(crate) struct PltCallFixup {
     pub(crate) import_index: usize,
     /// Tail jump (`JMP`/`B`) when true, else a call (`CALL`/`BL`).
     pub(crate) is_tail: bool,
-    /// Address-materialisation site (`LEA rip` / `adrp+add`) taking the
+    /// Address-materialization site (`LEA rip` / `adrp+add`) taking the
     /// import's address rather than transferring control; `is_tail` unused.
     pub(crate) is_addr: bool,
 }
@@ -3255,7 +3255,7 @@ pub(crate) enum AbsAddrTarget {
     Rodata(u64),
 }
 
-/// Address-materialisation site in `Build::text` reaching a byte of
+/// Address-materialization site in `Build::text` reaching a byte of
 /// `RodataBuild::bytes`: `lea reg, [rip+disp32]` on x86_64 (disp32 at
 /// `code_offset + 3`), `adrp + add` on aarch64. Same patch shape as
 /// [`DataFixup`], resolved against the read-only blob's base instead.
@@ -3300,7 +3300,7 @@ pub(crate) struct RodataAbs64 {
     pub text_offset: u64,
 }
 
-/// A data-image slot holding the address of a labelled code location
+/// A data-image slot holding the address of a labeled code location
 /// (GCC `&&label` in a static initializer), resolved once the owning
 /// function's block layout is final. The relocatable writers emit one
 /// `R_*_64` against the `.text` section symbol with `addend =
@@ -3472,7 +3472,7 @@ pub(crate) struct TextAbsReloc {
 // the per-target TLS offset (variant-1 TCB_HEAD + offset on
 // aarch64, variant-2 -(tls_size - offset) on x86_64) only depends
 // on the total TLS block size, which is known when the codegen
-// lowers `Inst::TlsAddr`. The codegen materialises the final
+// lowers `Inst::TlsAddr`. The codegen materializes the final
 // immediate inline; the writer just needs `Build::tls_data` /
 // `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
 //
@@ -3519,7 +3519,7 @@ pub(crate) struct TlsOffsetFixup {
 }
 
 /// Relocation for a macOS arm64 Thread-Local Variable access.
-/// The codegen emits an `adrp + add` pair that materialises the
+/// The codegen emits an `adrp + add` pair that materializes the
 /// address of the variable's `__thread_vars` descriptor (a
 /// 24-byte triple of pointers); the Mach-O writer patches both
 /// halves with the descriptor's vmaddr once the
@@ -3532,7 +3532,7 @@ pub(crate) struct TlsOffsetFixup {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MachoTlvFixup {
     /// Byte offset within `Build::text` of the adrp instruction
-    /// that opens the descriptor-address materialisation. The
+    /// that opens the descriptor-address materialization. The
     /// matching `add` lives at `adrp_offset + 4`.
     pub adrp_offset: usize,
     /// Index into [`Build::macho_tlv_descriptors`]. The writer
@@ -3664,7 +3664,7 @@ pub(crate) struct UserExternCallSite {
 /// at that symbol; the name also enters the unit's
 /// `NT_BADC_EXTERN_DATA` note, which carries what the symbol type
 /// no longer does. A cross-TU function pointer rides this channel
-/// too -- materialising an address is the same lowering -- so the
+/// too -- materializing an address is the same lowering -- so the
 /// note names functions as well as data.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
@@ -4451,7 +4451,7 @@ pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
 /// Byte offset of the canary from the guard segment's base: its slot in
 /// the System V x86-64 thread control block, which glibc and musl both
-/// honour, and in the per-CPU area Linux reaches through `%gs`.
+/// honor, and in the per-CPU area Linux reaches through `%gs`.
 pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
 
 /// The object a `global` stack guard is read from, and the name
@@ -5605,7 +5605,7 @@ pub(crate) fn bind_named_slots(
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
-/// Architecture flavour the lowering pass picks. Mirrors
+/// Architecture flavor the lowering pass picks. Mirrors
 /// [`Machine`] but lives next to [`Abi`] so the per-target table
 /// can carry it directly without an extra cross-reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5616,7 +5616,7 @@ pub(crate) enum Arch {
 
 /// Per-target ABI description. Replaces the old free-form
 /// `TargetOptions { variadic_on_stack, win64_abi }` with an
-/// explicit catalogue of every choice the lowering pass has to
+/// explicit catalog of every choice the lowering pass has to
 /// make: which registers carry integer arguments, how much
 /// shadow space the caller reserves, whether variadic calls go
 /// through the macOS-flavoured stack-packing path, and whether
@@ -5664,7 +5664,7 @@ pub(crate) struct Abi {
     /// on Aarch64, the saved-int area on x64), so an AAPCS64-
     /// or SysV-style FP-reg placement causes msvcrt's printf to
     /// see denormal garbage. Mutually exclusive with
-    /// `variadic_on_stack` (Apple's all-stack flavour).
+    /// `variadic_on_stack` (Apple's all-stack flavor).
     pub variadic_int_only: bool,
     /// Win64 places each arg in the register at its argument
     /// position (arg 0 -> int_arg_regs[0] / xmm0, arg 1 ->
@@ -5707,7 +5707,7 @@ pub(crate) struct Abi {
     /// for its width. Per-run (from [`NativeOptions::strict_align`]), not
     /// a `Target::abi` row property; see [`access_chunk`].
     pub strict_align: bool,
-    /// Speculative-execution mitigations the emitters must honour.
+    /// Speculative-execution mitigations the emitters must honor.
     /// Per-run (from [`NativeOptions::hardening`]), not a `Target::abi`
     /// row property; see [`Hardening`].
     pub hardening: Hardening,

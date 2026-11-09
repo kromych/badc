@@ -1,4 +1,4 @@
-//! Width / signedness normalisation helpers for the arithmetic and
+//! Width / signedness normalization helpers for the arithmetic and
 //! comparison codegen.
 //!
 //! C99 6.3.1.8 ("usual arithmetic conversions") picks a *common
@@ -18,7 +18,7 @@
 //!     extended and the other is zero-extended at a narrow width.
 //!
 //! All three are called from inside the precedence-climbing loop in
-//! `expr()`; centralising them here keeps the per-operator branches
+//! `expr()`; centralizing them here keeps the per-operator branches
 //! readable.
 
 use super::Compiler;
@@ -42,10 +42,10 @@ impl Compiler {
     /// raw integer bit pattern.
     pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
         // C99 6.3.1.2: storing any scalar into a `_Bool` lvalue
-        // normalises it to 0 / 1. Wrap the accumulator in an
+        // normalizes it to 0 / 1. Wrap the accumulator in an
         // `Expr::Cast` to `_Bool` so the walker emits the `!= 0`
         // test; a source already typed `_Bool` is already 0 / 1
-        // and needs no re-normalisation.
+        // and needs no re-normalization.
         if is_bool_ty(dest_ty) && !is_bool_ty(self.ty) {
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;

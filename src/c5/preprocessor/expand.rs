@@ -1650,7 +1650,7 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
 /// spelled `next_text` would re-lex as one preprocessing token. The
 /// serializer inserts one space at such boundaries -- white space
 /// between tokens never changes phase-7 semantics -- so substituted text
-/// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
+/// cannot paste onto its neighbors (C99 6.10.3.3 reserves pasting for
 /// `##`). `prev_kind` is the preceding token's kind, which decides
 /// whether the pp-number and encoding-prefix rules apply.
 ///

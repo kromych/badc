@@ -1,7 +1,7 @@
 //! AArch64 instruction encoder + per-function lowering shell.
 //!
 //! All AArch64 instructions are 32 bits wide and little-endian on every
-//! supported OS, which makes the encoder a flat catalogue of
+//! supported OS, which makes the encoder a flat catalog of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
 //! through [`super::ssa::shadow::produce_ssa_funcs`] +
 //! [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
@@ -28,7 +28,7 @@
 //!   (PLT trampoline placement, x19 reservation, branch placeholder
 //!   patching).
 
-// Encoder catalogue: a few entries (e.g. unused arithmetic forms,
+// Encoder catalog: a few entries (e.g. unused arithmetic forms,
 // MSR/MRS variants we'd reach for if we ever grow scheduling) sit
 // here for completeness and aren't called by the lowering pass.
 // Suppress the dead-code lint for the whole module so adding the
@@ -367,7 +367,7 @@ pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 
 /// True when `bytes` fits the two-instruction split of `ADD` / `SUB`
 /// (immediate): a 12-bit value plus a 12-bit value left-shifted by 12.
-/// Past it an offset must be materialised into a register.
+/// Past it an offset must be materialized into a register.
 pub(crate) fn add_sub_imm24_in_range(bytes: u32) -> bool {
     bytes < (1 << 24)
 }
@@ -418,7 +418,7 @@ pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 }
 
 /// Add any 32-bit `bytes` to SP. Past the 24-bit immediate reach the
-/// count is materialised into `scratch` and applied with the
+/// count is materialized into `scratch` and applied with the
 /// extended-register form, so the frame size is bounded by the
 /// frame-offset width rather than by the immediate encoding. Growing sp
 /// needs no probe: it moves back over bytes the frame already reached.
@@ -1295,7 +1295,7 @@ pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
 
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
 /// and conditional moves. Names match the ARM ARM. The Mi/Ls
-/// variants are the FP-comparison flavour: after `FCMP`, the
+/// variants are the FP-comparison flavor: after `FCMP`, the
 /// `<`/`<=` results live under the unsigned/sign-bit codes
 /// (mi/ls) rather than the signed-arithmetic lt/le, because
 /// FCMP's flag layout differs from SUBS's.
@@ -3106,7 +3106,7 @@ mod tests {
 
     #[test]
     fn sp_restore_past_immediate_reach_uses_register_form() {
-        // Tearing down a frame beyond the 24-bit immediate reach materialises
+        // Tearing down a frame beyond the 24-bit immediate reach materializes
         // the byte count and applies it with the extended-register form rather
         // than truncating or refusing.
         let bytes = 20_000_016u32;
@@ -3601,7 +3601,7 @@ mod tests {
             enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0x1234),
             None
         );
-        // Each form packs the word the assembler catalogue does.
+        // Each form packs the word the assembler catalog does.
         let reg = |num, is64| Opnd::Reg {
             num,
             is64,

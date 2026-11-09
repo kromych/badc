@@ -360,7 +360,7 @@ int wcstombs_s(size_t *pconverted, char *dst, size_t dstsz, const wchar_t *src,
 // that msvcrt's getenv / _putenv / _wgetenv never update. Reach the
 // vectors through msvcrt's own accessor functions; the wide vector
 // stays NULL until the first wide-environment use, matching the CRT's
-// initialize-on-demand behaviour.
+// initialize-on-demand behavior.
 #pragma binding(msvcrt::_get_environ,  "_get_environ")
 #pragma binding(msvcrt::_get_wenviron, "_get_wenviron")
 int _get_environ(char ***out);

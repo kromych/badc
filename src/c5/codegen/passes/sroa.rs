@@ -51,7 +51,7 @@
 //! expressions. A slot the emit or the callee ABI writes without an
 //! instruction operand -- a by-value aggregate parameter's prologue
 //! copy, the indirect-result address, an alloca base, the caller-side
-//! temporary an aggregate return materialises into -- has no store in
+//! temporary an aggregate return materializes into -- has no store in
 //! the tape to redirect, and a slot a direct `LoadLocal` / `StoreLocal`
 //! names is read or written under a second name that the redirect would
 //! not follow. Both are excluded up front. An over-aligned object (C11
@@ -258,7 +258,7 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
             }
         }
         // Returning the pointer hands the object to the caller; a
-        // terminator reading it is not modelled either.
+        // terminator reading it is not modeled either.
         for block in &func.blocks {
             let mut term = block.terminator;
             term.for_each_operand_mut(|v| {
@@ -548,7 +548,7 @@ struct FieldUse {
 }
 
 /// Rewrite every splittable object's accesses to per-field slots,
-/// decompose its block initializer, and neutralise the dead
+/// decompose its block initializer, and neutralize the dead
 /// base-address instructions. Returns one [`Split`] per object actually
 /// split. `budget` is the target's usable GPR file: a round admits
 /// objects greedily under it, largest register demand first, so the
@@ -843,7 +843,7 @@ fn split_objects(
     // A store of an immediate spanning more than one of the object's
     // fields is object-granularity initialization written as a store
     // rather than a copy -- what an aggregate's zero fill emits per cell
-    // -- and is decomposed like one. It is recognised by strictly
+    // -- and is decomposed like one. It is recognized by strictly
     // containing another access's byte range, so a store that is itself
     // a field keeps its own width and stays a plain access.
     let mut ranges_of: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
@@ -1235,7 +1235,7 @@ fn split_objects(
             };
         }
     }
-    // Neutralise the now-dead base-address expressions of every fully
+    // Neutralize the now-dead base-address expressions of every fully
     // split object: every consumer was a rewritten access or another
     // address expression, so the value has no live use. An object a call
     // still reaches keeps them. Before the expansion below, which
@@ -1829,12 +1829,12 @@ mod tests {
                     ..
                 }
             )),
-            "promoted stores are neutralised"
+            "promoted stores are neutralized"
         );
     }
 
     #[test]
-    fn dead_local_addr_neutralised() {
+    fn dead_local_addr_neutralized() {
         let mut f = two_elem_array();
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
@@ -1875,11 +1875,11 @@ mod tests {
                 ..
             }
         ));
-        // Base-address instructions (LocalAddr + Add) neutralised.
+        // Base-address instructions (LocalAddr + Add) neutralized.
         for id in [1usize, 4, 5, 7, 9, 10] {
             assert!(
                 matches!(f.insts[id], Inst::Imm(0)),
-                "address expr v{id} must be neutralised, got {:?}",
+                "address expr v{id} must be neutralized, got {:?}",
                 f.insts[id]
             );
         }
@@ -2139,7 +2139,7 @@ mod tests {
 
     /// `Block::exit_acc` naming an address into the object is a liveness
     /// pin, not a use of the address, so it must not decline the split;
-    /// the neutralised expression still defines a value there.
+    /// the neutralized expression still defines a value there.
     #[test]
     fn base_address_as_exit_acc_still_splits() {
         let mut f = two_elem_array();
@@ -2770,7 +2770,7 @@ mod tests {
         );
     }
 
-    /// A copy between two spans of one object is not modelled.
+    /// A copy between two spans of one object is not modeled.
     #[test]
     fn copy_within_one_object_not_split() {
         let insts = alloc::vec![
@@ -3082,7 +3082,7 @@ mod tests {
         assert!(split[0].slots.is_empty(), "with no field to move");
         assert!(
             matches!(f.insts[0], Inst::Imm(0)) && matches!(f.insts[1], Inst::Imm(0)),
-            "its address expressions are neutralised: {:?}",
+            "its address expressions are neutralized: {:?}",
             f.insts
         );
     }
@@ -3165,7 +3165,7 @@ mod tests {
         assert!(split[0].slots.is_empty(), "with no field to move");
         assert!(
             f.insts[..4].iter().all(|i| matches!(i, Inst::Imm(0))),
-            "its loads and address expressions are neutralised: {:?}",
+            "its loads and address expressions are neutralized: {:?}",
             f.insts
         );
     }
@@ -3192,7 +3192,7 @@ mod tests {
             [0, 2, 3]
                 .iter()
                 .all(|&i| matches!(f.insts[i], Inst::Imm(0))),
-            "its address, its copy and its load are neutralised: {:?}",
+            "its address, its copy and its load are neutralized: {:?}",
             f.insts
         );
     }
@@ -3267,7 +3267,7 @@ mod tests {
     }
 
     /// The caller-side temporary a callee's aggregate return
-    /// materialises into is filled through the host ABI, named only by
+    /// materializes into is filled through the host ABI, named only by
     /// the call's `ret_slot_local`. Redirecting its member loads to
     /// field slots would leave them reading storage nothing wrote.
     #[test]

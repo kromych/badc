@@ -5,7 +5,7 @@
 // same-named static gets its own fresh slot.
 //
 // Static locals are commonly used for cached state (one-time
-// initialisations, hash tables, etc.).
+// initializations, hash tables, etc.).
 
 #include <stdlib.h>
 

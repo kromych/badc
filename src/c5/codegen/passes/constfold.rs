@@ -1,5 +1,5 @@
 //! Post-inline constant folding. The inliner substitutes call-site
-//! immediates into callee bodies and materialises callee-narrows
+//! immediates into callee bodies and materializes callee-narrows
 //! extends on them (`splice_param_ref`), leaving `Extend(Imm)` /
 //! `Binop(Imm, Imm)` / `BinopI(Imm, k)` chains no earlier stage
 //! re-folds. Folding them lets the downstream matchers (`rotate`'s
@@ -12,7 +12,7 @@
 //!   * `Binop { int op, Imm, Imm }` -> `Imm`;
 //!   * `Binop { rhs = Imm }` -> `BinopI` for [`binopi_safe`] ops when
 //!     the immediate encodes without a per-use scratch
-//!     materialisation or the `Imm` def has no other use;
+//!     materialization or the `Imm` def has no other use;
 //!   * `Binop { lhs = Imm }` -> the rhs-imm form via commutation or
 //!     compare mirroring, then the rule above;
 //!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped;
@@ -641,14 +641,14 @@ fn binopi_safe(op: BinOp) -> bool {
 }
 
 /// Whether `op` with immediate `imm` encodes in both per-arch
-/// emitters without a per-use scratch materialisation of the
+/// emitters without a per-use scratch materialization of the
 /// immediate. Derived from the two `emit_binop_imm` peephole sets:
 /// shifts embed a 6-bit count, add/sub take imm12 (aarch64) / imm32
 /// (x86_64), compares cmp-imm12 / cmp-imm32, mul lowers to a
 /// shift-by-log2; `And 0xffffffff` and `Xor -1` have dedicated
 /// single-instruction forms. Anything else loads the immediate into
 /// a scratch register at every use, so rewriting a shared immediate
-/// operand would duplicate its materialisation.
+/// operand would duplicate its materialization.
 fn imm_encodes_free(op: BinOp, imm: i64) -> bool {
     match op {
         BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => (0..64).contains(&imm),
@@ -898,8 +898,8 @@ fn eval_fp_binop(op: BinOp, l: i64, r: i64, f32: bool) -> Option<i64> {
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
-    // the encoding is materialisation-free; a sole use may always
-    // move (the per-use materialisation replaces the def's).
+    // the encoding is materialization-free; a sole use may always
+    // move (the per-use materialization replaces the def's).
     let to_imm_form = |op: BinOp, value_id: ValueId, imm: i64| -> bool {
         binopi_safe(op)
             && (imm_encodes_free(op, imm) || uses.get(value_id as usize).copied().unwrap_or(0) == 1)
@@ -1646,9 +1646,9 @@ mod tests {
 
     #[test]
     fn shared_wide_imm_keeps_register_form() {
-        // A scratch-materialised immediate (Xor with a wide constant)
+        // A scratch-materialized immediate (Xor with a wide constant)
         // shared by two ops must stay a register operand: rewriting
-        // both would duplicate the constant materialisation per use.
+        // both would duplicate the constant materialization per use.
         let mut f = fresh(vec![
             Inst::LocalAddr(0),
             Inst::Imm(0x0123_4567_89ab_cdef),

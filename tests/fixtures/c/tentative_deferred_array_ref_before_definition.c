@@ -50,7 +50,7 @@ int main(void) {
     if (mid_slot != steps + IDX_MID || mid_slot->value != 13) {
         return 5;
     }
-    // The fresh storage must not have overrun the neighbour placed after
+    // The fresh storage must not have overrun the neighbor placed after
     // the one-element tentative.
     if (neigh != 0x1111111111111111LL) {
         return 6;

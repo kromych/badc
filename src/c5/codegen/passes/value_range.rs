@@ -27,7 +27,7 @@
 //! [`super::simplify_branches`] consume.
 //!
 //! Ranges are keyed by expression rather than by value id, so a
-//! re-materialised operand -- the same extension of the same value
+//! re-materialized operand -- the same extension of the same value
 //! emitted in two blocks -- reads the fact recorded for the other. The
 //! key covers only pure arithmetic; a load or a call is opaque, so
 //! nothing is carried across a write to memory. A store is the one
@@ -200,7 +200,7 @@ fn cmp_code(op: BinOp, narrow: bool) -> u32 {
 
 /// Canonical id per value, and the first instruction of each key: the
 /// first instruction computing the same pure expression. Address chains
-/// re-materialised per block (`LocalAddr` + constant offset, the same
+/// re-materialized per block (`LocalAddr` + constant offset, the same
 /// field read twice) collapse onto one identity, which is what lets a
 /// branch fact recorded for one read reach the other.
 struct Numbering {
@@ -233,7 +233,7 @@ fn value_numbers(func: &FunctionSsa) -> Numbering {
         // A 32-bit compare or division is another function of its operands.
         let narrow = super::narrow::is_cmp32(&func.cmp32, i as ValueId)
             || super::narrow::is_narrow_div(func, i as ValueId);
-        // Address-materialisation immediates (`ImmData`, `ImmCode`,
+        // Address-materialization immediates (`ImmData`, `ImmCode`,
         // `ImmExtCode`, `TlsAddr`) stay on their own ids: their operand
         // is a placeholder a per-instruction fixup resolves, so equal
         // operands can name different symbols.
@@ -2219,7 +2219,7 @@ mod tests {
     }
 
     /// A dominating unsigned guard on a loaded field bounds what a
-    /// re-materialised load of the same field produces (a macro that
+    /// re-materialized load of the same field produces (a macro that
     /// expands its argument twice reads the field once for the guard and
     /// once for the value), and a store in between ends the fact.
     #[test]
@@ -3257,7 +3257,7 @@ mod tests {
             Some(1)
         );
         // Shifts move both endpoints; a shift left out of the register
-        // is not modelled and settles nothing.
+        // is not modeled and settles nothing.
         let shl = |k| Inst::BinopI {
             op: BinOp::Shl,
             lhs: 0,

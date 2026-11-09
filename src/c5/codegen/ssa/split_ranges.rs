@@ -99,7 +99,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
         return out;
     }
     let preds = super::mem2reg::predecessors(func);
-    // Blocks in tape order, so a chain link is a neighbouring pair.
+    // Blocks in tape order, so a chain link is a neighboring pair.
     let mut order: Vec<usize> = (0..func.blocks.len()).collect();
     order.sort_unstable_by_key(|&b| func.blocks[b].inst_range.start);
     // Per value, the run it was last seen in plus that run's first and
@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(spill_traffic(&f, &alt), 2, "def plus the copy");
     }
     /// A copy between a comparison and the branch it feeds writes no
-    /// host flags, so the fusion the allocator recognised survives one
+    /// host flags, so the fusion the allocator recognized survives one
     /// landing in that window.
     #[test]
     fn a_copy_in_the_branch_window_keeps_the_fusion() {

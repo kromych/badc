@@ -1844,7 +1844,7 @@ fn x86_64_riprel_const_operand_takes_any_address_constant() {
         .expect("local `obj` symbol")
         .value as i64;
     // The `leaq` sites carry a `%c` operand each; every other row in
-    // `.text` belongs to the operand's own value materialisation.
+    // `.text` belongs to the operand's own value materialization.
     let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
         .relocs
         .iter()

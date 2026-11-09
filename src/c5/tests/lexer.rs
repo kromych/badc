@@ -301,7 +301,7 @@ fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
 }
 
 #[test]
-fn line_text_by_number_honours_line_markers() {
+fn line_text_by_number_honors_line_markers() {
     // The diagnostic echo resolves (file, line) through the `#line`
     // markers the preprocessor embeds; the first occurrence of a
     // (file, line) pair wins when an include re-enters a file. The

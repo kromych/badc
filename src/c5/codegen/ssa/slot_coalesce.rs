@@ -91,7 +91,7 @@ pub(crate) fn run(
 }
 
 /// One block of the compacted frame, in the order the blocks are placed.
-/// A group and a single keep storage of their own; a colour is one block
+/// A group and a single keep storage of their own; a color is one block
 /// its live-disjoint members share.
 #[derive(Clone, Copy)]
 enum Unit {
@@ -929,9 +929,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
 
-    // Greedy colouring: interfering slots get distinct colours. Each
-    // row is walked over its set bits, and the colours its already-
-    // coloured neighbours hold are marked in a stamp array refreshed by
+    // Greedy coloring: interfering slots get distinct colors. Each
+    // row is walked over its set bits, and the colors its already-
+    // colored neighbors hold are marked in a stamp array refreshed by
     // bumping the stamp, so the search costs the row's degree rather
     // than the candidate count times a set insertion.
     let mut color = alloc::vec![usize::MAX; n];
@@ -1225,7 +1225,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
         }
     }
-    // Colour the shareable groups, widest first, so a colour's width is
+    // Color the shareable groups, widest first, so a color's width is
     // fixed by its first member and later members always fit.
     let mut order: Vec<usize> = (0..nsg).collect();
     let width = |sg: usize| {
@@ -1237,7 +1237,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut g_color_used = alloc::vec![0u32; nsg + 1];
     let mut g_ncolors = 0usize;
     let mut g_color_width: Vec<i64> = Vec::new();
-    // Region members and frame storage take separate colours.
+    // Region members and frame storage take separate colors.
     let mut g_color_region: Vec<bool> = Vec::new();
     for (i, &sg) in order.iter().enumerate() {
         let stamp = i as u32 + 1;
@@ -1268,8 +1268,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // floor: reserved groups first (each a contiguous block, order
     // preserved so the base stays the lowest address and interior pointer
     // arithmetic still lands), then reserved singles, then one block per
-    // group colour with every member packed against its high end, then one
-    // slot per scalar colour. Slots at or below the floor and the
+    // group color with every member packed against its high end, then one
+    // slot per scalar color. Slots at or below the floor and the
     // parameter slots (positive offsets) are not in the map and keep their
     // offset.
     // In compact mode a reserved group no live instruction or
@@ -1334,7 +1334,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     let mut reordered = false;
     if protected {
         // An array is an aggregate, so its base always forms a group; the
-        // single and scalar-colour cases below cost nothing and keep the
+        // single and scalar-color cases below cost nothing and keep the
         // classification total.
         let mut group_holds = alloc::vec![false; ng];
         let mut single_holds: BTreeSet<i64> = BTreeSet::new();
@@ -1395,8 +1395,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
         }
     }
-    // Cells of a colour's shared block map to the members' original
-    // offsets; whether any is exclusive is decided per colour below.
+    // Cells of a color's shared block map to the members' original
+    // offsets; whether any is exclusive is decided per color below.
     let mut shared_group_cells: BTreeSet<i64> = BTreeSet::new();
     let mut g_members = alloc::vec![0usize; g_ncolors];
     for sg in 0..nsg {
@@ -1492,7 +1492,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
     // Lay the region out again over the members that survive. The members
-    // of one colour share a block, as disjoint lifetimes share frame storage;
+    // of one color share a block, as disjoint lifetimes share frame storage;
     // a movable member absent from `new_off` was dropped and frees its bytes.
     let mut blocks: Vec<Vec<RegionMember>> = Vec::new();
     let mut color_block: BTreeMap<usize, usize> = BTreeMap::new();
@@ -1528,7 +1528,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         super::super::ir::place_region(blocks)
     };
     // The array-holding objects follow their storage. A base the compact
-    // repack dropped goes with it; a base that shares a colour's block
+    // repack dropped goes with it; a base that shares a color's block
     // keeps naming the cell it was given, which is inside that block.
     f.array_slots
         .retain(|&s| !movable(s) || new_off.contains_key(&s));
@@ -1544,7 +1544,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // offset that backs exactly one original slot holds that slot's value
     // for its whole scope, so the location is rewritten to the new offset
     // (exclusive). Storage shared by disjoint lifetimes -- a multi-member
-    // scalar colour, or any cell of a multi-member group colour -- has no
+    // scalar color, or any cell of a multi-member group color -- has no
     // single stable location, so the slot's location is dropped (shared).
     let mut reverse_count: BTreeMap<i64, usize> = BTreeMap::new();
     for &new in new_off.values() {
@@ -2207,7 +2207,7 @@ mod tests {
     }
 
     /// A pointer stored to memory escapes its object, and groups of
-    /// different sizes pack against their colour's high end so interior
+    /// different sizes pack against their color's high end so interior
     /// offsets keep their meaning.
     #[test]
     fn stored_pointer_escapes_and_sizes_pack() {
@@ -2290,7 +2290,7 @@ mod tests {
         assert!(matches!(f.insts[0], Inst::LocalAddr(-4)));
         assert!(
             matches!(f.insts[3], Inst::LocalAddr(-2)),
-            "the 2-cell group packs against the colour's high end"
+            "the 2-cell group packs against the color's high end"
         );
     }
 

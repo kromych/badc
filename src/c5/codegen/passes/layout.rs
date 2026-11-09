@@ -972,7 +972,7 @@ mod tests {
 
     /// The for-loop shape with its header as an address-taken label, named
     /// by a `BlockAddr` in the entry and by a static-data slot.
-    fn labelled_for_loop() -> FunctionSsa {
+    fn labeled_for_loop() -> FunctionSsa {
         let mut f = for_loop_shape();
         f.insts[0] = Inst::BlockAddr(1);
         f.computed_goto_targets = vec![1];
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn a_label_keeps_its_address_through_the_layout() {
-        let mut f = labelled_for_loop();
+        let mut f = labeled_for_loop();
         run_one(&mut f, &mut JumpChains::default());
         // Rotated as the unlabelled shape is: old ids 0 3 2 1 4.
         assert!(matches!(f.blocks[3].terminator, Terminator::Bz { .. }));

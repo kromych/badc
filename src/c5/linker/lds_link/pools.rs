@@ -199,7 +199,7 @@ impl<'a> LdsLinker<'a> {
         if strings && !entries.is_empty() {
             // bfd merge_strings: sort by reversed content (lengths
             // without the terminator) and merge each entry into an
-            // alignment-compatible neighbour it is a suffix of.
+            // alignment-compatible neighbor it is a suffix of.
             let content_len = |e: &Entry| e.bytes.len() - es;
             let uniform = entries[1..]
                 .iter()

@@ -92,7 +92,7 @@ BASELINE_FAILURES = 0
 # Deliberately absent, each with a tracked cause:
 #   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
 #     time.thread_time() is absent.
-#   test_json              -- json.tool's colour cases spawn an isolated
+#   test_json              -- json.tool's color cases spawn an isolated
 #     child interpreter, which ignores PYTHONHOME; getpath cannot find
 #     Lib without an install layout. A harness limit, not a runtime one.
 TEST_SLICE = [

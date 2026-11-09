@@ -444,7 +444,7 @@ pub(crate) enum Mnemonic {
     /// Literal machine bytes, carried in [`AsmInsn::bytes`]. Produced for a
     /// template piece that is a run of hex-byte tokens (`CC; C3; 90`) or a
     /// `.byte` / `.word` / `.long` / `.quad` directive. An escape hatch for
-    /// instructions the mnemonic catalogue does not cover; the bytes are
+    /// instructions the mnemonic catalog does not cover; the bytes are
     /// emitted verbatim.
     RawBytes,
     /// A `.byte`-family data directive whose arguments reference operands
@@ -458,14 +458,14 @@ pub(crate) enum Mnemonic {
     /// in [`AsmInsn::bytes`].
     Skip,
     /// A general-purpose / system mnemonic recognized straight from the
-    /// catalogue, not one of the bespoke forms above. The string is the
-    /// catalogue mnemonic; [`encode`] routes it through the table encoder with
+    /// catalog, not one of the bespoke forms above. The string is the
+    /// catalog mnemonic; [`encode`] routes it through the table encoder with
     /// a generic AT&T-to-Intel operand transpose. This is what lets inline asm
     /// reach every instruction the table encodes without a per-mnemonic arm.
     Table(&'static str),
     /// An AT&T zero/sign-extending move spelling source and destination
     /// widths (`movzbl` = `movzx r32, r/m8`, `movslq` = `movsxd r64,
-    /// r/m32`). `name` is the catalogue's Intel mnemonic; the source width
+    /// r/m32`). `name` is the catalog's Intel mnemonic; the source width
     /// is applied to the r/m operand before the table encode, since AT&T
     /// syntax carries it only in the mnemonic.
     ExtMov {
@@ -1190,7 +1190,7 @@ fn string_op(name: &str) -> Option<Mnemonic> {
 pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     // The flag / general-register stack pushes and the interrupt / far return
     // spell their operand size in the mnemonic and take no operands; the
-    // catalogue is generated for long mode and carries only some of the
+    // catalog is generated for long mode and carries only some of the
     // spellings, so all of them resolve here.
     if let Some(m) = sized_nullary(name) {
         return Some(m);
@@ -1250,7 +1250,7 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "ds" => Mnemonic::Prefix(0x3E),
         "fs" => Mnemonic::Prefix(0x64),
         "gs" => Mnemonic::Prefix(0x65),
-        // Protection-key register write (the read form is catalogued).
+        // Protection-key register write (the read form is cataloged).
         "wrpkru" => Mnemonic::Fixed(&[0x0F, 0x01, 0xEF]),
         "crc32" => Mnemonic::Crc32,
         "fninit" => Mnemonic::Fixed(&[0xDB, 0xE3]),
@@ -2329,11 +2329,11 @@ fn movq_mmx(
     Ok(true)
 }
 
-/// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
+/// The catalog mnemonic matching `name`, as a `'static` string, or `None`.
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
 fn table_mnemonic(name: &str) -> Option<&'static str> {
-    // The catalogue is sorted by mnemonic; binary-search rather than scan.
+    // The catalog is sorted by mnemonic; binary-search rather than scan.
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < name);
     forms.get(start).map(|f| f.mnemonic).filter(|&m| m == name)
@@ -2364,13 +2364,13 @@ fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
 /// A trailing `b`/`w`/`l`/`q` is a suffix only when the token is not a
 /// mnemonic as written (so `shl` stays `shl`, but `bswapl` is
 /// `bswap` + long). A token that is not a bespoke mnemonic but names a
-/// catalogue instruction resolves to [`Mnemonic::Table`].
+/// catalog instruction resolves to [`Mnemonic::Table`].
 fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
     }
     // AT&T reads the size letter on a stack op as a suffix of `push` / `pop`.
-    // The catalogue also carries Intel's own `pushw` spelling (its imm16 row
+    // The catalog also carries Intel's own `pushw` spelling (its imm16 row
     // only), which must not swallow the suffix, so these skip the whole-name
     // match and take the split below.
     let att_suffixed = matches!(tok, "pushw" | "pushl" | "pushq" | "popw" | "popl" | "popq");
@@ -2378,7 +2378,7 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         return Some((Mnemonic::Table(name), None));
     }
     // Unsuffixed flag push / pop: in 64-bit mode the operand size defaults to
-    // 64-bit, so these name the `q` forms. The catalogue is Intel-syntax and
+    // 64-bit, so these name the `q` forms. The catalog is Intel-syntax and
     // carries only the explicitly sized spellings.
     if let Some(sized) = match tok {
         "pushf" => Some("pushfq"),
@@ -2395,7 +2395,7 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     } {
         return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
     }
-    // The narrower counter widths of the `E3 rel8` branch. The catalogue row
+    // The narrower counter widths of the `E3 rel8` branch. The catalog row
     // is `jrcxz`; these differ from it only by the address-size prefix, which
     // the encoder selects from the mode, so they carry no row of their own.
     if let Some(name) = match tok {
@@ -2735,7 +2735,7 @@ fn matching_open_paren(tok: &str) -> Option<usize> {
 
 /// Parse `prefix(inner)`: the `disp(%%reg)` / `disp(%N)` /
 /// `disp(%%base, %%index, scale)` memory forms and the `LABEL(%rip)`
-/// label-address form. `None` for shapes not modelled.
+/// label-address form. `None` for shapes not modeled.
 fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOpnd> {
     let prefix = strip_outer_parens(prefix);
     let inner = inner.trim();
@@ -2967,7 +2967,7 @@ fn parse_align_directive(name: &str, rest: &str) -> Result<AsmSectionItem, Strin
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
-/// piece is a mnemonic instruction. Two forms are recognised:
+/// piece is a mnemonic instruction. Two forms are recognized:
 ///
 /// * a run of bare 2-hex-digit tokens (`CC C3 90`), each a byte value, and
 /// * a `.byte` / `.word` / `.long` / `.quad` directive whose comma-separated
@@ -3864,7 +3864,7 @@ fn to_table(
 ) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
     use super::table::Opnd;
     use Mnemonic as M;
-    // A catalogue-passthrough mnemonic carries its own name; arrange the AT&T
+    // A catalog-passthrough mnemonic carries its own name; arrange the AT&T
     // operands into the table's Intel order by arity and route straight through.
     if let M::Table(name) = mnemonic {
         return to_table_generic(name, suffix, ops);
@@ -3950,12 +3950,12 @@ fn to_table(
     Some((name, suffix.map(|s| s.bytes()), tops))
 }
 
-/// Arrange the operands of a catalogue-passthrough mnemonic
+/// Arrange the operands of a catalog-passthrough mnemonic
 /// ([`Mnemonic::Table`]) into the table's Intel order, by arity: no operands
 /// stay empty, a unary form passes its operand, a two-operand form transposes
 /// AT&T `src, dst` to `dst, src`, and a shift / rotate takes its count (CL or an
 /// immediate) after the destination with an omitted count meaning `1`. Operands
-/// naming a register with no catalogue form (MMX / control / debug / segment,
+/// naming a register with no catalog form (MMX / control / debug / segment,
 /// `reg >= MMX_BASE`) return `None`.
 fn to_table_generic(
     name: &'static str,
@@ -3988,7 +3988,7 @@ fn to_table_generic(
         }
         // `imul $imm, %reg` is the three-operand form with the destination
         // repeated as the source; only the two-operand spelling reaches here,
-        // since the catalogue has no immediate row of arity two.
+        // since the catalog has no immediate row of arity two.
         [Concrete::Imm(v), dst] if name == "imul" => {
             alloc::vec![table_opnd(dst), table_opnd(dst), Opnd::Imm(*v)]
         }
@@ -4165,7 +4165,7 @@ pub(crate) fn encode_in(
         return Ok(());
     }
     // An AT&T extending move: the spelled source width lands on the r/m
-    // operand (AT&T first), then the catalogue encodes the Intel form.
+    // operand (AT&T first), then the catalog encodes the Intel form.
     if let Mnemonic::ExtMov { name, src } = mnemonic {
         let mut ops = ops.to_vec();
         if let Some(o) = ops.first_mut() {
@@ -4184,9 +4184,9 @@ pub(crate) fn encode_in(
     // resolved to Intel order first.
     if let Some((name, width, tops)) = to_table(mnemonic, suffix, ops) {
         // The inline-asm path holds the mnemonic as text (a parsed token); map
-        // it to the catalogue enum at this one boundary.
+        // it to the catalog enum at this one boundary.
         let mnem = super::table::Mnem::from_name(name)
-            .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
+            .ok_or_else(|| format!("inline asm: unknown catalog mnemonic `{name}`"))?;
         code.extend_from_slice(&super::table::encode_in(mode, addr, mnem, width, &tops)?);
         return Ok(());
     }
@@ -4215,7 +4215,7 @@ pub(crate) fn encode_in(
     Ok(())
 }
 
-/// The forms the catalogue does not carry: the double-precision shifts, the
+/// The forms the catalog does not carry: the double-precision shifts, the
 /// port I/O and privileged prefix forms, the MMX and control / debug / segment
 /// register moves, and the interrupt / stack ops.
 fn encode_bespoke(
@@ -5854,7 +5854,7 @@ fn encode_bespoke(
             Err(String::from("inline asm: unsupported mov operands"))
         }
         // The delegated general-purpose / system mnemonics are handled by the
-        // table encoder above; reaching here means the catalogue has no form
+        // table encoder above; reaching here means the catalog has no form
         // matching these operands. A push / pop of a segment register is the
         // one such form with a fixed encoding, so try it before reporting the
         // mnemonic as written.
@@ -5977,7 +5977,7 @@ fn segment_stack_op(
 fn as_reg(op: Concrete) -> Result<(u8, AsmRegSize), String> {
     match op {
         Concrete::Reg { reg, size } => Ok((reg, size)),
-        // A high-byte register reaches only the catalogue path; the bespoke
+        // A high-byte register reaches only the catalog path; the bespoke
         // arms encode forms that cannot name one.
         Concrete::HighReg(_) => Err(String::from(
             "inline asm: high-byte register is not an operand of this instruction",
@@ -7342,11 +7342,11 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_passthrough() {
+    fn catalog_passthrough() {
         let q = AsmRegSize::Quad;
         let rax = Concrete::Reg { reg: 0, size: q };
         let rbx = Concrete::Reg { reg: 3, size: q };
-        // A non-bespoke catalogue mnemonic parses to Mnemonic::Table, stripping
+        // A non-bespoke catalog mnemonic parses to Mnemonic::Table, stripping
         // an AT&T size suffix; an unknown token stays unresolved.
         assert_eq!(split_mnemonic("cmp"), Some((Mnemonic::Table("cmp"), None)));
         assert_eq!(
@@ -7429,7 +7429,7 @@ mod tests {
         assert_eq!(asm_bytes(b"popfq"), [0x9D]);
         assert_eq!(asm_bytes(b"pushfw"), [0x66, 0x9C]);
         assert_eq!(asm_bytes(b"popfw"), [0x66, 0x9D]);
-        // `pushw %ax` is `push` at word width; the Intel-syntax catalogue
+        // `pushw %ax` is `push` at word width; the Intel-syntax catalog
         // entry named `pushw` covers only the imm16 row, which still encodes.
         assert_eq!(asm_bytes(b"pushw %%ax"), [0x66, 0x50]);
         assert_eq!(asm_bytes(b"popw %%ax"), [0x66, 0x58]);
@@ -9582,7 +9582,7 @@ mod string_and_prefix_tests {
     /// 16 bits whatever the suffix says. The SDM spells that source `r/m16`,
     /// so a `movl` names an operand the row has not, and the suffix rule here
     /// is the one `descriptor_field_spellings_rejected` already applies to the
-    /// neighbouring 16-bit fields.
+    /// neighboring 16-bit fields.
     #[test]
     fn segment_register_move_spellings_rejected() {
         for tmpl in [

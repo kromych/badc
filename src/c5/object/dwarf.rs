@@ -1860,7 +1860,7 @@ fn emit_type_die(
     }
 }
 
-/// Coarse arch flavour the CFI emitter dispatches on.
+/// Coarse arch flavor the CFI emitter dispatches on.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CfiArch {
     Aarch64,
@@ -2220,7 +2220,7 @@ fn build_debug_frame(
     }
 
     // Emit one FDE covering the ELF `_start` stub. Mark the return- address
-    // column as `DW_CFA_undefined` so the unwinder recognises the bottom of
+    // column as `DW_CFA_undefined` so the unwinder recognizes the bottom of
     // the stack and stops with a clean "Backtrace stopped: at top of stack"
     // instead of reading garbage.
     if let Some((start, end)) = start_stub {

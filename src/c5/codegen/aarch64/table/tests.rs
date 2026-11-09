@@ -2,7 +2,7 @@
 //!
 //! Golden cases run everywhere and lock exact words, including the
 //! logical-immediate encoder and the rows the design spike found miscoded in
-//! the source database. The differential sweep cross-checks the catalogue
+//! the source database. The differential sweep cross-checks the catalog
 //! against the native assembler; it is gated on `BADC_FUZZ_ASM=1` plus `clang`
 //! and `objdump`, so a bare `cargo test` skips it.
 
@@ -309,7 +309,7 @@ fn load_store_register_offset() {
 #[test]
 fn load_store_writeback() {
     // Pre-index `[Xn, #off]!` and post-index `[Xn], #off` are distinct
-    // catalogue shapes taking an unscaled simm9, across every access size.
+    // catalog shapes taking an unscaled simm9, across every access size.
     // Words match the assembler.
     let pre = |base: u8, off: i64| Opnd::Mem {
         base,
@@ -394,7 +394,7 @@ fn bitfield_aliases() {
     assert_eq!(enc("sbfiz", &[x(0), x(1), i(4), i(8)]), 0x937C_1C20);
     assert_eq!(enc("bfi", &[x(0), x(1), i(4), i(8)]), 0xB37C_1C20);
     assert_eq!(enc("ubfx", &[w(0), w(1), i(4), i(8)]), 0x5304_2C20); // 32-bit
-    // The base ubfm goes through the catalogue with raw immr/imms.
+    // The base ubfm goes through the catalog with raw immr/imms.
     assert_eq!(enc("ubfm", &[x(0), x(1), i(4), i(11)]), 0xD344_2C20);
     // A field running past the register width is rejected.
     assert!(encode("ubfx", &[w(0), w(1), i(28), i(8)]).is_err());
@@ -810,7 +810,7 @@ fn simd_vector() {
     assert_eq!(b("bic"), 0x4E62_1C20);
     assert_eq!(b("orn"), 0x4EE2_1C20);
     // Mismatched arrangements and a non-byte logical op are rejected; GP `add`
-    // and `bic` (register operands) still reach the catalogue.
+    // and `bic` (register operands) still reach the catalog.
     assert!(encode("add", &[v(0, 2, true), v(1, 0, true), v(2, 2, true)]).is_err());
     assert!(encode("and", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]).is_err());
     assert_eq!(enc("add", &[x(0), x(1), x(2)]), 0x8B02_0020);
@@ -2287,8 +2287,8 @@ fn add_sub_immediate_picks_the_shift() {
 }
 
 #[test]
-fn catalogue_is_sorted() {
-    // encode() binary-searches the catalogue by mnemonic; the generator emits it
+fn catalog_is_sorted() {
+    // encode() binary-searches the catalog by mnemonic; the generator emits it
     // sorted. Lock the invariant.
     let forms = super::super::isa_a64_table::FORMS;
     assert!(
@@ -2441,10 +2441,10 @@ fn corrected_database_rows_encode_true_bits() {
     // corrections are recorded in tools/gen_isa_a64.py DB_FIXES.)
 }
 
-/// The signature classifier catalogues every GP row the field model expresses;
+/// The signature classifier catalogs every GP row the field model expresses;
 /// lock one word per newly covered class (all verified against the assembler).
 #[test]
-fn classified_catalogue_growth() {
+fn classified_catalog_growth() {
     assert_eq!(enc("adc", &[x(1), x(2), x(3)]), 0x9A030041); // carry arithmetic
     assert_eq!(enc("smull", &[x(1), w(2), w(3)]), 0x9B237C41); // mixed-width multiply
     assert_eq!(enc("umaddl", &[x(1), w(2), w(3), x(4)]), 0x9BA31041);
@@ -2954,7 +2954,7 @@ mod differential {
         std::eprintln!("sysop tables: {checked} verified, {skipped} unknown to the assembler");
     }
 
-    /// Sweep the catalogue itself: synthesize operands for every form from its
+    /// Sweep the catalog itself: synthesize operands for every form from its
     /// operand pattern and require the encoded word to equal the assembler's.
     /// Register numbers avoid 31, so no zr/sp alias re-canonicalization can
     /// shift the assembler's word choice. `bad` (encoded, disagrees) and `gap`
@@ -3224,9 +3224,9 @@ mod differential {
             let names: Vec<&str> = skipped.into_iter().collect();
             std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
         }
-        assert_eq!(bad, 0, "A64 catalogue words disagree with the assembler");
+        assert_eq!(bad, 0, "A64 catalog words disagree with the assembler");
         assert_eq!(sp_bad, 0, "sp operands disagree with the assembler");
-        assert_eq!(gap, 0, "synthesized catalogue operands failed to encode");
+        assert_eq!(gap, 0, "synthesized catalog operands failed to encode");
     }
 
     /// Cross-check the logical-immediate encoder against the assembler for

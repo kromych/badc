@@ -1239,7 +1239,7 @@ pub(crate) fn apply_data_liveness(
         .collect();
     let obj_end = |i: usize| -> i64 { obj_ends[i] };
     // A relocation writes a (generally non-zero) value into its slot at
-    // link/write time, so the slot's object is initialised data even when
+    // link/write time, so the slot's object is initialized data even when
     // its bytes are zero in `program.data` (a function-pointer slot, or a
     // pointer whose stored placeholder is its target offset). Such objects
     // stay file-backed: the writer patches the slot in the file image.

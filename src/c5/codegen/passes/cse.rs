@@ -18,7 +18,7 @@
 //! fits the callee-saved bank (where a range spanning a call must go),
 //! and no block of the region nests deeper in a loop than the duplicate.
 //! The headroom widens as the duplicate gets cheaper to recompute, and
-//! is widest for the operand-free values, which rematerialise anywhere.
+//! is widest for the operand-free values, which rematerialize anywhere.
 //!
 //! A region holding a call is taken only from inside a loop. The
 //! callee-saved register such a range needs is saved by the prologue and
@@ -1052,7 +1052,7 @@ mod tests {
     }
 
     /// A comparison whose only consumer is its block's branch fuses into
-    /// that branch; a second use would force it to materialise, so it is
+    /// that branch; a second use would force it to materialize, so it is
     /// neither leader nor duplicate.
     #[test]
     fn branch_fused_comparison_is_not_numbered() {
@@ -1243,11 +1243,11 @@ mod tests {
         );
     }
 
-    /// An address rematerialises in one or two instructions, so a merge
+    /// An address rematerializes in one or two instructions, so a merge
     /// that holds it across a straight-line call is declined like any
     /// other.
     #[test]
-    fn address_across_a_call_outside_a_loop_is_rematerialised() {
+    fn address_across_a_call_outside_a_loop_is_rematerialized() {
         let mut f = dup_across_call();
         f.insts[2] = Inst::ImmData(8);
         f.insts[4] = Inst::ImmData(8);

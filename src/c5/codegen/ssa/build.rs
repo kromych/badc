@@ -111,7 +111,7 @@ enum PureKey {
     Imm(i64),
     /// `Inst::Imm` holding an f32 bit pattern, tagged f32. Kept apart
     /// from [`PureKey::Imm`]: the f32 mark changes the value's
-    /// materialisation, so an integer imm with an equal payload must
+    /// materialization, so an integer imm with an equal payload must
     /// not unify with it.
     ImmF32(i64),
     ImmData(i64),
@@ -930,7 +930,7 @@ impl SsaBuilder {
     /// per-arch emit short-circuits and writes nothing for the
     /// zero case. The walker emits one per function so the
     /// codegen's per-function state (`current_alloca_top`)
-    /// initialises consistently across SSA producers.
+    /// initializes consistently across SSA producers.
     pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
         self.push(Inst::AllocaInit(slot))
     }
@@ -1373,7 +1373,7 @@ impl SsaBuilder {
     ///     `(x ^ K1) ^ K2  ->  x ^ (K1^K2)`
     ///   The folds use `wrapping_add` / `wrapping_sub` to mirror
     ///   the SSA value model (a 64-bit bit pattern; per-type
-    ///   narrowing happens at materialisation). The original
+    ///   narrowing happens at materialization). The original
     ///   `lhs` BinopI may become dead and the existing DCE pass
     ///   skips it.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
@@ -2130,7 +2130,7 @@ impl SsaBuilder {
         self.last_def = NO_VALUE;
     }
 
-    /// Finalise the builder and return the populated [`FunctionSsa`].
+    /// Finalize the builder and return the populated [`FunctionSsa`].
     /// Panics if any block was opened but not terminated.
     ///
     /// Block ranges come from the `block_starts` / `block_ends`

@@ -41,10 +41,10 @@ Output mode -- pick at most one (defaults to a native binary):
                            main executable.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
-  --list-diagnostics       Print the diagnostic catalogue -- code,
+  --list-diagnostics       Print the diagnostic catalog -- code,
                            name, default level, class, groups -- and
                            exit.
-  --explain <selector>     Print one catalogue row and exit. The
+  --explain <selector>     Print one catalog row and exit. The
                            selector is a diagnostic name, an alias, or
                            a `B` code.
   --dump-headers           Print every bundled header to stdout and

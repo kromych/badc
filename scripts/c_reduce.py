@@ -24,7 +24,7 @@ failure is what is wanted, not one that keeps the program meaningful. Check
 what comes out before filing it.
 
 That matters most when the failure is a wrong answer rather than a crash.
-Deleting a `return` or an initialiser gives the program undefined behaviour,
+Deleting a `return` or an initializer gives the program undefined behavior,
 and two compilers are then free to disagree about it, so the reduction happily
 walks to a case that proves nothing. Make the test reject such a candidate --
 build the reference with `-Werror=return-type -Werror=uninitialized` and treat

@@ -2509,7 +2509,7 @@ fn scriptless_shared_link_uses_the_default_script() {
 /// A `-shared` link whose script discards the dynamic tables gets no
 /// dynamic sections.
 #[test]
-fn shared_link_honours_discarding_the_dynamic_tables() {
+fn shared_link_honors_discarding_the_dynamic_tables() {
     let script = parse_linker_script(
         r#"
 SECTIONS {

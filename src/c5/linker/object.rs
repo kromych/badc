@@ -867,7 +867,7 @@ pub enum NativeSymSection {
     /// into a single `.bss`-resident slot with the largest size
     /// and strictest alignment.
     Common,
-    /// `_Thread_local` storage in `.tdata` (initialised) or
+    /// `_Thread_local` storage in `.tdata` (initialized) or
     /// `.tbss` (zero-init). The merged image needs a PT_TLS
     /// segment and TPOFF / TLSGD relocs at call sites; the
     /// native linker fails fast on Tls references until that
@@ -1098,7 +1098,7 @@ pub struct NativeObject {
     /// aligns this object's base in the merged `.bss` to it.
     pub bss_align: usize,
     /// Concatenated bytes from every `.tdata*` section
-    /// (initialised TLS storage). Empty for objects without
+    /// (initialized TLS storage). Empty for objects without
     /// `_Thread_local` data.
     pub tls_data: Vec<u8>,
     /// Sum of every `.tbss*` section's size (zero-init TLS).
@@ -1126,7 +1126,7 @@ pub struct NativeObject {
     /// `.init_array` / `.fini_array` entries, each a constructor /
     /// destructor pointer resolved to this unit's `.text` offset. The
     /// linker collects these across units, orders them by priority, and
-    /// materialises the merged init/fini arrays the startup runtime
+    /// materializes the merged init/fini arrays the startup runtime
     /// walks. Empty for objects declaring no such functions.
     pub init_funcs: Vec<NativeInitFunc>,
     /// Dylib load paths the writer copied out of the unit's
@@ -1162,7 +1162,7 @@ pub struct NativeObject {
     pub tls_index_fixups: Vec<usize>,
     /// Mach-O TLV descriptor offsets (`NT_BADC_MACHO_TLV_DESC`), one
     /// `offset_in_block` per `_Thread_local` variable. The Mach-O
-    /// writer materialises a `__thread_vars` descriptor for each.
+    /// writer materializes a `__thread_vars` descriptor for each.
     pub macho_tlv_descriptors: Vec<u64>,
     /// Mach-O TLV fixups (`NT_BADC_MACHO_TLV_FIXUP`), each
     /// `(adrp_offset, descriptor_index)`: a `.text` byte offset and
@@ -1206,7 +1206,7 @@ pub struct NativeObject {
     /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
     /// global definitions and states the binding in its symbol tables.
     pub unique: Vec<String>,
-    /// Names this unit materialises the address of through an undefined
+    /// Names this unit materializes the address of through an undefined
     /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
     /// function whose address is taken, which shares that lowering.
     /// Undefined references are all typed `STT_NOTYPE`, so the linker
@@ -2969,7 +2969,7 @@ pub enum SectionFamily {
     /// Deliberately not merged: the section carries no image payload
     /// (`.symtab`, `.strtab`, `.comment`, `.group`, DWARF, `SHT_RELA`)
     /// or is an allocatable note the merged image does not reproduce.
-    /// Distinct from an unrecognised allocatable section, which is an
+    /// Distinct from an unrecognized allocatable section, which is an
     /// error rather than a silent drop.
     Discard,
 }
@@ -3163,7 +3163,7 @@ mod tests {
     /// trampoline emission, so every BL placeholder reaching an
     /// external import stays at imm26 = 0 and the matching
     /// `R_AARCH64_CALL26` reloc carries the import name. The
-    /// system linker (or our own native linker) materialises the
+    /// system linker (or our own native linker) materializes the
     /// PLT pool when producing the final image.
     #[test]
     fn relocatable_leaves_bl_placeholders_raw_on_aarch64() {
@@ -3739,7 +3739,7 @@ mod tests {
             (".rodata", SHT_PROGBITS, A, SectionFamily::RoData),
             (".rodata.cst16", SHT_PROGBITS, A, SectionFamily::RoData),
             (".data", SHT_PROGBITS, A | W, SectionFamily::Data),
-            // Initialised-then-readonly tables: writable for the
+            // Initialized-then-readonly tables: writable for the
             // loader, re-protected under PT_GNU_RELRO.
             (".data.rel.ro", SHT_PROGBITS, A | W, SectionFamily::RelRo),
             (
@@ -3880,7 +3880,7 @@ mod tests {
         assert_eq!(s.value, 4, "alignment from st_value");
     }
 
-    /// `_Thread_local` storage: clang emits initialised TLS
+    /// `_Thread_local` storage: clang emits initialized TLS
     /// variables into `.tdata` and zero-init ones into `.tbss`,
     /// with STT_TLS symbols pointing at those sections. The
     /// parser concatenates `.tdata*` bytes into `tls_data`,

@@ -1,13 +1,13 @@
 //! Phi-aware block liveness and SSA value interference.
 //!
 //! Liveness is the standard backward dataflow over the control-flow
-//! graph, with phi semantics modelled on the edges: a phi operand is
+//! graph, with phi semantics modeled on the edges: a phi operand is
 //! a use at the end of the corresponding predecessor (live-out of that
 //! predecessor), and every phi result of a block is a definition at
 //! that block's head -- one program point shared by all of them, since
 //! one parallel copy per edge writes them together. This is the
 //! lazy-copy view of out-of-SSA: the predecessor-exit move that
-//! materialises a phi operand executes on the edge, so the operand is
+//! materializes a phi operand executes on the edge, so the operand is
 //! live up to that edge and the result from the join onward.
 //!
 //! The interference query answers whether two SSA values are live at
@@ -1015,7 +1015,7 @@ impl SparseValueSet {
     /// enumeration costs the occupied words instead of the set's whole
     /// width. It earns its per-insertion bookkeeping only once that
     /// width is large: over a narrow set the full-width memset and scan
-    /// are contiguous and vectorised, and cost less.
+    /// are contiguous and vectorized, and cost less.
     fn new(n: usize, track: bool) -> Self {
         let words = n.div_ceil(64).max(1);
         SparseValueSet {
@@ -1179,7 +1179,7 @@ pub(crate) struct Interference {
 impl Interference {
     /// Nodes that interfere with `node`, each listed once. The row order
     /// is the order the sweep emitted the edges; both consumers (the
-    /// coalescer's membership test and the colourer's neighbour-colour
+    /// coalescer's membership test and the colourer's neighbor-color
     /// scan) read a row as a set.
     pub(crate) fn neighbors(&self, node: ValueId) -> &[ValueId] {
         let (a, b) = (
@@ -1995,7 +1995,7 @@ mod tests {
         assert!(g.neighbors(4).contains(&5));
     }
 
-    /// Every row is the neighbour set, each entry once and both
+    /// Every row is the neighbor set, each entry once and both
     /// directions present, whatever order and multiplicity the sweep
     /// emitted the pairs in. The CSR build sizes the rows off the raw
     /// pair count, so a repeated edge would otherwise show up twice.

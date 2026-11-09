@@ -425,7 +425,7 @@ pub(super) fn emit_binop(
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
     // FP arithmetic and comparison: operands in d-registers, spills
-    // reloaded into the FP scratches; no integer materialisation runs here.
+    // reloaded into the FP scratches; no integer materialization runs here.
     if fp_arith_enc(op).is_some() {
         // C99 6.3.1.8: the encoder follows the result's precision.
         let is_f32 = alloc.is_f32(v);

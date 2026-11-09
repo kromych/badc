@@ -1,7 +1,7 @@
 //! Tests for the table-driven x86-64 encoder.
 //!
 //! The golden cases run everywhere and lock exact encodings. The differential
-//! sweep and the seeded fuzzer cross-check the catalogue against the system
+//! sweep and the seeded fuzzer cross-check the catalog against the system
 //! assembler; both are gated on `BADC_FUZZ_ASM=1` and the presence of
 //! `clang` + `objdump`, so a bare `cargo test` skips them.
 
@@ -390,7 +390,7 @@ fn memory_rip_relative() {
 }
 
 #[test]
-fn widened_catalogue_encodings() {
+fn widened_catalog_encodings() {
     // Branch families: the Rel operand is the raw displacement (the asm
     // layer resolves labels); rel8 wins when the value fits, call has no
     // rel8 form. Register / memory indirect branches ride FF /2, /4.
@@ -591,7 +591,7 @@ fn code16_operand_size_prefix_matches_gnu_as() {
         e("movzx", Some(4), &[r(4, 4), r(4, 2)]),
         [0x66, 0x0f, 0xb7, 0xe4]
     );
-    // `B8+rd mov` is a width class the catalogue splits by immediate width;
+    // `B8+rd mov` is a width class the catalog splits by immediate width;
     // the 32-bit member still takes the prefix outside 32-bit mode. The 8-bit
     // member (`B0+rb`) is its own opcode and never does.
     assert_eq!(
@@ -820,8 +820,8 @@ fn modes_without_rex_reject_long_mode_forms() {
 }
 
 #[test]
-fn catalogue_is_sorted() {
-    // encode() binary-searches the catalogue by mnemonic, which is correct only
+fn catalog_is_sorted() {
+    // encode() binary-searches the catalog by mnemonic, which is correct only
     // if the generator emitted it sorted. Lock the invariant.
     let forms = super::super::isa_x86_table::FORMS;
     assert!(
@@ -1165,7 +1165,7 @@ mod differential {
         }
         if mn == "xchg" {
             // 86/87 encodes either operand order; the assembler and the
-            // catalogue may pick opposite reg/rm assignments of the same
+            // catalog may pick opposite reg/rm assignments of the same
             // exchange, so compare the operand multiset.
             ops.sort();
         }
@@ -1245,7 +1245,7 @@ mod differential {
     /// may be incomplete*: `bad` (the encoder produced bytes that decode to a
     /// different instruction than intended, or differ from the assembler's
     /// in length or prefixes) is the hard failure; `gap` (the assembler
-    /// accepts the instruction but the catalogue has no form for it) is
+    /// accepts the instruction but the catalog has no form for it) is
     /// reported, not fatal; `skip` is a case the assembler itself rejects;
     /// `divergent` is a case the two reference toolchains would encode
     /// differently, where badc follows GNU as ([`OPERAND_ORDER_DIVERGENT`]).
@@ -1386,7 +1386,7 @@ mod differential {
     }
 
     /// A random immediate that the effective operand width can express. An
-    /// out-of-range value is not a catalogue gap: the encoder refuses to
+    /// out-of-range value is not a catalog gap: the encoder refuses to
     /// truncate (the assembler silently does), so drawing one only removes the
     /// case from coverage and inflates the gap tally.
     fn rnd_imm(eff: u8, raw: u64) -> Opnd {
@@ -1449,7 +1449,7 @@ mod differential {
         }
     }
 
-    /// Every catalogued form instantiated at every width it admits, deduped:
+    /// Every cataloged form instantiated at every width it admits, deduped:
     /// the case list is derived from the tables themselves, so a form added by
     /// the generator or supplemented by hand is fuzzed without touching this
     /// file.
@@ -1528,20 +1528,20 @@ mod differential {
             t.skip,
             t.divergent
         );
-        // The sweep is derived from the catalogue, so it must be complete
+        // The sweep is derived from the catalog, so it must be complete
         // (every case has a form) as well as correct.
         assert_eq!(t.bad, 0, "table encodings disagree with the assembler");
         assert_eq!(
             t.gap, 0,
-            "sweep case not covered by the catalogue: {:?}",
+            "sweep case not covered by the catalog: {:?}",
             t.gaps
         );
     }
 
-    /// Seeded deterministic fuzzer: draw a random catalogue form, a random
+    /// Seeded deterministic fuzzer: draw a random catalog form, a random
     /// admissible width, and random operands (registers, memory shapes with
     /// displacement / SIB / RIP-relative, immediates), and cross-check the
-    /// encoding against the assembler. Form-driven, so a catalogue addition
+    /// encoding against the assembler. Form-driven, so a catalog addition
     /// is fuzzed without touching this list.
     #[test]
     fn seeded_fuzz() {
@@ -1635,10 +1635,10 @@ mod differential {
             t.bad, 0,
             "fuzzed table encodings disagree with the assembler"
         );
-        // The generator draws catalogue forms with operands each form admits,
+        // The generator draws catalog forms with operands each form admits,
         // so every case must encode. A gap means the draw is unrepresentable
         // (it once fed out-of-range immediates to byte operands) or the
-        // catalogue row is unreachable.
+        // catalog row is unreachable.
         assert_eq!(t.gap, 0, "fuzzed case not encodable: {:?}", t.gaps);
     }
 

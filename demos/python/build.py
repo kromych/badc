@@ -631,7 +631,7 @@ def _elf_section_sizes(d: bytes) -> dict | None:
 
 def _pe_section_sizes(d: bytes) -> dict | None:
     # PE: the COFF header at e_lfanew lists the section table. A section's
-    # on-disk SizeOfRawData is its initialised bytes; VirtualSize beyond that
+    # on-disk SizeOfRawData is its initialized bytes; VirtualSize beyond that
     # is the zero-fill (bss) tail the linker folds into the section, since a
     # PE image carries no separate .bss section.
     e_lfanew = struct.unpack_from("<I", d, 0x3C)[0]

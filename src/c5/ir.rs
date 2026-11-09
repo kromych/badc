@@ -398,7 +398,7 @@ pub(crate) enum Inst {
         /// `agg_descs[i]` by value; `None` for scalar / void.
         ret_agg: Option<u32>,
         /// Negative frame slot of the caller-allocated result
-        /// temporary an aggregate return materialises into: through the
+        /// temporary an aggregate return materializes into: through the
         /// host ABI when `ret_agg` is set, else through the c5
         /// out-pointer the call passes as `args[0]`. A frame slot rather
         /// than a `ValueId` so it survives value renumbering. `0` for a
@@ -658,7 +658,7 @@ pub(crate) enum Inst {
         fp_mask: FpMask,
     },
     /// SSA phi: at a join block where a promoted slot has more
-    /// than one reaching definition, mem2reg synthesises one of
+    /// than one reaching definition, mem2reg synthesizes one of
     /// these per slot to merge the predecessors' incoming
     /// values. `incoming` records one `(predecessor_block,
     /// reaching_value)` pair per predecessor in the same order
@@ -2241,7 +2241,7 @@ pub(crate) struct AggDesc {
     pub vector: bool,
 }
 
-/// A static-initializer data slot holding the address of a labelled
+/// A static-initializer data slot holding the address of a labeled
 /// code location in this function (GCC `&&label`). The label's address
 /// is a link-time constant, so the slot is filled by a relocation
 /// rather than by stores at the declaration point.
@@ -2769,7 +2769,7 @@ pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTre
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
 /// Windows `setjmp` macro (libc/include/setjmp.h). The AArch64 inline
-/// setjmp an in-process image takes is an intrinsic, recognised
+/// setjmp an in-process image takes is an intrinsic, recognized
 /// structurally by `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
     matches!(

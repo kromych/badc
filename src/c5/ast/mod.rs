@@ -743,7 +743,7 @@ pub(crate) struct RuntimeInitElement {
 }
 
 /// Initializer shape on a `Decl::Local`. C99 6.7.8 admits four
-/// flavours the AST distinguishes:
+/// flavors the AST distinguishes:
 /// * `None` -- no initializer; C99 6.7.8p10 leaves the value
 ///   indeterminate.
 /// * `Scalar(ExprId)` -- a single initializer expression for an
@@ -992,7 +992,7 @@ pub(crate) struct Ast {
     /// The labels whose address is taken, a computed `goto`'s targets.
     pub label_addrs: Vec<LabelId>,
     /// Forward-fixup table for `goto`. `goto_targets[id as usize]`
-    /// is `Some(StmtId)` once the matching labelled statement is
+    /// is `Some(StmtId)` once the matching labeled statement is
     /// seen; `None` while the label is still pending.
     pub goto_targets: Vec<Option<StmtId>>,
     /// The function type of a call's callee expression, keyed by its

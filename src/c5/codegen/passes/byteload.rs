@@ -210,7 +210,7 @@ struct Clear {
     to: usize,
 }
 
-/// Linearises an OR tree / Horner chain into byte terms.
+/// Linearizes an OR tree / Horner chain into byte terms.
 struct Assembly<'a> {
     func: &'a FunctionSsa,
     terms: Vec<Term>,
@@ -233,7 +233,7 @@ impl Assembly<'_> {
                 self.interior.push(node);
                 self.walk(lhs, shift, depth + 1) && self.walk(rhs, shift, depth + 1)
             }
-            // `acc | 0` off a zero-initialised Horner accumulator.
+            // `acc | 0` off a zero-initialized Horner accumulator.
             Some(Inst::BinopI {
                 op: BinOp::Or,
                 lhs,

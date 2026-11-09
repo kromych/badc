@@ -1,7 +1,7 @@
 // C11 6.7.5: `_Alignas` on a block-scope declarator places the object on
 // the requested boundary -- a static local in the data image, an
 // automatic one in the over-aligned frame region -- and a thread-local
-// keeps the 8-byte boundary its block is placed on. Odd-sized neighbours
+// keeps the 8-byte boundary its block is placed on. Odd-sized neighbors
 // keep the running offsets off every wide boundary, so a dropped request
 // shows up in the address. Returns 0, distinct non-zero per failure.
 

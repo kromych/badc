@@ -3,7 +3,7 @@
 //! Mirrors the structure of [`super::aarch64`]. Per-function code
 //! generation routes through [`super::ssa::shadow::produce_ssa_funcs`]
 //! + [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
-//! module owns the encoder catalogue, the start-stub, the PLT
+//! module owns the encoder catalog, the start-stub, the PLT
 //! trampoline emit, and the post-pass fixup walks that the SSA emit
 //! defers to.
 //!
@@ -324,7 +324,7 @@ pub(crate) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 }
 
 /// `mov r32, r32` (89 /r without REX.W). Writing a 32-bit register
-/// zero-extends it to the full 64-bit register, so this materialises
+/// zero-extends it to the full 64-bit register, so this materializes
 /// `dst = src & 0xffffffff` in one instruction with no scratch. The
 /// REX prefix is emitted only when either operand is a high (r8..r15)
 /// register; for low registers the 32-bit form needs no REX so the
@@ -497,7 +497,7 @@ pub(crate) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 
 /// `MOV DWORD PTR [base + disp], imm32` -- 32-bit immediate store.
 /// Encoding: `C7 /0 id` (with REX only when `base` needs the high
-/// bank). Used to initialise the System V `__va_list_tag`
+/// bank). Used to initialize the System V `__va_list_tag`
 /// `gp_offset` / `fp_offset` (4-byte each) in `va_start`.
 pub(crate) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
     super::table::encode_into(
@@ -508,7 +508,7 @@ pub(crate) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm
     );
 }
 
-/// `op [base + disp], imm` -- a memory-immediate ALU operation. The catalogue
+/// `op [base + disp], imm` -- a memory-immediate ALU operation. The catalog
 /// selects the shortest form (the `83` imm8 group when the value fits a signed
 /// byte, else `81`).
 pub(crate) fn emit_mi(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp: i32, imm: i32) {
@@ -631,7 +631,7 @@ pub(crate) fn emit_add_rsp(code: &mut Vec<u8>, imm: u32) {
 /// `op dst, src` -- a register-register form. A generic shape emitter the native
 /// lowering calls in place of a per-instruction wrapper. The `r/m, r` direction
 /// (ADD/SUB/AND/OR/XOR/CMP/TEST/MOV: `dst` is r/m, `src` is reg) and the `r, r/m`
-/// direction (IMUL) are both selected by the catalogue from the operand shape.
+/// direction (IMUL) are both selected by the catalog from the operand shape.
 pub(crate) fn emit_rr(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg, src: Reg) {
     super::table::encode_into(code, mnem, Some(width), &[rw(dst, width), rw(src, width)]);
 }
@@ -1327,7 +1327,7 @@ pub(crate) fn emit_cdq(code: &mut Vec<u8>) {
 //      from the immediate path.
 
 /// `op dst, cl` -- a shift / rotate by the count in `cl` (the `D3` group; the
-/// reg field is the /N digit the catalogue selects from the mnemonic).
+/// reg field is the /N digit the catalog selects from the mnemonic).
 pub(crate) fn emit_shift_cl(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg) {
     super::table::encode_into(code, mnem, Some(width), &[rw(dst, width), rw(Reg::RCX, 1)]);
 }
@@ -1342,7 +1342,7 @@ pub(crate) fn emit_shift_ri(code: &mut Vec<u8>, mnem: Mnem, width: u8, dst: Reg,
     );
 }
 
-// ---- Immediate-form ALU (`ADD r/m, imm`, `SUB r/m, imm`, ...). The catalogue
+// ---- Immediate-form ALU (`ADD r/m, imm`, `SUB r/m, imm`, ...). The catalog
 //      selects the shortest form: the `83` imm8 group when the value fits a
 //      signed byte, the accumulator form for `rax`, else the `81` imm32 group.
 

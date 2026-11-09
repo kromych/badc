@@ -5,7 +5,7 @@
 // and an unnamed bit-field takes it too. The PE targets take the MS layout
 // (clang for the windows-msvc triples), where an unnamed bit-field raises
 // the aggregate's alignment as on Linux/AArch64. Every write reads back
-// without disturbing a neighbour. Each failure returns a distinct code.
+// without disturbing a neighbor. Each failure returns a distinct code.
 
 #include <stddef.h>
 #include <string.h>

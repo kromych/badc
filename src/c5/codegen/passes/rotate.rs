@@ -1,6 +1,6 @@
-//! Recognise `(x >> c) | (x << (W - c))` shapes and fold them to a
+//! Recognize `(x >> c) | (x << (W - c))` shapes and fold them to a
 //! single `Ror`. Runs after `inline` so post-inline rotates
-//! exposed by parameter substitution become recognisable. Only the
+//! exposed by parameter substitution become recognizable. Only the
 //! 64-bit form (`W == 64`) is matched; the per-arch emit rotates the
 //! full register.
 //!
@@ -135,7 +135,7 @@ fn resolve_shl_count(func: &FunctionSsa, count: &ShiftAmount) -> Option<ShlCount
     }
 }
 
-/// Attempt to recognise the rotate pattern at the OR named by
+/// Attempt to recognize the rotate pattern at the OR named by
 /// `or_idx`. Returns `Some((x, by))` on a match. A constant count
 /// lands in `1..=63`.
 fn match_rotate(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)> {
@@ -206,7 +206,7 @@ fn match_rotate(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)
     try_one(*lhs, *rhs).or_else(|| try_one(*rhs, *lhs))
 }
 
-/// Walk every function, rewrite recognised rotates to `Ror`.
+/// Walk every function, rewrite recognized rotates to `Ror`.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let n = func.insts.len();

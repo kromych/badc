@@ -1,6 +1,6 @@
 //! Diagnostic helpers (warnings, errors, type-mismatch checks).
 //!
-//! Centralises the gcc / clang-shape `<file>:<line>: <kind>: <msg>`
+//! Centralizes the gcc / clang-shape `<file>:<line>: <kind>: <msg>`
 //! formatting plus the lax type-compatibility predicate that
 //! [`Compiler::type_warning`] uses to decide whether a mixed
 //! pointer / integer / struct assignment is worth surfacing.
@@ -294,7 +294,7 @@ impl Compiler {
                 !infinite || self.stmt_has_loop_break(*body)
             }
             // Switch / Labeled / Case / Default: control flow not
-            // modelled precisely. Treat as not falling through so the
+            // modeled precisely. Treat as not falling through so the
             // diagnostic never fires on a function that uses them.
             _ => false,
         }

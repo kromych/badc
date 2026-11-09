@@ -754,7 +754,7 @@ int main(void) { write_db7(read_db7()); return 0; }
 fn inline_asm_lar_lsl_r32_from_r16_source_encode_0f02_0f03() {
     // `lar`/`lsl` read a 16-bit selector into a 32-bit destination. A source
     // cast to 16 bits (`lar %[ss], %[ar]` with `[ss] "rm" ((unsigned short)x)`)
-    // is a 16-bit register or `m16`, and the catalogue's `r16,r/m16` and
+    // is a 16-bit register or `m16`, and the catalog's `r16,r/m16` and
     // `r32,r/m32` forms both miss. GNU as encodes `lar %bx,%eax` as
     // `0F 02 C3` (no `66` prefix, the 32-bit destination sets the operand
     // size); `lsl` is `0F 03 /r`.
@@ -2662,7 +2662,7 @@ fn block_static_struct_array_extent_matches_reservation() {
     // `count * sizeof(elem)` bytes, which is not a multiple of 8 here.
     // The emission record must claim that extent and no more: an
     // extent rounded past the reservation runs the `.rodata` carve
-    // into the neighbouring object or into the padding the packed
+    // into the neighboring object or into the padding the packed
     // layout records ahead of the aligned global.
     let src = "\
         struct pair { char c[3]; };\n\
@@ -2685,7 +2685,7 @@ fn block_static_struct_array_extent_matches_reservation() {
         );
         assert!(
             bytes.windows(18).any(|w| w == b"carve stays intact"),
-            "the neighbouring carved object must keep its bytes"
+            "the neighboring carved object must keep its bytes"
         );
         assert!(
             bytes.windows(4).any(|w| w == 0x11223344u32.to_le_bytes()),
@@ -4387,7 +4387,7 @@ fn asm_lsl_encodes_32bit_destination_form() {
 #[test]
 fn thread_local_storage_round_trips_through_et_rel() {
     // `_Thread_local` storage now rides the native ET_REL object:
-    // elf_reloc emits `.tdata` (initialised slice) + `.tbss`
+    // elf_reloc emits `.tdata` (initialized slice) + `.tbss`
     // (zero-fill remainder), and `parse_native_elf` concatenates
     // them back into `tls_data` / `tls_bss_size`. Verifies the
     // bytes survive the write -> parse round-trip; the link-time
@@ -4421,11 +4421,11 @@ fn thread_local_storage_round_trips_through_et_rel() {
         program.tls_data.len(),
         "round-tripped TLS size (tdata + tbss) must match the source's tls_data",
     );
-    // `counter = 7` is a 4-byte initialised int; its little-endian
+    // `counter = 7` is a 4-byte initialized int; its little-endian
     // image leads the `.tdata` bytes.
     assert!(
         obj.tls_data.starts_with(&7i32.to_le_bytes()),
-        "initialised TLS byte image must round-trip; got {:?}",
+        "initialized TLS byte image must round-trip; got {:?}",
         obj.tls_data,
     );
 }
@@ -4495,7 +4495,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     );
     assert!(
         merged.tls_data.starts_with(&7i32.to_le_bytes()),
-        "initialised TLS image must survive the merge"
+        "initialized TLS image must survive the merge"
     );
     let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
@@ -4530,7 +4530,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     let (p_filesz, p_memsz) = pt_tls.expect("executable must carry a PT_TLS segment");
     assert_eq!(
         p_filesz, program.tls_init_size as u64,
-        "PT_TLS p_filesz must equal the initialised TLS image size"
+        "PT_TLS p_filesz must equal the initialized TLS image size"
     );
     assert_eq!(
         p_memsz,
@@ -4905,7 +4905,7 @@ fn macho_tlv_descriptors_round_trip_through_et_rel() {
     // `.note.badc` NT_BADC_MACHO_TLV_DESC / NT_BADC_MACHO_TLV_FIXUP
     // records. parse_native_elf recovers them and link_native_objects
     // rebases the fixups into the merged `.text`, so the Mach-O writer
-    // materialises the `__thread_vars` descriptors.
+    // materializes the `__thread_vars` descriptors.
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -7926,7 +7926,7 @@ fn aarch64_lo12_relocations_all_reach_the_same_target() {
     // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] into
     // the matching load/store imm12, which the instruction scales back
     // by its access size. Every form therefore addresses the same
-    // byte. A relocation matched under a neighbouring type's arm is
+    // byte. A relocation matched under a neighboring type's arm is
     // left unpatched or scaled by the wrong size, and this comparison
     // catches both.
     use crate::c5::linker::{
@@ -8238,7 +8238,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
     // `.word gdata` / `.xword gdata` inside `.text`: GNU ld resolves
     // both against the symbol's runtime address. The value depends on
     // the load address, so the merge pass parks them and the ET_EXEC
-    // writer materialises them.
+    // writer materializes them.
     use crate::c5::linker::object::{NativeReloc, NativeSymbol};
     use crate::c5::linker::{NativeMachine, NativeSymSection};
     use crate::c5::linker::{link_native_objects, write_executable_elf64};
@@ -8882,7 +8882,7 @@ fn variable_aligned_sets_where_alignas_only_raises() {
         );
     }
     // Automatic storage takes the set alignment too: a type aligned past
-    // what a frame can realise is placeable once the variable lowers it.
+    // what a frame can realize is placeable once the variable lowers it.
     let wide = "struct __attribute__((aligned(8192))) page { char c[8192]; };\n";
     assert!(
         unit(&format!(
@@ -13395,7 +13395,7 @@ fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
 fn x64_asm_m_operand_on_a_global_is_rip_relative() {
     // `call *%[op]` on a file-scope object encodes `FF 15 disp32` with a
     // PC-relative relocation, gcc's form and the one an indirect-call patcher
-    // recognises. gcc's addend is the field's offset in the object less the
+    // recognizes. gcc's addend is the field's offset in the object less the
     // 4-byte end skew.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
@@ -14930,7 +14930,7 @@ fn two_tu_extern_data_links_through_own_linker() {
     }
 }
 
-/// A unit that materialises an imported function's address names it in
+/// A unit that materializes an imported function's address names it in
 /// `NT_BADC_EXTERN_DATA` -- that lowering is the extern-data one, and
 /// no relocation kind separates the two on aarch64. The note names the
 /// symbol and the link reads one set over every unit, so a sibling

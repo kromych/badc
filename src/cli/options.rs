@@ -38,10 +38,10 @@ pub(crate) enum Mode {
     /// linking; the archive is meant to be passed back as
     /// input to a future link.
     BuildArchive,
-    /// `--list-diagnostics` -- print the diagnostic catalogue and
+    /// `--list-diagnostics` -- print the diagnostic catalog and
     /// exit. Takes no source file.
     ListDiagnostics,
-    /// `--explain <selector>` -- print one catalogue row and exit.
+    /// `--explain <selector>` -- print one catalog row and exit.
     /// The selector is a name, an alias, or a `B` code.
     Explain,
     /// `--dump-native-link` -- parse a list of native ELF

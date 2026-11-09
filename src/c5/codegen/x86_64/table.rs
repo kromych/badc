@@ -1,6 +1,6 @@
 //! Table-driven x86-64 encoder.
 //!
-//! The instruction catalogue in [`super::isa_x86_table`] is a compact set of
+//! The instruction catalog in [`super::isa_x86_table`] is a compact set of
 //! [`Form`]s generated from an external instruction-set database (see
 //! `tools/gen_isa.py`); this module interprets a form against concrete
 //! operands to produce machine bytes. It is the single encoder shared by the
@@ -10,7 +10,7 @@
 //! Operand order is Intel (`dst, src`), matching the database signatures. The
 //! caller passes operands already resolved to architectural register numbers.
 
-#![allow(dead_code)] // Catalogue breadth runs ahead of lowering coverage.
+#![allow(dead_code)] // Catalog breadth runs ahead of lowering coverage.
 
 use alloc::format;
 use alloc::string::String;
@@ -150,7 +150,7 @@ pub(crate) enum RegField {
     NoReg,
 }
 
-/// One catalogue entry: an operand pattern plus its encoding.
+/// One catalog entry: an operand pattern plus its encoding.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Form {
     /// The mnemonic as an enum, for the native emitter's type-safe, integer
@@ -268,7 +268,7 @@ fn imm_field_bytes(c: ImmC, opw: u8) -> Option<u8> {
     })
 }
 
-/// The width class of a form's operand slot as `mode` reads it. The catalogue
+/// The width class of a form's operand slot as `mode` reads it. The catalog
 /// is generated for long mode, where the stack and near-branch group takes a
 /// promoted 64-bit operand size; in every other mode the group follows the
 /// mode default, which is the `v` class.
@@ -288,12 +288,12 @@ fn legacy66(f: &Form) -> bool {
 }
 
 /// Whether the operand-size prefix selects the form's operand width even
-/// though no slot carries the `v` class. The catalogue pins a width the
+/// though no slot carries the `v` class. The catalog pins a width the
 /// architecture leaves to that class in three places: an extending move's
 /// destination (`movzx r32, r/m16`), a fixed accumulator wider than a byte
 /// (`in eax, dx`), and a register-in-opcode group whose members differ only
 /// by operand size (`B8+rd mov`, whose immediate width follows it, so the
-/// catalogue splits the group into `iw` / `id` / `iq` members). All three
+/// catalog splits the group into `iw` / `id` / `iq` members). All three
 /// name the operation width.
 fn pinned_width(f: &Form) -> bool {
     let slot = |p: Option<&OpPat>| match p {
@@ -351,7 +351,7 @@ fn same_opcode(a: &Form, b: &Form) -> bool {
         && mandatory(a) == mandatory(b)
 }
 
-/// Whether the catalogue spells a `v` width class out member by member under
+/// Whether the catalog spells a `v` width class out member by member under
 /// this form's opcode, instead of naming the class (`and r/m16, imm16` /
 /// `r/m32, imm32` / `r/m64, imms32`, all `81 /4`). The operand-size prefix
 /// still selects between such members, so the form is operand-sized. The
@@ -458,7 +458,7 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
 /// widest register / memory operand, else the mode default. An operand a
 /// `mem` slot of unstated size consumes carries no width, as the slot carries
 /// none. An immediate-only instruction (`push $imm`) has neither, and the
-/// assembler's default-64 operation width for that group is not modelled, so
+/// assembler's default-64 operation width for that group is not modeled, so
 /// an out-of-range immediate there stays a diagnostic instead of being
 /// reduced.
 fn form_width(f: &Form, ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> (u8, bool) {
@@ -729,7 +729,7 @@ fn form_matches(
 
 impl Mnem {
     /// The mnemonic for a token, or `None`. Used only by the inline-asm parser
-    /// (the one place a mnemonic arrives as text); the catalogue is sorted by
+    /// (the one place a mnemonic arrives as text); the catalog is sorted by
     /// name, so this binary-searches.
     pub(crate) fn from_name(name: &str) -> Option<Mnem> {
         let forms = super::isa_x86_table::FORMS;
@@ -760,7 +760,7 @@ fn describe_operands(ops: &[Opnd]) -> String {
 
 /// Encode one instruction. `width_override` forces the operation width (an
 /// AT&T size suffix); otherwise it comes from the operands. Among the forms
-/// that match, the shortest encoding is chosen (ties broken by catalogue
+/// that match, the shortest encoding is chosen (ties broken by catalog
 /// order), which deterministically reproduces the assembler's preference for
 /// the `83 /r` imm8 short form, the accumulator immediate forms, and the like.
 pub(crate) fn encode(
@@ -810,7 +810,7 @@ pub(crate) fn encode_in(
 
 /// Encode one instruction directly into `code`, no heap allocation. The native
 /// emitter's migrated families use this: the operands are always a form the
-/// catalogue covers, so a failure is a codegen invariant violation and panics.
+/// catalog covers, so a failure is a codegen invariant violation and panics.
 pub(crate) fn encode_into(
     code: &mut Vec<u8>,
     mnem: Mnem,
@@ -846,7 +846,7 @@ pub(crate) fn encode_into_disp32(
 /// The shortest encoding of `mnem` for `ops` with its immediate's byte count,
 /// plus whether any form matched (to
 /// distinguish "no such form" from "form matched but not encodable"). The
-/// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
+/// catalog is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
 ///
 /// Forms of equal length are ranked by immediate field width, which is how
@@ -883,7 +883,7 @@ fn encode_best(
 }
 
 /// Forms the external instruction database omits, encoded by the same
-/// interpreter as the generated catalogue. `inc` / `dec` on a 16- or 32-bit
+/// interpreter as the generated catalog. `inc` / `dec` on a 16- or 32-bit
 /// register have a one-byte `+r` encoding outside 64-bit mode, where those
 /// opcodes are the REX prefix instead; the database carries only the
 /// mode-independent `FF /0` and `FF /1`. The segment-descriptor loads
@@ -916,7 +916,7 @@ fn encode_best(
 /// width and drops the 16-bit destination row, leaving the group without the
 /// member that marks it a width class; the supplement spells it with the `66` a
 /// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
-/// `retf imm16` (CA) are absent from the generated catalogue; the immediate
+/// `retf imm16` (CA) are absent from the generated catalog; the immediate
 /// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
     Form {
@@ -1410,7 +1410,7 @@ fn encode_form(
     // Operand-size prefix: `66` selects the width class member that is not the
     // mode default. A form whose widths are all fixed (lldt r16/m16, in al/dx)
     // has its operand size baked into the opcode and takes no prefix, unless
-    // the catalogue spells the same opcode at another width; a legacy-map form
+    // the catalog spells the same opcode at another width; a legacy-map form
     // carrying `66` in `pp` is the 16-bit member of such a class, so the
     // prefix comes from this rule instead of from `pp`.
     let pp66 = legacy66(f);
@@ -1439,7 +1439,7 @@ fn encode_form(
     // exclusion below leaves unprefixed.
     let desc_table = pseudo_descriptor_widths(f.mnem, mode).is_some();
     // The prefix applies only when the operation width differs from the mode
-    // default and is not 64-bit, which REX.W selects; the catalogue scan sits
+    // default and is not 64-bit, which REX.W selects; the catalog scan sits
     // behind that so it stays off the path every other instruction takes.
     let selects = fopw != dflt && fopw != 8;
     // A stack-group form with an established width is operand-sized even when
@@ -1616,7 +1616,7 @@ fn encode_form(
             }
         };
         // A relative offset's field is as wide as the branch displacement, not
-        // as the immediate class the catalogue names for long mode.
+        // as the immediate class the catalog names for long mode.
         match f.ops.first() {
             Some(&OpPat::Rel(sz)) if f.ops.len() == 1 => {
                 let n = rel_bytes(sz, f, fopw);

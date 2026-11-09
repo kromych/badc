@@ -2,7 +2,7 @@
 
 badc compiles the [curl](https://curl.se) 8.23.0 library from source and
 builds it three ways -- a static archive, a shared library, and an executable
-that links against each -- plus a fourth flavour that links a badc-compiled
+that links against each -- plus a fourth flavor that links a badc-compiled
 client against the platform's **installed** libcurl to prove the frontend
 matches the OS ABI.
 
@@ -10,7 +10,7 @@ The vendored library is trimmed to no external dependencies: HTTP, `file://`,
 and the WebSocket / URL / multi / easy APIs, with the threaded resolver and
 IPv6 on. HTTPS is provided by [Mbed TLS](https://github.com/Mbed-TLS/mbedtls)
 3.6, compiled by badc in its default configuration, when the TLS lane is built
-(`USE_MBEDTLS`); the system-libcurl flavour gets HTTPS from the OS's own TLS
+(`USE_MBEDTLS`); the system-libcurl flavor gets HTTPS from the OS's own TLS
 backend. The other protocols (FTP, SMTP, LDAP, ...) are compiled out via the
 `CURL_DISABLE_*` set.
 
@@ -33,11 +33,11 @@ TLS's `library/` and `include/` trees in `mbedtls/`. Committed alongside:
   escape round-tripping, the string list, a `file://` transfer, and -- when a
   base URL is passed -- an `http(s)://` fetch used by the loopback test.
 * `curl_syslink.h` -- `#pragma dylib` / `#pragma binding` bindings for the
-  system-libcurl flavour.
+  system-libcurl flavor.
 
-## Build flavours
+## Build flavors
 
-The smoke builds every flavour at `-O0` and `-O`:
+The smoke builds every flavor at `-O0` and `-O`:
 
 * **static** -- `badc --ar` bundles the objects into `libcurl.a`; the driver
   links it with `-L/-l`.

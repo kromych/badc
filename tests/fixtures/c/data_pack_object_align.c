@@ -1,6 +1,6 @@
 // snapshot-flags: -c
 // Static data packs at each object's own alignment. The page-aligned
-// object does not push its neighbours onto page boundaries, and the
+// object does not push its neighbors onto page boundaries, and the
 // objects the data prune drops leave no padding behind. The relocation
 // addends below are the packed offsets, so this fixture locks the
 // layout the compaction produces.

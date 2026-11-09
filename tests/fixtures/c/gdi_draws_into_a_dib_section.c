@@ -98,7 +98,7 @@ int main(void) {
     if (SetPixel(dc, 63, 0, green) == (COLORREF)-1 || GetPixel(dc, 63, 0) != green)
         return 9;
 
-    // Text: a transparent run in the text colour inks pixels of its box.
+    // Text: a transparent run in the text color inks pixels of its box.
     font = CreateFontA(16, 0, 0, 0, FW_BOLD, 0, 0, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH, "Arial");
     if (!font)
@@ -157,7 +157,7 @@ int main(void) {
     }
 
     // Gradients: gdi32's and msimg32's fill the rectangle between the two
-    // vertex colours.
+    // vertex colors.
     {
         TRIVERTEX v[2] = {{0, 48, 0x0000, 0x0000, 0x0000, 0}, {16, 50, 0xff00, 0xff00, 0xff00, 0}};
         GRADIENT_RECT r = {0, 1};

@@ -73,7 +73,7 @@ Disassembly of section .text:
                	leave
                	retq
 
-<short_output_keeps_neighbours>:
+<short_output_keeps_neighbors>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

@@ -57,7 +57,7 @@ pub trait Host {
     /// Look up `name` in the host environment. None on miss.
     fn getenv(&mut self, name: &str) -> Option<String>;
 
-    /// Set `name` to `value`, honouring `overwrite`.
+    /// Set `name` to `value`, honoring `overwrite`.
     fn setenv(&mut self, name: &str, value: &str, overwrite: Overwrite);
 
     /// `dlopen` -- load a shared library at runtime. `path = None`
@@ -295,7 +295,7 @@ mod std_host {
         fn setenv(&mut self, name: &str, value: &str, overwrite: Overwrite) {
             if overwrite == Overwrite::Force || std::env::var(name).is_err() {
                 // SAFETY: env mutation is process-global; tests must
-                // serialise via a Mutex on the variable name. The
+                // serialize via a Mutex on the variable name. The
                 // 2024 edition flags this as unsafe to surface that
                 // exposure.
                 unsafe { std::env::set_var(name, value) };
@@ -382,7 +382,7 @@ mod std_host {
         // dlopen(NULL) we return `GetModuleHandleA(NULL)` -- the
         // main process handle -- which lets `GetProcAddress` look up
         // symbols in the executable itself. POSIX's "search every
-        // loaded library" behaviour is not reproduced; callers that
+        // loaded library" behavior is not reproduced; callers that
         // need a libc symbol should `dlopen("ucrtbase.dll")`
         // explicitly. dlerror is approximated via `GetLastError +
         // FormatMessageA`.

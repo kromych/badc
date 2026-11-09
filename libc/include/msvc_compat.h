@@ -111,7 +111,7 @@
 
 // Function-like decorator macros (`__pragma(x)`, `_Pre_satisfies_(x)`,
 // ...) expand to nothing. `__declspec` is left to the compiler, which
-// honours align, thread, selectany, noreturn and dllimport / dllexport.
+// honors align, thread, selectany, noreturn and dllimport / dllexport.
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
@@ -139,7 +139,7 @@
 // `#pragma comment(lib, "...")` is an MSVC linker directive.
 // badc resolves imports through `#pragma binding(...)` (emitted
 // below) and the preprocessor emits an unknown-pragma warning
-// for the unrecognised spelling, so sources retaining it
+// for the unrecognized spelling, so sources retaining it
 // compile cleanly.
 
 // ---- kernel32 / msvcrt bindings -----------------------------

@@ -17,7 +17,7 @@
 //!    and a coalescing hint from the return / parameter / phi /
 //!    call-argument / call-result hint passes.
 //! 5. Color the graph greedily (`color_graph`): for each node forbid
-//!    the registers held by its live neighbours, then take the hinted
+//!    the registers held by its live neighbors, then take the hinted
 //!    register if free, else a free register of the right bank
 //!    (caller-saved first unless the value must survive a call), else
 //!    a fresh spill slot. Pre-coloring of call arguments into the host
@@ -118,7 +118,7 @@ pub(crate) struct Allocation {
     /// coalescing hints read it to avoid sending a value that outlives
     /// a call into a caller-saved register the call would clobber.
     pub last_use: Vec<u32>,
-    /// For `BinopI(Shr, X, K)` insts the allocator recognised as
+    /// For `BinopI(Shr, X, K)` insts the allocator recognized as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
     /// {32, 48, 56}), the original pre-narrow value (the Shl's
     /// lhs). NO_VALUE for any other inst. The emit pass collapses
@@ -134,11 +134,11 @@ pub(crate) struct Allocation {
     pub sxtw_k: Vec<i64>,
     /// True for `Binop` / `BinopI` comparison insts (integer and FP),
     /// and on x86-64 for integer loads ([`zero_testable_load`]),
-    /// that the allocator recognised as the source of a `Bz` / `Bnz`
+    /// that the allocator recognized as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that terminator
     /// and every instruction between the compare and the block's end
     /// leaving the host flags untouched. The emit pass skips the
-    /// `cset` / `setcc` materialisation and the terminator emits
+    /// `cset` / `setcc` materialization and the terminator emits
     /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
     /// the compare set. The compare's value keeps its place: on
     /// x86_64 the destination register doubles as the operand-staging
@@ -160,7 +160,7 @@ pub(crate) struct Allocation {
     pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
-    /// pick site. The pick-reg path honours the hint only when it
+    /// pick site. The pick-reg path honors the hint only when it
     /// satisfies the live-across-call constraint; unsatisfied
     /// hints are ignored, so a hint never compromises correctness.
     /// `None` for any value with no preference. Populated by the
@@ -286,7 +286,7 @@ impl Allocation {
 }
 
 /// Whether `inst`'s lowering leaves the host flags intact. On x86_64
-/// every integer ALU op writes them, a zero immediate materialises as
+/// every integer ALU op writes them, a zero immediate materializes as
 /// `xor r, r`, and the unsigned FP converts test the sign bit with
 /// flag-setting arithmetic; scalar SSE and the mov / lea / movzx
 /// families do not. On aarch64 only the comparisons reach a
@@ -776,7 +776,7 @@ pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
     matches!(op, AtomicRmwOp::And | AtomicRmwOp::Or | AtomicRmwOp::Xor)
 }
 
-/// x86-64 register preferences the colorer honours among free caller-saved
+/// x86-64 register preferences the colorer honors among free caller-saved
 /// registers. `apart[root]` keeps the result of a non-commutative `op dst,
 /// rhs` (`sub`, `subsd`, `divsd`, a rotate) off the register of `rhs`, which
 /// the emitter would copy aside first. A rotate reads a register count in
@@ -1236,10 +1236,10 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 }
 
 /// Which entries of `RegBanks::fp_scratch` the body can write. The
-/// handlers stage spilled FP destinations and materialised operands
+/// handlers stage spilled FP destinations and materialized operands
 /// through the first, break FP move cycles / build sign masks / narrow
 /// f64->f32 through the second, and the FMA lowering uses the third as
-/// its accumulator slot. Every use of the first two materialises or
+/// its accumulator slot. Every use of the first two materializes or
 /// produces an FP value, so any FP-classed value implies the demand.
 /// A scratch the target's ABI marks callee-saved (the AAPCS64
 /// d8..d15 tail taken under `-ffixed-`, or a Win64 fallback off a
@@ -1386,7 +1386,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // allocated member of a class, then routes every other member to
     // the same `Place`. For a function with no phis every class is a
     // singleton and the lookup degenerates to identity, so the path
-    // collapses to today's per-value behaviour. Class-level
+    // collapses to today's per-value behavior. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
@@ -1422,7 +1422,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
     // Build the interference graph over phi-congruence-class roots and
-    // colour it. Two values ever simultaneously live (per CFG
+    // color it. Two values ever simultaneously live (per CFG
     // liveness) get distinct registers; a value with no free register
     // in its bank spills. Unlike a pc-interval linear scan this models
     // a value live across a back-edge passthrough block, whose live
@@ -1602,7 +1602,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 & super::super::x86_64::emit::bound_scratch_candidates(asm, fixed);
         }
     }
-    // Recognise the c5 sign-narrow shape:
+    // Recognize the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
     // The shift's rhs may arrive either as a `BinopI` (with the
     // immediate folded into the inst) or as a `Binop` whose `rhs`
@@ -1799,12 +1799,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             use_counts[c as usize] = 0;
         }
     }
-    // Recognise comparison-feeding-branch sites. The terminator's cond
+    // Recognize comparison-feeding-branch sites. The terminator's cond
     // must be a Binop / BinopI comparison defined in the same block
     // with the terminator as its single consumer, and every following
     // instruction the emit produces code for must leave the host flags
     // untouched, so the branch reads the flags the comparison set. The
-    // emit drops the `cset` / `setcc` materialisation and the
+    // emit drops the `cset` / `setcc` materialization and the
     // terminator branches on the condition directly (`b.cond` / `jcc`,
     // with the per-arch FP forms covering the unordered cases). The
     // phi predecessor moves emitted between the body and the
@@ -1815,7 +1815,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let flags_survive = |inst: &Inst| flags_survive(inst, is_x86);
     // Whether the edge `pred -> succ` carries an FP-classed phi income
     // that is the integer constant zero: its predecessor-exit move
-    // re-materialises the bits through the integer scratch, which on
+    // re-materializes the bits through the integer scratch, which on
     // x86_64 is a flag-writing `xor`.
     let fp_zero_phi_income =
         |succ: super::super::ir::BlockId, pred: super::super::ir::BlockId| -> bool {
@@ -2368,7 +2368,7 @@ fn verify_allocation(
 ///   value in an FP register, integer value in an integer register or
 ///   slot).
 /// * FP phi class: a phi's register class must match every operand's,
-///   apart from the float constant the phi lowering re-materialises.
+///   apart from the float constant the phi lowering re-materializes.
 /// * Block coverage: no instruction or terminator inside a block reads a
 ///   value covered by no block's `inst_range`.
 /// * Asm outputs: an `AsmOut` follows its statement in its block.
@@ -2484,7 +2484,7 @@ fn check_allocation(
             }
             // `result_kind` classes every `Imm` in the integer file, so a
             // float constant reaches an FP phi integer-classed;
-            // `emit_phi_predecessor_moves` re-materialises it into the FP
+            // `emit_phi_predecessor_moves` re-materializes it into the FP
             // destination rather than copying within a file. An
             // indeterminate income takes no move.
             if super::emit_common::phi_income_reads_no_place(func, *kind, src) {
@@ -2685,7 +2685,7 @@ pub(crate) struct NodeConstraints {
     /// register would be clobbered; it must take a callee-saved
     /// register or spill.
     pub must_callee: bool,
-    /// Preferred register, honoured when free and bank-legal.
+    /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
     /// assign, beyond interference. Bit `r` set forbids register `r`.
@@ -2805,7 +2805,7 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// registers its `follow` nodes hold or are hinted to, otherwise a
 /// caller-saved register (to avoid a prologue save) unless it must be
 /// callee-saved -- one outside its `avoid` set and apart from its `apart`
-/// neighbours (their registers, or the hints of those not yet colored) when
+/// neighbors (their registers, or the hints of those not yet colored) when
 /// one is free, else its hint -- otherwise a callee-saved register, and
 /// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
@@ -2836,16 +2836,16 @@ pub(crate) fn color_graph(
     if !weights.is_empty() {
         order.sort_by(|&a, &b| weights[b].cmp(&weights[a]).then(a.cmp(&b)));
     }
-    // Per-slot "stamp" marking which slots interfering neighbours hold,
+    // Per-slot "stamp" marking which slots interfering neighbors hold,
     // refreshed per node by bumping `stamp` instead of clearing. Slot
     // indices are bounded by `spill_count <= 2n`, so `2n + 2` entries suffice.
     // This keeps the free-slot search O(spill_count) per node rather than
-    // O(spill_count * neighbours): the membership test is an array read,
-    // not a linear scan of the neighbour list.
+    // O(spill_count * neighbors): the membership test is an array read,
+    // not a linear scan of the neighbor list.
     let mut slot_used: Vec<u32> = vec![0u32; 2 * n + 2];
     let mut stamp: u32 = 0;
-    // `interference` is over individual values, so a node's neighbouring
-    // nodes are its members' neighbours mapped through `node_of`. Members
+    // `interference` is over individual values, so a node's neighboring
+    // nodes are its members' neighbors mapped through `node_of`. Members
     // by root, CSR, so the walk is one pass over the node's own rows
     // rather than a second graph built over the roots.
     let (memb_off, memb_val) = class_members(node_of);
@@ -2855,11 +2855,11 @@ pub(crate) fn color_graph(
         };
         stamp += 1;
         let mut forbidden: [bool; 64] = [false; 64];
-        // The hints of interfering neighbours still to be colored: a node
+        // The hints of interfering neighbors still to be colored: a node
         // that cannot take its own hint leaves those registers to them.
         let mut hinted: u64 = 0;
         // A spill slot is 8 bytes shared by both banks (a 128-bit value holds
-        // two), so a slot an interfering neighbour holds is off-limits.
+        // two), so a slot an interfering neighbor holds is off-limits.
         for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
             for &nb in interference.neighbors(m) {
                 let root = node_of[nb as usize];
@@ -2977,12 +2977,12 @@ pub(crate) fn color_graph(
             Some(r) => Place::IntReg(r),
             None => {
                 // Reuse the lowest existing slot held by no interfering
-                // neighbour; allocate a fresh slot only when every one
+                // neighbor; allocate a fresh slot only when every one
                 // collides. Two values share a slot only when no
                 // interference edge joins them -- i.e. they are never
                 // simultaneously live -- so the slot holds at most one
                 // live value at any point. Edges are bidirectional, so a
-                // later-coloured value that interferes excludes this
+                // later-colored value that interferes excludes this
                 // slot, preserving distinct storage for live ranges that
                 // overlap.
                 //
@@ -3638,7 +3638,7 @@ fn populate_call_arg_hints(
             // later-parameter guard below keeps the entry hazard out.
             // The override never applies when the register is another
             // parameter's incoming register: that parameter's own home
-            // hint pins it there, so the override would not be honoured
+            // hint pins it there, so the override would not be honored
             // and would displace the parameter's home instead -- the
             // marshal's cycle-breaking swap (`xchg` on x86-64, the
             // scratch on aarch64) is the cheaper route.
@@ -3717,7 +3717,7 @@ fn populate_call_result_hints(
 /// Populate coalescing hints for ABI-fixed registers so the linear
 /// scan lands call arguments directly in their ABI register, captures
 /// a call result in the return register, and keeps a Return-value in
-/// the return register. The pick-reg path honours each hint only when
+/// the return register. The pick-reg path honors each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
 fn populate_return_hints(
@@ -3727,7 +3727,7 @@ fn populate_return_hints(
     hints: &mut [Option<u8>],
 ) {
     // Hint the value feeding `Terminator::Return` to the ABI return
-    // register so the exit move drops out. Two cases are honoured:
+    // register so the exit move drops out. Two cases are honored:
     //
     //   * Leaf functions (no call site, `is_call_site`, anywhere).
     //     Empirically safe -- no call can clobber the caller-saved
@@ -4079,7 +4079,7 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // each parameter in place, so the materialization is a self-update
     // and no ParamRef can land on another's source. The incoming arg
     // registers are caller-saved and free at entry, so the hint is
-    // honoured whenever the parameter is not forced elsewhere (live
+    // honored whenever the parameter is not forced elsewhere (live
     // across a call, or competing for the same register).
     let plan = param_incoming_plan(func, target);
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -5105,7 +5105,7 @@ int main(void) { return 0; }
     }
 
     #[test]
-    fn hint_is_honoured_when_free() {
+    fn hint_is_honored_when_free() {
         let g = Interference::from_edges(2, &[(0, 1)]);
         let node_of = [0u32, 1];
         let cons = [int_node(false, Some(21)), int_node(false, None)];
@@ -6423,9 +6423,9 @@ int main(void) { return 0; }
     }
 
     /// An immediate between the compare and the branch: on aarch64 the
-    /// materialisation (`movz`) leaves the flags alone and the compare
+    /// materialization (`movz`) leaves the flags alone and the compare
     /// fuses; on x86_64 a zero immediate lowers to a flag-writing
-    /// `xor r, r` and the compare must stay materialised.
+    /// `xor r, r` and the compare must stay materialized.
     #[test]
     fn branch_fusion_window_is_target_flag_aware() {
         let build = || {
@@ -6454,7 +6454,7 @@ int main(void) { return 0; }
     }
 
     /// A zero that only a store reads is written from the store's
-    /// encoding on x86_64 and never materialised, so it writes no flags.
+    /// encoding on x86_64 and never materialized, so it writes no flags.
     #[test]
     fn zero_stored_as_an_immediate_leaves_the_flags_alone() {
         let func = branch_func(
@@ -6631,10 +6631,10 @@ int main(void) { return 0; }
     }
 
     /// A node without a usable hint takes a free caller-saved register
-    /// apart from its keep-apart neighbours: the register of one already
+    /// apart from its keep-apart neighbors: the register of one already
     /// colored, the hint of one not yet colored.
     #[test]
-    fn keep_apart_steers_a_node_off_its_neighbour() {
+    fn keep_apart_steers_a_node_off_its_neighbor() {
         let g = Interference::from_edges(2, &[]);
         let cons = [int_node(false, None), int_node(false, Some(0))];
         let apart = vec![vec![1], vec![0]];
@@ -7237,7 +7237,7 @@ int main(void) { return 0; }
         }
     }
 
-    /// A compare with a second consumer keeps its materialisation on
+    /// A compare with a second consumer keeps its materialization on
     /// both targets.
     #[test]
     fn multi_use_compare_stays_materialized() {

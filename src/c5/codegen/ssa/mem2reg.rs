@@ -598,7 +598,7 @@ pub(crate) fn phi_placement(
 
 /// Per-block live-in sets over promotable slots, held as a dense
 /// bitset: `bits[b * words .. (b + 1) * words]` is block `b`'s set,
-/// indexed by each slot's rank in the analysed slot set.
+/// indexed by each slot's rank in the analyzed slot set.
 pub(crate) struct SlotLiveIn {
     rank: alloc::collections::BTreeMap<i64, usize>,
     words: usize,
@@ -1439,7 +1439,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let access = slot_accesses(func, &candidates, &escape);
     // A slot whose every load sits past its escape has nothing to
     // promote. A write-only address-free slot stays for the dead-store
-    // neutralisation below.
+    // neutralization below.
     let promotable: BTreeSet<i64> = candidates
         .into_iter()
         .filter(|s| access[s].has_load || !escape.escapes(*s))
@@ -1462,7 +1462,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         return Vec::new();
     }
     // Write-only address-free slots: every store is dead per C99
-    // 6.2.4p2 (the slot's value is never observed). Neutralise each
+    // 6.2.4p2 (the slot's value is never observed). Neutralize each
     // such store to `Inst::Imm(0)`; the dead-pure check in the emit
     // drops it, the frame slot remains allocated by the prologue but
     // costs no per-call memory traffic.
@@ -2150,10 +2150,10 @@ mod tests {
     }
 
     #[test]
-    fn run_neutralises_writes_to_write_only_slot() {
+    fn run_neutralizes_writes_to_write_only_slot() {
         // Address-free slot -1 is stored twice (two distinct int
         // values) and never loaded; both stores are dead per C99
-        // 6.2.4p2 and must be neutralised to `Inst::Imm(0)` so the
+        // 6.2.4p2 and must be neutralized to `Inst::Imm(0)` so the
         // dead-pure emit drops them.
         let insts = alloc::vec![
             Inst::Imm(1),
@@ -2187,11 +2187,11 @@ mod tests {
         // Both StoreLocal positions now hold Imm(0).
         match &f.insts[1] {
             Inst::Imm(0) => {}
-            other => panic!("expected first StoreLocal to be neutralised, got {other:?}"),
+            other => panic!("expected first StoreLocal to be neutralized, got {other:?}"),
         }
         match &f.insts[3] {
             Inst::Imm(0) => {}
-            other => panic!("expected second StoreLocal to be neutralised, got {other:?}"),
+            other => panic!("expected second StoreLocal to be neutralized, got {other:?}"),
         }
         // The Return's value still points at Imm(99).
         match f.blocks[0].terminator {
@@ -2204,7 +2204,7 @@ mod tests {
         );
         // The Imm RHS of the first StoreLocal is still in the IR
         // (the emit's is_dead_pure check drops it because the
-        // neutralised store no longer references it); confirm the
+        // neutralized store no longer references it); confirm the
         // Imm(99) used by Return is also still in place and
         // unmodified.
         match &f.insts[0] {
@@ -2221,7 +2221,7 @@ mod tests {
                 disp: 0, off: -1, ..
             } = inst
             {
-                panic!("StoreLocal to slot -1 at id {i} should have been neutralised");
+                panic!("StoreLocal to slot -1 at id {i} should have been neutralized");
             }
         }
     }
@@ -3182,18 +3182,18 @@ mod tests {
             other => panic!("expected Inst::Phi at block 3 head, got {other:?}"),
         }
         // The block-1 / block-2 StoreLocals were redirected to the
-        // stored value and then neutralised to Imm(0); without this
-        // neutralisation each predecessor would still emit a store
+        // stored value and then neutralized to Imm(0); without this
+        // neutralization each predecessor would still emit a store
         // to the c5 frame slot. After insert_phis the StoreLocals
         // sit at the same positions (no phi was prepended at blocks
         // 1 / 2) so the original ids 2 and 4 are still where to look.
         match &f.insts[2] {
             Inst::Imm(0) => {}
-            other => panic!("block 1 StoreLocal should be neutralised to Imm(0), got {other:?}"),
+            other => panic!("block 1 StoreLocal should be neutralized to Imm(0), got {other:?}"),
         }
         match &f.insts[4] {
             Inst::Imm(0) => {}
-            other => panic!("block 2 StoreLocal should be neutralised to Imm(0), got {other:?}"),
+            other => panic!("block 2 StoreLocal should be neutralized to Imm(0), got {other:?}"),
         }
         // The block-3 LoadLocal got its operand redirected to the
         // phi value. The instruction itself stays in place as a

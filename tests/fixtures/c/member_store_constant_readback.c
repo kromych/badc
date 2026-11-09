@@ -68,7 +68,7 @@ static int narrow_sign(struct widths *p)
 
 // Two members one byte apart: writing one must not answer a read of the
 // other.
-static int neighbours(struct guard *p)
+static int neighbors(struct guard *p)
 {
     p->lo = 1;
     p->hi = 2;
@@ -114,7 +114,7 @@ int main(void)
 
     if (power_of_two_member(&w) != 0) rc |= 1;
     if (narrow_sign(&w) != 0) rc |= 2;
-    if (neighbours(&g) != 0) rc |= 4;
+    if (neighbors(&g) != 0) rc |= 4;
 
     escaped = &g.lo;
     if (aliased(&g.lo, &g.lo) != 9) rc |= 8;

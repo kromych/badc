@@ -2003,7 +2003,7 @@ mod tests {
         // b1: v3 Extend(v1, I8); v4 Call(args=[v3]); Return(v4)
         // b2: Return(v2)
         // The dominated extend feeds a call argument, so it stays: the
-        // emit materialises it into the argument register in place.
+        // emit materializes it into the argument register in place.
         let mut f = fresh(
             vec![
                 Inst::Imm(300),

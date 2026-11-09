@@ -797,7 +797,7 @@ def maybe_boot(binp: Path, arch: str) -> None:
         machine = "virt,acpi=off"
     console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
     # earlycon (arm64) prints from the device-tree stdout-path PL011 before the
-    # console driver initialises, so a stall in early kernel setup is still
+    # console driver initializes, so a stall in early kernel setup is still
     # visible on the serial log instead of a silent timeout.
     early = "earlycon " if arch == "aarch64" else ""
     append = os.environ.get("BADC_QEMU_APPEND") or f"{early}rdinit=/sbin/init console={console}"

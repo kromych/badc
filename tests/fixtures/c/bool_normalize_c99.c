@@ -1,9 +1,9 @@
 // C99 6.3.1.2: when any scalar value is converted to `_Bool`, the
 // result is 0 if the value compares equal to 0, otherwise 1. The
 // type occupies one byte (6.2.5p2 / 6.5.3.4) and a load reads back
-// the stored 0 / 1. Every conversion site -- initialiser,
+// the stored 0 / 1. Every conversion site -- initializer,
 // assignment, cast, struct-field store, function argument, return
-// value, arithmetic operand -- must apply the normalisation.
+// value, arithmetic operand -- must apply the normalization.
 
 #include <stdbool.h>
 
@@ -14,22 +14,22 @@ struct flags {
 };
 
 static _Bool ret_bool(int v) {
-    return v; // return conversion normalises
+    return v; // return conversion normalizes
 }
 
 static int take_bool(_Bool b) {
-    return (int)b; // argument conversion normalises
+    return (int)b; // argument conversion normalizes
 }
 
 // `volatile` keeps the converted value a runtime value so the
-// normalisation sequence is emitted at each conversion site.
+// normalization sequence is emitted at each conversion site.
 static int rti(int v) { volatile int t = v; return t; }
 static double rtd(double v) { volatile double t = v; return t; }
 
 int main(void) {
     if (sizeof(_Bool) != 1) return 1;
 
-    _Bool i = rti(5); // initialiser
+    _Bool i = rti(5); // initializer
     if ((int)i != 1) return 2;
     _Bool z = rti(0);
     if ((int)z != 0) return 3;

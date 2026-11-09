@@ -116,7 +116,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("rdtsc_host_ticks.c", "linux-aarch64"),           // x86-64 rdtsc
     ("inline_asm_fixed_reg_output_width.c", "linux-aarch64"), // x86-64 rdtsc / fixed-reg outputs
     ("inline_asm_memory_operand.c", "linux-aarch64"),  // x86-64 lock cmpxchg/xadd
-    ("inline_asm_x64_catalogue.c", "linux-aarch64"),   // x86-64 neg/not/xchg/rol/adc
+    ("inline_asm_x64_catalog.c", "linux-aarch64"),     // x86-64 neg/not/xchg/rol/adc
     ("inline_asm_x64_stream_branches.c", "linux-aarch64"), // x86-64 stream-branch relaxation
     ("inline_asm_x64_paren_disp.c", "linux-aarch64"),  // x86-64 rip-relative label address
     ("inline_asm_x64_seg_prefix_wrpkru.c", "linux-aarch64"), // x86-64 segment prefix / wrpkru
@@ -2705,7 +2705,7 @@ fn the_source_tree_beside_the_executable_is_not_read() {
     );
 }
 
-// A `#pragma entrypoint` an object file cannot carry is a catalogue
+// A `#pragma entrypoint` an object file cannot carry is a catalog
 // row, so `-Wno-link-pragma-ignored` silences it and `-Werror` fails
 // the unit on it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2746,7 +2746,7 @@ fn a_dropped_link_pragma_is_a_controllable_diagnostic() {
     assert!(!raised.status.success(), "-Werror= must fail the unit");
 }
 
-// A declined `inline` is a catalogue row the codegen tier reports
+// A declined `inline` is a catalog row the codegen tier reports
 // through the diagnostic sink: off by default, `-Winline` prints it
 // with its code and name, `-Werror=inline` fails the unit and
 // `-Wno-inline` silences it.
@@ -2851,7 +2851,7 @@ fn the_always_inline_report_is_a_controllable_diagnostic() {
 // `-Werror` fails the unit at the phase boundary, not at the first
 // raised warning: the whole source is parsed, so every diagnostic is
 // reported before the driver gives up.
-// A frame over the `-Wframe-larger-than=` bound is a catalogue row the
+// A frame over the `-Wframe-larger-than=` bound is a catalog row the
 // codegen tier reports on both architectures, naming the function, the
 // size and the bound at the function's definition -- in the header that
 // holds it, past a prototype ahead of it; `-Werror=` fails the unit,
@@ -3023,7 +3023,7 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     );
 }
 
-// An unrecognised dash-prefixed option must be rejected with a clear
+// An unrecognized dash-prefixed option must be rejected with a clear
 // "unknown option" diagnostic, not silently reinterpreted as a source
 // file (which produces a misleading `cannot read` error or, worse,
 // compiles a same-named file).
@@ -3602,7 +3602,7 @@ int main(void) {
 ";
 
 /// Disassemble `obj` with the first of `llvm-objdump` / `objdump` on PATH
-/// that decodes it, recognised by `marker` appearing in the output.
+/// that decodes it, recognized by `marker` appearing in the output.
 /// `None` when neither is installed or neither decodes the object's
 /// architecture.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -3918,7 +3918,7 @@ fn ffixed_borrowing_sequences_keep_live_values() {
 /// diagnostic that names the cause.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn ffixed_refuses_what_it_cannot_honour() {
+fn ffixed_refuses_what_it_cannot_honor() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let root = TempDir::new("badc-ffixed-err");
     let src = root.join("pressure.c");
@@ -4215,7 +4215,7 @@ fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
     );
 
     // Each spelling of `ignored` reaches the same row; 4101 is the
-    // catalogue's MSVC alias for it.
+    // catalog's MSVC alias for it.
     for silencer in [
         "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n",
         "#pragma clang diagnostic ignored \"-Wunused-variable\"\n",

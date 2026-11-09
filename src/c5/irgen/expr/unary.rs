@@ -144,7 +144,7 @@ impl<'a> Walker<'a> {
             let low = b.load_at(v, load_kind_for(low_ty, self.target), false, align);
             return Ok(self.convert_scalar_value(b, low, low_ty, to_ty));
         }
-        // The reverse: a scalar cast to a 128-bit type materialises a
+        // The reverse: a scalar cast to a 128-bit type materializes a
         // 16-byte object, whose address is the value.
         if !is_struct_ty(src_ty) && self.is_int128_value_ty(to_ty) {
             let slot = b.alloc_synthetic_struct(16, 8);

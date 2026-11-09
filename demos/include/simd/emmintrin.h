@@ -141,7 +141,7 @@ MM_ALWAYS __m128i _mm_load_si128(const __m128i *p) {
 MM_ALWAYS __m128i _mm_loadu_si128(const __m128i *p) { return _mm_load_si128(p); }
 MM_ALWAYS __m128i _mm_loadl_epi64(const __m128i *p) {
     /* movq reads exactly 8 bytes; type the operand as 8 bytes so no spurious
-     * 16-byte read of *p is modelled. */
+     * 16-byte read of *p is modeled. */
     __m128i r;
     __asm__("movq %1, %%xmm0\n\t"
             "movdqu %%xmm0, %0"

@@ -486,7 +486,7 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
     }
 }
 
-/// Rewrite recognised scaled-index loads and stores in place.
+/// Rewrite recognized scaled-index loads and stores in place.
 /// When `v` is `Shr K` (arithmetic) or `Shru K` (logical) of `Shl K` of
 /// some `w`, return `w` if a store of `store_width` bytes keeps only the
 /// low bits the normalize leaves unchanged (`8 * store_width <= 64 - K`).

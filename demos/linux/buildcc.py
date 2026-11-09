@@ -233,7 +233,7 @@ FORWARD_PREFIX = (
     # extension list and refuses one it does not implement.
     "-mcpu=",
     # A reserved register. badc keeps it out of its allocator and its own
-    # scratch picks, and refuses a name it cannot honour (the stack and frame
+    # scratch picks, and refuses a name it cannot honor (the stack and frame
     # pointers, its scratch registers), so the unit fails rather than
     # compiling with the register in use. x18, the shadow-call-stack
     # register, is outside badc's aarch64 pool on every target already.
@@ -762,7 +762,7 @@ def _self_test() -> int:
     # because its opposite is: only the spelling that holds is listed.
     for flag in ("-mbig-endian", "-mabi=ilp32"):
         assert rewrite([flag]).unknown == [flag], flag
-    # Every reserved register reaches badc, which honours it or fails the
+    # Every reserved register reaches badc, which honors it or fails the
     # unit; the shim no longer decides which spellings it can drop.
     for flag in ("-ffixed-x18", "-ffixed-x9", "-ffixed-q16", "-ffixed-r12"):
         assert rewrite([flag]) == Rewritten([flag], [], []), flag

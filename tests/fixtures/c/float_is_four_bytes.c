@@ -67,7 +67,7 @@ int main(void) {
         printf("FAIL array stride %td\n", (char *)&globals[1] - gp);
         rc = 6;
     }
-    // Re-read all four initialised slots, confirming the narrowing
+    // Re-read all four initialized slots, confirming the narrowing
     // applied at static-init time produced the correct f32 bit
     // patterns (NOT a truncation of the f64 mantissa to its low 4
     // bytes, which would zero every entry).

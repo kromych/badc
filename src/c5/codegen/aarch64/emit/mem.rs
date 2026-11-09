@@ -48,17 +48,17 @@ pub(crate) fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) 
     }
 }
 
-/// Materialise `sp + off` into `dst`.
+/// Materialize `sp + off` into `dst`.
 pub(super) fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(31), off.into());
 }
 
-/// Materialise `fp + off` into `dst`.
+/// Materialize `fp + off` into `dst`.
 pub(super) fn emit_fp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
     emit_reg_disp(code, dst, Reg(29), off.into());
 }
 
-/// Materialise `fp - delta` into `dst`.
+/// Materialize `fp - delta` into `dst`.
 pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), -i64::from(delta));
 }
@@ -283,7 +283,7 @@ pub(super) fn emit_tls_addr(
 ) -> Emit {
     let tls_extern_sym = tls_sym.map(|r| r.name.as_str());
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    // A spilled destination materialises in x16; the sequences read `rd`
+    // A spilled destination materializes in x16; the sequences read `rd`
     // only after their last use of x16, and x17 stays free for the store.
     let rd = match dst {
         Place::IntReg(r) => Reg(r),

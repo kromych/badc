@@ -463,7 +463,7 @@ def clear_foreign_files(text: str) -> str:
 # module can only load into the kernel that produced it. A distribution
 # ships its modules alongside their kernel and does not need either; here
 # the two can come from different compilers, and a module built by one
-# loaded into a kernel built by another is undefined behaviour that
+# loaded into a kernel built by another is undefined behavior that
 # presents as a fault far from its cause.
 #
 # MODVERSIONS makes the loader compare a CRC of every exported symbol's
@@ -1233,7 +1233,7 @@ def find_firmware(arch: str, exists=None) -> tuple[str, str | None] | None:
 def resolve_firmware(arch: str, choice: str, found) -> tuple[str, str]:
     """The firmware `--vm-firmware choice` resolves to -- "uefi" or "bios" --
     and the reason to log when the run did not get what it asked for.
-    Raises ValueError when the choice cannot be honoured on this host."""
+    Raises ValueError when the choice cannot be honored on this host."""
     efi_only = arch != "x86_64"
     if choice == "bios":
         if efi_only:

@@ -780,7 +780,7 @@ static inline float scalbnf(float x, int n) {
 static inline float scalblnf(float x, long n) {
     return (float) ldexp((double) x, (int) n);
 }
-// C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
+// C99 7.12.6.4: frexp(x, *exp) splits x into a normalized
 // significand in [0.5, 1.0) and an integer exponent.
 double frexp(double x, int *exp);
 // C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional

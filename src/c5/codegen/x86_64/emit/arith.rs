@@ -79,7 +79,7 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
 }
 
 /// After a flags-setting compare: `true` when a fused branch consumes
-/// the flags directly and the boolean materialisation is elided, else
+/// the flags directly and the boolean materialization is elided, else
 /// `setcc` + `movzx` the result into `rd`.
 fn finish_int_cmp(
     code: &mut Vec<u8>,
@@ -890,7 +890,7 @@ fn emit_fp_binop(
     Ok(())
 }
 
-/// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signalling
+/// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signaling
 /// an unordered (NaN) compare. C99 6.5.9p3 requires `==` to yield 0 on NaN
 /// and `!=` to yield 1, so the cc-only `setcc` takes an explicit
 /// AND-with-`setnp` / OR-with-`setp` fixup. A fused branch reads the flags
@@ -1029,7 +1029,7 @@ fn emit_int_binop(
     // The rhs scratch carries a spilled shift count, or preserves a register
     // rhs that aliases rd. It must not be rcx for a shift: a rotate
     // moves the count into cl while preserving a live rcx with a push / pop,
-    // which a count materialised into rcx here would defeat; r11 is always
+    // which a count materialized into rcx here would defeat; r11 is always
     // safe.
     let is_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror);
     let rhs_scratch = if is_shift {
@@ -1185,7 +1185,7 @@ fn implicit_holds_live(
 /// in rax and the remainder in rdx; one-operand IMUL / MUL write the
 /// 128-bit product to rdx:rax. A value live in rax / rdx across the
 /// operation is preserved with push / pop; the transient misalignment is
-/// harmless since no call intervenes. `rn` is the materialised lhs;
+/// harmless since no call intervenes. `rn` is the materialized lhs;
 /// `rhs_place` routes into r10.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
@@ -1451,7 +1451,7 @@ fn emit_shift_by_count_reg(
     Ok(())
 }
 
-/// Whether `Inst::BinopI { op, rhs_imm: imm }` materialises the immediate
+/// Whether `Inst::BinopI { op, rhs_imm: imm }` materializes the immediate
 /// into a register, so the loop-invariant hoist can lift it into a
 /// preheader; false when it rides the instruction's own field. Mirrors
 /// the arm order in `emit_binop_imm`.
@@ -1614,7 +1614,7 @@ pub(super) fn emit_binop_imm(
         return Ok(());
     }
     // A commutative op with `rd != rn` folds the staging mov into the
-    // materialisation: `mov rd, imm; OP rd, rn`.
+    // materialization: `mov rd, imm; OP rd, rn`.
     let commutative = matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
@@ -1641,7 +1641,7 @@ pub(super) fn emit_binop_imm(
             frame,
         );
     }
-    // The immediate materialises into r11, which sits outside both
+    // The immediate materializes into r11, which sits outside both
     // allocator banks (`RegBanks::for_target`) and so never aliases `rd` or
     // `rn` and is free under any register pressure.
     let scratch = SCRATCH_R11;

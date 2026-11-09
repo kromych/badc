@@ -199,7 +199,7 @@ impl Compiler {
             sym.is_string_literal = false;
         }
         // The retired `__func__` storage is gone, so a later reference
-        // must materialise it again rather than resolve to the offset.
+        // must materialize it again rather than resolve to the offset.
         examined += pop_tail_past(&mut self.func_name_objects, |&(.., o)| o >= end);
         super::initializer::note_init_bookkeeping(examined, recorded, 0);
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
@@ -1662,7 +1662,7 @@ impl Compiler {
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the per-arg
     /// temp store + reverse push + call dispatch lands. `callee`
-    /// is the callee's AST expression (synthesised here for
+    /// is the callee's AST expression (synthesized here for
     /// direct calls via `ast.push_expr(Ident { ... })`; the
     /// indirect-call path passes the already-built function-
     /// pointer ExprId). `args` holds each declared argument's
@@ -1699,7 +1699,7 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
-    /// Synthesise an `Expr::Ident` for a direct-call callee. The
+    /// Synthesize an `Expr::Ident` for a direct-call callee. The
     /// parser's call site looks up `id_idx` (a symbol-table index
     /// for a `Token::Fun` / `Token::Sys` symbol); the AST needs
     /// a matching Ident node so [`Self::ast_emit_call`] can fill
@@ -1774,7 +1774,7 @@ impl Compiler {
     /// outer `Stmt::Compound` that would re-list the
     /// already-referenced sub-stmts and cause the walker to
     /// double-visit them. For empty statements (`;`) the helper
-    /// synthesises an empty `Stmt::Compound` so the caller has a
+    /// synthesizes an empty `Stmt::Compound` so the caller has a
     /// valid id to bind.
     pub(super) fn ast_wrap_stmts_since(&mut self, before: usize) -> super::super::ast::StmtId {
         let after = self.ast.stmts.len();
@@ -1995,13 +1995,13 @@ impl Compiler {
         id
     }
 
-    /// Whether `name`'s labelled statement has been parsed. False for
+    /// Whether `name`'s labeled statement has been parsed. False for
     /// a name so far only mentioned by a forward reference.
     pub(super) fn label_is_defined(&self, name: &str) -> bool {
         self.labels.get(name).is_some_and(|st| st.defined)
     }
 
-    /// Bind `name` to its labelled statement, returning the AST slot.
+    /// Bind `name` to its labeled statement, returning the AST slot.
     /// The caller rejects a redefinition through `label_is_defined`.
     pub(super) fn define_label(&mut self, name: &str) -> super::super::ast::LabelId {
         let id = self.ast_label_by_name(name);
@@ -2038,7 +2038,7 @@ impl Compiler {
     /// source spelled out a value and `None` for a bare
     /// `return;` in a void function; the caller picks the shape.
     /// The Stmt's id is returned in case a future parent
-    /// (a labelled stmt, a surrounding compound block) wants to
+    /// (a labeled stmt, a surrounding compound block) wants to
     /// chain it.
     pub(super) fn ast_emit_return(
         &mut self,
@@ -2076,7 +2076,7 @@ impl Compiler {
         let pos = self.ast_src_pos();
         // C99 6.5.8p6 / 6.5.9p3: a relational or equality operator yields
         // `int` whatever the operands are. The parser still holds an
-        // operand type here (it retags after the emit, since the flavour
+        // operand type here (it retags after the emit, since the flavor
         // pick reads both operand types), so stamp the result type here
         // rather than leaving consumers to infer it from the operands.
         // The GCC vector extension is the exception: a vector comparison
@@ -2195,7 +2195,7 @@ impl Compiler {
         // different chain (a nested assignment's value pushed
         // for an enclosing operator, a constant literal pushed
         // by a side-effect computation, ...). Drop the build
-        // rather than synthesise a non-C99 shape the walker
+        // rather than synthesize a non-C99 shape the walker
         // would reject downstream.
         if !matches!(
             self.ast.expr(lhs),

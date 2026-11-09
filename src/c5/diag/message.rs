@@ -42,7 +42,7 @@ impl Loc {
 ///
 /// TODO: the text is a `String` formatted at the site. Typed payloads
 /// -- a per-row message struct, so every template lives in the
-/// catalogue and localisation has one place to work on -- are deferred
+/// catalog and localization has one place to work on -- are deferred
 /// until the sites are migrated.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Diagnostic {

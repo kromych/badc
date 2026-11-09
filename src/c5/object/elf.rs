@@ -4004,7 +4004,7 @@ impl<'a> ElfImageWriter<'a> {
     }
 
     /// The non-loaded tail: the five `.debug_*` sections under `-g`
-    /// (`.debug_frame` carries the CFI an unwinder reads through optimised
+    /// (`.debug_frame` carries the CFI an unwinder reads through optimized
     /// frames), the `--emit-relocs` tables against the static symtab's
     /// section symbols, `.comment`, the static symbol table (`sh_info` one
     /// past the last LOCAL, which is every entry), and `.shstrtab` last.

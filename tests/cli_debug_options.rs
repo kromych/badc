@@ -94,7 +94,7 @@ fn section<'a>(elf: &'a [u8], want: &str) -> Option<&'a [u8]> {
     })
 }
 
-/// What badc emits, which every honoured request is measured against.
+/// What badc emits, which every honored request is measured against.
 const EMITTED_VERSION: u16 = badc::DWARF_VERSION;
 
 #[test]
@@ -128,7 +128,7 @@ fn level_zero_emits_no_debug_sections() {
 }
 
 #[test]
-fn the_version_badc_emits_is_honoured_silently() {
+fn the_version_badc_emits_is_honored_silently() {
     for flags in [
         &["-gdwarf-4"][..],
         // No version: DWARF debug information, at whatever version.

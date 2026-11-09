@@ -2298,7 +2298,7 @@ impl Compiler {
         // routes through the per-element runtime store path
         // required by C99 6.7.8p13 -- automatic-storage
         // arrays may carry non-constant initializers, with
-        // each element initialised as if by assignment in
+        // each element initialized as if by assignment in
         // declaration order.
         if self.lex.tk == '{' {
             let (scan_count, needs_runtime) = self.scan_array_init()?;
@@ -2336,7 +2336,7 @@ impl Compiler {
             // Constant path: keep matching the legacy flow
             // exactly -- allocate from the parsed element count
             // (mirrors `let final_size = elements.len()` below)
-            // rather than the pre-scanned count, so behaviour is
+            // rather than the pre-scanned count, so behavior is
             // identical to before this fix when no runtime
             // expressions are present.
         }
@@ -2765,7 +2765,7 @@ impl Compiler {
     }
 
     /// Number of 8-byte stack slots a local declaration consumes,
-    /// honouring an array dimension if present. For non-arrays this
+    /// honoring an array dimension if present. For non-arrays this
     /// is just `slots_of_type(ty)`; for an array of N Ts the
     /// allocation is rounded up to 8-byte alignment so subsequent
     /// stack frame entries stay aligned.
@@ -2980,7 +2980,7 @@ impl Compiler {
     /// Emit per-element store sequences for a local-array
     /// initializer whose elements aren't all compile-time
     /// constants. C99 6.7.8 paragraph 13 specifies that each
-    /// element is initialised as if by assignment in declaration
+    /// element is initialized as if by assignment in declaration
     /// order. Positions the brace list leaves out keep the zero
     /// seed every caller Mcpy's into the slot first (6.7.8p21).
     ///

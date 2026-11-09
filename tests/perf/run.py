@@ -326,7 +326,7 @@ def probe_compilers() -> list[Compiler]:
     else:
         tcc = PERF_DIR / "build" / f"tcc{EXE}"
         # Bootstrap the vendored tinycc on first run so the perf
-        # table reports a single-pass non-optimising baseline
+        # table reports a single-pass non-optimizing baseline
         # without the caller having to remember to invoke
         # `build_tcc.sh`. The build script is a no-op when its
         # output already exists. It is a POSIX script: on Windows the

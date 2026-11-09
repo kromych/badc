@@ -58,7 +58,7 @@ int main(void) {
         // Mixed-width signed/unsigned in one storage unit: an
         // unsigned 12-bit clump_index packed next to two signed
         // 2-bit deltas. C99 6.7.2.1 lets adjacent bitfields share
-        // a storage unit; the read path has to honour each field's
+        // a storage unit; the read path has to honor each field's
         // own signedness, so dx must yield -1 for bit pattern `11`
         // rather than the unsigned `3`.
         struct mixed_signedness m;

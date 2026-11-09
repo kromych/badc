@@ -380,7 +380,7 @@ jobs:
         # integer + bit-twiddle deflate code. Compresses + uncompresses
         # a known buffer at both -O and noO and checks CRC32 / Adler32
         # against RFC 1950 / 3309 reference values. Runs three build
-        # flavours (single-source amalgamation, separate-compilation
+        # flavors (single-source amalgamation, separate-compilation
         # `-c` + link, and `--ar` archive + `-l`) at both -O levels
         # to exercise the linker pipeline end-to-end.
         run: python demos/miniz/smoke.py
@@ -391,7 +391,7 @@ jobs:
         # FFT at both -O and noO. Catches FP libm boundary
         # regressions (xmm0 / d0 return value, FP arg masks
         # through the optimizer, ...). Runs the same three build
-        # flavours as miniz so the multi-TU FP paths get exercised.
+        # flavors as miniz so the multi-TU FP paths get exercised.
         run: python demos/kissfft/smoke.py
       - name: bzip2 smoke (amalg + TU + archive)
         # Third non-trivial demo. Integer + bit-twiddle heavy:
@@ -399,7 +399,7 @@ jobs:
         # coding through a 128-bit bitstream packer. Compresses +
         # decompresses a 600-byte buffer at blockSize 1 and 9 at
         # both -O and noO. Different code shape from miniz's
-        # deflate. Runs the same three build flavours so the
+        # deflate. Runs the same three build flavors so the
         # bzip2 library bundles correctly through `--ar`.
         run: python demos/bzip2/smoke.py
       - name: tweetnacl smoke (amalg + TU + archive)
@@ -409,7 +409,7 @@ jobs:
         # asserts a SHA-512 known-answer, an RFC 8032 Ed25519
         # vector (deterministic signature byte-for-byte), and
         # secretbox / box / sign round trips. Runs the same
-        # three build flavours so the multi-TU + archive paths
+        # three build flavors so the multi-TU + archive paths
         # get exercised across `-O` and no-`-O`.
         run: python demos/tweetnacl/smoke.py
       - name: monocypher smoke (amalg + TU + archive)
@@ -418,7 +418,7 @@ jobs:
         # SHA-512 + RFC 8032 Ed25519. Five scenarios:
         # SHA-512(`abc`), BLAKE2b(`abc`), RFC 8032 Ed25519
         # vector 1 (sign + verify), AEAD round trip, X25519
-        # Diffie-Hellman. Same build flavour matrix as the
+        # Diffie-Hellman. Same build flavor matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
 
@@ -462,7 +462,7 @@ jobs:
       - name: curl smoke (static + shared + system + Mbed TLS HTTPS)
         # Compiles the whole libcurl source tree (HTTP + file + ws)
         # and builds it as a static archive, a shared library, and an
-        # exe linked against each, plus a flavour bound to the system
+        # exe linked against each, plus a flavor bound to the system
         # libcurl. HTTPS uses badc-compiled Mbed TLS. Transfers run
         # against a hermetic loopback server.
         run: python demos/curl/smoke.py
@@ -703,7 +703,7 @@ jobs:
         # trip through stage1's own linker. `KNOWN_DRIFT` is
         # empty on every lane; a non-empty set indicates a real
         # regression. Exit code 2 (env_unsuitable) only fires on
-        # hosts the harness doesn't recognise -- none of the
+        # hosts the harness doesn't recognize -- none of the
         # five CI runners hit that path, so the gate is hard.
         run: python demos/tinycc/self_host.py
       - name: upload tinycc stage1 binary (Windows lanes only)

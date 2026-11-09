@@ -99,7 +99,7 @@ const PROGRAM_HEADER_SIZE: u16 = 56;
 
 /// Standard Linux executable load base. `ld -no-pie` plants
 /// the program here by default; matching it keeps `objdump -d`
-/// addresses recognisable next to a `gcc -static` reference.
+/// addresses recognizable next to a `gcc -static` reference.
 const BASE_ADDR: u64 = 0x400000;
 const PAGE_SIZE: u64 = 0x1000;
 
@@ -1485,7 +1485,7 @@ mod tests {
         // memory (not `pop rdi`, which shifts rsp by 8) keeps rsp
         // 16-aligned for the upcoming `call`. The byte sequence
         // below is the contract the linker stub must continue to
-        // honour; the syscall-tail variant is exercised by passing
+        // honor; the syscall-tail variant is exercised by passing
         // `None` for `exit_text_offset`.
         let stub = x86_64_start_stub(0, 0x100, Some(0x200));
         // xor ebp, ebp

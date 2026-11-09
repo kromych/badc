@@ -439,7 +439,7 @@ fn external_int_return_is_sign_extended() {
     // C99 6.3.1.1 + AAPCS64: a callee returning `int` leaves only the low
     // 32 bits defined; the caller must extend the result before using it
     // at 64-bit width. c5 keeps accumulator values extended to 64 bits and
-    // its own callees honour that, but an external (defined-elsewhere)
+    // its own callees honor that, but an external (defined-elsewhere)
     // callee compiled by another toolchain need not, so a narrow return
     // used at 64 bits must be extended at the call site. libc `atoi`
     // (resolved via dlsym) returns -1 for "-1"; the `== -1` compare is a
@@ -508,7 +508,7 @@ fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
     // A body that hands a structure to another function by value is
     // still inlinable: the argument address is one more value operand
     // and the callee's aggregate layout re-interns into the caller. The
-    // request here is mandatory, and honouring it is what folds the
+    // request here is mandatory, and honoring it is what folds the
     // per-site guards on the constant `sr` -- the undefined `bug` would
     // otherwise fail the JIT load.
     //
@@ -1144,7 +1144,7 @@ fn spill_slot_beyond_imm12_reach() {
     // The encoders only `debug_assert` the bound, so in release the
     // scaled imm12 overflowed into the opcode's load/store bit and a
     // spill store silently became a load (and vice versa), leaving the
-    // slot uninitialised. The SP-relative spill helpers now materialise
+    // slot uninitialised. The SP-relative spill helpers now materialize
     // the base into a scratch register for out-of-reach offsets.
     //
     // With the integer bank capped to one register, every local spills,
@@ -1537,7 +1537,7 @@ fn variadic_va_list_survives_spilled_operands_under_pressure() {
 
 #[test]
 fn paramref_pointer_arg_survives_shared_register_packing() {
-    // A `ParamRef` materialises its parameter from the incoming host
+    // A `ParamRef` materializes its parameter from the incoming host
     // argument register. When the allocator packs several
     // sequentially-live parameters into one register -- each consumed
     // by an intervening store before the next is produced -- the
@@ -1559,7 +1559,7 @@ fn paramref_pointer_arg_survives_shared_register_packing() {
     // register pressure that drives the allocator to pack the three
     // stored parameters into the second integer register (rcx) instead
     // of leaving them in distinct registers. Without it the allocator
-    // colours them apart and the entry parallel-copy batch -- which is
+    // colors them apart and the entry parallel-copy batch -- which is
     // always correct -- handles the placement, hiding the per-inst bug.
     let src = r#"
         static int g[8];
@@ -1634,7 +1634,7 @@ fn division_with_call_result_divisor_and_spilled_dst_under_pressure() {
 fn multiply_by_immediate_with_spilled_result_under_pressure() {
     // `BinopI { op: Mul }` by a non-power-of-two constant. The x86_64
     // lowering must not depend on a free caller-saved scratch to
-    // materialise the immediate: with the bank capped to one register
+    // materialize the immediate: with the bank capped to one register
     // the product spills and no scratch is free, so the three-operand
     // `imul rd, rn, imm32` form is required. The earlier scratch path
     // bailed the whole function out of the implemented subset here.
@@ -1697,7 +1697,7 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     // A base pointer kept live across many indexed loads while the body
     // also runs 64-bit rotations and stores under register pressure. On
     // x86_64 a shift reads its count from cl (rcx). When the destination
-    // is a spill the shift's spilled count was materialised straight into
+    // is a spill the shift's spilled count was materialized straight into
     // rcx through the rhs scratch -- before the shift arm's push / pop
     // could preserve a long-lived SSA value the allocator had parked in
     // rcx -- so the base pointer was overwritten by a shift count and the
@@ -1750,7 +1750,7 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
 }
 
 /// `always_inline` is a mandatory request -- gcc and clang report a
-/// diagnostic when they cannot honour one rather than declining -- so the
+/// diagnostic when they cannot honor one rather than declining -- so the
 /// inliner's size and frame budgets do not apply to it, and the splice
 /// relocates the callee's own slots into the caller's frame. Every
 /// relocated slot must still address correctly past the single-instruction
@@ -1901,7 +1901,7 @@ fn fp_store_f32_preserves_live_numerator() {
             int k;
             for (k = 0; k < 2; ++k) {
                 // The `1` is an int divided by a float: the dividend is an
-                // IntToFp cast (scvtf) materialised once and reused for both
+                // IntToFp cast (scvtf) materialized once and reused for both
                 // stores. The first store's narrow must not clobber it.
                 a[k] = 1 / (t[k] * 2.0f);
                 b[k] = 1 / (t[k] * 4.0f);
@@ -1963,9 +1963,9 @@ fn fp_load_into_spill_preserves_live_operand_under_pressure() {
 
 #[test]
 fn mcpy_src_scratch_preserves_live_pointer_under_pressure() {
-    // A zero-initialised local aggregate (`swc s = {0}`) lowers to an
+    // A zero-initialized local aggregate (`swc s = {0}`) lowers to an
     // `Inst::Mcpy` from a zero-filled `ImmData` blob. On x86_64 the Mcpy
-    // emit materialises its destination base into SCRATCH_R10 and, when
+    // emit materializes its destination base into SCRATCH_R10 and, when
     // the destination spilled (so its base already occupies r10), needs a
     // second scratch for the source base. rcx is in the LinuxX64
     // `caller_gprs` pool, so under raised register pressure the allocator

@@ -157,7 +157,7 @@ class LoopbackServer:
     """Threaded HTTP(S) server on 127.0.0.1 serving a fixed body at any path.
 
     Passing a (certfile, keyfile) pair wraps the listener in TLS, so the same
-    harness drives both the plain-HTTP flavours and the HTTPS lane."""
+    harness drives both the plain-HTTP flavors and the HTTPS lane."""
 
     def __init__(self, tls: tuple[str, str] | None = None) -> None:
         body = LOOPBACK_BODY.encode()

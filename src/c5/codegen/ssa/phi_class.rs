@@ -13,7 +13,7 @@
 //! merge only when no member of one class interferes with any member of
 //! the other. The interference test is the value-liveness query in
 //! [`super::liveness`]. An operand whose class cannot merge keeps
-//! its own location, and the per-arch emit materialises it with a real
+//! its own location, and the per-arch emit materializes it with a real
 //! move on the phi's predecessor edge.
 //!
 //! Output is consumed by `ssa_alloc::allocate`, which indexes its

@@ -1,5 +1,5 @@
 
-inline_asm_x64_catalogue.x64:	file format elf64-x86-64
+inline_asm_x64_catalog.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

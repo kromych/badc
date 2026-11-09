@@ -4,7 +4,7 @@ use super::*;
 /// `emit_call_indirect`. The outgoing area holds it when none is free.
 pub(super) const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
 
-/// AAPCS64 `va_start` (Appendix B): initialise the 32-byte `__va_list`
+/// AAPCS64 `va_start` (Appendix B): initialize the 32-byte `__va_list`
 /// at args[0] (args[1], `&last`, is unused; the named counts come from
 /// the prototype):
 ///   __stack   (+0)  = first incoming stack argument
@@ -689,7 +689,7 @@ fn setup_indirect_result(
     }
 }
 
-/// Materialise a call's result. An aggregate of at most 16 bytes
+/// Materialize a call's result. An aggregate of at most 16 bytes
 /// arrives in x0/x1 and is stored into the result temp; a larger one
 /// was written through x8 by the callee, so nothing remains. A scalar
 /// return uses the standard register bridge.
@@ -744,7 +744,7 @@ fn finish_call_result(
             }
         } else if size <= 16 {
             // The object's bytes alone, from x0 then x1: a copy elided into
-            // a member points the slot at storage its neighbours share.
+            // a member points the slot at storage its neighbors share.
             let pieces = (0..size.div_ceil(8)).flat_map(|k| {
                 crate::c5::codegen::access_pieces(8 * k, (size - 8 * k).min(8), 8, false)
             });
@@ -1094,7 +1094,7 @@ impl CallArgs<'_> {
     /// integer register as a bit pattern the integer marshal overwrites. The
     /// d-to-d moves are a parallel copy scheduled first, with the second FP
     /// scratch breaking cycles; spilled and integer sources then
-    /// materialise into their targets.
+    /// materialize into their targets.
     fn marshal_fp_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
@@ -1169,7 +1169,7 @@ impl CallArgs<'_> {
     /// register move: a `StructRegs` base goes into its own first eightbyte
     /// register `regs[0]` (overwritten by its own eightbyte last), never a
     /// shared scratch, so one aggregate's loads cannot clobber another's
-    /// pending base. Non-register sources then materialise into their
+    /// pending base. Non-register sources then materialize into their
     /// targets.
     fn marshal_int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();

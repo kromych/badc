@@ -335,7 +335,7 @@ pub(crate) struct Preprocessor {
     /// Expansion-arena storage reused across lines.
     exp_scratch: RefCell<expand::ExpScratch>,
     /// Borland / Watcom `#pragma warn -<code>` codes the source asked to
-    /// disable. No catalogue row carries these identifiers, so the set
+    /// disable. No catalog row carries these identifiers, so the set
     /// records what the source asked for and filters nothing.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
     /// Diagnostic-pragma events this pass has recorded on the sink's
@@ -1848,7 +1848,7 @@ impl Preprocessor {
     /// Process one synthesized `#include "name"` per `-include FILE`
     /// ahead of the user's source, through the same machinery a written
     /// `#include` takes, so a failure inside such a header names that
-    /// header. The synthesized buffer is labelled `<force-include>`, so
+    /// header. The synthesized buffer is labeled `<force-include>`, so
     /// a diagnostic on one of its lines does not claim a line of the
     /// user's source.
     fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
@@ -2226,7 +2226,7 @@ impl Preprocessor {
                 }
                 active
             }
-            // gcc/clang extension, standardised in C23: same shape as
+            // gcc/clang extension, standardized in C23: same shape as
             // `#error` but compilation continues.
             Directive::Warning(message) => {
                 if active {
@@ -2388,8 +2388,8 @@ impl Preprocessor {
     }
 }
 
-/// The catalogue rows this pass reports. `preprocessor_codes_are_live`
-/// checks each against the catalogue.
+/// The catalog rows this pass reports. `preprocessor_codes_are_live`
+/// checks each against the catalog.
 pub(crate) const WARNING_DIRECTIVE: Code = Code::new(1002);
 pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
 pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
@@ -2760,7 +2760,7 @@ impl<'p, 's> LinePass<'p, 's> {
 
     /// C99 6.10.2p4: expand the operand and reparse the result as a
     /// `<...>` / `"..."` header name. Anything else is an error, as for
-    /// an unrecognised directive. The
+    /// an unrecognized directive. The
     /// spelling-faithful expansion keeps re-lex separators out of the
     /// header name.
     fn include_macro(

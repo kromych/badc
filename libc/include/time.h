@@ -258,7 +258,7 @@ int gettimeofday(struct timeval *restrict tv, void *restrict tz);
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and
-// any normalisation of out-of-range fields). Returns the seconds
+// any normalization of out-of-range fields). Returns the seconds
 // count or (time_t)-1 on failure.
 time_t mktime(struct tm *tm);
 struct tm *localtime(const time_t *t);

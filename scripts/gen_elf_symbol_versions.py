@@ -192,7 +192,7 @@ def needs_review(
 ) -> bool:
     """Whether the floor's pick and the library's current default are
     distinct implementations. Two names for one address cannot differ in
-    behaviour; two addresses can, and which one the bundled headers
+    behavior; two addresses can, and which one the bundled headers
     describe is not something the floor decides."""
     if chosen is None or default is None or chosen == default:
         return False

@@ -22,8 +22,8 @@ vendor-deps mirror -- see `setup.py`.
 ## Smoke scenarios
 
 `smoke.py` builds the two TUs + the driver through
-badc in four flavours (amalgamation + separate-TU compile, each
-at `-O` and no-`-O`), plus an archive flavour, and runs each
+badc in four flavors (amalgamation + separate-TU compile, each
+at `-O` and no-`-O`), plus an archive flavor, and runs each
 binary. Five scenarios:
 
 | Scenario              | What it asserts                                                                                              |
@@ -45,8 +45,8 @@ published 64-byte value.
   vendor-deps release and extract the four source files flat
   into the demo dir; idempotent.
 * `smoke.py` -- compile + run the five-scenario driver in the
-  four build flavours, gated against the expected output
-  lines. Returns 0 only when every flavour passes every
+  four build flavors, gated against the expected output
+  lines. Returns 0 only when every flavor passes every
   scenario.
 * `smoke_main.c` -- the driver (deterministic keys, scenarios,
   expected outputs).

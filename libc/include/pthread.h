@@ -271,7 +271,7 @@
 // embedded in larger structs whose field offsets a separately-compiled
 // module reads back. An over-wide object
 // shifts every later field. The leading word carries 8-byte alignment;
-// macOS additionally uses it for the signature the static initialisers
+// macOS additionally uses it for the signature the static initializers
 // seed (its libpthread rejects a zero-signature statically-allocated
 // object from pthread_mutex_lock / pthread_cond_wait with EINVAL). Sizes
 // per `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
@@ -340,7 +340,7 @@ typedef struct __c5_pthread_rwlock pthread_rwlock_t;
 typedef struct __c5_pthread_rwlockattr pthread_rwlockattr_t;
 #endif
 
-// Static-storage initialisers. macOS seeds the signature word; Linux
+// Static-storage initializers. macOS seeds the signature word; Linux
 // takes an all-zero object. Both forms match the leading-word + buffer
 // shape above.
 #if defined(__APPLE__)

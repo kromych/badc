@@ -259,7 +259,7 @@ impl Memory {
     }
 
     /// Validate a `[addr, addr+len)` access. C99 doesn't pin
-    /// dangling-pointer behaviour, but mistaken accesses get
+    /// dangling-pointer behavior, but mistaken accesses get
     /// surfaced here when `track_pointers` is on. Reads / writes
     /// into a freed allocation, past an allocation's end, or
     /// against a never-allocated heap byte each surface as a
@@ -1079,7 +1079,7 @@ fn run_func<H: Host>(
     result
 }
 
-/// Materialise a call's result. For a host-ABI aggregate return,
+/// Materialize a call's result. For a host-ABI aggregate return,
 /// `ret` is the callee's struct address (in its just-released frame,
 /// bytes intact); copy the aggregate into the caller's result temp at
 /// `ret_slot` and yield the temp's address. A scalar return passes
@@ -1222,7 +1222,7 @@ fn run_inst<H: Host>(
     let name = match inst {
         Inst::Imm(k) => {
             // An f32-marked imm carries the f32 bit pattern (the shape
-            // the native emit materialises); the interpreter's register
+            // the native emit materializes); the interpreter's register
             // convention keeps every f32 value as the f64 pattern of
             // its single-precision value, so widen at the definition.
             frame.regs[v as usize] = if matches!(frame.func.f32_values.get(v as usize), Some(true))
@@ -1250,7 +1250,7 @@ fn run_inst<H: Host>(
         }
         Inst::ImmCode(target_pc) => {
             // Code pointers don't map to bytes; tag with
-            // `CODE_ADDR_TAG` so `CallIndirect` recognises them.
+            // `CODE_ADDR_TAG` so `CallIndirect` recognizes them.
             frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
             return Ok(());
         }
@@ -2344,8 +2344,8 @@ fn dispatch_callext<H: Host>(
             })
         }
         // `int setenv(const char *name, const char *value, int overwrite)`.
-        // C99 doesn't standardise setenv; this matches POSIX.
-        // The `int overwrite` is normalised through the `Overwrite`
+        // C99 doesn't standardize setenv; this matches POSIX.
+        // The `int overwrite` is normalized through the `Overwrite`
         // enum at the trait boundary.
         "setenv" => {
             if args.len() < 3 {
@@ -2575,7 +2575,7 @@ impl<'a> Varargs<'a> {
 /// -- flags, width (incl. `*`), precision (incl. `.*`), length
 /// modifiers -- and pulls arguments from `args` as each
 /// conversion requires. Returns the raw output bytes for the
-/// caller to hand to `host.write`. An unrecognised conversion
+/// caller to hand to `host.write`. An unrecognized conversion
 /// emits its spec text verbatim without consuming an argument
 /// (undefined per 7.19.6.1p9).
 fn format_printf(fmt: &[u8], mut args: Varargs<'_>, mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
@@ -3379,7 +3379,7 @@ fn run_inline_asm(
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a
-    // 128-bit SSE value that has no modelled slot. Such asm also uses SSE
+    // 128-bit SSE value that has no modeled slot. Such asm also uses SSE
     // instructions, refused below -- reject the operand up front with a clear
     // message rather than mis-model it as a GPR.
     if asm
@@ -3409,7 +3409,7 @@ fn run_inline_asm(
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         // A bound operand is the stack or frame pointer itself: seed the
-        // modelled slot with the proxy `StackPointer` / `FrameAddress` read,
+        // modeled slot with the proxy `StackPointer` / `FrameAddress` read,
         // and never treat it as a destination address.
         if let crate::c5::ir::AsmConstraint::Bound(b) = op.constraint {
             let rsp = crate::c5::codegen::x86_64::asm::reg_by_name("rsp").map(|(n, _)| n);
@@ -3432,7 +3432,7 @@ fn run_inline_asm(
     let value_of = |o: &AsmOpnd, xregs: &[i64; 16]| -> (i64, AsmRegSize) {
         match *o {
             AsmOpnd::Imm(v) => (v, AsmRegSize::Long),
-            // Only the 16 GPRs are modelled; MMX / control / debug / segment
+            // Only the 16 GPRs are modeled; MMX / control / debug / segment
             // registers (marked with register numbers >= 16) read as zero.
             AsmOpnd::Reg { reg, size } if (reg as usize) < 16 => (xregs[reg as usize], size),
             AsmOpnd::Reg { size, .. } => (0, size),
@@ -3474,7 +3474,7 @@ fn run_inline_asm(
     let dst_reg = |o: &AsmOpnd| -> Option<usize> {
         match *o {
             // A write into an unmodelled register (MMX / control / debug /
-            // segment, marked >= 16) has no modelled slot: no-op.
+            // segment, marked >= 16) has no modeled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
             // A high-byte write updates bits 8..16 of its GPR, which the
@@ -3504,11 +3504,11 @@ fn run_inline_asm(
         match insn.mnemonic {
             // Literal machine bytes, emit-time data directives, `.skip`
             // padding, and `.align` padding are opaque to the register model,
-            // like the privileged / port ops below: no modelled effect under
+            // like the privileged / port ops below: no modeled effect under
             // the VM.
             Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
-            // the catalogue is refused rather than modelled. Such inline asm is
+            // the catalog is refused rather than modeled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
             // The interpreter is single-threaded: a fence orders nothing.
             Mnemonic::Table("mfence" | "lfence" | "sfence") => {}
@@ -3566,7 +3566,7 @@ fn run_inline_asm(
             | Mnemonic::Evex(_)
             | Mnemonic::VexGpr { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
-                // native / JIT construct, refused here rather than mis-modelled.
+                // native / JIT construct, refused here rather than mis-modeled.
                 return Err(C5Error::Runtime(alloc::string::String::from(
                     "inline asm: SSE register ops are not supported under --interp",
                 )));
@@ -3625,7 +3625,7 @@ fn run_inline_asm(
                 // on the VM's register model (a debugger is not attached).
             }
             Mnemonic::Movd => {
-                // No modelled MMX register file. A read into a GPR (the AT&T
+                // No modeled MMX register file. A read into a GPR (the AT&T
                 // destination is a GPR: reg < 16) yields zero; a write into an
                 // MMX register is a no-op.
                 if let Some(r) = dst_reg(&ops[1])
@@ -4174,7 +4174,7 @@ fn run_intrinsic(
             })
         }
         Intrinsic::X86Sgdt | Intrinsic::X86Sidt | Intrinsic::X86Sldt | Intrinsic::X86Str => {
-            // Store forms: no modelled descriptor tables. Zero the operand so
+            // Store forms: no modeled descriptor tables. Zero the operand so
             // a caller reads a defined result. sgdt/sidt write a 10-byte
             // pseudo-descriptor (2-byte limit + 8-byte base); sldt/str write a
             // 2-byte selector.
@@ -4340,7 +4340,7 @@ fn run_intrinsic(
         // The OS's value in x18 (the Windows TEB) has no interpreter
         // counterpart.
         Intrinsic::PlatformRegister => Err(C5Error::Runtime(
-            "vm_ssa: the platform register x18 is not modelled under --interp".to_string(),
+            "vm_ssa: the platform register x18 is not modeled under --interp".to_string(),
         )),
         Intrinsic::ReturnAddress => {
             // The return slot of a frame record: this frame's without an

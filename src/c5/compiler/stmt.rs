@@ -12,7 +12,7 @@
 //!     `parse_local_decl`) which save shadowed bindings
 //!     into a per-block vector and restore them on exit.
 //!   * `consume(byte, msg)` -- the canonical single-byte-token
-//!     consumer with a labelled error on mismatch. Used from
+//!     consumer with a labeled error on mismatch. Used from
 //!     every statement-shape parser plus a handful of expression
 //!     paths in expr().
 //!
@@ -1849,7 +1849,7 @@ impl Compiler {
         // the `rep; nop` byte encoding of PAUSE on x86; normalize away the
         // whitespace and `;` so every spelling maps to the relax hint. It
         // carries no operand (only an optional `"memory"` clobber), so it
-        // is recognised before the general operand parser.
+        // is recognized before the general operand parser.
         let compact: alloc::string::String = tmpl_lc
             .chars()
             .filter(|c| !c.is_whitespace() && *c != ';')
@@ -2847,7 +2847,7 @@ impl Compiler {
             let cc = super::super::codegen::x86_64::asm::flag_cond_code(cond)?;
             return Some((AsmConstraint::Flags(cc), is_rw));
         }
-        // No other `@` form is modelled; without this the letters after it
+        // No other `@` form is modeled; without this the letters after it
         // would be read as ordinary class letters.
         if body.contains('@') {
             return None;
@@ -3934,7 +3934,7 @@ impl Compiler {
             } else if !returns_void {
                 // Bare `return;` in a function returning non-void.
                 // C99 leaves the returned value indeterminate (6.9.1p12
-                // -- undefined behaviour if the caller uses it); C23
+                // -- undefined behavior if the caller uses it); C23
                 // 6.8.6.4 and every current toolchain reject it. Lowered,
                 // the return carries no value, as reaching the closing
                 // brace does.
@@ -4072,7 +4072,7 @@ impl Compiler {
         Ok(start)
     }
 
-    /// Consume a single-byte token, returning a labelled compile error otherwise.
+    /// Consume a single-byte token, returning a labeled compile error otherwise.
     pub(super) fn consume(&mut self, expected: u8, msg: &str) -> Result<(), C5Error> {
         if self.lex.tk == expected {
             self.next()?;

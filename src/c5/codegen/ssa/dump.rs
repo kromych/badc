@@ -599,7 +599,7 @@ fn _block_check(_b: BlockId) {}
 
 /// True when SSA-dump output is requested through the CLI flag
 /// (`NativeOptions::dump_ssa`). Under the `codegen_test` feature the
-/// `BADC_DUMP_SSA` environment variable is also honoured; a production
+/// `BADC_DUMP_SSA` environment variable is also honored; a production
 /// build relies solely on the flag and never reads the environment.
 pub(crate) fn enabled(options: &super::NativeOptions) -> bool {
     if options.dump_ssa {

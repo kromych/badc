@@ -162,7 +162,7 @@ def main() -> int:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
-        # Separate-compilation flavour: each .c through `-c`
+        # Separate-compilation flavor: each .c through `-c`
         # to its own .o, link the three pieces. No amalgamation.
         tu_dir = work / "tu"
         tu_dir.mkdir()
@@ -190,7 +190,7 @@ def main() -> int:
                 print(f"smoke FAIL: TU build ({tag}) failed", file=sys.stderr)
                 return 1
 
-        # Archive flavour: bundle the two library sources into
+        # Archive flavor: bundle the two library sources into
         # libkissfft.a, link smoke_main.c against it via -l.
         ar_dir = work / "ar"
         ar_dir.mkdir()

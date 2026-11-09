@@ -1962,8 +1962,8 @@ typedef struct _WIN32_FILE_ATTRIBUTE_DATA *LPWIN32_FILE_ATTRIBUTE_DATA;
 
 // WIN32_FIND_DATAA / WIN32_FIND_DATAW -- output buffer for
 // FindFirstFile / FindNextFile. Layouts pinned to the Win64 ABI;
-// the ANSI flavour uses MAX_PATH bytes for the file name, the wide
-// flavour uses 260 unsigned shorts.
+// the ANSI flavor uses MAX_PATH bytes for the file name, the wide
+// flavor uses 260 unsigned shorts.
 #define MAX_PATH 260
 struct _WIN32_FIND_DATAA {
     DWORD    dwFileAttributes;

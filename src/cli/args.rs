@@ -75,7 +75,7 @@ pub(crate) enum Parsed {
     /// `--install [<dir>]` writes the embedded header and runtime tree
     /// and reads no target, so it is decided before target resolution.
     Install { dir: Option<PathBuf>, quiet: bool },
-    /// `--list-diagnostics` / `--explain <sel>`: rendered catalogue text
+    /// `--list-diagnostics` / `--explain <sel>`: rendered catalog text
     /// for stdout, then exit 0. Neither reads a target or an input.
     Diagnostics(String),
     /// gcc's `-print-file-name=<name>`: print the path for `name`, then
@@ -725,7 +725,7 @@ fn byte_size(spec: &str) -> Option<u64> {
     number.parse::<u64>().ok()?.checked_mul(scale)
 }
 
-/// What a `-W` option's selector names: a catalogue selector, or `None`
+/// What a `-W` option's selector names: a catalog selector, or `None`
 /// for a warning gcc or clang defines that badc does not implement. `arg`
 /// is the option as written, so the rejection quotes what the user typed.
 fn selector(sel: &str, arg: &str) -> Result<Option<badc::diag::Selector>, ParseError> {
@@ -774,7 +774,7 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
             }
             continue;
         }
-        // An unrecognised dash-prefixed token is an unknown option, not
+        // An unrecognized dash-prefixed token is an unknown option, not
         // a source file. Without this guard it falls through to the
         // positionals and is classified by extension, becoming a phantom
         // input path. `-` alone is the stdin source.
@@ -864,7 +864,7 @@ impl Parser {
 
     /// The `-g` family: whether debug information is emitted, and which
     /// DWARF it is asked to be. One rule covers every spelling. A
-    /// request the emitter satisfies is honoured and silent; one it does
+    /// request the emitter satisfies is honored and silent; one it does
     /// not is accepted and reported through `dwarf-output`, because a
     /// build system passes `-gdwarf-<n>` unconditionally and rejecting
     /// it fails the compile rather than writing another version. A
@@ -2261,7 +2261,7 @@ impl Parser {
         Ok(true)
     }
 
-    /// Render the catalogue text `--list-diagnostics` / `--explain`
+    /// Render the catalog text `--list-diagnostics` / `--explain`
     /// asked for. An unknown selector is refused, matching the
     /// driver's policy of rejecting what it does not implement.
     fn catalog_query(&self, mode: Mode) -> Result<Option<String>, ParseError> {
@@ -3033,7 +3033,7 @@ mod tests {
             Ok(Parsed::Run(_)) => "a run".to_string(),
             Ok(Parsed::Print(_)) => "printed text".to_string(),
             Ok(Parsed::Install { .. }) => "an install".to_string(),
-            Ok(Parsed::Diagnostics(_)) => "catalogue text".to_string(),
+            Ok(Parsed::Diagnostics(_)) => "catalog text".to_string(),
             Ok(Parsed::PrintFileName(_)) => "a file name".to_string(),
             Err(e) => format!("a rejection: {}", e.message),
         }
@@ -3296,7 +3296,7 @@ mod tests {
         assert!(parse(&["-gdwarf64", "a.c"]).diagnostics.is_empty());
     }
 
-    /// The report is a catalogue row, so the `-W` family reaches it
+    /// The report is a catalog row, so the `-W` family reaches it
     /// wherever on the line it is written.
     #[test]
     fn the_dwarf_report_follows_the_w_family() {
@@ -3407,11 +3407,11 @@ mod tests {
         }
     }
 
-    /// The catalogue text `args` prints. Panics on any other outcome.
+    /// The catalog text `args` prints. Panics on any other outcome.
     fn catalog(args: &[&str]) -> String {
         match parse_args(argv(args)) {
             Ok(Parsed::Diagnostics(text)) => text,
-            other => panic!("{args:?}: expected catalogue text, got {}", outcome(&other)),
+            other => panic!("{args:?}: expected catalog text, got {}", outcome(&other)),
         }
     }
 
@@ -3451,7 +3451,7 @@ mod tests {
 
     /// The level `sel` reports at after `args`.
     fn level(args: &[&str], sel: &str) -> badc::diag::Level {
-        let code = badc::diag::Code::from_selector(sel).expect("a catalogue row");
+        let code = badc::diag::Code::from_selector(sel).expect("a catalog row");
         parse(args).front.diag.level(code)
     }
 

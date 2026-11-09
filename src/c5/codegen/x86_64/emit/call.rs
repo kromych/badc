@@ -259,7 +259,7 @@ impl Marshal<'_> {
     /// parallel register move (System V AMD64 3.2.3): an aggregate routes its
     /// base through its own first integer eightbyte register, so no
     /// aggregate's loads clobber another's pending base. The sources not
-    /// register-resident then materialise into their targets.
+    /// register-resident then materialize into their targets.
     fn int_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
         for (i, &placement) in self.plan.placements.iter().enumerate() {
@@ -410,7 +410,7 @@ fn store_agg_return(
     for (class, off) in super::abi_classify::register_slots(&eb_classes) {
         let disp = (disp + i64::from(off)) as i32;
         // The object's bytes alone: a copy elided into a member points the
-        // temp at storage its neighbours share.
+        // temp at storage its neighbors share.
         let width = desc.size.saturating_sub(off).min(8);
         if class == super::abi_classify::RegClass::X87 {
             super::encode::emit_fstp_m80(code, base, disp);

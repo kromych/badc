@@ -1,8 +1,8 @@
 //! Object-layout authority.
 //!
 //! One description of how a compiled unit's static data is measured,
-//! aligned, serialised, and addressed. The image writers and the linker
-//! read it for record serialisation and section padding, the
+//! aligned, serialized, and addressed. The image writers and the linker
+//! read it for record serialization and section padding, the
 //! data-compaction pass for the offset surface it must rewrite, and the
 //! symbol table for each object's extent.
 //!

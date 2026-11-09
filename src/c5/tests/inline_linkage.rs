@@ -28,7 +28,7 @@
 //! calls alone, so dropping the body would leave undefined the calls gcc
 //! resolves by inlining them.
 //!
-//! That licence covers calls, not the address: `f` keeps external
+//! That license covers calls, not the address: `f` keeps external
 //! linkage, so C99 6.2.2p2 requires `&f` to denote one function across
 //! the program. The body is therefore emitted under the private name
 //! `f.inline`, which no C identifier can spell, and the identifier
@@ -233,7 +233,7 @@ const GNU89_REFERENCE: &[(Sym, Sym, Sym)] = &[
 /// to the reference: equal, or badc's unit-local body implementing a
 /// call against their undefined reference. Returns the number of cells
 /// in the latter. An address cell must agree outright -- C99 6.2.2p2
-/// leaves no licence there.
+/// leaves no license there.
 fn check_matrix(
     label: &str,
     attr: &str,

@@ -1,7 +1,7 @@
 """Helpers for invoking badc's multi-translation-unit build path
 from a demo smoke harness.
 
-Two flavours:
+Two flavors:
 
 * ``build_tu_separate(badc, srcs, ...)``  -- compile each
   ``.c`` to its own ``.o`` via ``badc -c`` and link the lot

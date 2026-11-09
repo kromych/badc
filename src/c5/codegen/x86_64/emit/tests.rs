@@ -1841,10 +1841,10 @@ mod code_mode_tests {
         );
     }
 
-    /// A width class the instruction catalogue spells out member by member
+    /// A width class the instruction catalog spells out member by member
     /// still takes the operand-size prefix. `and`'s ModRM immediate group is
     /// written `r/m16, imm16` / `r/m32, imm32` / `r/m64, imms32` rather than
-    /// `rv/mv, immv`, and `lea` reaches the catalogue without its 16-bit
+    /// `rv/mv, immv`, and `lea` reaches the catalog without its 16-bit
     /// destination row at all; a 32-bit member of either under `.code16` is
     /// what the x86 real-mode trampoline runs. A group with no 16-bit member
     /// is the `y` class, which REX.W alone selects and `66` does not reach.
@@ -2744,7 +2744,7 @@ mod code_mode_tests {
                 (2, 2, false, at(".Lc5_asmsec_0_3"), 0),
                 (5, 2, false, at(".Lc5_asmsec_0_3"), 0),
                 (9, 2, false, at(".Lc5_asmsec_0_3"), 0),
-                // A 32-bit address size takes the zero-extended flavour.
+                // A 32-bit address size takes the zero-extended flavor.
                 (15, 4, false, at(".Lc5_asmsec_0_2"), 0),
                 (33, 4, true, at(".Lc5_asmsec_0_1"), 0),
             ]
@@ -2923,7 +2923,7 @@ mod code_mode_tests {
     }
 
     /// A scaled index addresses memory in the hand-written SSE / VEX shapes as
-    /// it does in the catalogue: the SIB byte with REX.X / VEX.X carrying the
+    /// it does in the catalog: the SIB byte with REX.X / VEX.X carrying the
     /// index's high bit. Bytes measured with GNU as 2.46.1.
     #[test]
     fn scaled_index_memory_operands_match_gnu_as() {

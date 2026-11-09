@@ -13,7 +13,7 @@
 // caps that user code derives from `SIZE_MAX`.
 //
 // NULL is the canonical zero pointer literal. The offsetof
-// shape `&((T*)0)->m` is recognised by the constant-expression
+// shape `&((T*)0)->m` is recognized by the constant-expression
 // evaluator (see parse_const_offsetof in the compiler); the
 // macro form below is the customary expansion.
 #pragma once

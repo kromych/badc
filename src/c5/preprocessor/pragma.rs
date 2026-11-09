@@ -322,7 +322,7 @@ impl Preprocessor {
     /// accepts without a diagnostic.
     ///
     /// Actions: `push`, `pop`, and `ignored` / `warning` / `error`
-    /// with a quoted `-W` selector naming a catalogue row or a group.
+    /// with a quoted `-W` selector naming a catalog row or a group.
     fn parse_pragma_diagnostic(&mut self, args: &str, site: Site<'_>) -> bool {
         let mut tokens = args.split_whitespace();
         let Some(vendor) = tokens.next().filter(|t| matches!(*t, "GCC" | "clang")) else {
@@ -363,7 +363,7 @@ impl Preprocessor {
 
     /// The `"-W<selector>"` operand a diagnostic pragma takes. `None`
     /// when the operand is malformed or names nothing in the
-    /// catalogue; both are reported and the pragma covers nothing.
+    /// catalog; both are reported and the pragma covers nothing.
     fn diag_selector(
         &mut self,
         operand: &str,
@@ -469,7 +469,7 @@ impl Preprocessor {
     /// * `#pragma warning(push)` / `#pragma warning(push, level)`
     /// * `#pragma warning(pop)`
     ///
-    /// Each ID resolves through the catalogue's MSVC aliases; the
+    /// Each ID resolves through the catalog's MSVC aliases; the
     /// overall level a `push, <level>` names has no badc counterpart
     /// and is accepted without effect. An ID no row lists is ignored:
     /// badc numbers its own diagnostics, and a source silencing an
@@ -533,7 +533,7 @@ impl Preprocessor {
                     PRAGMA_SYNTAX,
                     site,
                     format!(
-                        "unrecognised `#pragma warning({clause})` \
+                        "unrecognized `#pragma warning({clause})` \
                          -- expected `disable : N` / `enable : N` / \
                          `default : N` / `error : N` / `once : N` / \
                          `suppress : N` / `push` / `pop`"
@@ -571,7 +571,7 @@ impl Preprocessor {
                     PRAGMA_SYNTAX,
                     site,
                     format!(
-                        "unrecognised `#pragma warning` action `{action}` \
+                        "unrecognized `#pragma warning` action `{action}` \
                          -- expected `disable` / `enable` / `default` / \
                          `error` / `once` / `suppress` / a level 1 to 4"
                     ),

@@ -801,7 +801,7 @@ pub enum AsmRegister {
 /// declarations and for the symbol-table predefines; file-scope
 /// declarations resolve to one of `Internal` (`static`) or
 /// `External` (everything else, including bare declarations and
-/// `extern T x;`). Materialised onto every symbol so the linker
+/// `extern T x;`). Materialized onto every symbol so the linker
 /// can decide whether to surface the name in the cross-TU symbol
 /// table or keep it private.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

@@ -338,7 +338,7 @@ impl Preprocessor {
     }
 
     /// Shared tail of `process_include` / `process_include_next`: error on
-    /// a miss, honour `#pragma once`, bound the include depth, and process
+    /// a miss, honor `#pragma once`, bound the include depth, and process
     /// the resolved body.
     pub(super) fn finish_include(
         &mut self,

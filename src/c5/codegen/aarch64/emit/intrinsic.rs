@@ -86,13 +86,13 @@ pub(super) fn emit_intrinsic(
         | I::X86Lldt
         | I::X86Clflush => fail("descriptor-table intrinsic is x86-only"),
         I::Divq128 => fail("divq intrinsic is x86-64 only"),
-        // `dsb ish`: data synchronisation barrier over the inner shareable
+        // `dsb ish`: data synchronization barrier over the inner shareable
         // domain.
         I::AArch64DsbIsh => {
             emit(code, 0xD503_3B9Fu32);
             Ok(())
         }
-        // `isb`: instruction synchronisation barrier.
+        // `isb`: instruction synchronization barrier.
         I::AArch64Isb => {
             emit(code, 0xD503_3FDFu32);
             Ok(())
@@ -1136,7 +1136,7 @@ fn atomic128_restore_working(code: &mut Vec<u8>, w: &Work) {
     );
 }
 
-/// Materialise an operand into `target`, reading the saved copy when the
+/// Materialize an operand into `target`, reading the saved copy when the
 /// allocator placed it in a working register that an earlier operand move
 /// may already have clobbered.
 fn atomic128_operand_into(
@@ -1241,7 +1241,7 @@ fn emit_atomic128(
 }
 
 /// Store `src` (a loaded old half) through the output address operand
-/// `addr_val`, materialised into `addr_tmp`.
+/// `addr_val`, materialized into `addr_tmp`.
 fn atomic128_writeback(
     code: &mut Vec<u8>,
     addr_val: super::super::ir::ValueId,
@@ -1294,7 +1294,7 @@ fn emit_atomic128_ldst(
             let back = ((loop_start as i64) - (code.len() as i64)) / 4;
             emit(code, enc_cbnz(status, back as i32));
         }
-        // Plain STP: materialise the two halves and store the pair.
+        // Plain STP: materialize the two halves and store the pair.
         I::Atomic128Store => {
             if !atomic128_operand_into(code, args[1], vl, &w, frame, alloc)
                 || !atomic128_operand_into(code, args[2], vh, &w, frame, alloc)

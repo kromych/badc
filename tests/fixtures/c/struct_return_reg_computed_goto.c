@@ -3,7 +3,7 @@
    target of a computed goto. The return slot, its single store, and the disp-0
    load all sit in one block, so the slot is promoted out of memory; the
    computed-goto terminator's target value must be redirected to the stored
-   register word, not left reading the neutralised slot. Two shapes: a single
+   register word, not left reading the neutralized slot. Two shapes: a single
    stored label, and a ternary whose two label addresses merge into the stored
    word (the store value is a phi). */
 typedef struct {

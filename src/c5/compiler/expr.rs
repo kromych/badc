@@ -1171,7 +1171,7 @@ impl Compiler {
         Some(self.make_vector_type(signed, bytes))
     }
 
-    /// Comparison opcode flavour for a vector operand pair: floating by
+    /// Comparison opcode flavor for a vector operand pair: floating by
     /// the element type; between two integer vectors unsigned when either
     /// element is (6.3.1.8 common type, as gcc compares); against a
     /// broadcast scalar the vector's element decides, since the scalar
@@ -4248,7 +4248,7 @@ impl Compiler {
             ));
         }
         // The nominal opcode; the walker picks the signed /
-        // unsigned / floating flavour from the element type.
+        // unsigned / floating flavor from the element type.
         let bop = vector_binop_op(binop);
         let bin = self.ast.push_expr(
             super::super::ast::Expr::Binary {
@@ -5613,7 +5613,7 @@ impl Compiler {
                 self.pending.last_array_decay_dims = dims;
             } else {
                 // A flexible array member (C99 6.7.2.1p16) is an incomplete array,
-                // signalled to `typeof` / `__builtin_types_compatible_p` with the
+                // signaled to `typeof` / `__builtin_types_compatible_p` with the
                 // `-1` sentinel as for a zero-length array object.
                 self.pending.last_array_decay_size = -1;
                 // A multi-dimensional flexible member records a 0 placeholder for
@@ -6660,7 +6660,7 @@ enum BinaryKind {
 
 impl BinaryKind {
     /// The opcode the GCC vector extension lowers element-wise; the
-    /// walker picks the signed, unsigned or floating flavour from the
+    /// walker picks the signed, unsigned or floating flavor from the
     /// element type. `None` for an operator the extension does not take.
     fn vector_op(self) -> Option<super::super::ir::BinOp> {
         match self {

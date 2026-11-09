@@ -41,6 +41,6 @@ int main(void) {
     w.a = 15;
     w.a++; // wraps within the 4-bit field: 15 -> 0
     if (w.a != 0) return 10;
-    if (w.b != 1 || w.c != 1) return 11; // neighbours intact
+    if (w.b != 1 || w.c != 1) return 11; // neighbors intact
     return 0;
 }

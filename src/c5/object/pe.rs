@@ -2173,7 +2173,7 @@ fn build_reloc_section(
 }
 
 /// Per-`.data` offsets for the trio of TLS support structures (the
-/// `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the initialised TLS
+/// `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the initialized TLS
 /// image).
 #[derive(Default)]
 struct TlsLayout {

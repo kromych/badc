@@ -10,7 +10,7 @@
  *
  * Only the symbols the client actually calls are listed. macOS Mach-O prefixes
  * exported symbols with an underscore; ELF and PE use the bare C name. Windows
- * ships no redistributable libcurl, so the smoke skips this flavour there.
+ * ships no redistributable libcurl, so the smoke skips this flavor there.
  */
 
 #ifndef BADC_CURL_SYSLINK_H

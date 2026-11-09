@@ -124,7 +124,7 @@ fn comparison_macros_raise_no_invalid() {
 
 #[test]
 fn bool_normalize_c99() {
-    // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
+    // C99 6.3.1.2 `_Bool` 0/1 normalization on every conversion.
     assert_eq!(run_fixture("bool_normalize_c99.c"), 0);
 }
 
@@ -439,7 +439,7 @@ fn rdtsc_host_ticks() {
 fn inline_asm_fixed_reg_output_width() {
     // A fixed-register output stores back at the width of its C object:
     // a `long` operand of a 32-bit instruction takes all eight bytes, a
-    // 16-bit operand takes two and leaves its neighbours alone.
+    // 16-bit operand takes two and leaves its neighbors alone.
     assert_eq!(
         run_fixture_for(
             "inline_asm_fixed_reg_output_width.c",
@@ -1209,7 +1209,7 @@ fn overaligned_type_placement() {
     // An object whose alignment comes from its type (an over-aligned
     // struct member raising the aggregate), with no attribute on the
     // declarator, is placed on that boundary for file-scope, block-scope
-    // static, and initialised storage. Runtime address checks, matched
+    // static, and initialized storage. Runtime address checks, matched
     // against GCC and clang on x86-64 and aarch64.
     assert_eq!(run_fixture("overaligned_type_placement.c"), 0);
 }
@@ -1256,7 +1256,7 @@ fn section_attr_flexible_array_tail() {
 #[test]
 fn max_alignment_placement() {
     // The widest static alignment badc honors for the target -- 64 KiB, 16 KiB
-    // on Mach-O -- lands on its boundary for bare, initialised, and
+    // on Mach-O -- lands on its boundary for bare, initialized, and
     // block-scope-static storage.
     assert_eq!(run_fixture("max_alignment_placement.c"), 0);
 }
@@ -1535,7 +1535,7 @@ fn builtin_types_compatible_ptr_array() {
 fn gnu_capability_macros_match_their_features() {
     use crate::{CompileOptions, Compiler, Target, Vm};
     // Every capability macro the `--gnu` predefine set claims, checked
-    // against the behaviour it promises: the atomic lock-free properties
+    // against the behavior it promises: the atomic lock-free properties
     // and test-and-set true value, the `__sync_*` widths, the byte-swap
     // builtins the version claim covers, and the UTF literal encodings.
     let src = super::load_fixture("gnu_capability_macros.c");
@@ -3327,7 +3327,7 @@ fn weak_alias_call_not_inlined() {
 #[test]
 fn asm_label_rename() {
     // A GNU asm-label renames the emitted symbol without changing what the
-    // identifier denotes, so the program's behaviour is the same as it
+    // identifier denotes, so the program's behavior is the same as it
     // would be without the labels.
     assert_eq!(run_fixture("asm_label_rename.c"), 0);
 }
@@ -3838,7 +3838,7 @@ fn tag_scopes() {
 fn a_zero_size_object_takes_a_frame_cell() {
     // GNU C's empty aggregate is an object: a local, a by-value argument's
     // copy and a returned temporary each take a cell of their own, so the
-    // interpreter reads their addresses and no neighbour shares one.
+    // interpreter reads their addresses and no neighbor shares one.
     let src = "struct E {};\n\
         static int f(struct E e, int y) { (void)e; return y; }\n\
         static struct E mk(void) { struct E e; return e; }\n\
@@ -4084,7 +4084,7 @@ fn store_forward_local_slot() {
 fn struct_return_reg_computed_goto() {
     // A one-word-struct return that carries a label address is promoted out
     // of its frame slot; the computed-goto terminator reading the field must
-    // be redirected to the stored word rather than the neutralised slot.
+    // be redirected to the stored word rather than the neutralized slot.
     assert_eq!(run_fixture("struct_return_reg_computed_goto.c"), 0);
 }
 
@@ -4265,7 +4265,7 @@ fn inline_asm_raw_bytes() {
 #[test]
 fn inline_asm_x64_align_padding_opaque() {
     // `.align` / `.p2align` / `.balign` padding in the code stream has no
-    // modelled effect; the surrounding computation is unaffected.
+    // modeled effect; the surrounding computation is unaffected.
     assert_eq!(
         run_fixture_for("inline_asm_x64_align.c", crate::Target::LinuxX64),
         42
@@ -5608,7 +5608,7 @@ fn static_init_accepts_paren_cast_of_string() {
     // use the cast-of-string-literal idiom
     // `((const T *)"...")`. The integer constant-expression
     // path would drop the data relocation; the init parser
-    // must recognise the shape and route through the
+    // must recognize the shape and route through the
     // string-literal branch so the slot is patched at load.
     assert_eq!(run_fixture("static_init_paren_cast_string.c"), 0);
 }
@@ -5764,7 +5764,7 @@ fn macro_argument_rescan_resolves_pasted_call() {
     // C99 6.10.3.4: the function-like macro's substituted body
     // is rescanned for further macro replacement. An object
     // identifier supplied as a parameter and immediately
-    // followed by `(` in the body must be recognised as a
+    // followed by `(` in the body must be recognized as a
     // function-like call in the rescan.
     assert_eq!(run_fixture("macro_argument_rescan.c"), 0);
 }
@@ -5831,7 +5831,7 @@ fn typedef_fn_ptr_struct_field_carries_lineage() {
     // comes from a `typedef RET (*fn_t)(args)` alias rather
     // than an inline fn-pointer declarator. The typedef's
     // `fn_ptr_indirection` must propagate into the StructField
-    // record so the post-load `(*g->cb)(args)` recognises the
+    // record so the post-load `(*g->cb)(args)` recognizes the
     // decay.
     assert_eq!(run_fixture("typedef_fn_ptr_struct_field.c"), 0);
 }
@@ -5842,7 +5842,7 @@ fn fp_nan_unordered_compare() {
     // 96: NaN compares unordered with everything. Relational
     // and equality ops yield 0 when either operand is NaN; `!=`
     // yields 1. Locks the post-UCOMISD AND-with-`setnp` /
-    // OR-with-`setp` masks the x86_64 backend needs to honour
+    // OR-with-`setp` masks the x86_64 backend needs to honor
     // the unordered case.
     assert_eq!(run_fixture("fp_nan_unordered_compare.c"), 0);
 }
@@ -5940,7 +5940,7 @@ fn block_scope_object_alignment() {
     // the requested boundary -- a static local in the data image, an automatic
     // one in the over-aligned frame region -- while a thread-local keeps the
     // boundary its block is placed on. One function holds all three kinds with
-    // odd-sized neighbours between them, so a dropped request shows up in the
+    // odd-sized neighbors between them, so a dropped request shows up in the
     // address rather than being masked by a lucky offset.
     assert_eq!(run_fixture("block_scope_object_alignment.c"), 0);
 }
@@ -6431,7 +6431,7 @@ fn extern_declaration_inside_function_body() {
 
 #[test]
 fn va_copy_clones_va_list_cursor() {
-    // C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
+    // C99 7.15.1.2: `va_copy(dst, src)` initializes `dst` to the
     // same position in the variadic list as `src`. The fixture
     // builds a copy of the cursor immediately after `va_start`
     // and walks the copy; the sum must match the values passed
@@ -6676,7 +6676,7 @@ fn predefined_constants_are_visible() {
 #[test]
 fn c99_qualifiers_parse_as_no_ops() {
     // const, volatile, restrict, signed, unsigned, short, long, _Bool,
-    // register, auto, inline -- recognised by the lexer and consumed at
+    // register, auto, inline -- recognized by the lexer and consumed at
     // every declaration position the parser visits. Returns 0 if every
     // shape parsed and ran.
     assert_eq!(run_fixture("c99_qualifiers.c"), 0);
@@ -6706,7 +6706,7 @@ fn static_local_array_init_bounds() {
     // C99 6.7.8p2/p14/p21: a static-local array initializer fills the storage
     // reserved for the declared bound and no more -- an over-long list is
     // rejected (see `tests::parser`), and the legal shapes leave the
-    // neighbouring statics untouched.
+    // neighboring statics untouched.
     assert_eq!(run_fixture("static_local_array_init_bounds.c"), 0);
 }
 
@@ -7340,7 +7340,7 @@ fn const_expr_arithmetic() {
     // constant-expression grammar -- arithmetic, casts, comparisons,
     // conditionals, sizeof, bitwise / logical operators, and FP
     // operands as casts (folded at parse time and truncated at the
-    // integer boundary). Exercises enum initialisers, _Static_assert,
+    // integer boundary). Exercises enum initializers, _Static_assert,
     // array sizes (global + local), and nested combinations.
     assert_eq!(run_fixture("const_expr_arithmetic.c"), 0);
 }
@@ -8606,7 +8606,7 @@ fn the_mach_process_inspection_headers_are_macos_only() {
     use crate::Target;
     // The include set a remote-memory reader pulls in: the process
     // introspection calls, the Mach-O fat and symbol-table layouts, and
-    // the 64-bit VM routines with their region-info flavours.
+    // the 64-bit VM routines with their region-info flavors.
     let src = "#include <libproc.h>\n\
         #include <mach-o/fat.h>\n\
         #include <mach-o/loader.h>\n\
@@ -8666,7 +8666,7 @@ fn the_mach_process_inspection_headers_are_macos_only() {
 #[test]
 fn vm_region_basic_info_keeps_the_kernel_packing() {
     use crate::Target;
-    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavour
+    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavor
     // pads to 40 bytes and VM_REGION_BASIC_INFO_COUNT_64 reports 10, so
     // mach_vm_region would be handed a reply size the kernel rejects.
     let src = "#include <mach/vm_region.h>\n\

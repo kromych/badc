@@ -125,7 +125,7 @@ pub(crate) fn exports_definition(
 
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
-/// target's expected virtual addresses, materialise the PLT
+/// target's expected virtual addresses, materialize the PLT
 /// pool against [`Self::imports`], and emit the dynamic
 /// symbol table.
 #[derive(Debug, Clone)]
@@ -279,7 +279,7 @@ pub struct MergedNative {
     /// `_Thread_local` access.
     pub tls_index_fixups: Vec<usize>,
     /// Mach-O TLV descriptor offsets, concatenated across units. The
-    /// Mach-O writer materialises one `__thread_vars` descriptor per
+    /// Mach-O writer materializes one `__thread_vars` descriptor per
     /// entry. Empty on non-macOS links.
     pub macho_tlv_descriptors: Vec<u64>,
     /// Mach-O TLV fixups, each `(adrp_offset, descriptor_index)` with
@@ -378,7 +378,7 @@ pub struct MergedNative {
     /// defines, with the attributes its `.symtab` gave it.
     pub(crate) symbols: Vec<crate::c5::codegen::ImageSymbol>,
     /// Per-thread TLS image for the merged executable. The first
-    /// [`Self::tls_init_size`] bytes are the initialised `.tdata`
+    /// [`Self::tls_init_size`] bytes are the initialized `.tdata`
     /// template; the remainder is `.tbss` zero-fill. The per-format
     /// writers consume this as `Build::tls_data` / `tls_init_size`
     /// to lay out PT_TLS (ELF), the TLV section (Mach-O), or the
@@ -638,7 +638,7 @@ pub struct MergedSymbol {
 }
 
 /// Call-site / address-of reloc the linker parks for the
-/// final-image writer to apply. Three flavours, discriminated
+/// final-image writer to apply. Three flavors, discriminated
 /// by `target_section`:
 ///
 ///   * `Undef`: a libc / dylib import. `import_index` selects
@@ -2884,7 +2884,7 @@ impl<'a> Link<'a> {
                 let Some(value) = self.symbol_offset(i, sym) else {
                     continue;
                 };
-                // `RoData` / `RelRo` normalise to `Data`: both payloads
+                // `RoData` / `RelRo` normalize to `Data`: both payloads
                 // lie in the data-byte space, so the merged table speaks
                 // one space.
                 let section = match sym.section {
@@ -7763,7 +7763,7 @@ mod tests {
         );
     }
 
-    /// `emit_x86_64_plt` materialises one trampoline per
+    /// `emit_x86_64_plt` materializes one trampoline per
     /// unique import the merged image reaches for, then
     /// patches each call site's disp32 to reach its
     /// trampoline. Pins the shape: one `printf` import + one
@@ -7771,7 +7771,7 @@ mod tests {
     /// `.text` payload, each starting with `FF 25` (jmp
     /// qword ptr [rip + disp32]).
     #[test]
-    fn emit_x86_64_plt_materialises_one_trampoline_per_import() {
+    fn emit_x86_64_plt_materializes_one_trampoline_per_import() {
         let target = Target::LinuxX64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
@@ -7870,7 +7870,7 @@ mod tests {
     /// unique import. `pending_imports` drains of every
     /// `R_AARCH64_CALL26` reloc; data-ref parks stay.
     #[test]
-    fn emit_aarch64_plt_materialises_one_trampoline_per_import() {
+    fn emit_aarch64_plt_materializes_one_trampoline_per_import() {
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;

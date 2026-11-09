@@ -1787,7 +1787,7 @@ fn freestanding_entry_from_archive_is_pulled() {
 // subsystem at the link step, so a link of precompiled `.o` inputs (which
 // carry no `#pragma entrypoint` / `#pragma subsystem`) still stamps them.
 // Host-independent: cross-compiles a windows-x64 PE and inspects its
-// header. The link succeeding at all proves `--entry` was honoured -- the
+// header. The link succeeding at all proves `--entry` was honored -- the
 // object defines only `my_efi_entry`, so a freestanding link that ignored
 // the flag would fail on the missing default `__c5_entry`.
 #[test]
@@ -2885,7 +2885,7 @@ fn a_link_reports_every_undefined_name_once() {
     }
 }
 
-/// A hard link error carries its catalogue code and no `-W` tail: the
+/// A hard link error carries its catalog code and no `-W` tail: the
 /// row is not controllable, so no option moves it. `-Wno-dead-store`
 /// stands for an accepted `-W` spelling here; the selector grammar
 /// itself is the driver's to implement.
@@ -3937,7 +3937,7 @@ fn debug_line_covers_each_function_entry_pc() {
     // every binutils install on Linux. Skip the assertion if it
     // isn't on PATH so the test still runs in a stripped image;
     // the rest of the test surface (file emission, exit code)
-    // still guards the underlying behaviour.
+    // still guards the underlying behavior.
     let dd = Command::new("dwarfdump")
         .arg("--debug-line")
         .arg(&out)
@@ -5035,7 +5035,7 @@ fn multi_tu_link_emits_decl_line_on_locals() {
 }
 
 /// Multi-TU subprogram DIEs need DW_AT_external (DWARF 4
-/// section 3.3.1) so debuggers honour cross-CU name resolution
+/// section 3.3.1) so debuggers honor cross-CU name resolution
 /// for user-defined functions. Without it (gdb) call helper()
 /// from main's frame may fail to find the helper symbol when
 /// the two functions live in different translation units.
@@ -5479,7 +5479,7 @@ fn emit_native_then_link_native_resolves_cross_unit_call() {
 
 // macOS arm64 -.o link path through the synthesizer. Compiles
 // two sources with `-c`, links the two .o into a Mach-O
-// executable, and execs to verify the runtime behaviour round-
+// executable, and execs to verify the runtime behavior round-
 // trip works. The synth path auto-codesigns via
 // `post_write_native`, so no manual codesign step is needed.
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -20926,7 +20926,7 @@ fn elf_section_names(bytes: &[u8]) -> Vec<String> {
 
 /// The merged path gives a grouped named section its own ELF section
 /// header, not just `__start_` / `__stop_` bounds over bytes folded
-/// into the family blob. Read-only, writable and zero-initialised
+/// into the family blob. Read-only, writable and zero-initialized
 /// placements each land in the family whose region holds them.
 #[test]
 fn named_sections_get_their_own_elf_section_header() {

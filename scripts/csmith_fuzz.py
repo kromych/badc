@@ -4,7 +4,7 @@
 One case is one generated program: csmith emits it from a recorded seed, the
 reference compiler and `badc -O0` / `badc -O` each build it, all three binaries
 run, and the checksum the program prints is compared. csmith's contract is that
-the program is free of undefined behaviour, so any disagreement, crash or
+the program is free of undefined behavior, so any disagreement, crash or
 compile failure is a defect in one of the compilers.
 
 The oracle is the reference compiler (`clang`, else `gcc`, else `cc`), for
@@ -36,7 +36,7 @@ does not hold yet, with `cvise` or `creduce` from PATH, else the in-tree
 `c_reduce.py`. The interestingness test the harness writes keeps a compile
 verdict's signature, and for a runtime verdict keeps the reference honest: it
 must build under `-Werror` for the constructs a reduction likes to leave
-undefined, run clean under the undefined-behaviour and address sanitizers,
+undefined, run clean under the undefined-behavior and address sanitizers,
 and compute the same checksum at `-O0`, at `-O2` and with automatic storage
 pre-filled with a pattern and with zeros. A reduction that trades one
 defect for another is refused by the same test.
@@ -99,7 +99,7 @@ BADC_FLAGS = ("--verify-ssa",)
 
 # The reference builds the case twice: once to gate and answer, once to confirm
 # a runtime finding. The gate is unoptimised because the question it settles is
-# whether the program terminates at all, and an optimiser answers a different
+# whether the program terminates at all, and an optimizer answers a different
 # one: a csmith program whose loop never ends is side-effect free, so `clang
 # -O2` deletes the loop and the binary exits at once while every honest build
 # of it runs forever. One such program reached a `run-timeout` finding against
@@ -881,10 +881,10 @@ def confirm(
     steps: list[Step],
 ) -> bool:
     """Drop a runtime finding the reference cannot reproduce at `-O2`, or
-    whose program the undefined-behaviour sanitizer stops at `-O0`.
+    whose program the undefined-behavior sanitizer stops at `-O0`.
 
     A reference that disagrees with itself between the two levels is either
-    optimising a program csmith did not keep free of undefined behaviour or
+    optimizing a program csmith did not keep free of undefined behavior or
     wrong itself; either way the case says nothing about badc. Agreeing is
     not enough: csmith 2.4.0's builtins pass 0 to `__builtin_clz`, and both
     levels can compute the same answer from it. A sanitizer build that does
@@ -927,7 +927,7 @@ def confirm(
 
 REDUCERS = ("cvise", "creduce")
 
-# The candidate must stay a program the reference has no licence to
+# The candidate must stay a program the reference has no license to
 # compute differently: no missing return or uninitialized scalar, no
 # implicit declaration, and nothing the sanitizers see. csmith's own
 # programs take the address of packed members, so alignment stays off.

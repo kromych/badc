@@ -552,7 +552,7 @@ struct TlvSections {
     storage: SectionPlacement,
     /// log2 of the storage's alignment, the section header's `align`.
     storage_align: u32,
-    initialised: bool,
+    initialized: bool,
 }
 
 /// `LC_SEGMENT_64` for a segment with no sections (`__PAGEZERO`,
@@ -753,7 +753,7 @@ fn segment_data(
             3,
             S_THREAD_LOCAL_VARIABLES,
         ));
-        let (name, flags, offset) = if t.initialised {
+        let (name, flags, offset) = if t.initialized {
             ("__thread_data", S_THREAD_LOCAL_REGULAR, t.storage.offset)
         } else {
             ("__thread_bss", S_THREAD_LOCAL_ZEROFILL, 0)
@@ -1507,7 +1507,7 @@ struct Layout {
     thread_storage_size: u64,
     thread_storage_offset_in_segment: u64,
     thread_storage_align: u64,
-    thread_storage_initialised: bool,
+    thread_storage_initialized: bool,
     data_filesize: u64,
     data_vmsize: u64,
     bss_base_vmaddr: u64,
@@ -2124,9 +2124,9 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        l.thread_storage_initialised = build.tls_init_size > 0;
+        l.thread_storage_initialized = build.tls_init_size > 0;
         let data_segment_file_used: u64 = if self.tls_present {
-            if l.thread_storage_initialised {
+            if l.thread_storage_initialized {
                 l.thread_storage_offset_in_segment + l.thread_storage_size
             } else {
                 l.thread_vars_offset_in_segment + l.thread_vars_size
@@ -2567,7 +2567,7 @@ impl<'a> MachOWriter<'a> {
                 l.thread_storage_fileoff(),
             ),
             storage_align: l.thread_storage_align.trailing_zeros(),
-            initialised: l.thread_storage_initialised,
+            initialized: l.thread_storage_initialized,
         });
         let data_segment = segment_data(
             place(
@@ -2852,7 +2852,7 @@ impl<'a> MachOWriter<'a> {
             None,
             &|off| self.data_off_to_vaddr(off),
         )?;
-        let tls_sites = if self.tls_present && l.thread_storage_initialised {
+        let tls_sites = if self.tls_present && l.thread_storage_initialized {
             Some(self.tls_reloc_sites()?)
         } else {
             None

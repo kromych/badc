@@ -5,7 +5,7 @@
 //! from the *declarator* (`*p[10]`, `(*fp)(int)`, ...). This
 //! module owns the first half: consume zero-or-more leading
 //! qualifier / sign / size / storage-class modifiers, then
-//! recognise the base type keyword (`int`, `char`, `void`,
+//! recognize the base type keyword (`int`, `char`, `void`,
 //! `float`, `double`, `enum`, `struct`, `union`) or a typedef
 //! name, returning the resulting `ty`-encoded type.
 //!
@@ -91,7 +91,7 @@ impl AttrFlags {
 /// type. `signed` / `unsigned` / `short` / `long` (any count) /
 /// `_Bool` are tracked separately so a later dispatch can pick
 /// between `Ty::Int`, `Ty::Long`, `Ty::LongLong`, `Ty::Short` etc.
-/// `long_count` lets us recognise `long long`.
+/// `long_count` lets us recognize `long long`.
 #[derive(Default, Debug, Clone, Copy)]
 pub(super) struct IntModifiers {
     pub saw_signed: bool,
@@ -1643,7 +1643,7 @@ impl Compiler {
     /// Parse the operand of `__attribute__((mode(M)))` and return the
     /// mode's `(byte width, is floating)`. The operand is an identifier;
     /// GCC accepts the mode names with and without the `__M__` spelling.
-    /// An unrecognised name is an error, as in GCC -- a silently dropped
+    /// An unrecognized name is an error, as in GCC -- a silently dropped
     /// mode would change the layout of every aggregate holding the type.
     fn parse_machine_mode(&mut self) -> Result<(u8, bool), C5Error> {
         if self.lex.tk != Token::Id {

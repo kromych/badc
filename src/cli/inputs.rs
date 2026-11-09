@@ -76,7 +76,7 @@ pub(crate) fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
             }
             s
         }
-        None => format!("is not an object file in any format badc recognises; {reads}"),
+        None => format!("is not an object file in any format badc recognizes; {reads}"),
     }
 }
 
@@ -483,7 +483,7 @@ impl Inputs {
     /// assembler source; `.o` / `.obj` a relocatable object; `.a` /
     /// `.lib` a static archive; `.so` / `.dylib` / `.tbd` / `.dll` a shared
     /// library; `-` the stdin source. Under `--jit` / `--interp` the
-    /// first unrecognised entry starts the program's own argv; every
+    /// first unrecognized entry starts the program's own argv; every
     /// other mode reads it by content.
     pub(crate) fn classify(cli: &Cli) -> Self {
         let mut sources: Vec<String> = Vec::new();
@@ -525,7 +525,7 @@ impl Inputs {
                 "o" | "obj" | "res" | "def" => InputKind::Object,
                 "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => InputKind::Shared,
                 "a" | "lib" => InputKind::Archive,
-                // In --jit / --interp the first unrecognised entry starts the
+                // In --jit / --interp the first unrecognized entry starts the
                 // program's argv (`badc --jit foo.c arg1 arg2`).
                 _ if takes_prog_args => {
                     prog_args_start = i;

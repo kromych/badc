@@ -698,7 +698,7 @@ fn carve_anonymous_const_data(
             .collect(),
     );
     // Disqualify per recorded span, before merging: merging first would let
-    // one span's relocation or named overlap withdraw its neighbours, which
+    // one span's relocation or named overlap withdraw its neighbors, which
     // are separate objects.
     let carvable: Vec<(u64, u64)> = spans
         .into_iter()
@@ -4751,7 +4751,7 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// `.tdata` holds the initialised slice of the TLS template and `.tbss`
+    /// `.tdata` holds the initialized slice of the TLS template and `.tbss`
     /// the zero-fill remainder, both `SHF_TLS` so the linker groups them
     /// into `PT_TLS`; `.rela.tdata` follows `.tbss` so the fixed indices
     /// below it stay put.
@@ -5320,7 +5320,7 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_COPY_RELOC, &desc);
     }
 
-    // Record 12: names whose address this unit materialises through an
+    // Record 12: names whose address this unit materializes through an
     // undefined symbol, NUL-separated. Typed STT_NOTYPE in the symbol table
     // like every other undefined reference, so the distinction lives only
     // here.

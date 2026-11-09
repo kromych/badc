@@ -122,7 +122,7 @@ const RECURSIVE_FRAME_SLOTS: i64 = 32;
 /// Local-slot count (2 KiB) a caller's frame must exceed -- together with
 /// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before optional
 /// inlining into it stops; only a mandatory (`always_inline`) request is
-/// honoured past the bound. Region reuse and the post-inline slot
+/// honored past the bound. Region reuse and the post-inline slot
 /// compaction keep organic growth under this backstop. Mirrors gcc's
 /// large-stack-frame / large-stack-frame-growth pair, which a plain
 /// `inline` hint does not bypass.
@@ -634,7 +634,7 @@ fn addr_is_slot(func: &FunctionSsa, addr: ValueId, slot: i64) -> bool {
 /// disp folds it into the store) -- return the byte offset from the slot
 /// base. A second-eightbyte store of a two-register return reaches the
 /// candidate filter in the unfolded `Add` form, so the result-slot writes
-/// must be recognised through it.
+/// must be recognized through it.
 fn slot_base_offset(func: &FunctionSsa, addr: ValueId, slot: i64) -> Option<i64> {
     match func.insts.get(addr as usize) {
         Some(Inst::LocalAddr(s)) if *s == slot => Some(0),
@@ -667,7 +667,7 @@ struct OutPtrReturn {
     copy: ValueId,
 }
 
-/// Recognise [`OutPtrReturn`] in a single-block callee. The declared
+/// Recognize [`OutPtrReturn`] in a single-block callee. The declared
 /// return type must be a by-value structure the host-ABI classification
 /// left on this convention, which is what makes the destination the call
 /// site's own result temporary: every such site is the walker's, and it
@@ -1380,10 +1380,10 @@ fn is_inline_candidate(
                     say(format_args!("frame-bound intrinsic {i:?}"));
                     return false;
                 }
-                // An unrecognised opcode is declined for the same reason,
+                // An unrecognized opcode is declined for the same reason,
                 // but it is a different fact and reads as one.
                 None => {
-                    say(format_args!("unrecognised intrinsic opcode {kind}"));
+                    say(format_args!("unrecognized intrinsic opcode {kind}"));
                     return false;
                 }
                 Some(_) => {}
@@ -2480,7 +2480,7 @@ fn splice_multi_block(
     // mapped to (parameter index, layout). The cell relocates into the
     // caller frame with the callee's other own locals; the prefix copies
     // the argument into it, which is what the prologue does out of line.
-    // `splice_arg_addresses` normalised each such argument to the address
+    // `splice_arg_addresses` normalized each such argument to the address
     // of the caller's copy, so it is the copy's source. A cell the body
     // never names is unobservable and takes no copy.
     let names_slot = |s: i64| {
@@ -4142,7 +4142,7 @@ fn inline_caller(
     // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
     // caller shape is spliceable.
     // Optional splices count toward the per-step cap; a mandatory
-    // (`always_inline`) request is spliced past it, as gcc honours one at
+    // (`always_inline`) request is spliced past it, as gcc honors one at
     // any caller size.
     let mut steps = 0usize;
     let mut spliced = false;
@@ -4466,7 +4466,7 @@ pub(crate) fn run(
     }
     // Pairs the final round's splices created have had no sweep yet.
     devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
-    // Report each inline request the pass could not honour. The scan
+    // Report each inline request the pass could not honor. The scan
     // runs only for a row the level resolution leaves reportable; the
     // detection is factored into `unhonoured_inline` so it is
     // unit-testable apart from the sink.
@@ -5214,7 +5214,7 @@ mod tests {
     /// carry the caller's region past one page is not spliced, even though
     /// the caller's frame has not grown relative to its pre-inline size,
     /// so the relative gate never fires. A mandatory request is still
-    /// honoured.
+    /// honored.
     #[test]
     fn caller_frame_absolute_bound_blocks_optional_inlining() {
         let abi = Target::LinuxX64.abi();
@@ -6371,7 +6371,7 @@ mod tests {
     }
 
     /// The decline names the intrinsic rather than its opcode, and an
-    /// unrecognised opcode reads as that rather than as frame-bound.
+    /// unrecognized opcode reads as that rather than as frame-bound.
     #[test]
     fn unhonoured_names_the_intrinsic() {
         let abi = Target::LinuxX64.abi();
@@ -6430,7 +6430,7 @@ mod tests {
         assert!(reason_for_opt(crate::c5::op::Intrinsic::StackPointer as i64).is_none());
         assert_eq!(
             reason_for(1_000_000),
-            "unrecognised intrinsic opcode 1000000"
+            "unrecognized intrinsic opcode 1000000"
         );
     }
     /// A parameter past the ABI's argument registers has no prologue
@@ -6979,7 +6979,7 @@ mod tests {
 
     /// A call through the address of a function this unit imports
     /// becomes the direct call on the import's placeholder ent_pc, so
-    /// the address is never materialised. A prototype that disagrees
+    /// the address is never materialized. A prototype that disagrees
     /// with the import's, a reference naming another symbol, and an
     /// address that names no import each hold it back.
     #[test]

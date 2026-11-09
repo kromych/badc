@@ -3,7 +3,7 @@ use super::*;
 
 /// The predecessor-exit moves for the `Inst::Phi`s at the head of every
 /// CFG successor of `self_block`: register pairs through the parallel-copy
-/// scheduler, spill destinations through the materialise helper.
+/// scheduler, spill destinations through the materialize helper.
 ///
 /// TODO: FpReg sources and destinations, once the promotion path admits
 /// them (`slot_stores_only_int` keeps them out today).

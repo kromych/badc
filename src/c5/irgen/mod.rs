@@ -96,7 +96,7 @@ impl core::fmt::Display for WalkError {
                     ),
                     None => write!(
                         f,
-                        "ast::walk: symbol #{sym} class {class} not recognised \
+                        "ast::walk: symbol #{sym} class {class} not recognized \
                          (expected one of Loc, Glo, Fun, Sys)"
                     ),
                 }

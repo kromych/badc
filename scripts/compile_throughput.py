@@ -7,8 +7,8 @@ same corpus has moved by a factor of six across a fortnight of CI. What
 is comparable is a ratio taken *within one run on one machine*, where
 the machine cancels. This reports two, both over the whole corpus:
 
-  * `-O0 / -O` -- the cost of the unoptimised build over the optimised
-    one. `-O` runs the optimisation passes on top of the same front end,
+  * `-O0 / -O` -- the cost of the unoptimised build over the optimized
+    one. `-O` runs the optimization passes on top of the same front end,
     so it costs more; a build that is cheaper with them is paying for
     the volume of unoptimised code somewhere in the back end.
   * `slowest / next` -- the slowest unit's cost over the next slowest
@@ -143,7 +143,7 @@ def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
     if ratio > CEILINGS["o0_over_o"]:
         print(
             f"[throughput] -O0/-O {ratio:.2f} is over the "
-            f"{CEILINGS['o0_over_o']:.2f} ceiling. The optimised build runs "
+            f"{CEILINGS['o0_over_o']:.2f} ceiling. The optimized build runs "
             f"strictly more passes over the same front end, so it has to "
             f"cost more; find the back-end cost that scales with the volume "
             f"of unoptimised code, or raise the ceiling here with the reason."

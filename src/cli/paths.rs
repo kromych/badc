@@ -138,7 +138,7 @@ fn existing_dirs(root: &Path, dirs: &[String]) -> Vec<String> {
 
 /// Default `-o` value for native compilation. Picks an
 /// extension matching the (target, mode) pair so the produced
-/// file is loader-recognisable on the destination OS:
+/// file is loader-recognizable on the destination OS:
 ///
 /// | mode     | target            | extension |
 /// |----------|-------------------|-----------|

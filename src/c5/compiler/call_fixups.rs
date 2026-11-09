@@ -197,7 +197,7 @@ impl Compiler {
 
     /// Emit the body of every requested Sys trampoline. Called
     /// after every real function body has been parsed so the
-    /// synthesised SSA lands after the user code without
+    /// synthesized SSA lands after the user code without
     /// splitting a caller mid-build. Each trampoline is the
     /// shortest possible "re-push args, CallExt, return" sequence:
     ///
@@ -303,7 +303,7 @@ impl Compiler {
             // Forwarded arg count (variadic bindings took the tail
             // jump above).
             let nargs_ssa = fixed_nargs;
-            // The synthesised trampoline's own signature is a
+            // The synthesized trampoline's own signature is a
             // fixed-arg host-ABI function: callers reach it via
             // function pointer through `(sys_ptr)open`, which the
             // SysV / AAPCS / win64 ABIs deliver in the integer

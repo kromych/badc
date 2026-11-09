@@ -232,7 +232,7 @@ impl<'a> Walker<'a> {
             return Ok(v);
         }
         // C99 6.6: a constant expression evaluates at translation time.
-        // The parser leaves the synthesised pointer-arithmetic scaling
+        // The parser leaves the synthesized pointer-arithmetic scaling
         // unfolded (`arr[K]` lowers to `arr + (K * sizeof(*arr))`).
         if imm_safe_binop(op)
             && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)

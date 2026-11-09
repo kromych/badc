@@ -379,7 +379,7 @@ fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
     assert!(unchanged(&f));
 }
 
-/// `void f(long n){ if(!n) return; g(); f(n-1); }` modelled as a void
+/// `void f(long n){ if(!n) return; g(); f(n-1); }` modeled as a void
 /// helper whose returns are Imm(0): the last effectful op is the
 /// self-call and the return is a constant.
 fn const_void_tail() -> FunctionSsa {

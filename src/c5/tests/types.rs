@@ -516,7 +516,7 @@ fn pragmas_around_a_statement_govern_its_fall_through() {
     assert_eq!(lines, [5], "{:?}", p.warnings);
 }
 
-/// The MSVC spelling reaches the same rows through the catalogue's
+/// The MSVC spelling reaches the same rows through the catalog's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]
 fn the_msvc_pragma_reaches_a_parser_diagnostic() {
@@ -3233,7 +3233,7 @@ fn a_warning_reported_before_a_hard_error_rides_with_it() {
         .iter()
         .map(|d| (d.code, d.level))
         .collect();
-    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("catalogued");
+    let unknown_pragma = Code::from_selector("unknown-pragmas").expect("cataloged");
     assert_eq!(
         reported,
         [

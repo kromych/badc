@@ -1,4 +1,4 @@
-// x86-64 inline asm reaching catalogue mnemonics through the generic parser
+// x86-64 inline asm reaching catalog mnemonics through the generic parser
 // passthrough (neg, not, xchg, rol, adc) -- instructions the table encodes but
 // that have no bespoke Mnemonic arm. Returns 42 only when each produces the
 // architecturally correct result. Native x86-64 only.

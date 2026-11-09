@@ -1,5 +1,5 @@
 //! Propagate what the call sites agree about an argument into the
-//! parameter it initialises: the constant it is, and the range it lies
+//! parameter it initializes: the constant it is, and the range it lies
 //! in.
 //!
 //! C99 6.9.1p10: the arguments of a call are the initial values of the
@@ -120,7 +120,7 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
 }
 
 /// Entry PCs whose function can be reached other than through the
-/// `Inst::Call` sites in `funcs`: a body materialises the address, a
+/// `Inst::Call` sites in `funcs`: a body materializes the address, a
 /// static or `_Thread_local` initializer holds it, an alias gives it a
 /// second name, an asm template names it, or a scope table names it for
 /// the language handler. Any of those admits a call the pass cannot see

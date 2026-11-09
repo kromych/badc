@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the SSA + asm snapshots after every commit.
 
-Codegen drift relative to the just-finalised commit shows up as
+Codegen drift relative to the just-finalized commit shows up as
 `git status` dirt under `tests/snapshots/`. Fold it into the commit
 via `git add tests/snapshots/ && git commit --amend --no-edit`, or
 land a follow-up snapshot-only commit.

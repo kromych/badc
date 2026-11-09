@@ -1304,7 +1304,7 @@ fn forward_declared_struct_pointer_compiles() {
     // A `struct Foo *p` mention before any body is a forward
     // declaration -- the struct stays opaque (size 0, no fields)
     // but pointer types and typedefs can refer to it. This is
-    // the C standard's behaviour and a hard requirement for
+    // the C standard's behavior and a hard requirement for
     // common `typedef struct Foo Foo;`-before-body shapes.
     use super::run_str;
     let exit = run_str("int main() { struct Forward *p; p = 0; return 7; }");
@@ -1384,7 +1384,7 @@ fn pragma_export_records_function_on_program() {
     // `#pragma export(<name>)` is the c5 directive that
     // marks a function as externally callable from another
     // image (dlsym / GetProcAddress). The preprocessor
-    // recognises it, the compiler validates the name
+    // recognizes it, the compiler validates the name
     // resolves to a function defined here, and the result
     // lands on `Program::exports` for the per-format
     // shared-object writers to consume.

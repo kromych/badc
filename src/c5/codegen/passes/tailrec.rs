@@ -6,7 +6,7 @@
 //! after the inliner, on the promoted SSA (parameters read through
 //! `ParamRef`, scalar locals as phis).
 //!
-//! Two tail shapes are recognised in a block that ends in `Return`,
+//! Two tail shapes are recognized in a block that ends in `Return`,
 //! where the last effectful instruction is a direct self-call `C`
 //! (`Inst::Call { target_pc == ent_pc }`) whose dependent cone reaches
 //! only the terminator:

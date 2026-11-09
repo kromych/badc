@@ -1,6 +1,6 @@
 //! Promotion of a single-store address-taken slot to its stored value.
 //!
-//! A one-word struct return is materialised into a caller frame slot: the
+//! A one-word struct return is materialized into a caller frame slot: the
 //! callee's result write lands in the slot, and the caller reads it back
 //! with a `disp == 0` load or copies the whole slot elsewhere with an
 //! `Mcpy`. When the slot's address is taken only by those reads and the
@@ -20,7 +20,7 @@
 //!
 //! Soundness rests on three conditions checked per slot:
 //!   - the slot's address escapes nowhere (every `LocalAddr(S)` use is one
-//!     of the recognised reads or the single store), so no other access
+//!     of the recognized reads or the single store), so no other access
 //!     can read or write it;
 //!   - exactly one store writes it, at `disp 0`, covering the slot's full
 //!     width, so one register value is the slot's entire contents;
@@ -29,7 +29,7 @@
 //! A slot failing any condition is left in memory.
 //!
 //! A second, piece-level form (`promote_pieces_once`) covers the
-//! multi-word struct return the inliner materialises as per-field stores
+//! multi-word struct return the inliner materializes as per-field stores
 //! into the call's return slot: a linear walk of the block tracks each
 //! slot's disjoint (offset, width) piece values, forwards a load a piece
 //! covers exactly, and propagates pieces across a whole-slot `Mcpy` into
@@ -157,7 +157,7 @@ struct SlotCtx {
     /// displacements built off a slot address, which the piece form
     /// resolves into an access displacement.
     addrs: BTreeMap<ValueId, (i64, i64)>,
-    /// Slots accessed outside the `LocalAddr` forms modelled here:
+    /// Slots accessed outside the `LocalAddr` forms modeled here:
     /// `LoadLocal` / `StoreLocal`, a call's aggregate-return result temp
     /// (written by the call itself), and the indirect-result slot.
     opaque: BTreeSet<i64>,
@@ -214,7 +214,7 @@ fn slot_ctx(func: &FunctionSsa, derived: bool) -> SlotCtx {
 }
 
 /// Slots whose address is referenced as an operand in more than one
-/// block. The one-word form neutralises its store function-wide, so a
+/// block. The one-word form neutralizes its store function-wide, so a
 /// read anywhere else would see the slot after the store is gone.
 fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> BTreeSet<i64> {
     let mut slot_block: BTreeMap<i64, u32> = BTreeMap::new();
@@ -495,7 +495,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                 // A reference to the copy's result reads the stored value.
                 redirect[midx as usize] = Some(u.word);
             }
-            // Neutralise the store; a reference to its propagated value
+            // Neutralize the store; a reference to its propagated value
             // reads the stored word.
             rewrites.push((u.store_idx as usize, Inst::Imm(0)));
             redirect[u.store_idx as usize] = Some(u.word);
@@ -654,7 +654,7 @@ fn piece_fwd(p: &Piece, at: i64, kind: LoadKind) -> Option<PieceFwd> {
     })
 }
 
-/// Slots whose address reaches a use outside the modelled access forms,
+/// Slots whose address reaches a use outside the modeled access forms,
 /// or that carry a volatile access, anywhere in the function. Another
 /// pointer may then alias the slot, so neither its contents nor its
 /// writes are known.

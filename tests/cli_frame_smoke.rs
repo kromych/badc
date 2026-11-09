@@ -460,7 +460,7 @@ long many(long a, long b, long c, long d, long e, long f) {
 "#;
 
 /// The frame addresses `insts` stores to, in order. An aarch64 store
-/// whose address the emit materialised in x16 / x17 names that register;
+/// whose address the emit materialized in x16 / x17 names that register;
 /// the `sub` / `add` that built it from x29 is the instruction before it,
 /// so `staged` resolves the store to the key a direct `stur` produces. A
 /// store relative to sp -- the frame record, the callee-saved area -- is
@@ -708,7 +708,7 @@ fn aarch64_frameless_leaf_keeps_the_entry_rule() {
 /// Privileged-mode inline asm: indirect call sites through a table member
 /// binding the stack pointer (`"+r"` on a register variable), a feature
 /// test through a link-time memory operand beside an immediate, register
-/// outputs into locals, and self-initialised output locals.
+/// outputs into locals, and self-initialized output locals.
 const PRIVILEGED_ASM: &str = r#"
 struct ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
 extern struct ops_t ops;

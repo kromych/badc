@@ -1,4 +1,4 @@
-//! The catalogue: one row per diagnostic, and the accessors generated
+//! The catalog: one row per diagnostic, and the accessors generated
 //! from it.
 //!
 //! Canonical names reuse gcc's and clang's spellings wherever the
@@ -15,7 +15,7 @@ use alloc::format;
 
 use super::code::{Class, Code, Groups, Level, Status};
 
-/// One catalogue entry. The code and the name are the published
+/// One catalog entry. The code and the name are the published
 /// contract and never change; the default level and the groups may.
 #[derive(Clone, Copy, Debug)]
 pub struct Row {
@@ -412,12 +412,12 @@ impl Code {
     pub const INTERNAL: Code = Code::new(9001);
 }
 
-/// Every row, in catalogue order.
+/// Every row, in catalog order.
 pub fn rows() -> impl Iterator<Item = &'static Row> {
     ROWS.iter()
 }
 
-/// The accessors the catalogue generates. `Code` is constructible only
+/// The accessors the catalog generates. `Code` is constructible only
 /// from a row, so every lookup here resolves; the fallbacks keep the
 /// accessors total without a panic path.
 impl Code {
@@ -453,7 +453,7 @@ impl Code {
         self.status() == Status::Retired
     }
 
-    /// The spelling `sel` as the catalogue holds it, when more than one row
+    /// The spelling `sel` as the catalog holds it, when more than one row
     /// answers to it by name or alias.
     pub fn shared_spelling(sel: &str) -> Option<&'static str> {
         let mut carriers = ROWS.iter().filter_map(|r| {

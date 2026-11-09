@@ -2,7 +2,7 @@
 //! general registers, over the operand registers the native lowering assigns,
 //! and `fmov` on the scalar SIMD / FP registers. Memory, branches, condition
 //! flags, the vector instructions and system registers are refused rather
-//! than mis-modelled.
+//! than mis-modeled.
 
 use alloc::format;
 

@@ -214,7 +214,7 @@ pub(crate) struct LineMarker {
 /// or a C99 `#line` directive (`line N "file"`). Returns the
 /// marker on a successful match, `None` for any other shape.
 ///
-/// Recognises:
+/// Recognizes:
 ///   * `#line N`               -> `LineMarker { line: N, file: None }`
 ///   * `#line N "file"`        -> `LineMarker { line: N, file: Some("file") }`
 ///   * `# N "file"`            -> same (GNU shape, no `line` keyword)
@@ -691,7 +691,7 @@ pub(crate) struct Lexer {
 ///      stride so the big `Symbol` struct only gets touched on a hash hit.
 ///
 /// Newer entries always land at the head of their bucket, so a chain
-/// walk visits the most-recent declaration first -- same behaviour the
+/// walk visits the most-recent declaration first -- same behavior the
 /// old `.rev()` scan had, which is what shadowing relies on.
 pub(crate) struct SymbolIndex {
     buckets: Vec<u32>,
@@ -716,7 +716,7 @@ impl SymbolIndex {
     /// Find the most recent live symbol whose `(hash, name)` matches.
     /// `token != 0` filters out any defensively-zeroed entries the way
     /// the old linear scan did; in practice no caller zeroes `token`
-    /// today, but the check is cheap and keeps behaviour identical.
+    /// today, but the check is cheap and keeps behavior identical.
     pub fn lookup(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
         self.find(symbols, hash, name, |s| s.token != 0 && !s.detached)
     }
@@ -905,7 +905,7 @@ impl Lexer {
     /// Active `#pragma pack(N)` value at the current source
     /// position. `aggregate.rs` clamps each struct field's natural
     /// alignment by this when laying out a struct definition. The
-    /// default 8 matches c5's pre-existing struct-layout behaviour
+    /// default 8 matches c5's pre-existing struct-layout behavior
     /// (no packing); any explicit `#pragma pack(N)` lowers it.
     pub fn current_pack(&self) -> usize {
         self.pack
@@ -924,7 +924,7 @@ impl Lexer {
     /// like other pragmas, because pack is source-position-
     /// dependent in a way the per-translation-unit `dylibs` /
     /// `bindings` accumulator can't capture).
-    /// Tokenise a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
+    /// Tokenize a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
     /// character (`L'...'`) literal. Caller has consumed the prefix;
     /// `self.pos` points at the opening quote. Characters are emitted
     /// into `data` as little-endian values `elem_bytes` wide, one per
@@ -1563,7 +1563,7 @@ impl Lexer {
 
     /// True if the next non-whitespace byte is the start of an
     /// identifier. Used by the parse_declarator
-    /// nested-paren disambiguator to recognise the redundant-
+    /// nested-paren disambiguator to recognize the redundant-
     /// paren shape `(name[N])` -- the inner declarator is a
     /// regular identifier rather than `*name` or `(*...)`.
     pub fn peek_after_whitespace_starts_ident(&self) -> bool {
@@ -1685,7 +1685,7 @@ impl Lexer {
     /// True if the next non-whitespace byte is the start of a
     /// numeric literal -- digit or a `.` immediately followed by
     /// a digit (the `.5` form). Used by the constant-initializer
-    /// parser to recognise `-LITERAL` (where the next token will
+    /// parser to recognize `-LITERAL` (where the next token will
     /// be Num or FloatNum) without consuming the `-` until it
     /// knows what shape follows. Avoids a snapshot/restore round
     /// trip through the lexer state.
@@ -1870,7 +1870,7 @@ impl Lexer {
             .flatten()
     }
 
-    /// Finalise a numeric constant: a digit/suffix run must not be
+    /// Finalize a numeric constant: a digit/suffix run must not be
     /// immediately followed by an identifier character. `1_000`,
     /// `0x1_0000`, `1.0q` are invalid preprocessing numbers (C99 6.4.8)
     /// and require a diagnostic rather than splitting into a number plus
@@ -1895,7 +1895,7 @@ impl Lexer {
 
     /// The byte span of source line `target` in `file`, recovered by
     /// walking the `#line` markers the preprocessor embedded in the buffer
-    /// so the original (file, line) numbering is honoured. `None` when no
+    /// so the original (file, line) numbering is honored. `None` when no
     /// such line is found.
     fn line_span(&self, file: &str, target: usize) -> Option<(u32, u32)> {
         note_line_lookup();
@@ -2044,7 +2044,7 @@ impl Lexer {
                 //     preprocessor batches). Parse the args and fold
                 //     into the pack state / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
-                //     unrecognised pragmas, stray `#`s the
+                //     unrecognized pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
                 let line_start = self.pos;
                 let mut line_end = line_start;
@@ -2822,7 +2822,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__declspec", Token::Attribute),
     // MSVC inline spellings. `__inline` / `_inline` are hints (the C99
     // keyword); `__forceinline` is a mandatory request tracked distinctly so
-    // the inliner can diagnose a request it cannot honour.
+    // the inliner can diagnose a request it cannot honor.
     ("__forceinline", Token::ForceInline),
     ("__inline", Token::Inline),
     ("_inline", Token::Inline),
@@ -2920,7 +2920,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     // C11 _Noreturn (6.7.4): the function never returns to its
     // caller. Recorded on the function symbol so the reachability
     // analysis treats a call to it as not reaching its continuation.
-    // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
+    // `noreturn` is the <stdnoreturn.h> macro spelling, recognized
     // under the same token so source using the keyword without the
     // header still parses.
     ("asm", Token::Asm),
@@ -3140,7 +3140,7 @@ mod tests {
 
     /// Lex a single source-text string through `Lexer::next` and
     /// return the bytes the lexer pushed into `data`. Used to pin
-    /// the escape-sequence behaviour of string literals.
+    /// the escape-sequence behavior of string literals.
     fn lex_string_literal(src: &str) -> Vec<u8> {
         lex_string_literal_w(src, 4)
     }
@@ -3378,7 +3378,7 @@ mod tests {
 
     #[test]
     fn unknown_escape_passes_through_the_letter() {
-        // Matches GCC's implementation-defined behaviour for unknown
+        // Matches GCC's implementation-defined behavior for unknown
         // escapes: emit the literal char.
         assert_eq!(lex_string_literal(r#""\q""#), vec![b'q']);
     }
@@ -3664,7 +3664,7 @@ mod tests {
     }
 
     #[test]
-    fn wide_string_literal_honours_escapes() {
+    fn wide_string_literal_honors_escapes() {
         // `\n` -> 0x0A, `\\` -> 0x5C, `\x41` -> 0x41.
         assert_eq!(
             lex_string_literal(r#"L"\n\\""#),

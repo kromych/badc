@@ -9,7 +9,7 @@
  * curl_config_win32.h.
  *
  * Selected by -DHAVE_CONFIG_H. The CURL_DISABLE_* protocol trim is passed on
- * the command line (honoured after this include) so the same config header
+ * the command line (honored after this include) so the same config header
  * serves every lane.
  */
 

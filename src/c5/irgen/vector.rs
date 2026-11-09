@@ -89,7 +89,7 @@ impl<'a> Walker<'a> {
         let elem_size = size / lanes;
         // A comparison loads at the operand element type (float or
         // unsigned included) and stores 0 / -1 at the result's signed
-        // element; the parser fixed the opcode flavour from the operands.
+        // element; the parser fixed the opcode flavor from the operands.
         let is_cmp = is_vector_compare_op(op);
         let src_elem_ty = if is_cmp {
             let vec = if lhs_vec { lhs } else { rhs };
@@ -298,7 +298,7 @@ fn lane_addr(b: &mut SsaBuilder, base: ValueId, off: i64) -> ValueId {
 }
 
 /// Concrete lane opcode for a GCC vector operator. The parser tags the node
-/// with the nominal opcode; the element type picks the floating flavour and
+/// with the nominal opcode; the element type picks the floating flavor and
 /// the signedness of divide / modulo / right shift.
 fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
     use BinOp as B;

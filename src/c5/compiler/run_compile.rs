@@ -3086,7 +3086,7 @@ impl Compiler {
             slot
         };
         self.next()?;
-        // C99 6.5.2.5: `static T g = (T){ ... }` initialises the aggregate from a
+        // C99 6.5.2.5: `static T g = (T){ ... }` initializes the aggregate from a
         // compound literal of its own type; dropping the redundant cast leaves the
         // brace list below. A scalar object keeps it -- `T *p = (T[]){ ... }` and
         // `int x = (int){ v }` are the constant evaluator's, which needs the type.
@@ -3403,7 +3403,7 @@ impl Compiler {
     /// runs only under `-O` and declines a body its candidate filter
     /// rejects, so the copy is what keeps those calls resolvable.
     ///
-    /// That licence covers calls, not the address. The name keeps
+    /// That license covers calls, not the address. The name keeps
     /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
     /// function program-wide. The body is therefore emitted under
     /// `Symbol::inline_body_name`, a name no C identifier can spell, and

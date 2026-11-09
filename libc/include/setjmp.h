@@ -7,7 +7,7 @@
 // to per-platform below. The buffer is sized to safely cover every
 // supported host's `jmp_buf` layout (macOS arm64 ~200 B, Linux
 // x86_64 ~200 B, Windows _setjmp 256 B plus alignment slack);
-// oversizing is harmless, undersizing is undefined behaviour.
+// oversizing is harmless, undersizing is undefined behavior.
 
 #pragma once
 

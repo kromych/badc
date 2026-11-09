@@ -105,7 +105,7 @@ codegen_test = ["std"]
 # it doesn't drag in `ahash`'s rng init or the `serde` feature -- we
 # just want the map. The default `foldhash` hasher is fine for our
 # purely internal keys (macro names) and avoids the small extra cost
-# of the `aHashMap` initialisation.
+# of the `aHashMap` initialization.
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
 # `rustc-hash` ships the `FxHash` hasher rustc itself uses for its
 # internal id-keyed maps. We use it through `hashbrown::HashMap` (so

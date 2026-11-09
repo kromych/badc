@@ -280,7 +280,7 @@ fn dash_mf_names_the_output_and_leaves_stdout_empty() {
     let dir = fixture("mf");
     assert_eq!(run(&dir, &["-MM", "-MF", "out1.d", "main.c"]), "");
     assert_eq!(read(&dir, "out1.d"), "main.o: main.c a.h sub/deep.h b.h\n");
-    // `-M` / `-MM` also honour `-o` as the dependency output.
+    // `-M` / `-MM` also honor `-o` as the dependency output.
     assert_eq!(run(&dir, &["-MM", "-o", "out2.d", "main.c"]), "");
     assert_eq!(read(&dir, "out2.d"), "main.o: main.c a.h sub/deep.h b.h\n");
 }

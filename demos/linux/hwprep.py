@@ -460,7 +460,7 @@ class Prep:
 
         Per-boot arguments -- panic, netconsole -- belong to the badc entry
         alone and are applied by `entry`, so the stock kernels keep the
-        behaviour they had.
+        behavior they had.
         """
         if not self.manifest:
             print("! run `record` first: without it, rollback has nothing to")

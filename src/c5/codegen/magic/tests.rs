@@ -107,7 +107,7 @@ fn narrow(v: i64, w: u32, signed: bool) -> i64 {
 }
 
 /// Divisors: every small value, every power of two and its immediate
-/// neighbours, the powers of ten, the width's extremes, and a sampled
+/// neighbors, the powers of ten, the width's extremes, and a sampled
 /// vector. Signed sets carry both signs.
 fn divisors(w: u32, signed: bool) -> Vec<i64> {
     let mut v: Vec<i64> = Vec::new();
@@ -130,7 +130,7 @@ fn divisors(w: u32, signed: bool) -> Vec<i64> {
         ten = next;
     }
     if signed {
-        // INT_MIN, INT_MAX and their neighbours at this width.
+        // INT_MIN, INT_MAX and their neighbors at this width.
         let min = (1i64 << (w - 1)).wrapping_neg();
         let max = (1i64 << (w - 1)).wrapping_sub(1);
         v.extend([min, min + 1, min + 2, max, max - 1, max - 2]);
@@ -164,7 +164,7 @@ fn divisors(w: u32, signed: bool) -> Vec<i64> {
 }
 
 /// Numerators: the boundaries the task names, every power of two and
-/// its neighbours, the multiples of `d` that bracket the range ends
+/// its neighbors, the multiples of `d` that bracket the range ends
 /// (the worst case for the reciprocal's error term), and a sampled
 /// vector.
 fn numerators(d: i64, w: u32, signed: bool, rng: &mut Rng) -> Vec<i64> {
@@ -338,7 +338,7 @@ fn promoted_narrow_operands_match_hardware() {
 /// Signed `n / +-2^k` and `n % +-2^k` for every `k` at both widths,
 /// against Rust's truncating division at that width. The numerators
 /// bracket each place the bias changes the result: zero, the sign
-/// change, the multiples of `2^k` and their neighbours, and the ends of
+/// change, the multiples of `2^k` and their neighbors, and the ends of
 /// the range. The step counts pin the single-shift bias.
 #[test]
 fn signed_power_of_two_matches_truncating_division() {

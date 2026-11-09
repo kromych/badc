@@ -1226,7 +1226,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // __DATA,__thread_vars descriptors + __DATA,__thread_bss
     // storage, with the loader binding `__tlv_bootstrap` from
     // libSystem to descriptor slot 0. The codegen emits an
-    // `adrp+add` that materialises the descriptor's address,
+    // `adrp+add` that materializes the descriptor's address,
     // then `ldr x16, [x0]; blr x16` to call into the getter.
     ("thread_local_basic.c", 0),
     ("msvc_decl_decorators.c", 0),
@@ -1363,7 +1363,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // runtime element values.
     ("auto_struct_array_multi_dim.c", 0),
     // C89 6.5.2 / C99 6.7.2p2 deprecated implicit-int: a decl
-    // without a type specifier infers `int`. Honours
+    // without a type specifier infers `int`. Honors
     // `f(int x) { ... }` / `g = 5;` / `main() { ... }`.
     ("implicit_int_decl.c", 0),
     // C99 6.10.1 + 6.5.15: `#if (cond ? then : else)` ternary in
@@ -2873,7 +2873,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("vla_loop_stack_restore.c", 42),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
-    ("inline_asm_x64_catalogue.c", 42),
+    ("inline_asm_x64_catalog.c", 42),
     ("inline_asm_x64_paren_disp.c", 42),
     ("inline_asm_x64_seg_prefix_wrpkru.c", 42),
     ("inline_asm_x64_crc32.c", 42),

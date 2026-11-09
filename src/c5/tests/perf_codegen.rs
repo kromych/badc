@@ -3591,7 +3591,7 @@ int idi(int n) { return n; }\n\
 long idl(long n) { return n; }\n";
 
 /// The walker lowers integer `-x` to one `Inst::Neg`: no multiply, no
-/// subtraction, no constant to materialise. C99 6.5.3.3p2 makes unary
+/// subtraction, no constant to materialize. C99 6.5.3.3p2 makes unary
 /// plus the promoted operand, so `+n` emits what `n` alone emits, and a
 /// floating operand keeps `Inst::Fneg` (6.5.3.3p3).
 #[test]
@@ -5020,7 +5020,7 @@ fn a64_a_fused_shift_keeps_the_early_return_the_flags_and_sxtw() {
     }
     let ws = a64(SRC, "f");
     m.expect(!ws.iter().any(|&w| a64_is_cset(w)), || {
-        format!("f: the compare's flags are materialised: {ws:08x?}")
+        format!("f: the compare's flags are materialized: {ws:08x?}")
     });
     let ws = a64(SRC, "sx");
     m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {
@@ -5162,7 +5162,7 @@ fn a64_a_multiply_add_keeps_the_early_return_the_flags_and_sxtw() {
     });
     let ws = a64(SRC, "fm");
     m.expect(!ws.iter().any(|&w| a64_is_cset(w)), || {
-        format!("fm: the compare's flags are materialised: {ws:08x?}")
+        format!("fm: the compare's flags are materialized: {ws:08x?}")
     });
     let ws = a64(SRC, "sxm");
     m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {

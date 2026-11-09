@@ -3668,7 +3668,7 @@ fn import_slot_layout(
 }
 
 /// Count the references into `slots` that read through a slot and the
-/// ones that materialise a slot's own address. Scans `code` for the
+/// ones that materialize a slot's own address. Scans `code` for the
 /// two page-relative forms each machine uses; the resolved target has
 /// to land in `slots`, so an unaligned scan start cannot contribute.
 #[cfg(feature = "full")]
@@ -3726,7 +3726,7 @@ fn count_slot_references(
 
 /// A reference to an imported data object reaches the object through the
 /// slot the loader fills, so the emitted sequence has to read that slot.
-/// Materialising the slot's address instead hands the object's address
+/// Materializing the slot's address instead hands the object's address
 /// to code expecting its value, and every later dereference is off by
 /// one indirection. Each of the three image writers patches the site
 /// with its own helper, so the property is checked on every target.
@@ -3760,7 +3760,7 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
         let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
         assert_eq!(
             addressed, 0,
-            "{target:?}: {addressed} reference(s) materialise an import slot's address \
+            "{target:?}: {addressed} reference(s) materialize an import slot's address \
              instead of reading it"
         );
         reading += usize::from(through > 0);
@@ -3776,7 +3776,7 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
 /// object through the import slot the loader fills. Routing it to a call
 /// stub instead leaves the reference pointing at code, so every read
 /// returns instruction bytes -- with no diagnostic at link or load. The
-/// source materialises no other in-code address, so a page-relative
+/// source materializes no other in-code address, so a page-relative
 /// address landing inside the code section is that misrouting.
 #[cfg(feature = "full")]
 #[test]
@@ -3812,7 +3812,7 @@ fn a_shared_library_data_import_reads_its_slot_on_every_target() {
         let (_, into_text) = count_slot_references(target, code_va, &code, &text);
         assert_eq!(
             into_text, 0,
-            "{target:?}: {into_text} reference(s) materialise an address inside the code \
+            "{target:?}: {into_text} reference(s) materialize an address inside the code \
              section -- a data import bound to a call stub"
         );
     }
@@ -4021,7 +4021,7 @@ fn sxtw_fold_collapses_int_mul_sign_narrow() {
         any_sxtw,
         "expected an SXTW byte pattern in aarch64 image (the sign-narrow Shl/Shr pair did not fold)",
     );
-    // Pre-fold: the lsl #32 / asr #32 pair was materialised through a
+    // Pre-fold: the lsl #32 / asr #32 pair was materialized through a
     // `movz xN, #32` before the lsl. `#32` lives in bits 21..5 of the
     // movz word, so the encoded value 32 produces high bytes 0x80 0xd2
     // regardless of which N gets picked. Their absence confirms the
@@ -5061,7 +5061,7 @@ fn atomic128_store_insert_aarch64() {
 /// in inline asm. Unlike the recognized load/store
 /// idioms this is not lowered to an intrinsic: `prfm`, `ldxp`, `cmp`, `ccmp`,
 /// `b.ne`, `stxp`/`stlxp` and `cbnz` each go through the per-instruction
-/// inline-asm encoder. Before `ldxp` gained a catalogue row this failed to
+/// inline-asm encoder. Before `ldxp` gained a catalog row this failed to
 /// encode; the test locks the generic encoding and the plain / release forms.
 #[test]
 fn atomic128_cmpxchg_llsc_generic_encoder_aarch64() {
@@ -7130,7 +7130,7 @@ fn float_to_int_lowers_to_direct_fpcast() {
 
 /// C99 6.6: `(float)K` / `(double)K` of an integer literal folds to the
 /// converted floating constant at build time -- no runtime `FpCast`,
-/// so no int-register-to-FP conversion is materialised.
+/// so no int-register-to-FP conversion is materialized.
 #[test]
 fn int_const_cast_to_float_folds_to_imm() {
     use crate::c5::ir::Inst;
@@ -7321,7 +7321,7 @@ fn relocatable_elf_reads_own_thread_locals_local_exec_and_others_initial_exec() 
 
 /// A `_Thread_local` access whose destination spills. Under a two-GPR
 /// pool the allocator places the `TlsAddr` result in a frame slot, and
-/// each aarch64 sequence must materialise it through a scratch and store
+/// each aarch64 sequence must materialize it through a scratch and store
 /// it, as the other address-producing lowerings do. Refusing the place
 /// fails the build only under the pressure caps, which is the register
 /// matrix rather than a default run.
@@ -7493,7 +7493,7 @@ fn undefined_references_stay_untyped() {
             assert_eq!(st_info & 0xf, want, "{target:?}: `{name}` symbol type");
         }
         // The note channel carries what the symbol type no longer does.
-        // It names the sites that materialise an address -- the data
+        // It names the sites that materialize an address -- the data
         // object, and an address-taken function, which shares that
         // lowering -- and not a call site, which binds to a stub.
         let parsed = crate::c5::linker::parse_native_object(&obj).expect("parse object");
@@ -7507,7 +7507,7 @@ fn undefined_references_stay_untyped() {
         );
         assert!(
             !parsed.extern_data_names.iter().any(|n| n == "ext_fn_call"),
-            "{target:?}: a call site is not an address materialisation"
+            "{target:?}: a call site is not an address materialization"
         );
     }
 }
@@ -13792,7 +13792,7 @@ fn duplicate_initializer_retires_the_overridden_relocation() {
 }
 
 /// `always_inline` is a mandatory request: gcc and clang report an error
-/// when they cannot honour one rather than silently leaving the call out
+/// when they cannot honor one rather than silently leaving the call out
 /// of line, so the inliner's size and frame budgets do not apply to it and
 /// a chain of such callees is admitted whatever the caller's frame costs.
 /// Every relocated callee slot must still address correctly.
@@ -13830,7 +13830,7 @@ fn always_inline_is_admitted_regardless_of_caller_frame() {
 }
 
 /// A frame past the 24-bit reach of the immediate `ADD`/`SUB` must still
-/// emit: the aarch64 teardown materialises the byte count and applies it
+/// emit: the aarch64 teardown materializes the byte count and applies it
 /// with the extended-register form, and the body addresses its slots the
 /// same way. Before that this aborted the compiler in the epilogue.
 #[test]
@@ -15631,7 +15631,7 @@ fn scoped_fn_declaration_keeps_its_entity_for_the_link() {
 
 /// The walker reserves each label's SSA block through a table indexed by
 /// `LabelId`, so a `goto` chain costs exactly one block per label and the
-/// forward `goto` shares the block its labelled statement gets.
+/// forward `goto` shares the block its labeled statement gets.
 #[test]
 fn a_goto_chain_reserves_one_block_per_label() {
     use crate::Target;
@@ -16112,7 +16112,7 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
 }
 
 /// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
-/// rm=rbp. Every frame address the body materialises is one of these.
+/// rm=rbp. Every frame address the body materializes is one of these.
 #[cfg(feature = "full")]
 fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
     code.windows(4)
@@ -16143,7 +16143,7 @@ fn stack_protector_orders_arrays_above_the_other_locals() {
     // before anything else. A protected frame reverses that: the array's
     // last byte abuts the canary region, so the overflow reaches the
     // canary first. The two objects are the only frame addresses the body
-    // materialises besides the parameter home, which sits below both, so
+    // materializes besides the parameter home, which sits below both, so
     // the array's base is the one nearest the frame base.
     let src = "void snk(void *);\n\
                int f(int i) { int *p; char b[32]; p = &i; snk(b); return *p; }\n";

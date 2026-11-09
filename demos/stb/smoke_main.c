@@ -694,7 +694,7 @@ static int scenario_truetype(void) {
 static int scenario_wang_tile(void) {
     /* The herringbone-wang generator is large; just check its
      * primary entry point produces a valid output buffer for a
-     * tiny request. The template pre-image is a synthesised
+     * tiny request. The template pre-image is a synthesized
      * 8-color wang-tile set; sending NULL would error out, so we
      * call into an introspection helper that doesn't require a
      * template. */

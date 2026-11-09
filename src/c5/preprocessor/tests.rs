@@ -446,7 +446,7 @@ fn gnu_identity_version_derives_from_the_shared_claim() {
 fn vendor_and_stdc_pragmas_are_silent() {
     // The GCC / clang vendor pragmas c5 does not act on and the C99
     // 6.10.6 STDC pragmas must not warn. A `diagnostic` pragma naming
-    // a catalogue row is acted on, and is equally silent.
+    // a catalog row is acted on, and is equally silent.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process(
         "#pragma GCC diagnostic push\n\
@@ -464,7 +464,7 @@ fn vendor_and_stdc_pragmas_are_silent() {
         pp.sink.diagnostics()
     );
 
-    // An unrecognised pragma still surfaces a warning.
+    // An unrecognized pragma still surfaces a warning.
     let mut pp2 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp2.process("#pragma frobnicate widgets\nint y;\n")
         .expect("preprocessor failed");
@@ -1465,7 +1465,7 @@ fn named_rest_variadic_macro_fixed_plus_tail() {
 #[test]
 fn named_rest_variadic_macro_paste_elides_comma() {
     // `, ##rest` drops the comma when the tail is empty, matching the
-    // `, ##__VA_ARGS__` GNU behaviour.
+    // `, ##__VA_ARGS__` GNU behavior.
     let out = process("#define F(a, rest...) g(a, ##rest)\nF(1);\nF(1, 2);\n");
     assert!(out.contains("g(1);"), "empty tail not elided: {out:?}");
     assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
@@ -2812,7 +2812,7 @@ fn pragma_warning_bad_action_warns() {
             .diagnostics()
             .iter()
             .any(|w| w.text.contains("silence")),
-        "expected unrecognised-action warning: {:?}",
+        "expected unrecognized-action warning: {:?}",
         pp.sink.diagnostics()
     );
 }
@@ -2965,7 +2965,7 @@ fn show_includes_names_the_resolved_path() {
 }
 
 #[test]
-fn quoted_include_form_is_recognised() {
+fn quoted_include_form_is_recognized() {
     // `"foo.h"` resolves through the same search chain as
     // `<foo.h>` (C99 6.10.2p2/p3), so a search-path hit works
     // for both spellings.
@@ -5249,7 +5249,7 @@ fn trailing_directive_disqualifies_the_guard() {
 
 /// `#if !defined(G)` is the other spelling of the same test.
 #[test]
-fn if_not_defined_guard_form_is_recognised() {
+fn if_not_defined_guard_form_is_recognized() {
     for open in [
         "#if !defined(G_H)",
         "#if !defined G_H",
@@ -5649,7 +5649,7 @@ fn directive_kind(line: &str) -> &'static str {
 /// with another directive. The whole name decides, so the answer cannot
 /// depend on the order the names are tried in.
 #[test]
-fn directives_are_recognised_by_their_whole_name() {
+fn directives_are_recognized_by_their_whole_name() {
     for (line, want) in [
         ("define A 1", "define"),
         ("define A(x) x", "define-fn"),
@@ -5889,7 +5889,7 @@ fn target_predefines_are_locked() {
 }
 
 #[test]
-fn preprocessor_codes_are_live_catalogue_rows() {
+fn preprocessor_codes_are_live_catalog_rows() {
     for code in [
         WARNING_DIRECTIVE,
         MALFORMED_DIRECTIVE,
@@ -6227,7 +6227,7 @@ fn a_hard_error_carries_the_diagnostics_reported_before_it() {
         .process("#pragma frobnicate\n#warning first\n#include \"no-such-header.h\"\n")
         .expect_err("a missing include fails the pass");
     let reported: Vec<Code> = err.diagnostics().iter().map(|d| d.code).collect();
-    let row = |name: &str| Code::from_selector(name).expect("catalogued");
+    let row = |name: &str| Code::from_selector(name).expect("cataloged");
     assert_eq!(
         reported,
         [row("unknown-pragmas"), row("#warnings"), Code::DIRECTIVE]

@@ -1,7 +1,7 @@
 //! Table-driven AArch64 (A64) encoder.
 //!
 //! Every A64 instruction is one 32-bit little-endian word: a fixed base with
-//! named bit-fields spliced in. The catalogue in [`super::isa_a64_table`] is
+//! named bit-fields spliced in. The catalog in [`super::isa_a64_table`] is
 //! generated from an external instruction-set database (see
 //! `tools/gen_isa_a64.py`) as a base word plus a field list; this module packs
 //! concrete operand values into those fields. Some fields need a computed
@@ -9,9 +9,9 @@
 //! move-wide `hw` shift -- which the field kind selects.
 //!
 //! Register numbers are architectural (0..31, 31 = xzr/sp per context). The
-//! `sf` bit (W vs X) is baked into the two separate catalogue rows.
+//! `sf` bit (W vs X) is baked into the two separate catalog rows.
 
-#![allow(dead_code)] // Catalogue breadth runs ahead of lowering coverage.
+#![allow(dead_code)] // Catalog breadth runs ahead of lowering coverage.
 
 use alloc::format;
 use alloc::string::String;
@@ -105,7 +105,7 @@ pub(crate) enum Field {
     SameReg { op: u8, first: u8 },
 }
 
-/// One catalogue entry: a base word and the fields spliced into it.
+/// One catalog entry: a base word and the fields spliced into it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Form {
     pub mnemonic: &'static str,
@@ -328,7 +328,7 @@ fn op_matches(p: A64Op, o: Opnd) -> bool {
         (A64Op::OptShift, Opnd::Lsl(_) | Opnd::Shift { .. }) => true,
         (A64Op::OptExt, Opnd::Lsl(_) | Opnd::Extend { .. }) => true,
         (A64Op::Cond, Opnd::Cond(_)) => true,
-        // The offset and writeback addressing modes are distinct catalogue
+        // The offset and writeback addressing modes are distinct catalog
         // shapes, so a pre-index operand never takes an offset-only encoding.
         (A64Op::Mem, Opnd::Mem { pre, .. }) => !pre,
         (A64Op::MemPre, Opnd::Mem { pre, .. }) => pre,
@@ -466,11 +466,11 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         swapped[at] = Opnd::Imm(neg);
         return encode(opposite, &swapped);
     }
-    // A written `sp` is only ever a catalogue form's business: the bespoke
+    // A written `sp` is only ever a catalog form's business: the bespoke
     // arms below all encode register 31 as the zero register, so routing an sp
     // operand past them would silently drop the stack pointer.
     if ops.iter().any(|o| matches!(o, Opnd::Reg { sp: true, .. })) {
-        return encode_catalogue(mnemonic, ops);
+        return encode_catalog(mnemonic, ops);
     }
     if let Some(word) = encode_sve_state(mnemonic, ops) {
         return word;
@@ -723,7 +723,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // FP compare `fcmp`/`fcmpe Vn, {Vm | #0.0}` sets the flags. The result field
     // is the compare opcode: the register form is zero, the `#0.0` form sets
-    // bit 3, and the exception-signalling `fcmpe` adds bit 4.
+    // bit 3, and the exception-signaling `fcmpe` adds bit 4.
     if let "fcmp" | "fcmpe" = mnemonic {
         let e = if mnemonic == "fcmpe" { 0x10u32 } else { 0 };
         return match *ops {
@@ -913,7 +913,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // SIMD `rbit Vd.T, Vn.T`: reverse the bits of every byte. Byte
     // arrangements only, so Q is the sole size input; the GP `rbit Wd, Wn`
-    // and `rbit Xd, Xn` stay in the catalogue.
+    // and `rbit Xd, Xn` stay in the catalog.
     if mnemonic == "rbit"
         && let [
             Opnd::VecReg { num: rd, size, q },
@@ -935,7 +935,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
     // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
     // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
-    // (Reg operands) fall through to the catalogue below. `scalar` is the
+    // (Reg operands) fall through to the catalog below. `scalar` is the
     // smallest element of the scalar form `Rd, Rn, Rm` over the s or d view
     // (bits 30 and 28 set), where the instruction has one.
     let three_same = match mnemonic {
@@ -1043,7 +1043,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     }
     // SIMD logical `<and|bic|orr|orn|eor|bsl|bit|bif> Vd.T, Vn.T, Vm.T`, byte
     // arrangement only; the (U, size) fields select the operation. GP forms
-    // (Reg operands) fall through to the catalogue.
+    // (Reg operands) fall through to the catalog.
     if let Some(variant) = match mnemonic {
         "and" => Some(0u32),
         "bic" => Some(0x0040_0000),
@@ -2835,13 +2835,13 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
     }
     // `ror Rd, Rn, #n` is the immediate alias of `extr Rd, Rn, Rn, #n`; the
-    // register form (`rorv`) is in the catalogue under the same mnemonic.
+    // register form (`rorv`) is in the catalog under the same mnemonic.
     if mnemonic == "ror"
         && let [dst, src @ Opnd::Reg { .. }, imm @ Opnd::Imm(_)] = *ops
     {
-        return encode_catalogue("extr", &[dst, src, src, imm]);
+        return encode_catalog("extr", &[dst, src, src, imm]);
     }
-    encode_catalogue(mnemonic, ops)
+    encode_catalog(mnemonic, ops)
 }
 
 /// `mov Rd, #imm`: the move alias the value admits, in the order the
@@ -2858,7 +2858,7 @@ fn encode_mov_imm(dst: Opnd, is64: bool, v: i64) -> Result<u32, String> {
     ] {
         if let Some(hw) = chunk(x) {
             let imm = Opnd::Imm(((x >> (hw * 16)) & 0xFFFF) as i64);
-            return encode_catalogue(mnem, &[dst, imm, Opnd::Lsl(hw * 16)]);
+            return encode_catalog(mnem, &[dst, imm, Opnd::Lsl(hw * 16)]);
         }
     }
     if encode_logical_imm(value, is64).is_some() {
@@ -2867,22 +2867,22 @@ fn encode_mov_imm(dst: Opnd, is64: bool, v: i64) -> Result<u32, String> {
             is64,
             sp: false,
         };
-        return encode_catalogue("orr", &[dst, zr, Opnd::Imm(v)]);
+        return encode_catalog("orr", &[dst, zr, Opnd::Imm(v)]);
     }
     Err(String::from(
         "inline asm: mov immediate is not a move-wide or bitmask immediate",
     ))
 }
 
-/// Look the operand shape up in the generated catalogue and pack it. A form
+/// Look the operand shape up in the generated catalog and pack it. A form
 /// only matches when every written `sp` lands in a slot its `sp` mask marks,
 /// which is what selects the extended-register add/sub over the shifted one.
 /// The extended-register forms are tried second: an operand list that both
 /// can express (no `sp`, no written extend) takes the shifted encoding, as the
 /// assembler does.
-fn encode_catalogue(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
-    // The catalogue is sorted by mnemonic (enforced by the generator and the
-    // `catalogue_is_sorted` test): binary-search to the mnemonic's run of forms.
+fn encode_catalog(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
+    // The catalog is sorted by mnemonic (enforced by the generator and the
+    // `catalog_is_sorted` test): binary-search to the mnemonic's run of forms.
     let forms = super::isa_a64_table::FORMS;
     let start = forms.partition_point(|f| f.mnemonic < mnemonic);
     let mut sp_rejected = false;
@@ -2977,7 +2977,7 @@ static MOPS_FORMS: &[(&str, u32)] = &[
 ];
 
 /// The SVE and SME forms over vector, predicate and ZA operands, which the
-/// instruction database the catalogue is generated from does not carry: LDR
+/// instruction database the catalog is generated from does not carry: LDR
 /// and STR of a vector or predicate register at a vector-length-scaled
 /// offset, the FFR moves and `pfalse` (Arm ARM C8.2), and SME `rdsvl` and
 /// LDR/STR of a ZA array vector. `None` for any other mnemonic or shape.

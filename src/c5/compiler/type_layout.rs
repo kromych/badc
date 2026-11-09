@@ -2,7 +2,7 @@
 //! "is this token a type?" predicate.
 //!
 //! All read-mostly inspectors over the compiler's `structs` table
-//! plus the lexer's current-token state. Centralised here so the
+//! plus the lexer's current-token state. Centralized here so the
 //! per-`ty` size/align/slot rules and the target-dependent `long`
 //! width override live in one place; callers across the parser
 //! family reach for these via `self.size_of_type(...)` etc.
@@ -775,7 +775,7 @@ impl Compiler {
     /// True when the current lexer position starts a type. The free
     /// function `is_type_start_token` covers the keyword tokens
     /// (`int`, `char`, `const`, ...); this method extends it by
-    /// recognising any identifier whose symbol carries
+    /// recognizing any identifier whose symbol carries
     /// `class == Token::Typedef` -- shapes like
     /// `typedef struct X X; X *p;` would otherwise misparse as
     /// `Int p;`.

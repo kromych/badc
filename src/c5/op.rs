@@ -1,7 +1,7 @@
 /// Compiler-builtin intrinsic discriminant. Each lowering target
 /// dispatches on this value to emit the per-arch sequence.
 /// Keep the discriminants stable -- the `.o` SSA-body wire
-/// format serialises `Inst::Intrinsic { kind, .. }` verbatim, so
+/// format serializes `Inst::Intrinsic { kind, .. }` verbatim, so
 /// an archive built with an older c5 would mis-decode the
 /// operand if these reshuffle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub enum Intrinsic {
     LongjmpAArch64 = 3,
     /// `__builtin_va_start(ap, last)`. Args reach the op as
     /// (`&ap` on the c5 eval stack, `&last` in accumulator).
-    /// The expansion initialises `*ap` to point at the variadic
+    /// The expansion initializes `*ap` to point at the variadic
     /// region for the enclosing function. On AAPCS64 / SysV with
     /// the host variadic ABI this fills a struct (`__gr_top`,
     /// `__vr_top`, `__gr_offs`, `__vr_offs`, `__stack`); on
@@ -229,7 +229,7 @@ pub enum Intrinsic {
     /// `asm("fxsave %0" : "=m"(buf))` -- save the x87/SSE state to the
     /// 512-byte memory operand. The op takes the operand's address;
     /// codegen emits `fxsave m` (0F AE /0, x86_64 only). A no-op in the
-    /// interpreter (no modelled FPU/SSE state).
+    /// interpreter (no modeled FPU/SSE state).
     X86FxSave = 68,
     /// `asm("fxrstor %0" : : "m"(buf))` -- restore the x87/SSE state from
     /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
@@ -249,7 +249,7 @@ pub enum Intrinsic {
     X86Clflush = 76,
     /// `asm("lldtw %0" : : "g"(Ldtr))` -- load the LDTR from the 16-bit
     /// operand (0F 00 /2). The op takes the operand's address; the
-    /// interpreter treats it as a no-op (no modelled LDTR).
+    /// interpreter treats it as a no-op (no modeled LDTR).
     X86Lldt = 77,
     /// Read of a `register T name asm("rsp"/"sp")` variable -- the
     /// current stack pointer, as a `void *`-shaped value. No arguments.

@@ -402,7 +402,7 @@ fn emit_store_fp_mem(
         return Ok(());
     }
     // Emit the segment override immediately before the store opcode, past any
-    // value materialisation / narrowing the branches do first.
+    // value materialization / narrowing the branches do first.
     let push_seg = |code: &mut Vec<u8>| {
         if let Some(p) = seg {
             code.push(p);
@@ -468,7 +468,7 @@ pub(super) fn local_slot_base_disp(
 }
 
 /// `Inst::LoadLocal`: the c5 slot offset folds into the load's
-/// displacement with `disp`, so no `LocalAddr` is materialised.
+/// displacement with `disp`, so no `LocalAddr` is materialized.
 pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -1142,7 +1142,7 @@ pub(super) fn emit_load(
     bound: Option<u32>,
 ) -> Emit {
     let addr_place = place_of(alloc, addr);
-    // Spill-tolerant base materialisation: load a spilled address
+    // Spill-tolerant base materialization: load a spilled address
     // into r10 first, write into rd next, then spill rd to its
     // slot if the allocator wants it parked there. Matches the
     // aarch64 module's primary-scratch shape.

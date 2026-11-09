@@ -1701,7 +1701,7 @@ mod tests {
     }
 
     #[test]
-    fn recognises_only_the_relocatable_filetype() {
+    fn recognizes_only_the_relocatable_filetype() {
         let obj = build(CPU_TYPE_ARM64, MH_OBJECT, &[], &[]);
         assert!(is_mach_o_object(&obj));
         let exe = build(CPU_TYPE_ARM64, 0x2, &[], &[]);

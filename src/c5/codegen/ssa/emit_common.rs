@@ -1798,7 +1798,7 @@ pub(crate) fn seh_rows(
 /// keyed by the function's `ent_pc`. The DWARF CFI pass reads this
 /// to encode `DW_CFA_advance_loc <prologue bytes>` so the post-
 /// prologue CFA / saved-reg rule installs at the right PC. Keyed by
-/// `ent_pc` (unique per function) so a neighbouring function's PC
+/// `ent_pc` (unique per function) so a neighboring function's PC
 /// can't alias the entry, which a derived `pc_to_native` slot
 /// allowed for adjacent small functions.
 pub(crate) fn record_post_prologue_pc(
@@ -2938,7 +2938,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`, and an element's
+        // are both normalized to the same `(base, disp)`, and an element's
         // to the same `(base, index, scale)`. Bounded by live-range
         // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
@@ -3248,7 +3248,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Final-image output emits one PLT trampoline per import at the tail of
     // `.text` and rewrites every call placeholder to reach the matching
     // trampoline. Relocatable output leaves the placeholders raw so the
-    // linker materialises the PLT pool when it produces the final image --
+    // linker materializes the PLT pool when it produces the final image --
     // the matching reloc in `.rela.text` carries the site's import symbol.
     let plt_trampoline_offsets: alloc::vec::Vec<usize> =
         if native.output_kind != super::OutputKind::Relocatable {

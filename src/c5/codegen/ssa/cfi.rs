@@ -648,7 +648,7 @@ fn collect_fdes(records: &[CfiRecord]) -> Result<(Vec<Fde>, CfiSections), String
     for r in records {
         match &r.op {
             CfiOp::Sections(s) => {
-                // GNU as honours the directive only before the first frame
+                // GNU as honors the directive only before the first frame
                 // opens; one inside a description leaves the choice alone.
                 if !saw_proc {
                     sections = *s;

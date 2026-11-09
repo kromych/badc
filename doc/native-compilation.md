@@ -369,10 +369,12 @@ followed, since the image's C runtime is `msvcrt.dll`. A cl C++ object that
 needs the MSVC runtime's C++ support (operator `new` and `delete`, the frame
 handlers, `type_info`) names its libraries on the link line:
 `-llibvcruntime -llibcmt -lucrt`, from MSVC's and the SDK's library
-directories. `tlssup.obj` is not pulled from them, since the link supplies the
-TLS index and directory itself. The MSVC runtime's startup does not run, so
-neither does the initialization a C++ exception's frame handler depends on.
-TODO(#1991): a C++ `throw` through `__CxxFrameHandler4` aborts for that reason.
+directories, which `-l` searches on `-L` and on `LIB`. `tlssup.obj` is not
+pulled from them, since the link supplies the TLS index and directory itself.
+The MSVC runtime's startup does not run; a link naming `libvcruntime` instead
+has badc's startup call `__vcrt_initialize` before the C initializers and
+`__vcrt_uninitialize` at exit, as the VC startup code does, so a C++ `throw`
+through `__CxxFrameHandler4` finds the per-thread state it reads.
 
 A bundled header declares the names mingw-w64's header of the same name
 declares. A name mingw-w64 leaves undeclared stays undeclared, so a program's

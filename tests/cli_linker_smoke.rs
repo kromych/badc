@@ -23100,3 +23100,49 @@ fn a_pe_link_searches_lib_for_a_named_library() {
         );
     }
 }
+
+/// A C++ throw in a cl object linked with MSVC's static VC runtime is
+/// caught: a link naming `libvcruntime` runs its initialization before the
+/// C initializers, as the VC startup code does.
+#[cfg(windows)]
+#[test]
+fn a_cpp_throw_through_the_static_vc_runtime_is_caught() {
+    let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() else {
+        eprintln!("skipping a_cpp_throw_through_the_static_vc_runtime_is_caught: no cl.exe");
+        return;
+    };
+    let dir = tempdir("vcrt-throw");
+    let cpp = write_source(
+        &dir,
+        "eh.cpp",
+        "extern \"C\" int may_throw(int v) {\n    try {\n        if (v)\n            throw v;\n    \
+         } catch (int e) {\n        return e;\n    }\n    return 0;\n}\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int may_throw(int v);\nint main(void) { return may_throw(3) == 3 ? 0 : 1; }\n",
+    );
+    let obj = dir.join("eh.obj");
+    run(
+        Command::new(&cl)
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            .args(["/nologo", "/c", "/O2", "/MT", "/EHsc"])
+            .arg(format!("/Fo{}", obj.display()))
+            .arg(&cpp),
+        "compile the throwing unit with cl",
+    );
+    let exe = dir.join("eh.exe");
+    run(
+        Command::new(badc())
+            .envs(env.iter().map(|(k, v)| (k, v)))
+            .arg("--msvc")
+            .arg(&main)
+            .arg(&obj)
+            .args(["-llibvcruntime", "-llibcmt", "-lucrt", "-o"])
+            .arg(&exe),
+        "link with the static VC runtime",
+    );
+    let out = Command::new(&exe).output().expect("run the image");
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+}

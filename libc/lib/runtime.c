@@ -191,6 +191,28 @@ int __c5_entry(int argc, char **argv) {
 //   `nShowCmd` is `SW_SHOWNORMAL` (1), not `SW_SHOWDEFAULT` (10);
 // `SW_SHOWDEFAULT` defers to `STARTUPINFOA::wShowWindow`, which is
 // `SW_HIDE` when a parent left it zero without `STARTF_USESHOWWINDOW`.
+// `__BADC_WIN_VCRT__`: the link names the static VC runtime (libvcruntime),
+// whose per-thread state a C++ throw reads. Its initialization runs first
+// and its uninitialization last, as the VC startup code orders them; a
+// failed initialization fails fast, as there.
+#ifdef __BADC_WIN_VCRT__
+extern _Bool __vcrt_initialize(void);
+extern _Bool __vcrt_uninitialize(_Bool terminating);
+extern int atexit(void (*)(void));
+
+static void __c5_vcrt_uninitialize(void) {
+    __vcrt_uninitialize(0);
+}
+
+static void __c5_vcrt_startup(void) {
+    if (!__vcrt_initialize())
+        __fastfail(7);
+    atexit(__c5_vcrt_uninitialize);
+}
+#else
+static void __c5_vcrt_startup(void) {}
+#endif
+
 #ifdef __BADC_WIN_UCRT__
 // The application type (`_crt_gui_app` for the WinMain shape, else
 // `_crt_console_app`), then the unexpanded argument vector and the
@@ -217,6 +239,7 @@ extern int _initialize_narrow_environment(void);
 extern int _initialize_wide_environment(void);
 
 static void __c5_crt_startup(void) {
+    __c5_vcrt_startup();
     *__local_stdio_printf_options() |= 4 | 32;
     *__local_stdio_scanf_options() |= 2;
 #ifdef __BADC_WIN_WINMAIN__
@@ -233,7 +256,9 @@ static void __c5_crt_startup(void) {
 #endif
 }
 #else
-static void __c5_crt_startup(void) {}
+static void __c5_crt_startup(void) {
+    __c5_vcrt_startup();
+}
 #endif
 
 #ifdef __BADC_WIN_WINMAIN__

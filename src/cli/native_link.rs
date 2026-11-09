@@ -148,6 +148,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut resources = Vec::new();
     // A module-definition file's `LIBRARY` name, for the export directory.
     let mut def_image_name: Option<String> = None;
+    let mut vcrt = false;
     for input in ordered {
         if let LinkInput::Object(path) = &input
             && let Some(res) = read_resource_input(path, cli.target)
@@ -169,6 +170,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             }
             LinkInput::Object(path) => Slot::Fixed(vec![read_object_input(&path, cli.target)]),
             LinkInput::Archive { path, whole } => {
+                vcrt |= is_static_vc_runtime(&path);
                 let (members, imports) = read_archive_members(&path, cli.target);
                 for lib in imports {
                     shared_libs.push(lib);
@@ -234,11 +236,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // when they supply the UCRT's startup interface (ucrt.lib, ucrtbase.dll).
     let ucrt = cli.target.binary_format() == badc::BinaryFormat::Pe
         && (shared_libs.iter()).any(|l| l.exports.contains("_configure_narrow_argv"));
+    let vcrt = vcrt && cli.target.binary_format() == badc::BinaryFormat::Pe;
     let mut runtime = Vec::new();
     let runtime_dump = embedded.push_runtime(
         entry_override.as_deref(),
         subsystem_override,
-        ucrt,
+        (ucrt, vcrt),
         &mut runtime,
     );
     slots[0] = Slot::Fixed(runtime);
@@ -365,7 +368,8 @@ impl EmbeddedSources<'_> {
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
         // `wmain` / `wWinMain` entry), `__BADC_WIN_UCRT__` (the link
-        // supplies the UCRT).
+        // supplies the UCRT), `__BADC_WIN_VCRT__` (the link names the
+        // static VC runtime).
         let defines = (extra.iter()).map(|(k, v)| (k.to_string(), v.to_string()));
         let copts = (embedded_compile_options(cli, label))
             .with_defines(defines.collect())
@@ -385,7 +389,7 @@ impl EmbeddedSources<'_> {
         &self,
         entry_override: Option<&str>,
         subsystem_override: Option<badc::Subsystem>,
-        ucrt: bool,
+        (ucrt, vcrt): (bool, bool),
         objs: &mut Vec<badc::NativeObject>,
     ) -> String {
         let mut dumps = String::new();
@@ -420,6 +424,9 @@ impl EmbeddedSources<'_> {
         }
         if ucrt {
             runtime_defines.push(("__BADC_WIN_UCRT__", "1"));
+        }
+        if vcrt && emits_start_stub {
+            runtime_defines.push(("__BADC_WIN_VCRT__", "1"));
         }
         // An installed runtime source (`<badc-home>/lib/<name>`) replaces
         // the embedded body on the header overlay's terms: the unit keeps
@@ -1366,6 +1373,20 @@ fn pull_default_libraries(
 }
 
 /// The MSVC C runtime's libraries, static and DLL, release and debug.
+/// Whether the archive at `path` is the static VC runtime, `libvcruntime`
+/// (`libvcruntimed` for debug), whose initialization the startup runs.
+fn is_static_vc_runtime(path: &str) -> bool {
+    let stem = std::path::Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str());
+    stem.is_some_and(|s| {
+        matches!(
+            s.to_ascii_lowercase().as_str(),
+            "libvcruntime" | "libvcruntimed"
+        )
+    })
+}
+
 fn is_c_runtime_library(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     let stem = name.strip_suffix(".lib").unwrap_or(&name);

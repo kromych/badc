@@ -1825,6 +1825,13 @@ pub(super) fn interp_supplies(name: &str) -> bool {
                 | "memcmp"
                 | "write"
                 | "read"
+                | "pread"
+                | "pwrite"
+                | "lseek"
+                | "lseek64"
+                | "_lseek"
+                | "_lseeki64"
+                | "copy_file_range"
                 | "close"
                 | "malloc"
                 | "calloc"
@@ -2098,6 +2105,94 @@ fn dispatch_callext<H: Host>(
             let actual = (read_bytes as usize).min(n);
             mem.write_bytes(buf_addr as usize, &buf[..actual])?;
             Ok(read_bytes)
+        }
+        // `pread` / `pwrite` (POSIX): the transfer at `offset`, the
+        // descriptor's own position left where it was; a descriptor that
+        // cannot seek fails with ESPIPE.
+        "pread" | "pwrite" => {
+            if args.len() < 4 {
+                return Err(C5Error::Runtime(format!("vm_ssa: {name} expects 4 args")));
+            }
+            let (fd, buf_addr, offset) = (args[0], args[1] as usize, args[3]);
+            let n = libc_size(name, Some(args[2]))?;
+            let here = host.seek(fd, 0, 1);
+            if here < 0 || host.seek(fd, offset, 0) < 0 {
+                mem.set_errno(29);
+                return Ok(-1);
+            }
+            let done = if name == "pread" {
+                let n = n.min(mem.bytes.len().saturating_sub(buf_addr));
+                let mut buf = alloc::vec![0u8; n];
+                let got = host.read(fd, &mut buf);
+                if got > 0 {
+                    mem.write_bytes(buf_addr, &buf[..(got as usize).min(n)])?;
+                }
+                got
+            } else {
+                let owned = mem.read_bytes(buf_addr, n)?.to_vec();
+                host.write(fd, &owned)
+            };
+            host.seek(fd, here, 0);
+            Ok(done)
+        }
+        // `lseek` and its Windows and large-file spellings: the new position,
+        // or -1 with ESPIPE for a descriptor that cannot seek. `_lseek`
+        // takes and returns a 32-bit `long`.
+        "lseek" | "lseek64" | "_lseek" | "_lseeki64" => {
+            if args.len() < 3 {
+                return Err(C5Error::Runtime(format!("vm_ssa: {name} expects 3 args")));
+            }
+            let offset = match name {
+                "_lseek" => args[1] as i32 as i64,
+                _ => args[1],
+            };
+            let at = host.seek(args[0], offset, args[2] as i32);
+            if at < 0 {
+                mem.set_errno(29);
+            }
+            Ok(at)
+        }
+        // Linux `copy_file_range`: up to `len` bytes from `fd_in` to
+        // `fd_out`. A null offset pointer names the descriptor's own
+        // position, which the copy advances; a non-null one names the
+        // start, leaves the descriptor alone and advances by the count.
+        "copy_file_range" => {
+            if args.len() < 6 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: copy_file_range expects 6 args".into(),
+                ));
+            }
+            let (fd_in, off_in, fd_out, off_out) = (args[0], args[1], args[2], args[3]);
+            let len = libc_size(name, Some(args[4]))?;
+            let mut moved = Vec::new();
+            for (fd, ptr) in [(fd_in, off_in), (fd_out, off_out)] {
+                let here = host.seek(fd, 0, 1);
+                let start = match ptr {
+                    0 => here,
+                    p => load_from_memory(mem, p as usize, LoadKind::I64)?,
+                };
+                if here < 0 || host.seek(fd, start, 0) < 0 {
+                    mem.set_errno(29);
+                    return Ok(-1);
+                }
+                moved.push((fd, ptr, here, start));
+            }
+            let mut buf = alloc::vec![0u8; len];
+            let got = host.read(fd_in, &mut buf);
+            let done = if got > 0 {
+                host.write(fd_out, &buf[..got as usize])
+            } else {
+                got
+            };
+            for &(fd, ptr, here, start) in &moved {
+                if ptr != 0 {
+                    host.seek(fd, here, 0);
+                    if done > 0 {
+                        store_to_memory(mem, ptr as usize, start + done, StoreKind::I64)?;
+                    }
+                }
+            }
+            Ok(done)
         }
         // `int close(int fd)` -- pure host bridge.
         "close" => {
@@ -4818,6 +4913,13 @@ mod tests {
             "memcmp",
             "write",
             "read",
+            "pread",
+            "pwrite",
+            "lseek",
+            "lseek64",
+            "_lseek",
+            "_lseeki64",
+            "copy_file_range",
             "close",
             "malloc",
             "free",

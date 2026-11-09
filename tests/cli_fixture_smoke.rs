@@ -5646,3 +5646,30 @@ fn interp_draws_rand_and_reports_errors_as_the_target_library_does() {
         ],
     );
 }
+
+/// The interpreter runs the C-library functions these fixtures reach,
+/// through its own definitions and the on-demand sources, for every target:
+/// `tmpfile`, `pread`/`pwrite`, `lseek` and its Windows spellings, Linux's
+/// `copy_file_range`, and the GNU string extensions.
+#[test]
+fn interp_runs_the_file_and_string_extension_fixtures() {
+    let targets = [
+        "linux-x64",
+        "linux-aarch64",
+        "windows-x64",
+        "windows-arm64",
+        "macos-aarch64",
+    ];
+    for target in targets {
+        for fixture in ["copy_file_range_posix.c", "string_gnu_ext.c"] {
+            let out = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .arg(format!("--target={target}"))
+                .arg("--interp")
+                .arg(fixtures_dir().join(fixture))
+                .output()
+                .expect("run badc --interp");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert_eq!(out.status.code(), Some(0), "{target} {fixture}: {err}");
+        }
+    }
+}

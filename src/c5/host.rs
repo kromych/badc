@@ -94,6 +94,13 @@ pub trait Host {
         -EROFS
     }
 
+    /// A temporary file open for update and removed when it is closed or
+    /// the program ends (C99 7.19.4.3). Returns a fresh fd, or minus the
+    /// `errno` value of the failure; the default has no files to write.
+    fn tmpfile(&mut self) -> i64 {
+        -EROFS
+    }
+
     /// Move `fd`'s file position as `lseek` does, from the start, the
     /// current position or the end for `whence` 0, 1 or 2. Returns the new
     /// position, or -1; the default cannot seek.
@@ -194,6 +201,36 @@ mod std_host {
                 Ok(file) => self.install(file),
                 Err(e) => -errno_of(&e),
             }
+        }
+
+        fn tmpfile(&mut self) -> i64 {
+            let dir = std::env::temp_dir();
+            for k in 0..64 {
+                let name = format!("badc-tmpfile-{}-{}-{k}", std::process::id(), self.next_fd);
+                let path = dir.join(name);
+                let mut options = std::fs::OpenOptions::new();
+                options.read(true).write(true).create_new(true);
+                // Windows removes the file when its handle closes; other
+                // hosts unlink the name once the file is open.
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::OpenOptionsExt;
+                    const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+                    options
+                        .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+                        .share_mode(7);
+                }
+                match options.open(&path) {
+                    Ok(file) => {
+                        #[cfg(not(windows))]
+                        let _ = std::fs::remove_file(&path);
+                        return self.install(file);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(e) => return -errno_of(&e),
+                }
+            }
+            -17
         }
 
         fn time(&mut self) -> i64 {

@@ -14,6 +14,7 @@ use super::{AccessKind, Libc, LoadKind, Memory, Varargs, load_from_memory};
 
 pub(super) const NAMES: &[&str] = &[
     "fopen",
+    "tmpfile",
     "fclose",
     "fgetc",
     "getc",
@@ -176,6 +177,15 @@ pub(super) fn call<H: Host>(
     Some(run(name, args, mem, host))
 }
 
+/// A `FILE` object in the program's memory for the open descriptor `fd`.
+fn open_stream(mem: &mut Memory, fd: i64) -> i64 {
+    let file = super::guest_alloc(mem, Some(super::STDIO_FILE_BYTES as u64));
+    if file != 0 {
+        mem.streams.insert(file as usize, Stream::new(fd));
+    }
+    file
+}
+
 fn run<H: Host>(name: &str, args: &[i64], mem: &mut Memory, host: &mut H) -> Result<i64, C5Error> {
     let long32 = mem.target.long_width_bytes() == 4 && name != "_fseeki64";
     let long_offset = |v: i64| if long32 { v as i32 as i64 } else { v };
@@ -191,11 +201,15 @@ fn run<H: Host>(name: &str, args: &[i64], mem: &mut Memory, host: &mut H) -> Res
                 mem.set_errno(-fd as i32);
                 return Ok(0);
             }
-            let file = super::guest_alloc(mem, Some(super::STDIO_FILE_BYTES as u64));
-            if file != 0 {
-                mem.streams.insert(file as usize, Stream::new(fd));
+            Ok(open_stream(mem, fd))
+        }
+        "tmpfile" => {
+            let fd = host.tmpfile();
+            if fd < 0 {
+                mem.set_errno(-fd as i32);
+                return Ok(0);
             }
-            Ok(file)
+            Ok(open_stream(mem, fd))
         }
         "fclose" => {
             let file = arg(name, args, 0)?;

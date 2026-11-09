@@ -3956,6 +3956,29 @@ fn call_result_temporaries_of_successive_statements_share_a_slot() {
     assert!(frame <= 24, "calc4: frame of {frame} bytes");
 }
 
+/// Splicing a member of a call cycle leaves the member's own call back
+/// into the cycle a call: a caller that walks a tree through two mutually
+/// recursive helpers takes one level of them, not the recursion unrolled
+/// to the round limit.
+#[test]
+fn an_inlined_call_cycle_is_not_unrolled() {
+    const SRC: &str = "struct node { struct node *next, *child; int type, start, num; };\n\
+        static void in_prio(struct node *p, int acc);\n\
+        static int in_ns(struct node *ns, int acc) {\n\
+          for (struct node *p = ns->child; p; p = p->next) { in_prio(p, acc); acc += p->num; }\n\
+          return acc; }\n\
+        static void in_prio(struct node *p, int acc) {\n\
+          int accns = acc; p->start = acc;\n\
+          for (struct node *ns = p->child; ns; ns = ns->next) {\n\
+            accns = in_ns(ns, acc); if (p->type == 3) acc = accns; }\n\
+          if (!p->num) p->num = accns - p->start; }\n\
+        void set_attrs(struct node *root) { int start = 0;\n\
+          for (struct node *p = root->child; p; p = p->next) { in_prio(p, start); start += p->num; } }\n";
+    let obj = object_at(SRC, Target::LinuxX64, true);
+    let insns = x64_insns(&function_bytes(&obj, "set_attrs"));
+    assert!(insns.len() < 200, "set_attrs: {} instructions", insns.len());
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

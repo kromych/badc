@@ -188,6 +188,31 @@ struct SlotPlacement<'a> {
     orig_locals: i64,
     /// The cells of that frame its live instructions name.
     own_cells: i64,
+    /// The component of each function on a call cycle.
+    cycle_of: &'a BTreeMap<usize, usize>,
+    /// Per component, the optional splices of its members the caller
+    /// may still take.
+    cycle_budget: &'a mut BTreeMap<usize, usize>,
+}
+
+impl SlotPlacement<'_> {
+    /// Whether an optional splice of `callee` fits the caller's budget for
+    /// its call cycle: as many splices as the caller made calls into the
+    /// cycle before the pass, so a spliced member's own call back into
+    /// the cycle stays a call and the recursion is never unrolled.
+    fn cycle_open(&self, callee: usize) -> bool {
+        self.cycle_of
+            .get(&callee)
+            .is_none_or(|c| self.cycle_budget.get(c).is_some_and(|&n| n > 0))
+    }
+
+    fn spend_cycle(&mut self, callee: usize) {
+        if let Some(c) = self.cycle_of.get(&callee)
+            && let Some(n) = self.cycle_budget.get_mut(c)
+        {
+            *n = n.saturating_sub(1);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -3735,6 +3760,29 @@ fn inline_caller(
             (pc, merge_agg_descs(&mut caller.agg_descs, &descs))
         })
         .collect();
+    // The flat sites of a cycle member past the caller's budget, fixed
+    // before the walk so that every pass of it splices the same sites.
+    let mut budget = placement.cycle_budget.clone();
+    let mut over_budget: BTreeSet<u32> = BTreeSet::new();
+    for block in &caller.blocks {
+        for pc in block.inst_range.clone() {
+            if let Inst::Call { target_pc, .. } = &caller.insts[pc as usize]
+                && let Some(c) = callees.get(target_pc)
+                && !c.is_always_inline
+                && c.blocks.len() == 1
+                && !facts[target_pc].needs_reloc
+                && let Some(&k) = placement.cycle_of.get(target_pc)
+            {
+                let n = budget.entry(k).or_default();
+                if *n == 0 {
+                    over_budget.insert(pc);
+                } else {
+                    *n -= 1;
+                }
+            }
+        }
+    }
+    let mut spliced_optional: Vec<usize> = Vec::new();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(caller.inst_src.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
@@ -3773,6 +3821,7 @@ fn inline_caller(
         spliced_data_refs.clear();
         spliced_code_refs.clear();
         spliced_tls_refs.clear();
+        spliced_optional.clear();
         let before = remap.clone();
         for block in &caller.blocks {
             new_block_starts.push(new_insts.len() as u32);
@@ -3819,7 +3868,11 @@ fn inline_caller(
                 // runs once over the whole function.
                 let inlined =
                     inlined.filter(|(c, ..)| c.blocks.len() == 1 && !facts[&c.ent_pc].needs_reloc);
+                let inlined = inlined.filter(|_| !over_budget.contains(&old_pc));
                 if let Some((callee, call_args, ret_slot, callee_pc)) = inlined {
+                    if !callee.is_always_inline {
+                        spliced_optional.push(callee_pc);
+                    }
                     let agg_map: &[u32] = agg_maps
                         .get(&callee_pc)
                         .map(|m| m.as_slice())
@@ -4067,6 +4120,9 @@ fn inline_caller(
     // corrupt the caller. Leave the caller body untouched in that case and
     // let the multi-block splice loop below operate on the original body.
     if any_change {
+        for &pc in &spliced_optional {
+            placement.spend_cycle(pc);
+        }
         let mut new_blocks: Vec<Block> = Vec::with_capacity(caller.blocks.len());
         for (block_idx, block) in caller.blocks.iter().enumerate() {
             let start = new_block_starts[block_idx];
@@ -4177,6 +4233,7 @@ fn inline_caller(
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && (optional_open || c.is_always_inline)
+                    && (c.is_always_inline || placement.cycle_open(*target_pc))
                     && !unaffordable.contains(target_pc)
                     && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
                     // The guards of the single-block path; an
@@ -4251,6 +4308,7 @@ fn inline_caller(
         spliced = true;
         if !callee.is_always_inline {
             steps += 1;
+            placement.spend_cycle(callee.ent_pc);
         }
     }
     any_change || spliced
@@ -4305,6 +4363,25 @@ pub(crate) fn run(
     let sccs = call_graph_sccs(funcs);
     let cyclic = &sccs.cyclic;
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
+    let cycle_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| cyclic.contains(&f.ent_pc))
+        .map(|(i, f)| (f.ent_pc, sccs.comp[i]))
+        .collect();
+    let mut cycle_budgets: BTreeMap<usize, BTreeMap<usize, usize>> = BTreeMap::new();
+    for f in funcs.iter() {
+        let budget = cycle_budgets.entry(f.ent_pc).or_default();
+        for blk in &f.blocks {
+            for pc in blk.inst_range.clone() {
+                if let Inst::Call { target_pc, .. } = &f.insts[pc as usize]
+                    && let Some(&c) = cycle_of.get(target_pc)
+                {
+                    *budget.entry(c).or_default() += 1;
+                }
+            }
+        }
+    }
     // The size-driven rounds, then the rounds for the functions one call
     // site reaches (`CALLED_ONCE_CAP`). Those run last so that no other
     // splice copies the one site into a second caller.
@@ -4457,6 +4534,8 @@ pub(crate) fn run(
                         sp_tainted: &sp_tainted,
                         orig_locals: orig_locals[fi],
                         own_cells: own_cells[fi],
+                        cycle_of: &cycle_of,
+                        cycle_budget: cycle_budgets.entry(caller.ent_pc).or_default(),
                     },
                 );
                 if spliced {

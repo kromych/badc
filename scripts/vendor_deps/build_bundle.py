@@ -213,14 +213,14 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
-        # raylib 6.0 -- the asset is the upstream GitHub archive of the
-        # 6.0 tag (commit dbc56a87da87d973a9c5baa4e7438a9d20121d28),
+        # raylib 6.2 -- the asset is the upstream GitHub archive of the
+        # 6.2 tag (commit 02566453880e06bec97f5b8160fa6fe1e98397ca),
         # pinned by its own sha256.
         name="raylib",
-        version="6.0",
-        url="https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz",
+        version="6.2",
+        url="https://github.com/raysan5/raylib/archive/refs/tags/6.2.tar.gz",
         ext=".tar.gz",
-        upstream_sha="2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b",
+        upstream_sha="df7a13129b1bec9e73a6962efff170beba310ee6eab8f94cd000b7316b4db5ee",
         sha_kind="tarball-sha256",
     ),
     Source(

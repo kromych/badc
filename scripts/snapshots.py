@@ -699,9 +699,14 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # change the number in the commit that spends it. A fixture marked
 # `// snapshot-budget: exempt`, whose functions keep values live across
 # calls by design, takes no part; its own snapshots pin its code.
+#
+# x64 0.536 -> 0.545: splicing callees aligned above 16 removed 25 functions,
+# most of them 256-bit intrinsic bodies with no saves, and their test drivers
+# keep the operands live across the checks they call (0.5338 -> 0.5405);
+# the corpus lost 651 instructions and 346 memory accesses.
 SAVED_PER_FUNCTION: dict[str, float] = {
     "aarch64": 0.292,
-    "x64": 0.536,
+    "x64": 0.545,
 }
 
 BUDGET_EXEMPT_RE = re.compile(r"^//\s*snapshot-budget:\s*exempt\b", re.MULTILINE)

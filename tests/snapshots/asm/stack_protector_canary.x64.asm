@@ -62,29 +62,6 @@ Disassembly of section .text:
                	leave
                	retq
 
-<over_aligned>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%fs:0x28, %r11
-               	movq	%r11, -0x8(%rbp)
-               	xorl	%r11d, %r11d
-               	subq	$0x40, %rsp
-               	andq	$-0x20, %rsp
-               	leaq	(%rsp), %rdi
-               	movl	$0x40, %edx
-               	movl	$0x4, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movsbq	0x3f(%rsp), %rax
-               	movq	%fs:0x28, %r11
-               	cmpq	-0x8(%rbp), %r11
-               	je	<addr>
-               	callq	<addr>
-               	xorl	%r11d, %r11d
-               	leave
-               	retq
-
 <variadic>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -162,6 +139,8 @@ Disassembly of section .text:
                	movq	%fs:0x28, %r11
                	movq	%r11, -0x8(%rbp)
                	xorl	%r11d, %r11d
+               	subq	$0x40, %rsp
+               	andq	$-0x20, %rsp
                	leaq	-0x30(%rbp), %rdi
                	movl	$0x20, %edx
                	movl	$0x3, %esi
@@ -242,8 +221,12 @@ Disassembly of section .text:
                	xorl	%r11d, %r11d
                	leave
                	retq
-               	movl	$0x4, %edi
+               	leaq	(%rsp), %rdi
+               	movl	$0x40, %edx
+               	movl	$0x4, %esi
+               	xorl	%eax, %eax
                	callq	<addr>
+               	movsbq	0x3f(%rsp), %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x7, %eax

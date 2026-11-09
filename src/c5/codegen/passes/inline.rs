@@ -832,15 +832,6 @@ fn is_inline_candidate(
         say(format_args!("weak definition"));
         return false;
     }
-    // An automatic object aligned above 16 lives in the callee's prologue-
-    // realigned region; the splice cannot reproduce the sp realignment in the
-    // caller frame, so the body stays out of line. A 16-aligned region sits at
-    // a static frame offset and relocates with the callee's slots (the splice
-    // merges `over_aligned` into the caller's region).
-    if func.frame_align > 16 {
-        say(format_args!("automatic object aligned above 16"));
-        return false;
-    }
     // A self-recursive callee stays out of line: splicing it does not
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
@@ -3421,17 +3412,18 @@ fn splice_multi_block(
             merged_array_slots.push(rec);
         }
     }
-    // Merge the callee's over-aligned region (16-aligned only; the candidate
-    // filter rejects above 16) behind the caller's: the callee's packed
-    // offsets shift by the caller's region size, a 16-byte multiple, so every
-    // member keeps a 16-aligned base. A shared per-callee record replays the
-    // same relocated slots at a later site; those entries already exist and
-    // grow nothing.
+    // Merge the callee's over-aligned region behind the caller's, at the
+    // caller's region size rounded up to the callee's alignment, so every
+    // member keeps its alignment; the merged region takes the larger
+    // alignment, which the caller's prologue realigns sp to. A shared
+    // per-callee record replays the same relocated slots at a later site;
+    // those entries already exist and grow nothing.
     let mut merged_over_aligned = core::mem::take(&mut original.over_aligned);
     let mut merged_frame_align = original.frame_align;
     let mut merged_region_bytes = original.realign_region_bytes;
     if !callee.over_aligned.is_empty() {
-        let base_off = merged_region_bytes;
+        let align = callee.frame_align.max(16);
+        let base_off = (merged_region_bytes + align - 1) & !(align - 1);
         let mut appended = false;
         for m in &callee.over_aligned {
             let rec = crate::c5::ir::RegionMember {
@@ -3446,7 +3438,7 @@ fn splice_multi_block(
         }
         if appended {
             merged_frame_align = merged_frame_align.max(callee.frame_align);
-            merged_region_bytes += callee.realign_region_bytes;
+            merged_region_bytes = base_off + callee.realign_region_bytes;
         }
     }
 
@@ -6861,29 +6853,42 @@ mod tests {
         );
     }
 
-    /// A callee whose region alignment is above 16 needs the realigning
-    /// prologue the splice cannot reproduce; it stays out of line.
+    /// A callee whose region alignment is above 16 splices; its entry lands
+    /// behind the caller's 16-byte region at the next 32-byte offset, and
+    /// the caller's region takes the 32-byte alignment its prologue
+    /// realigns sp to.
     #[test]
-    fn region_above_16_callee_stays_out_of_line() {
+    fn region_above_16_callee_merges_at_its_alignment() {
         let abi = Target::LinuxX64.abi();
+        let member = |slot, off, align| crate::c5::ir::RegionMember {
+            slot,
+            off,
+            align,
+            size: align,
+        };
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![crate::c5::ir::RegionMember {
-            slot: -1,
-            off: 0,
-            align: 32,
-            size: 32,
-        }];
+        callee.over_aligned = alloc::vec![member(-1, 0, 32)];
         callee.frame_align = 32;
         callee.realign_region_bytes = 32;
-        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
+        let mut caller = multi_call_caller(1, 2, 100, 1);
+        caller.over_aligned = alloc::vec![member(-2, 0, 16)];
+        caller.frame_align = 16;
+        caller.realign_region_bytes = 16;
+        let mut funcs = alloc::vec![caller, callee];
         run(&mut funcs, 32, abi, &BTreeMap::new());
         assert!(
             funcs[0]
                 .insts
                 .iter()
-                .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100)),
-            "an above-16 region callee must not inline"
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "an above-16 region callee must inline"
         );
+        assert_eq!(
+            funcs[0].over_aligned,
+            alloc::vec![member(-2, 0, 16), member(-3, 32, 32)]
+        );
+        assert_eq!(funcs[0].frame_align, 32);
+        assert_eq!(funcs[0].realign_region_bytes, 64);
     }
 
     /// Caller whose only call is indirect through an `ImmCode(k)`.

@@ -19321,6 +19321,34 @@ fn a_call_left_to_an_error_or_warning_function_is_diagnosed() {
     }
 }
 
+/// A function holding an automatic object aligned above 16 is spliced: its
+/// object joins the caller's over-aligned region at its own alignment, and
+/// the caller's prologue realigns sp to it.
+#[test]
+fn a_callee_aligned_above_16_is_inlined() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "typedef long long v4di __attribute__((vector_size(32)));\n\
+               static inline __attribute__((always_inline)) v4di add(v4di a, v4di b) \
+               { return a + b; }\n\
+               void f(v4di *v) { v[0] = add(v[0], v[1]); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::WindowsX64] {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true);
+        let program = Compiler::with_options(src.into(), target, opts)
+            .compile()
+            .expect("compile");
+        let mut native = NativeOptions::new().with_optimize();
+        native.output_kind = OutputKind::Relocatable;
+        let build = crate::c5::codegen::lower_for(&program, target, native).expect("lower");
+        assert!(
+            build.diagnostics.is_empty(),
+            "{target:?}: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
 /// A call to a `warning` function reports at the call, as gcc does, not at
 /// the function making it, and the diagnostic pragmas around the call
 /// govern the report.

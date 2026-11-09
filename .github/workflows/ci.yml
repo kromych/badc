@@ -136,8 +136,10 @@ jobs:
     # windows-latest takes about 22 minutes and windows-11-arm 18 (measured at
     # 11d3ec96e); the Linux and macOS lanes finish well inside that. Process
     # spawning dominates the per-fixture runs on Windows. The cap is a hang
-    # backstop, so it sits above the slowest lane, not at it.
-    timeout-minutes: 30
+    # backstop, so it sits above the slowest lane, not at it. Runners vary:
+    # on the run for 00dd3a0ba every lane took 1.35-1.6x its previous time,
+    # rustc's own build included, and windows-latest passed 30 minutes.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

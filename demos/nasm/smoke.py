@@ -106,8 +106,21 @@ def badc_target() -> str:
     return "linux-aarch64" if aarch else "linux-x64"
 
 
+def pinned_version() -> str:
+    """The NASM release setup.py pins."""
+    text = (NASM_DEMO / "setup.py").read_text(encoding="utf-8")
+    return re.search(r'^VERSION = "([^"]+)"', text, re.M).group(1)
+
+
 def ensure_source() -> None:
-    if (SRC / "x86" / "insnsa.c").is_file() and (SRC / "version.mac").is_file():
+    # A tree extracted for an earlier pin is replaced, not built.
+    stamp = SRC / "version"
+    if (
+        (SRC / "x86" / "insnsa.c").is_file()
+        and (SRC / "version.mac").is_file()
+        and stamp.is_file()
+        and stamp.read_text(encoding="utf-8").strip() == pinned_version()
+    ):
         return
     log("fetching NASM source via setup.py")
     subprocess.run([sys.executable, str(NASM_DEMO / "setup.py")], check=True)

@@ -179,14 +179,14 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
-        # CPython 3.14.6 source distribution from www.python.org.
+        # CPython 3.15.1 source distribution from www.python.org.
         # Pinned by the sha256 of the released .tgz (the vendored asset
         # is that file renamed to the `name-version-sha8` convention).
         name="python",
-        version="3.14.6",
-        url="https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tgz",
+        version="3.15.1",
+        url="https://www.python.org/ftp/python/3.15.1/Python-3.15.1.tgz",
         ext=".tar.gz",
-        upstream_sha="74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222",
+        upstream_sha="133d85e118dc32621cda1d9d1d7d9694fe0c5e82bc339a7d528c109fe8b36387",
         sha_kind="tarball-sha256",
     ),
     Source(

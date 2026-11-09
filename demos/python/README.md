@@ -1,14 +1,14 @@
 # CPython demo
 
-Builds the CPython 3.14.6 interpreter with badc and runs a slice of the
+Builds the CPython 3.15.1 interpreter with badc and runs a slice of the
 standard library test suite. The interpreter exercises the bytecode
 evaluator, the object and memory model, Unicode, and the parser.
 
 ## Layout
 
-- `setup.py` -- fetches the pinned `Python-3.14.6.tgz` and the vendored
+- `setup.py` -- fetches the pinned `Python-3.15.1.tgz` and the vendored
   frozen-module headers from the badc vendor-deps mirror and extracts them
-  under `.cache/Python-3.14.6`. No make.
+  under `.cache/Python-3.15.1`. No make.
 - `build.py` -- the build command for every target (macOS, Linux x64/arm64,
   Windows x64/arm64): compiles CPython's all-builtin link set with badc and
   runs the tier-1 test slice, with no make. POSIX targets use a committed
@@ -19,7 +19,7 @@ evaluator, the object and memory model, Unicode, and the parser.
   `pcbuild.proj` and each `.vcxproj` for the Release configuration and runs
   badc with `--msvc` where MSBuild runs cl, link and lib, against the MSVC
   headers and the Windows SDK (not badc's bundled C library), linking the SDK
-  and UCRT import libraries. It builds `python314.dll`, `python3.dll`,
+  and UCRT import libraries. It builds `python315.dll`, `python3.dll`,
   `python.exe`, `pythonw.exe`, the launchers and every C extension module,
   with the external libraries from source; `--test` runs the whole regrtest
   suite. `BADC_WINDOWS_KITS` / `BADC_MSVC_TOOLS` point it at a copied kit for
@@ -82,16 +82,20 @@ stdout alone: a compiler warning interleaved into a parallel compile line drops
 that unit from the manifest. A bump keeps the host-dependent answers of the
 previous capture, so `pyconfig.h` changes only where upstream did:
 `diff3 -m <committed> <old version on this host> <new version on this host>`.
-For 3.14.6 the recipe gives the committed `manifest.json` (as a set of units
-with their defines and includes) and `config.c` on the Linux x86_64, Linux
-aarch64 and macOS arm64 hosts, except that the macOS `config.c` lists
-`binascii` last; `pyconfig.h` differs only where the hosts changed since:
-`HAVE_UUID_H` and `HAVE_UUID_GENERATE_TIME_SAFE` (libuuid-devel installed) on
-Linux, `HAVE_DUP3` and `HAVE_PIPE2` (the macOS 27 SDK) on macOS.
+The 3.15.1 inputs were taken that way on the Linux x86_64 and Linux aarch64
+hosts (gcc 16.2.1, glibc 2.43) and the macOS arm64 host (Apple clang 21, SDK
+27.0): `manifest.json` and `config.c` are the 3.15.1 output (290 units on macOS
+and Linux x86_64, 288 on Linux aarch64), and `pyconfig.h` the 3.14.6 capture
+plus each host's 3.14.6 to 3.15.1 difference. On the same hosts the recipe for
+3.14.6 gave the committed 3.14.6 `manifest.json` (as a set of units with their
+defines and includes) and `config.c`, except that the macOS `config.c` listed
+`binascii` last, and a `pyconfig.h` that differed only where the hosts had
+changed: `HAVE_UUID_H` and `HAVE_UUID_GENERATE_TIME_SAFE` (libuuid-devel
+installed) on Linux, `HAVE_DUP3` and `HAVE_PIPE2` (the macOS 27 SDK) on macOS.
 
 The frozen-module asset is `Python/frozen_modules/` of any such build -- the
 headers `make` generates plus the tarball's `README.txt` -- packed with
 `COPYFILE_DISABLE=1 tar --no-xattrs -czf python-frozen.tar.gz Python/frozen_modules`
 and named `python-frozen-<version>-<sha8>.tar.gz` after its own sha256. The
-headers are marshalled bytecode, the same on every host: the 3.14.6 asset's 25
-files equal those of a Linux x86_64 build.
+headers are marshalled bytecode, the same on every host: the 3.15.1 asset's 26
+files, from the macOS build, equal those of the Linux x86_64 build.

@@ -1,9 +1,9 @@
 // badc replacement for CPython's hand-written Python/asm_trampoline.S.
 //
 // perf_trampoline.c copies the bytes between _Py_trampoline_func_start and
-// _Py_trampoline_func_end into a per-code-object arena so the Linux perf
-// profiler attributes each compiled Python frame to a distinct address.
-// The template is therefore copied and run from a new location, so it must
+// _Py_trampoline_func_end into a per-code-object arena so a profiler (perf
+// on Linux) attributes each compiled Python frame to a distinct address.
+// CPython builds it on Linux and macOS. The template is therefore copied and run from a new location, so it must
 // be position-independent. A plain C trampoline that forwards its first
 // three arguments to the function pointer in the fourth compiles to exactly
 // that under badc -- frame-pointer-relative addressing plus an indirect

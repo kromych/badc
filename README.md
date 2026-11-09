@@ -39,7 +39,7 @@ library.
 smoke test. [`demos/README.md`](./demos/README.md) says what each one
 exercises.
 
-* _Language interpreters_: [Python](./demos/python/) 3.14 on all five
+* _Language interpreters_: [Python](./demos/python/) 3.15 on all five
   targets, [Lua](./demos/lua/), [QuickJS](./demos/quickjs/),
   [Tcl](./demos/tcl/).
 * _Systems software_: [SQLite](./demos/sqlite3/), [curl](./demos/curl/),

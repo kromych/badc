@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build CPython 3.14.6 with badc and run a slice of its test suite.
+"""Build CPython 3.15.1 with badc and run a slice of its test suite.
 
 Pipeline:
-  - ``setup.py`` fetches + extracts the source under ``.cache/Python-3.14.6``.
+  - ``setup.py`` fetches + extracts the source under ``.cache/Python-3.15.1``.
   - ``./configure`` + ``make`` (host compiler) generate the derived sources
     (the pegen tables, the frozen-module headers, ``Modules/config.c``) and
     a reference ``python`` used only during the build. The per-translation-
@@ -62,7 +62,7 @@ def _first_diagnostic(text: str, rc: int) -> str:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PY_DIR = Path(__file__).resolve().parent
-VERSION = "3.14.6"
+VERSION = "3.15.1"
 SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 
 # Maximum tolerated test failures. Tightened as the interpreter stabilizes.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the CPython 3.14.6 Windows distribution with badc, as PCbuild does.
+"""Build the CPython 3.15.1 Windows distribution with badc, as PCbuild does.
 
 PCbuild's project files are the specification: ``pcbuild.proj`` names the
 projects and each ``.vcxproj`` (with ``pyproject.props`` and the dependency
@@ -13,7 +13,7 @@ Every unit compiles with ``--msvc`` against the toolchain cl uses -- the MSVC
 headers (vcruntime.h, vadefs.h, ...) and the Windows SDK's ucrt, um and shared
 headers -- with nothing from badc's bundled C library, and links against the
 MSVC and SDK import libraries (ucrt.lib, vcruntime.lib, kernel32.lib, ...).
-The outputs follow PCbuild's layout: ``PCbuild/<arch>/python314.dll``,
+The outputs follow PCbuild's layout: ``PCbuild/<arch>/python315.dll``,
 ``python3.dll``, ``python.exe``, ``pythonw.exe``, the launchers and one
 ``.pyd`` per extension module, each importing from the core DLL, with the
 external libraries (bzip2, xz, zlib-ng, zstd, mpdecimal, sqlite, libffi)
@@ -53,7 +53,7 @@ REPO_ROOT = PY_DIR.parents[1]
 sys.path.insert(0, str(PY_DIR.parent))
 import _win_kits  # noqa: E402
 
-VERSION = "3.14.6"
+VERSION = "3.15.1"
 CACHE = PY_DIR / ".cache" / "sdk"
 # A tree of its own: build.py patches the shared extraction for its
 # bundled-header build, and this build takes the sources as released.

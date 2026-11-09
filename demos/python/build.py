@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build CPython 3.14.6 with badc for any target, with no make/configure.
+"""Build CPython 3.15.1 with badc for any target, with no make/configure.
 
 One command for every target -- macOS, Linux (x64/arm64), Windows (x64/arm64):
 
@@ -43,7 +43,7 @@ def _first_diagnostic(text: str, rc: int) -> str:
 
 PY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PY_DIR.parents[1]
-VERSION = "3.14.6"
+VERSION = "3.15.1"
 SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 # X.Y form for MS_DLL_ID / getpath PYWINVER (PC/dl_nt.c convention).
 WINVER_XY = VERSION.rsplit(".", 1)[0]
@@ -62,10 +62,7 @@ TEST_SLICE = [
 # Broad library coverage beyond the tier-1 smoke. Every module here was
 # verified to pass on the badc-built interpreter; they exercise the C
 # accelerators (math, struct, array, _datetime, _decimal, _pickle, _io,
-# _json's parser) and the pure-Python library. Tests that spawn isolated
-# child interpreters (`-I`, e.g. json.tool's colour output) are omitted:
-# an isolated child ignores PYTHONHOME and getpath cannot locate Lib
-# without an install layout, which is a harness concern, not a runtime one.
+# _json's parser) and the pure-Python library.
 TEST_TIER2 = [
     "test_math", "test_cmath", "test_collections", "test_itertools",
     "test_re", "test_struct", "test_array", "test_binascii",
@@ -78,17 +75,23 @@ TEST_TIER2 = [
 # Includes common to every POSIX TU; the manifest carries any per-TU extras.
 POSIX_INCLUDES = ["Include", "Include/internal", "."]
 
+# badc has the GCC vector types but not __builtin_shufflevector, which the
+# host compilers' configure finds; pystrhex.c takes its scalar path.
+# TODO(#1997): __builtin_shufflevector in badc lifts this.
+_POSIX_UNDEF = ["_Py_HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR"]
 # Linux modules badc cannot yet build: ELF/process introspection.
-_LINUX_EXCLUDE = [("_remote_debugging_module.c", "_remote_debugging")]
+_LINUX_EXCLUDE = [("Modules/_remote_debugging/", "_remote_debugging")]
 # pyconfig advertises headers badc's bundled set does not provide; undefining the
 # HAVE_ macros makes the module take a supported path: socket builds the common
 # families and raw CAN without the AF_PACKET/NETLINK/VSOCK/TIPC/QRTR/ALG, CAN
-# BCM/J1939 and netfilter address handling.
+# BCM/ISOTP/J1939 and netfilter address handling, the allocators do not name
+# their mappings (<linux/prctl.h>), and os.stat does not offer statx.
 _LINUX_UNDEF = [
     "HAVE_NETPACKET_PACKET_H", "HAVE_SOCKADDR_ALG",
     "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_VM_SOCKETS_H", "HAVE_LINUX_TIPC_H",
     "HAVE_LINUX_QRTR_H", "HAVE_LINUX_NETFILTER_IPV4_H",
-    "HAVE_LINUX_CAN_BCM_H", "HAVE_LINUX_CAN_J1939_H",
+    "HAVE_LINUX_CAN_BCM_H", "HAVE_LINUX_CAN_ISOTP_H", "HAVE_LINUX_CAN_J1939_H",
+    "_Py_HAVE_PR_SET_VMA_ANON_NAME", "HAVE_STATX",
 ]
 # badc's sys/epoll.h lays struct epoll_event out unpacked on x86-64 (16 bytes,
 # data at 8) against the kernel's packed 12-byte layout, so an epoll_wait
@@ -115,9 +118,9 @@ _WIN_DEFINES = [
     f'MS_DLL_ID="{WINVER_XY}"', 'VPATH="."',
 ]
 # getpath.c reads the install layout from these; bytes-only placeholders, the
-# runtime path comes from PYTHONHOME.
+# runtime path comes from the build-tree layout run_tests stages.
 _WIN_GETPATH_DEFINES = [
-    "PREFIX=NULL", "EXEC_PREFIX=NULL", 'VERSION="3.14"', 'VPATH="."',
+    "PREFIX=NULL", "EXEC_PREFIX=NULL", f'VERSION="{WINVER_XY}"', 'VPATH="."',
     'PLATLIBDIR="DLLs"', 'PYDEBUGEXT=""',
 ]
 # TUs excluded from the minimal static interpreter. zlib needs the vendored
@@ -147,29 +150,34 @@ _WIN_ADDITIONAL_TUS = [
 # stub PyInit_* for the excluded builtins.
 _WIN_HELPERS = ["win_entry.c", "win_excluded_stubs.c"]
 
+# Test methods that import a test extension module without a guard; the
+# all-builtin build leaves those modules out, as --disable-test-modules does.
+_NO_TEST_MODULES_IGNORE = ["test_deopt_from_append_list"]
+
 # tier-2 test methods that fail only on the legacy-CRT gaps described at the
 # Windows TARGETS entries; -i deselects each by name while the rest of its
 # module runs. Shared by both Windows arches.
 _WIN_CRT_IGNORE = [
     "testLdexp_denormal",
     "test_phase", "test_polar", "test_specific_values",
-    "test_strftime_y2k", "test_strftime_y2k_c99",
+    "test_strftime_y2k", "test_strftime_y2k_c99", "*.TestTime*.test_strftime_special",
 ]
 
 TARGETS = {
     "macos-aarch64": {
-        "asm_trampoline": False,
+        "asm_trampoline": True,
         # The hosted macOS runner does not execute binaries from the checked-out
         # workspace (the demos run from a temp directory); run_tests does too.
         "run_from_tempdir": True,
         # The captured pyconfig.h claims headers badc's bundled set does not
         # fully provide; undefine them so the module takes a supported path
         # (kqueue -> select/poll; no AF_SYSTEM kernel-control socket).
-        "undef_haves": ["HAVE_KQUEUE", "HAVE_SYS_EVENT_H", "HAVE_SYS_KERN_CONTROL_H"],
+        "undef_haves": _POSIX_UNDEF
+        + ["HAVE_KQUEUE", "HAVE_SYS_EVENT_H", "HAVE_SYS_KERN_CONTROL_H"],
         # Niche modules badc does not compile: Mach-O internals (remote
         # debugging), libuuid (_uuid), and CoreFoundation (_scproxy).
         "exclude": [
-            ("_remote_debugging_module.c", "_remote_debugging"),
+            ("Modules/_remote_debugging/", "_remote_debugging"),
             ("_uuidmodule.c", "_uuid"),
             ("_scproxy.c", "_scproxy"),
         ],
@@ -178,7 +186,7 @@ TARGETS = {
         "asm_trampoline": True,
         # badc has no x86 SSE/AVX intrinsics; build HACL's scalar BLAKE2 and drop
         # the vectorized variants (the runtime dispatch checks these macros).
-        "undef_haves": _LINUX_UNDEF + _LINUX_X64_UNDEF
+        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF + _LINUX_X64_UNDEF
         + ["_Py_HACL_CAN_COMPILE_VEC128", "_Py_HACL_CAN_COMPILE_VEC256"],
         "exclude": _LINUX_EXCLUDE + [
             ("Hacl_Hash_Blake2s_Simd128.c", "_blake2_simd128"),
@@ -187,7 +195,7 @@ TARGETS = {
     },
     "linux-aarch64": {
         "asm_trampoline": True,
-        "undef_haves": _LINUX_UNDEF,
+        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF,
         "exclude": _LINUX_EXCLUDE,
     },
     # The Windows interpreter links the legacy msvcrt.dll CRT, several of whose
@@ -204,7 +212,8 @@ TARGETS = {
     #     and cmath.polar raise a spurious math domain error on non-finite input
     #     (test_phase, test_polar, and test_specific_values via polar_complex).
     #   - wcsftime lacks the C99 %C/%F/%G conversion specifiers and returns ""
-    #     (test_strftime_y2k, test_strftime_y2k_c99).
+    #     (test_strftime_y2k, test_strftime_y2k_c99, and the time classes'
+    #     test_strftime_special).
     # TODO: a C99-conforming CRT or a math/time shim removes every entry here.
     "windows-x64": {"windows": True, "tier2_ignore": _WIN_CRT_IGNORE},
     "windows-arm64": {"windows": True, "tier2_ignore": _WIN_CRT_IGNORE},
@@ -682,9 +691,11 @@ def _macho_section_sizes(d: bytes) -> dict | None:
 
 
 def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
-    # The suite spawns isolated child interpreters (-I) that ignore PYTHONHOME;
-    # getpath locates Lib relative to the executable, so the interpreter runs
-    # from a copy beside Lib. The source tree serves for that, except where the
+    # The suite spawns isolated child interpreters (-I) that ignore PYTHONHOME,
+    # and getpath warns on stderr when PYTHONHOME names no install layout. The
+    # interpreter runs as from a build tree instead: a copy beside Lib and an
+    # empty pybuilddir.txt, which makes the executable's directory the platform
+    # library directory. The source tree serves for that, except where the
     # runner does not execute binaries from the checked-out workspace: there the
     # copy runs from a temp directory with Lib symlinked beside it.
     cfg = TARGETS[target]
@@ -694,7 +705,8 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
     # -i/--ignore deselects individual test methods by name (regrtest matches the
     # pattern against test ids), used for narrow platform gaps where skipping the
     # whole module would lose unrelated coverage.
-    ignore = [a for pat in cfg.get("tier2_ignore", []) for a in ("--ignore", pat)]
+    ignore = [a for pat in _NO_TEST_MODULES_IGNORE + cfg.get("tier2_ignore", [])
+              for a in ("--ignore", pat)]
     if cfg.get("run_from_tempdir"):
         rundir = Path(tempfile.mkdtemp(prefix="badc-cpython-"))
         exe = rundir / py.name
@@ -705,7 +717,8 @@ def run_tests(target: str, py: Path, log, tier2: bool = False) -> int:
         cwd = SRC
     shutil.copy2(py, exe)
     os.chmod(exe, 0o755)
-    env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
+    (exe.parent / "pybuilddir.txt").write_text("")
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONHOME", "PYTHONPATH")}
     r = run([str(exe), "-c", "print(2 + 2)"], env=env, timeout=120)
     if r.returncode != 0 or r.stdout.strip() != "4":
         sys.stderr.write(r.stdout + r.stderr)

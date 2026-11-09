@@ -2461,6 +2461,10 @@ pub struct Compiler {
     /// so each entry -- the symbol, the tag, and the declarator's line --
     /// is sized once the unit is complete.
     pending_incomplete_objects: Vec<(usize, usize, usize)>,
+    /// File-scope arrays declared `T x[];` that no later declaration has
+    /// sized yet. Their one-element bound (C99 6.9.2p2) is provisional, so
+    /// `__builtin_object_size` does not answer from it.
+    provisional_bounds: alloc::collections::BTreeSet<usize>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -3354,6 +3358,7 @@ impl Compiler {
             pending_aliases: Vec::new(),
             object_aliases: Vec::new(),
             pending_incomplete_objects: Vec::new(),
+            provisional_bounds: alloc::collections::BTreeSet::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             object_size_scope: None,

@@ -3001,6 +3001,12 @@ impl Compiler {
         if self.pending.object_size_operands == 0 || self.symbols[id_idx].is_vla {
             return None;
         }
+        // A later declaration of the unit may still size the array.
+        if self.symbols[id_idx].class == Token::Glo as i64
+            && self.provisional_bounds.contains(&id_idx)
+        {
+            return None;
+        }
         let elem = self.size_of_type(self.symbols[id_idx].type_) as i64;
         let count = self.symbols[id_idx].array_size;
         if count == 0 && !self.symbols[id_idx].is_zero_len_array {

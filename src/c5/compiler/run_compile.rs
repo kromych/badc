@@ -697,6 +697,7 @@ impl Compiler {
         self.ty = ty;
         let prior_array_size = self.symbols[id_idx].array_size;
         self.symbols[id_idx].array_size = array_size;
+        self.provisional_bounds.remove(&id_idx);
         // A zero-length array (`T x[0]`, or an alias of one) is a
         // complete type of size 0; the `-1` count it shares with
         // the deferred `T x[]` form cannot tell them apart.
@@ -2848,6 +2849,9 @@ impl Compiler {
         let count = if zero_len { 0 } else { 1 };
         self.symbols[id_idx].array_size = count;
         self.symbols[id_idx].is_zero_len_array = zero_len;
+        if !zero_len {
+            self.provisional_bounds.insert(id_idx);
+        }
         if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
             *first = count;
         }

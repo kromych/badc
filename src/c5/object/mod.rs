@@ -597,7 +597,11 @@ fn compact_and_lower(
         && options.pic
         && !options.pie
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
-    let segregate = options.bss_segregate && !bss_segregation_disabled();
+    let segregate = match options.bss_segregate && !bss_segregation_disabled() {
+        false => shadow::ZeroFill::Off,
+        true if options.zero_init_in_bss => shadow::ZeroFill::All,
+        true => shadow::ZeroFill::Uninitialized,
+    };
     let image = options.output_kind != OutputKind::Relocatable;
     if program.data.is_empty() {
         let build = crate::c5::codegen::lower_for_with_prebuilt(

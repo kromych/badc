@@ -470,6 +470,48 @@ fn a_zero_length_object_ends_the_objects_of_its_own_section() {
 }
 
 #[test]
+fn an_object_initialized_to_zero_stays_in_data_under_no_zero_initialized_in_bss() {
+    // gcc `-fno-zero-initialized-in-bss`: an object whose initializer is
+    // all zeros goes to `.data`, one with no initializer to `.bss`, a
+    // block-scope `static` alike.
+    let src = "int a;\nint b = 0;\nstatic int c = 0;\nstatic int d;\nint e[4] = {0};\n\
+               int *f(void) { static int h = 0; static int k; c++; d++; h++; k++; return &h; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions {
+                no_entry_point: true,
+                ..Default::default()
+            },
+        )
+        .compile()
+        .expect("compile");
+        let sections = |zero_init_in_bss: bool| {
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                zero_init_in_bss,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            let o = parse_et_rel(&bytes, "z.o").expect("parse");
+            ["a", "b", "c", "d", "e", "h.0", "k.1"].map(|n| {
+                match o.symbols.iter().find(|s| s.name == n).expect(n).sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => panic!("{n} is not defined in a section"),
+                }
+            })
+        };
+        assert_eq!(sections(true), [".bss"; 7], "{target:?}");
+        assert_eq!(
+            sections(false),
+            [".bss", ".data", ".data", ".bss", ".data", ".data", ".bss"],
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
     // Each object takes the section its constness, initializer and
     // relocated slots give it whether or not the unit defines a function:

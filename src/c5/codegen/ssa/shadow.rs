@@ -1147,7 +1147,11 @@ pub(crate) fn compact_program_data(
         program.clone(),
         &sets,
         &live_func_pcs,
-        segregate,
+        if segregate {
+            ZeroFill::All
+        } else {
+            ZeroFill::Off
+        },
         true,
         None,
     );
@@ -1181,11 +1185,22 @@ fn all_zero(bytes: &[u8]) -> bool {
 /// `.data` offset the IR holds -- are carried back through that map and
 /// forward through this one here, so no consumer is left on a stale
 /// layout.
+/// Which wholly-zero objects take zero-fill storage (`.bss`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ZeroFill {
+    /// None: every object is file-backed.
+    Off,
+    /// Those no initializer names (gcc `-fno-zero-initialized-in-bss`).
+    Uninitialized,
+    /// Every one.
+    All,
+}
+
 pub(crate) fn apply_data_liveness(
     mut out: Program,
     sets: &LiveSets,
     live_func_pcs: &alloc::collections::BTreeSet<usize>,
-    segregate: bool,
+    zero_fill: ZeroFill,
     image: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
@@ -1295,11 +1310,12 @@ pub(crate) fn apply_data_liveness(
     // whose bytes are all zero is uninitialised data: it carries no file
     // bytes and moves to the `.bss` region past the file image, which the
     // loader zero-fills. A partly-non-zero object keeps its interior zeros
-    // in the file -- only wholly-zero objects can move.
-    // Segregation is on by default; with it off (`segregate == false`,
-    // the `BADC_NO_BSS_SEGREGATE` opt-out or a target whose writer does
-    // not support it), every live object (zero or not) is packed into the
-    // file image as before and `bss_size` stays 0. The caller sets it.
+    // in the file -- only wholly-zero objects can move, and under
+    // `ZeroFill::Uninitialized` only those no initializer names. With
+    // `ZeroFill::Off` (the `BADC_NO_BSS_SEGREGATE` opt-out or a target
+    // whose writer does not support it), every live object (zero or not)
+    // is packed into the file image and `bss_size` stays 0. The caller
+    // sets it.
     //
     // This predicate is the only place the question is decided. The
     // layout it produces records the answer as a position -- everything
@@ -1332,9 +1348,23 @@ pub(crate) fn apply_data_liveness(
             }
         }
     }
+    let mut initialized = alloc::vec![false; n];
+    if zero_fill == ZeroFill::Uninitialized {
+        for sym in &out.symbols {
+            if sym.class == crate::c5::token::Token::Glo as i64
+                && sym.defined_here
+                && sym.has_initializer
+                && !sym.implicit_zero
+                && (0..data_len).contains(&sym.val)
+            {
+                initialized[interval_of(sym.val)] = true;
+            }
+        }
+    }
     let bss: Vec<bool> = (0..n)
         .map(|i| {
-            segregate
+            zero_fill != ZeroFill::Off
+                && !initialized[i]
                 && group[i].is_none()
                 && i != 0
                 && live[i]

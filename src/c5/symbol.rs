@@ -351,6 +351,10 @@ pub(crate) struct Symbol {
     /// the storage. A second declaration that *also* carries an
     /// initializer is a real duplicate.
     pub has_initializer: bool,
+    /// A block-scope `static` record declared without an initializer: it
+    /// reads as initialized, to zero (C17 6.7.9p10), but no initializer
+    /// names the zero, which `-fno-zero-initialized-in-bss` tells apart.
+    pub implicit_zero: bool,
 
     /// True when the object's initial value comes from stores emitted at
     /// its declaration point rather than from the data image, which is
@@ -1034,6 +1038,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             storage_is_const: _,
             h_storage_is_const: _,
             has_initializer: _,
+            implicit_zero: _,
             runtime_initialized: _,
             h_runtime_initialized: _,
             fn_ptr_indirection: _,

@@ -4530,6 +4530,11 @@ pub struct NativeOptions {
     /// On by default; under the `codegen_test` feature
     /// `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
+    /// Whether an object whose initializer is all zeros takes zero-fill
+    /// storage as an uninitialized one does. gcc's
+    /// `-fno-zero-initialized-in-bss` clears it, which keeps such an
+    /// object in `.data`.
+    pub zero_init_in_bss: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
     /// aarch64). See [`Abi::no_fp_regs`], which this sets.
@@ -5023,6 +5028,7 @@ impl NativeOptions {
             frame_larger_than: None,
             diag: crate::c5::diag::Config::new(),
             bss_segregate: true,
+            zero_init_in_bss: true,
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,

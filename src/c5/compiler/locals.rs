@@ -777,7 +777,8 @@ impl Compiler {
                 self.symbols[d.loc_idx].type_align = a.obj_align.max(0);
             }
             use crate::c5::segment_pragma::SegKind;
-            let kind = match self.lex.tk == Token::Assign {
+            let initialized = self.lex.tk == Token::Assign;
+            let kind = match initialized {
                 true if object_const => SegKind::Const,
                 true => SegKind::Data,
                 false => SegKind::Bss,
@@ -786,7 +787,7 @@ impl Compiler {
             let r = self.allocate_static_local(d.loc_idx, d.ty, d.array_size);
             self.static_duration_init -= 1;
             r?;
-            self.push_block_static_record(d.loc_idx, d.ty)?;
+            self.push_block_static_record(d.loc_idx, d.ty, initialized)?;
             if let Some(record) = self.symbols[d.loc_idx].entity_record
                 && !self.symbols[d.loc_idx].is_thread_local
             {
@@ -1287,6 +1288,7 @@ impl Compiler {
         &mut self,
         loc_idx: usize,
         ty: i64,
+        initialized: bool,
     ) -> Result<(), C5Error> {
         // A block-scope `static` has no linkage, so it cannot be weak.
         if self.pending.attrs.weak {
@@ -1329,6 +1331,7 @@ impl Compiler {
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
+            implicit_zero: !initialized,
             runtime_initialized: src.runtime_initialized,
             storage_is_const: src.storage_is_const,
             // Declaration shape and debug facts, so an `Expr::Ident`

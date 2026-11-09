@@ -456,6 +456,9 @@ Compile knobs:
   -fconserve-stack         Inline only while the caller's frame stays
                            within 100 bytes or 400% growth over its own,
                            in place of 256 bytes and 1000%.
+  -fno-zero-initialized-in-bss
+                           Keep an object initialized to zero in .data;
+                           only one with no initializer goes to .bss.
   -fno-jump-tables         Dispatch every switch through the compare
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores

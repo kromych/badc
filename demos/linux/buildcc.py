@@ -145,6 +145,8 @@ FORWARD_EXACT = {
     # The top-level Makefile adds this: the inliner's stack-growth bounds
     # tighten to gcc's values under it.
     "-fconserve-stack",
+    # The purgatory units keep an object initialized to zero in .data.
+    "-fno-zero-initialized-in-bss",
     # Early-boot units that run with the MMU off are built with this: memory
     # is Device-typed there and an unaligned access raises an alignment
     # fault. badc caps every compiler-generated access at the alignment its
@@ -270,9 +272,6 @@ UNSUPPORTED_PREFIX = (
     # asks for -- array bounds and shift-exponent among them -- are absent
     # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
     "-fsanitize=", "-fsanitize-trap=",
-    # Moves a zero-initialized definition out of .bss into .data, an
-    # observable effect badc does not reproduce, so it cannot be ignored.
-    "-fno-zero-initialized-in-bss",
     # Clears the call-clobbered registers a function used before it returns
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
     # TODO: implement the register-clearing epilogue and forward the flag.
@@ -712,7 +711,8 @@ def _self_test() -> int:
     assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
     assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
     assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
-    assert rewrite(["-fconserve-stack"]).argv == ["-fconserve-stack"]
+    for flag in ("-fconserve-stack", "-fno-zero-initialized-in-bss"):
+        assert rewrite([flag]).argv == [flag], flag
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]

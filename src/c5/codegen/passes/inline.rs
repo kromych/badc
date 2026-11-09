@@ -120,12 +120,9 @@ const CALLED_ONCE_CAP: u32 = 512;
 const RECURSIVE_FRAME_SLOTS: i64 = 32;
 
 /// Local-slot count (2 KiB) a caller's frame must exceed -- together with
-/// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before optional
-/// inlining into it stops; only a mandatory (`always_inline`) request is
-/// honored past the bound. Region reuse and the post-inline slot
-/// compaction keep organic growth under this backstop. Mirrors gcc's
-/// large-stack-frame / large-stack-frame-growth pair, which a plain
-/// `inline` hint does not bypass.
+/// `FRAME_GROWTH_FACTOR` times its pre-inline size -- before the round
+/// offers it only candidates whose splice adds no frame slot. A pre-filter
+/// on the candidate set; the per-splice bounds below decide each splice.
 const CALLER_FRAME_SLOTS: i64 = 256;
 
 /// Relative growth bound for the caller frame gate.
@@ -150,6 +147,13 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// predictable here -- so a frame can still end slightly past a page.
 /// What keeps that safe is the probing prologue, not this bound.
 const CALLER_FRAME_ABS_SLOTS: i64 = 512;
+
+/// gcc's `large-stack-frame` (256 bytes, in 8-byte cells) and
+/// `large-stack-frame-growth` (1000%, as a factor of the caller's own
+/// frame): an optional splice that grows the caller's frame past both is
+/// refused, as gcc refuses it to a plain `inline` hint.
+const LARGE_STACK_FRAME_CELLS: i64 = 32;
+const LARGE_STACK_FRAME_GROWTH: i64 = 11;
 
 #[derive(Clone, Copy)]
 enum RegionKey {
@@ -182,6 +186,8 @@ struct SlotPlacement<'a> {
     sp_tainted: &'a BTreeSet<usize>,
     /// The caller's frame before this pass spliced into it.
     orig_locals: i64,
+    /// The cells of that frame its live instructions name.
+    own_cells: i64,
 }
 
 #[derive(Default)]
@@ -4197,9 +4203,13 @@ fn inline_caller(
                         &caller.insts,
                     );
                     let charge = cost.min(placement.regions.growth(key, needed, caller.locals));
+                    let grown = caller.locals - placement.orig_locals + charge;
+                    let frame = placement.own_cells + grown;
                     if !c.is_always_inline
                         && charge > 0
-                        && caller.locals - placement.orig_locals + charge > CALLER_FRAME_ABS_SLOTS
+                        && (grown > CALLER_FRAME_ABS_SLOTS
+                            || frame > LARGE_STACK_FRAME_CELLS
+                                && frame > placement.own_cells * LARGE_STACK_FRAME_GROWTH)
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4287,6 +4297,10 @@ pub(crate) fn run(
     // and the devirt sweep admits no edge that reaches stack-pointer asm
     // or closes a cycle.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
+    let own_cells: Vec<i64> = funcs
+        .iter()
+        .map(|f| lasting_cells(f, &live_inst_mask(f), true, 0))
+        .collect();
     let orig_insts: Vec<usize> = funcs.iter().map(emitted_inst_count).collect();
     let sccs = call_graph_sccs(funcs);
     let cyclic = &sccs.cyclic;
@@ -4442,6 +4456,7 @@ pub(crate) fn run(
                         cyclic,
                         sp_tainted: &sp_tainted,
                         orig_locals: orig_locals[fi],
+                        own_cells: own_cells[fi],
                     },
                 );
                 if spliced {
@@ -4744,6 +4759,26 @@ mod tests {
         }
     }
 
+    /// `f` with an own object of `cells` cells its code stores to, so the
+    /// large-stack-frame bound measures growth against that frame.
+    fn with_own_object(mut f: FunctionSsa, cells: i64) -> FunctionSsa {
+        let n = f.insts.len() as u32;
+        f.insts.push(Inst::StoreLocal {
+            disp: 0,
+            off: -cells,
+            value: n - 1,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        });
+        f.inst_src.push(crate::c5::ir::InstSrc::default());
+        f.f32_values.push(false);
+        f.blocks[0].inst_range.end = n + 1;
+        f.locals = f.locals.max(cells);
+        f.multi_cell_slots.push((-cells, cells));
+        f
+    }
+
     /// A callee returning no value stays out of line where the caller reads
     /// the call's result, which the splice would leave undefined, and is
     /// spliced where the result is unread.
@@ -5008,8 +5043,13 @@ mod tests {
             let mut callee = asm_callee_with_template(100, 4, b"mov %%rsp, (%0)");
             callee.is_inline = always;
             callee.is_always_inline = always;
+            // 64 splices of 4 slots stay within 11 times the caller's own
+            // 30 cells and carry it past both pre-filter bounds.
             let mut funcs = alloc::vec![
-                multi_call_caller(1, 2, 100, MAX_MULTI_BLOCK_SPLICE_STEPS + over),
+                with_own_object(
+                    multi_call_caller(1, 2, 100, MAX_MULTI_BLOCK_SPLICE_STEPS + over),
+                    30
+                ),
                 callee,
             ];
             run(&mut funcs, 32, abi, &BTreeMap::new());
@@ -5169,6 +5209,9 @@ mod tests {
         caller.blocks[0].inst_range = 0..3;
         caller.blocks[0].terminator = Terminator::Return(2);
         caller.blocks[0].exit_acc = 2;
+        // An own frame 11 times which holds both splices, so the absolute
+        // bound alone decides.
+        let caller = with_own_object(caller, 2 * half / LARGE_STACK_FRAME_GROWTH + 1);
         let wide = |pc: usize| {
             let mut c = calling_callee(pc, half, 600);
             // One object spans the whole frame, so the splice keeps every cell.
@@ -5182,6 +5225,42 @@ mod tests {
             1,
             "exactly one of the two fits the budget"
         );
+    }
+
+    /// gcc's large-stack-frame pair: an optional splice whose growth
+    /// carries the caller's frame past 256 bytes and past 11 times the
+    /// caller's own frame stays a call; a mandatory one is spliced, and so
+    /// is one that stays under either bound.
+    #[test]
+    fn a_large_frame_callee_stays_out_of_a_small_caller() {
+        let abi = Target::LinuxX64.abi();
+        let wide = |cells: i64, always: bool| {
+            let mut c = calling_callee(500, cells, 600);
+            c.multi_cell_slots = alloc::vec![(-cells, cells)];
+            c.is_inline = always;
+            c.is_always_inline = always;
+            c
+        };
+        for (own, cells, always, spliced) in [
+            (2, 40, false, false),
+            (2, 40, true, true),
+            (4, 30, false, true),
+            (0, LARGE_STACK_FRAME_CELLS, false, true),
+        ] {
+            let caller = multi_call_caller(1, 0, 500, 1);
+            let caller = if own > 0 {
+                with_own_object(caller, own)
+            } else {
+                caller
+            };
+            let mut funcs = alloc::vec![caller, wide(cells, always), leaf(600)];
+            run(&mut funcs, 32, abi, &BTreeMap::new());
+            assert_eq!(
+                calls_to(&funcs[0], 500) == 0,
+                spliced,
+                "own={own} callee={cells} always={always}"
+            );
+        }
     }
 
     /// `growth` is what `place` adds to the frame for the same request:

@@ -237,6 +237,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rcx # <addr>
                	movq	$0x1, <rip> # <addr>
                	leaq	<rip>, %rdx # <addr>
@@ -278,11 +280,22 @@ Disassembly of section .text:
                	movl	$0x0, (%r10)
                	movl	$0x3, %edi
                	callq	<addr>
+               	movq	%rax, %rbx
+               	movl	$0x3, %edi
+               	callq	<addr>
+               	addq	%rax, %rbx
+               	movl	$0x3, %edi
+               	callq	<addr>
+               	addq	%rax, %rbx
+               	movl	$0x3, %edi
+               	callq	<addr>
+               	addq	%rbx, %rax
                	movq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
-               	popq	%rbp
+               	popq	%rbx
+               	leave
                	retq

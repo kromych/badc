@@ -13,6 +13,16 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<main>:
+<runtime3d>:
                	mov	x0, #0x0                // =0
+               	ret
+
+<main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	mov	x0, #0x2                // =2
+               	mov	x1, #0x1000             // =4096
+               	mov	x2, #0x9000             // =36864
+               	bl	<addr>
+               	ldp	x29, x30, [sp], #0x10
                	ret

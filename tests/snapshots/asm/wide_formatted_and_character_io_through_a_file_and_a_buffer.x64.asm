@@ -174,6 +174,182 @@ Disassembly of section .text:
                	leave
                	retq
 
+<file>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x78, %rsp
+               	pushq	%rbx
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movq	%rax, %rbx
+               	xorl	%esi, %esi
+               	movl	%esi, -0x70(%rbp)
+               	movl	%esi, -0x68(%rbp)
+               	testq	%rbx, %rbx
+               	jne	<addr>
+               	movl	$0xa, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x1, %esi
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jg	<addr>
+               	movl	$0xb, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	leaq	<rip>, %rsi # <addr>
+               	movl	$0x7, %edx
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	cmpq	$0x8, %rax
+               	jne	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	movl	$0x8, %edx
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	cmpl	$0x2, %eax
+               	je	<addr>
+               	movl	$0xc, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x78, %edi
+               	movq	%rbx, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	cmpl	$0x78, %eax
+               	jne	<addr>
+               	movl	$0x79, %edi
+               	movq	%rbx, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	cmpl	$0x79, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	movq	%rbx, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jge	<addr>
+               	movl	$0xd, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	-0x70(%rbp), %rdx
+               	leaq	-0x60(%rbp), %rcx
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	cmpq	$0x2, %rax
+               	jne	<addr>
+               	movl	-0x70(%rbp), %eax
+               	cmpl	$0x7, %eax
+               	jne	<addr>
+               	leaq	-0x60(%rbp), %rdi
+               	leaq	<rip>, %rsi # <addr>
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0xe, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	cmpl	$0xa, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	-0x68(%rbp), %rdx
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	cmpl	$0x1, %eax
+               	jne	<addr>
+               	movl	-0x68(%rbp), %eax
+               	cmpl	$0x8, %eax
+               	je	<addr>
+               	movl	$0xf, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	cmpl	$0x78, %eax
+               	jne	<addr>
+               	movl	$0x78, %edi
+               	movq	%rbx, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	cmpl	$0x78, %eax
+               	je	<addr>
+               	movl	$0x10, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	leaq	-0x40(%rbp), %rdi
+               	movl	$0x10, %esi
+               	movq	%rbx, %rdx
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	leaq	-0x40(%rbp), %rdi
+               	leaq	<rip>, %rsi # <addr>
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movl	%eax, %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
+               	jne	<addr>
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x11, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movq	%rbx, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	leave
+               	retq
+
 <strings_and_conversions>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -342,8 +518,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xc8, %rsp
-               	pushq	%rbx
+               	subq	$0xc0, %rsp
                	movl	$0x0, -0xb8(%rbp)
                	movl	$0x0, -0xb0(%rbp)
                	movq	$0x0, -0xa8(%rbp)
@@ -368,170 +543,18 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rax, %rax
                	jne	<addr>
-               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rbx
-               	xorl	%esi, %esi
-               	movl	%esi, -0xb0(%rbp)
-               	movl	%esi, -0xa8(%rbp)
-               	testq	%rbx, %rbx
-               	jne	<addr>
-               	movl	$0xa, %eax
                	testl	%eax, %eax
                	jne	<addr>
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %esi
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jg	<addr>
-               	movl	$0xb, %eax
-               	jmp	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x7, %edx
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rbx, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x8, %rax
-               	jne	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x8, %edx
-               	movq	%rbx, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0xc, %eax
-               	jmp	<addr>
-               	movl	$0x78, %edi
-               	movq	%rbx, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpl	$0x78, %eax
-               	jne	<addr>
-               	movl	$0x79, %edi
-               	movq	%rbx, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpl	$0x79, %eax
-               	jne	<addr>
-               	leaq	<rip>, %rdi # <addr>
-               	movq	%rbx, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jge	<addr>
-               	movl	$0xd, %eax
-               	jmp	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	leaq	-0xb0(%rbp), %rdx
-               	leaq	-0xa0(%rbp), %rcx
-               	movq	%rbx, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x2, %rax
-               	jne	<addr>
-               	movl	-0xb0(%rbp), %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	leaq	-0xa0(%rbp), %rdi
-               	leaq	<rip>, %rsi # <addr>
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0xe, %eax
-               	jmp	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpl	$0xa, %eax
-               	jne	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	leaq	-0xa8(%rbp), %rdx
-               	movq	%rbx, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	cmpl	$0x1, %eax
-               	jne	<addr>
-               	movl	-0xa8(%rbp), %eax
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0xf, %eax
-               	jmp	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpl	$0x78, %eax
-               	jne	<addr>
-               	movl	$0x78, %edi
-               	movq	%rbx, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpl	$0x78, %eax
-               	je	<addr>
-               	movl	$0x10, %eax
-               	jmp	<addr>
-               	leaq	-0x40(%rbp), %rdi
-               	movl	$0x10, %esi
-               	movq	%rbx, %rdx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	leaq	-0x40(%rbp), %rdi
-               	leaq	<rip>, %rsi # <addr>
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movl	%eax, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x11, %eax
-               	jmp	<addr>
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x4, %esi
                	leaq	<rip>, %rdx # <addr>

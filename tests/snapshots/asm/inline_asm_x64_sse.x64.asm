@@ -25,10 +25,171 @@ Disassembly of section .text:
                	int3
                	int3
 
+<fma_vfmadd>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x48, %rsp
+               	pushq	%rbx
+               	movl	$0x2a, %esi
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movq	%rcx, %rdi
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movl	%ecx, %eax
+               	shrq	$0x1c, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	movl	%edi, %eax
+               	shrq	$0xc, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	-0x40(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x30(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x40(%rbp), %xmm4
+               	movups	-0x30(%rbp), %xmm5
+               	movups	-0x20(%rbp), %xmm6
+               	cvtdq2ps	%xmm4, %xmm0
+               	cvtdq2ps	%xmm5, %xmm1
+               	cvtdq2ps	%xmm6, %xmm2
+               	vfmadd231ps	%xmm0, %xmm1, %xmm2 # xmm2 = (xmm1 * xmm0) + xmm2
+               	cvtps2dq	%xmm2, %xmm3
+               	movups	%xmm3, -0x10(%rbp)
+               	movl	-0x4(%rbp), %esi
+               	movq	%rsi, %rax
+               	popq	%rbx
+               	leave
+               	retq
+
+<avx2_vpbroadcastd>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x18, %rsp
+               	pushq	%rbx
+               	movl	$0x2a, %esi
+               	movl	$0x7, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movq	%rbx, %rdi
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movl	%ecx, %eax
+               	shrq	$0x1c, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	movl	%edi, %eax
+               	shrq	$0x5, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	movl	$0x15, %r10d
+               	movd	%r10d, %xmm0
+               	vpbroadcastd	%xmm0, %xmm1
+               	vpaddd	%xmm1, %xmm1, %xmm2
+               	movups	%xmm2, -0x10(%rbp)
+               	movl	-0x8(%rbp), %esi
+               	movq	%rsi, %rax
+               	popq	%rbx
+               	leave
+               	retq
+
+<avx2_vpsllvd>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x38, %rsp
+               	pushq	%rbx
+               	movl	$0x2a, %esi
+               	movl	$0x7, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movq	%rbx, %rdi
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movl	%ecx, %eax
+               	shrq	$0x1c, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	movl	%edi, %eax
+               	shrq	$0x5, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	-0x30(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x30(%rbp), %xmm1
+               	movups	-0x20(%rbp), %xmm2
+               	vpsllvd	%xmm2, %xmm1, %xmm0
+               	movups	%xmm0, -0x10(%rbp)
+               	movl	-0x4(%rbp), %esi
+               	movq	%rsi, %rax
+               	popq	%rbx
+               	leave
+               	retq
+
+<avx2_vpblendd>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x38, %rsp
+               	pushq	%rbx
+               	movl	$0x2a, %esi
+               	movl	$0x7, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movq	%rbx, %rdi
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movl	%ecx, %eax
+               	shrq	$0x1c, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	movl	%edi, %eax
+               	shrq	$0x5, %rax
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	-0x30(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x30(%rbp), %xmm1
+               	movups	-0x20(%rbp), %xmm2
+               	vpblendd	$0x8, %xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0,1,2],xmm2[3]
+               	movups	%xmm0, -0x10(%rbp)
+               	movl	-0x4(%rbp), %eax
+               	movl	-0x10(%rbp), %ecx
+               	addq	%rcx, %rax
+               	leaq	-0x1(%rax), %rsi
+               	movq	%rsi, %rax
+               	popq	%rbx
+               	leave
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x68, %rsp
+               	subq	$0x58, %rsp
                	pushq	%rbx
                	movl	$0x13, %r10d
                	movl	$0x17, %r11d
@@ -115,21 +276,21 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movups	-0x60(%rbp), %xmm1
-               	movups	-0x50(%rbp), %xmm2
+               	leaq	-0x40(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x50(%rbp), %xmm1
+               	movups	-0x40(%rbp), %xmm2
                	movdqa	%xmm1, %xmm7
                	paddd	%xmm2, %xmm7
                	movdqa	%xmm7, %xmm0
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x34(%rbp), %eax
+               	movups	%xmm0, -0x30(%rbp)
+               	movl	-0x24(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x8, %eax
@@ -143,19 +304,19 @@ Disassembly of section .text:
                	shrq	$0x1c, %rax
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movups	-0x60(%rbp), %xmm1
-               	movups	-0x50(%rbp), %xmm2
+               	leaq	-0x40(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x50(%rbp), %xmm1
+               	movups	-0x40(%rbp), %xmm2
                	vpaddd	%xmm2, %xmm1, %xmm0
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x34(%rbp), %eax
+               	movups	%xmm0, -0x30(%rbp)
+               	movl	-0x24(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x9, %eax
@@ -172,18 +333,18 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	vmovdqu	<rip>, %xmm0 # <addr>
                	vmovdqu	%xmm0, (%rax)
-               	leaq	-0x50(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movups	-0x50(%rbp), %xmm1
+               	movups	-0x40(%rbp), %xmm1
                	vpaddd	<rip>, %xmm1, %xmm0 # <addr>
-               	movups	%xmm0, -0x40(%rbp)
+               	movups	%xmm0, -0x30(%rbp)
                	movl	-0x10(%rbp), %eax
                	movl	-0x4(%rbp), %ecx
                	addq	%rcx, %rax
                	subq	$0x2a, %rax
-               	movl	-0x34(%rbp), %ecx
+               	movl	-0x24(%rbp), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
@@ -198,161 +359,48 @@ Disassembly of section .text:
                	shrq	$0x1c, %rax
                	testb	$0x1, %al
                	je	<addr>
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movups	-0x60(%rbp), %xmm1
-               	movups	-0x50(%rbp), %xmm2
+               	leaq	-0x40(%rbp), %rax
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	movups	-0x50(%rbp), %xmm1
+               	movups	-0x40(%rbp), %xmm2
                	vpmulld	%xmm2, %xmm1, %xmm0
                	vpshufd	$0x1b, %xmm0, %xmm0     # xmm0 = xmm0[3,2,1,0]
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x40(%rbp), %eax
+               	movups	%xmm0, -0x30(%rbp)
+               	movl	-0x30(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movq	%rcx, %rsi
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movl	%ecx, %eax
-               	shrq	$0x1c, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	movl	%esi, %eax
-               	shrq	$0xc, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	leaq	-0x30(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x30(%rbp), %xmm4
-               	movups	-0x60(%rbp), %xmm5
-               	movups	-0x50(%rbp), %xmm6
-               	cvtdq2ps	%xmm4, %xmm0
-               	cvtdq2ps	%xmm5, %xmm1
-               	cvtdq2ps	%xmm6, %xmm2
-               	vfmadd231ps	%xmm0, %xmm1, %xmm2 # xmm2 = (xmm1 * xmm0) + xmm2
-               	cvtps2dq	%xmm2, %xmm3
-               	movups	%xmm3, -0x40(%rbp)
-               	movl	-0x34(%rbp), %eax
+               	callq	<addr>
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x7, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movq	%rbx, %rsi
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movl	%ecx, %eax
-               	shrq	$0x1c, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	movl	%esi, %eax
-               	shrq	$0x5, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	movl	$0x15, %r10d
-               	movd	%r10d, %xmm0
-               	vpbroadcastd	%xmm0, %xmm1
-               	vpaddd	%xmm1, %xmm1, %xmm2
-               	movups	%xmm2, -0x40(%rbp)
-               	movl	-0x38(%rbp), %eax
+               	callq	<addr>
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x7, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movq	%rbx, %rsi
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movl	%ecx, %eax
-               	shrq	$0x1c, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	movl	%esi, %eax
-               	shrq	$0x5, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x60(%rbp), %xmm1
-               	movups	-0x50(%rbp), %xmm2
-               	vpsllvd	%xmm2, %xmm1, %xmm0
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x34(%rbp), %eax
+               	callq	<addr>
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x7, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movq	%rbx, %rsi
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	movl	%ecx, %eax
-               	shrq	$0x1c, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	movl	%esi, %eax
-               	shrq	$0x5, %rax
-               	testb	$0x1, %al
-               	je	<addr>
-               	leaq	-0x60(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x60(%rbp), %xmm1
-               	movups	-0x50(%rbp), %xmm2
-               	vpblendd	$0x8, %xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0,1,2],xmm2[3]
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x34(%rbp), %eax
-               	movl	-0x40(%rbp), %ecx
-               	addq	%rcx, %rax
-               	decq	%rax
+               	callq	<addr>
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xf, %eax

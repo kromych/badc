@@ -44,12 +44,10 @@ Disassembly of section .text:
                	movq	$-0x1, %rdi
                	jmp	<addr>
 
-<main>:
+<check>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x140, %rsp            # imm = 0x140
-               	leaq	-0x138(%rbp), %rax
-               	movq	%rax, <rip> # <addr>
+               	subq	$0x130, %rsp            # imm = 0x130
                	leaq	-0x130(%rbp), %rcx
                	movq	$0x0, -0x130(%rbp)
                	movq	$0x0, -0x128(%rbp)
@@ -115,7 +113,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	movq	-0x98(%rbp), %rax
                	leaq	-<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
@@ -124,7 +123,8 @@ Disassembly of section .text:
                	testb	$0x4, %al
                	jne	<addr>
                	movl	$0x4, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	movl	$0xa, %edi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -132,16 +132,29 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	movslq	<rip>, %rax # <addr>
                	testq	%rax, %rax
                	je	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
+               	leave
+               	retq
                	movl	$0x6, %eax
                	jmp	<addr>
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, <rip> # <addr>
+               	callq	<addr>
+               	leave
+               	retq

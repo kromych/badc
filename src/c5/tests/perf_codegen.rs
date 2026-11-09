@@ -3889,14 +3889,15 @@ fn a_frame_built_only_by_inlining_is_compacted() {
 /// Two escaped objects of disjoint blocks in a loop body share a slot,
 /// declared there or inlined there: each one's end marker ends the value a
 /// read in the next iteration could see (C17 6.2.4p6). An object read
-/// after the loop keeps its own slot.
+/// after the loop keeps its own slot. The callees are `always_inline`, as
+/// their frames are past the large-stack-frame bound of the caller's.
 #[test]
 fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
     const SRC: &str = "struct big { char buf[600]; };\n\
         extern void use(struct big *);\n\
-        static inline int a(void) { struct big b; __builtin_memset(&b, 0, sizeof b); \
+        static inline __attribute__((always_inline)) int a(void) { struct big b; __builtin_memset(&b, 0, sizeof b); \
         use(&b); return b.buf[0]; }\n\
-        static inline int c(void) { struct big d; __builtin_memset(&d, 0, sizeof d); \
+        static inline __attribute__((always_inline)) int c(void) { struct big d; __builtin_memset(&d, 0, sizeof d); \
         use(&d); return d.buf[1]; }\n\
         int inlined(int n) { int s = 0; for (int i = 0; i < n; i++) { s += a(); s += c(); } \
         return s; }\n\

@@ -173,6 +173,12 @@ LEGS = {
 }
 # The leg this run is: `--leg`.
 LEG = LEGS["default"]
+# `--keep`: case directories stay after their case. Otherwise each goes as
+# its case ends, so scratch use stays at the cases in flight.
+KEEP = False
+# What a compile prints when the scratch storage, not the program, stopped
+# it: ENOSPC and EDQUOT. Such a case is skipped, not a finding.
+STORAGE_FULL = ("No space left on device", "Disk quota exceeded")
 
 # The release used as the case store, and the label put on a weekly issue.
 CASE_STORE_TAG = "fuzz-cases-v1"
@@ -609,8 +615,25 @@ def run_case(
     limits: Limits,
     arch: str,
 ) -> CaseResult:
-    started = time.monotonic()
     workdir = root / f"case-{seed}"
+    try:
+        return run_case_in(seed, root, workdir, csmith, badc, reference, limits, arch)
+    finally:
+        if not KEEP:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
+def run_case_in(
+    seed: int,
+    root: Path,
+    workdir: Path,
+    csmith: Csmith,
+    badc: Path,
+    reference: Reference | None,
+    limits: Limits,
+    arch: str,
+) -> CaseResult:
+    started = time.monotonic()
     workdir.mkdir(parents=True, exist_ok=True)
     source = workdir / "case.c"
     steps: list[Step] = []
@@ -662,6 +685,10 @@ def run_case(
         )
         steps.extend(outcome.steps)
         outcomes[config] = outcome
+    if any(o.skip == "scratch storage full" for o in outcomes.values()):
+        return CaseResult(
+            seed, lines, time.monotonic() - started, "scratch storage full", steps=steps
+        )
 
     if expected is None:
         checksums = {c: o.checksum for c, o in outcomes.items() if o.checksum}
@@ -715,11 +742,19 @@ def build_and_run(
     built = run_command(argv, workdir, limits.compile, env)
     if not built.ok or not (workdir / binary).exists():
         reason = "compile timed out" if built.timed_out else "compile failed"
+        if storage_full(built):
+            reason = "scratch storage full"
         return Outcome(config, built, None, None, reason, [built])
     ran = run_command([f"./{binary}"], workdir, run_timeout, threads=1)
     checksum = extract_checksum(ran.stdout) if ran.ok else None
     skip = None if ran.ok else ("run timed out" if ran.timed_out else "run failed")
     return Outcome(config, built, ran, checksum, skip, [built, ran])
+
+
+def storage_full(step: Step) -> bool:
+    """Whether `step` failed because the scratch storage is full."""
+    text = step.stderr + step.stdout
+    return not step.ok and any(e in text for e in STORAGE_FULL)
 
 
 def classify(
@@ -2201,6 +2236,9 @@ def self_test() -> int:
     )
     findings = classify(1, "x86_64", outcomes, "AA", Path("case.c"), 10)
     check("a rejected program is a finding", [f.verdict for f in findings], ["compile-error"])
+    full = "badc: error: failed to write case-badc-O: Disk quota exceeded (os error 122)"
+    check("a full scratch is not the compiler's", storage_full(Step([], 1, 0.1, "", full, False)), True)
+    check("a diagnostic is the compiler's", storage_full(outcomes["-O"].compile_step), False)
     check("its signature names the diagnostic", "B2020" in findings[0].human, True)
     check("its detail quotes the diagnostic", "error: x" in findings[0].detail, True)
     outcomes["-O"] = Outcome(
@@ -2362,11 +2400,12 @@ def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    global LEG
+    global LEG, KEEP
     args = parse_args(argv)
     if args.self_test:
         return self_test()
     LEG = LEGS[args.leg]
+    KEEP = args.keep
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:

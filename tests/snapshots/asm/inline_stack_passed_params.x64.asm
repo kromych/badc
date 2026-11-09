@@ -130,14 +130,11 @@ Disassembly of section .text:
                	movl	$0xfa, %r9d
                	movq	<rip>, %rax # <addr>
                	subq	$0x30, %rsp
-               	movq	$-0x7, %r10
-               	movq	%r10, (%rsp)
+               	movq	$-0x7, (%rsp)
                	movabsq	$0x11111111ea60, %r10   # imm = 0x11111111EA60
                	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movq	$-0xa, %r10
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$-0xa, 0x18(%rsp)
                	movabsq	$0x123456789abcdef0, %r10 # imm = 0x123456789ABCDEF0
                	movq	%r10, 0x20(%rsp)
                	callq	*%rax

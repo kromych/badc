@@ -57,12 +57,9 @@ Disassembly of section .text:
                	movl	$0x6, %r9d
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
                	movq	%rax, %xmm0
                	callq	<addr>
                	addq	$0x20, %rsp
@@ -82,12 +79,9 @@ Disassembly of section .text:
                	movl	$0x3c, %r9d
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	subq	$0x20, %rsp
-               	movl	$0x46, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x50, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x5a, %r10d
-               	movq	%r10, 0x10(%rsp)
+               	movq	$0x46, (%rsp)
+               	movq	$0x50, 0x8(%rsp)
+               	movq	$0x5a, 0x10(%rsp)
                	movq	%rax, %xmm0
                	callq	<addr>
                	addq	$0x20, %rsp

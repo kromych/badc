@@ -100,12 +100,9 @@ Disassembly of section .text:
                	movq	<rip>, %rbx # <addr>
                	subq	$0x30, %rsp
                	movq	%rax, (%rsp)
-               	movl	$0x320, %r10d           # imm = 0x320
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0x186a0, %r10d         # imm = 0x186A0
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x320, 0x8(%rsp)       # imm = 0x320
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0x186a0, 0x18(%rsp)    # imm = 0x186A0
                	movl	$0xb2d05e00, %r10d      # imm = 0xB2D05E00
                	movq	%r10, 0x20(%rsp)
                	callq	*%rbx

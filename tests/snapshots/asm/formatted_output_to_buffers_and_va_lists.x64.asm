@@ -186,10 +186,8 @@ Disassembly of section .text:
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)
                	subq	$0x20, %rsp
-               	movq	$-0x5, %r10
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0x12c, %r10d           # imm = 0x12C
-               	movq	%r10, 0x18(%rsp)
+               	movq	$-0x5, 0x10(%rsp)
+               	movq	$0x12c, 0x18(%rsp)      # imm = 0x12C
                	movq	%r12, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)

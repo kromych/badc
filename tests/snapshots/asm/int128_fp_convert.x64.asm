@@ -943,8 +943,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%edi, %edi
                	subq	$0x10, %rsp
-               	movl	$0x1, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x1, (%rsp)
                	movq	%rdi, %rsi
                	movq	%rdi, %r9
                	movq	%rdi, %r8
@@ -966,8 +965,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
                	subq	$0x10, %rsp
-               	movl	$0x5, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x5, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -986,8 +984,7 @@ Disassembly of section .text:
                	movabsq	$0x4014000000000000, %rdx # imm = 0x4014000000000000
                	movl	$0x40a00000, %ecx       # imm = 0x40A00000
                	subq	$0x10, %rsp
-               	movl	$0x9, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x9, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1006,8 +1003,7 @@ Disassembly of section .text:
                	movabsq	$0x4340000000000000, %rdx # imm = 0x4340000000000000
                	movl	$0x5a000000, %ecx       # imm = 0x5A000000
                	subq	$0x10, %rsp
-               	movl	$0xd, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0xd, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1026,8 +1022,7 @@ Disassembly of section .text:
                	movabsq	$0x4340000000000000, %rdx # imm = 0x4340000000000000
                	movl	$0x5a000000, %ecx       # imm = 0x5A000000
                	subq	$0x10, %rsp
-               	movl	$0x11, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x11, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1046,8 +1041,7 @@ Disassembly of section .text:
                	movabsq	$0x4340000000000002, %rdx # imm = 0x4340000000000002
                	movl	$0x5a000000, %ecx       # imm = 0x5A000000
                	subq	$0x10, %rsp
-               	movl	$0x15, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x15, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1066,8 +1060,7 @@ Disassembly of section .text:
                	movabsq	$0x43f0000000000000, %rdx # imm = 0x43F0000000000000
                	movl	$0x5f800000, %ecx       # imm = 0x5F800000
                	subq	$0x10, %rsp
-               	movl	$0x19, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x19, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1086,8 +1079,7 @@ Disassembly of section .text:
                	movabsq	$0x43e0000000000000, %rdx # imm = 0x43E0000000000000
                	movl	$0x5f000000, %ecx       # imm = 0x5F000000
                	subq	$0x10, %rsp
-               	movl	$0x1d, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x1d, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1106,8 +1098,7 @@ Disassembly of section .text:
                	movabsq	$0x43f0000000000000, %rdx # imm = 0x43F0000000000000
                	movl	$0x5f800000, %ecx       # imm = 0x5F800000
                	subq	$0x10, %rsp
-               	movl	$0x21, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x21, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1126,8 +1117,7 @@ Disassembly of section .text:
                	movabsq	$0x4414000000000000, %rdx # imm = 0x4414000000000000
                	movl	$0x60a00000, %ecx       # imm = 0x60A00000
                	subq	$0x10, %rsp
-               	movl	$0x25, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x25, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1146,8 +1136,7 @@ Disassembly of section .text:
                	movabsq	$0x46f0000000000000, %rdx # imm = 0x46F0000000000000
                	movl	$0x77800000, %ecx       # imm = 0x77800000
                	subq	$0x10, %rsp
-               	movl	$0x29, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x29, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1166,8 +1155,7 @@ Disassembly of section .text:
                	movabsq	$0x46f0000000000010, %rdx # imm = 0x46F0000000000010
                	movl	$0x77800000, %ecx       # imm = 0x77800000
                	subq	$0x10, %rsp
-               	movl	$0x2d, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x2d, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1187,8 +1175,7 @@ Disassembly of section .text:
                	movabsq	$-0x4010000000000000, %r8 # imm = 0xBFF0000000000000
                	movl	$0xbf800000, %r9d       # imm = 0xBF800000
                	subq	$0x10, %rsp
-               	movl	$0x31, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x31, (%rsp)
                	movq	%rdi, %rsi
                	callq	<addr>
                	addq	$0x10, %rsp
@@ -1208,8 +1195,7 @@ Disassembly of section .text:
                	movabsq	$-0x3820000000000000, %r8 # imm = 0xC7E0000000000000
                	movl	$0xff000000, %r9d       # imm = 0xFF000000
                	subq	$0x10, %rsp
-               	movl	$0x35, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x35, (%rsp)
                	callq	<addr>
                	addq	$0x10, %rsp
                	testl	%eax, %eax
@@ -1226,8 +1212,7 @@ Disassembly of section .text:
                	movabsq	$0x47e0000000000000, %rdx # imm = 0x47E0000000000000
                	movl	$0x7f000000, %ecx       # imm = 0x7F000000
                	subq	$0x10, %rsp
-               	movl	$0x39, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x39, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>
@@ -1246,8 +1231,7 @@ Disassembly of section .text:
                	movabsq	$0x4731223344556678, %rdx # imm = 0x4731223344556678
                	movl	$0x7989119a, %ecx       # imm = 0x7989119A
                	subq	$0x10, %rsp
-               	movl	$0x3d, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x3d, (%rsp)
                	movq	%rdx, %r8
                	movq	%rcx, %r9
                	callq	<addr>

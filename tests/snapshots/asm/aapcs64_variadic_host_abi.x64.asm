@@ -411,18 +411,12 @@ Disassembly of section .text:
                	movl	$0x4, %r8d
                	movl	$0x5, %r9d
                	subq	$0x40, %rsp
-               	movl	$0x6, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x7, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x18(%rsp)
-               	movl	$0xa, %r10d
-               	movq	%r10, 0x20(%rsp)
-               	movl	$0xb, %r10d
-               	movq	%r10, 0x28(%rsp)
+               	movq	$0x6, (%rsp)
+               	movq	$0x7, 0x8(%rsp)
+               	movq	$0x8, 0x10(%rsp)
+               	movq	$0x9, 0x18(%rsp)
+               	movq	$0xa, 0x20(%rsp)
+               	movq	$0xb, 0x28(%rsp)
                	movq	%rdi, 0x30(%rsp)
                	movb	$0x0, %al
                	callq	<addr>
@@ -511,20 +505,13 @@ Disassembly of section .text:
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
                	subq	$0x40, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0xa, %r10d
-               	movq	%r10, 0x18(%rsp)
-               	movl	$0x64, %r10d
-               	movq	%r10, 0x20(%rsp)
-               	movl	$0xc8, %r10d
-               	movq	%r10, 0x28(%rsp)
-               	movl	$0x12c, %r10d           # imm = 0x12C
-               	movq	%r10, 0x30(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0xa, 0x18(%rsp)
+               	movq	$0x64, 0x20(%rsp)
+               	movq	$0xc8, 0x28(%rsp)
+               	movq	$0x12c, 0x30(%rsp)      # imm = 0x12C
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x40, %rsp

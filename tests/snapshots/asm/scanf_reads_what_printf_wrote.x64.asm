@@ -82,21 +82,17 @@ Disassembly of section .text:
                	fldl	-0x8(%rsp)
                	fstpt	-0x310(%rbp)
                	subq	$0x80, %rsp
-               	movq	$-0x499602d2, %r10      # imm = 0xB669FD2E
-               	movq	%r10, (%rsp)
+               	movq	$-0x499602d2, (%rsp)    # imm = 0xB669FD2E
                	movabsq	$0x20000000000001, %r10 # imm = 0x20000000000001
                	movq	%r10, 0x8(%rsp)
                	movl	$0xee6b2800, %r10d      # imm = 0xEE6B2800
                	movq	%r10, 0x10(%rsp)
                	movl	$0xdeadbeef, %r10d      # imm = 0xDEADBEEF
                	movq	%r10, 0x18(%rsp)
-               	movl	$0x1ed, %r10d           # imm = 0x1ED
-               	movq	%r10, 0x20(%rsp)
+               	movq	$0x1ed, 0x20(%rsp)      # imm = 0x1ED
                	movq	%r12, 0x60(%rsp)
-               	movl	$0x71, %r10d
-               	movq	%r10, 0x68(%rsp)
-               	movl	$0x1234, %r10d          # imm = 0x1234
-               	movq	%r10, 0x70(%rsp)
+               	movq	$0x71, 0x68(%rsp)
+               	movq	$0x1234, 0x70(%rsp)     # imm = 0x1234
                	movq	%r13, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x30(%rsp)

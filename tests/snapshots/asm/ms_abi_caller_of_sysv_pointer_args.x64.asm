@@ -88,8 +88,7 @@ Disassembly of section .text:
                	movq	0x18(%rbp), %rbx
                	subq	$0x20, %rsp
                	movq	%rax, 0x10(%rsp)
-               	movl	$0x134ac, %r10d         # imm = 0x134AC
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x134ac, 0x18(%rsp)    # imm = 0x134AC
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)

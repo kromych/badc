@@ -80,14 +80,10 @@ Disassembly of section .text:
                	movl	$0x6, %r9d
                	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0xa, %r10d
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0xa, 0x18(%rsp)
                	callq	*%rax
                	addq	$0x20, %rsp
                	cmpl	$0xf, %ebx

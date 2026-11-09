@@ -476,12 +476,9 @@ Disassembly of section .text:
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	movl	$0x40200000, %ebx       # imm = 0x40200000
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
                	movq	%rbx, %xmm0
                	movq	%rax, %xmm1
                	movb	$0x2, %al

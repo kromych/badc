@@ -168,8 +168,7 @@ Disassembly of section .text:
                	movabsq	$0x4020000000000000, %r12 # imm = 0x4020000000000000
                	movabsq	$0x4024000000000000, %r13 # imm = 0x4024000000000000
                	subq	$0x10, %rsp
-               	movl	$0x9, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x9, (%rsp)
                	movq	%rax, %xmm0
                	movq	%rdx, %xmm1
                	movq	%r9, %xmm2

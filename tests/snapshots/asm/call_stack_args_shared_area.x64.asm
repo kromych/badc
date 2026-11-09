@@ -78,14 +78,10 @@ Disassembly of section .text:
                	movl	$0x6, %r9d
                	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0xa, %r10d
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	movq	$0x9, 0x10(%rsp)
+               	movq	$0xa, 0x18(%rsp)
                	callq	*%rax
                	addq	$0x20, %rsp
                	movq	%rax, %rbx
@@ -97,16 +93,11 @@ Disassembly of section .text:
                	movl	$0x5, %r9d
                	movq	<rip>, %rax # <addr>
                	subq	$0x30, %rsp
-               	movl	$0x4, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x3, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x2, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0x1, %r10d
-               	movq	%r10, 0x18(%rsp)
-               	xorl	%r10d, %r10d
-               	movq	%r10, 0x20(%rsp)
+               	movq	$0x4, (%rsp)
+               	movq	$0x3, 0x8(%rsp)
+               	movq	$0x2, 0x10(%rsp)
+               	movq	$0x1, 0x18(%rsp)
+               	movq	$0x0, 0x20(%rsp)
                	callq	*%rax
                	addq	$0x30, %rsp
                	addq	%rbx, %rax

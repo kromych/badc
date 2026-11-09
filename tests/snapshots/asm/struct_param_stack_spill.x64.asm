@@ -100,10 +100,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movq	<rip>, %rbx # <addr>
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
@@ -133,10 +131,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movq	<rip>, %rbx # <addr>
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)

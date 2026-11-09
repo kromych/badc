@@ -386,8 +386,7 @@ Disassembly of section .text:
                	movl	$0x6, %r9d
                	leaq	-0x30(%rbp), %rax
                	subq	$0x30, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
+               	movq	$0x7, (%rsp)
                	movq	%rdx, 0x20(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
@@ -405,10 +404,8 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	leaq	-0x20(%rbp), %rax
                	subq	$0x30, %rsp
-               	movl	$0x1, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x9, %r10d
-               	movq	%r10, 0x20(%rsp)
+               	movq	$0x1, (%rsp)
+               	movq	$0x9, 0x20(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
@@ -595,10 +592,8 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	leaq	-0x10(%rbp), %rax
                	subq	$0x40, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x8, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
                	movq	%rdi, 0x10(%rsp)
                	movq	%rdx, 0x30(%rsp)
                	movq	%rax, %r10
@@ -621,12 +616,9 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	subq	$0x40, %rsp
                	movq	%rdi, (%rsp)
-               	movl	$0x1, %r10d
-               	movq	%r10, 0x8(%rsp)
-               	movl	$0x2, %r10d
-               	movq	%r10, 0x10(%rsp)
-               	movl	$0x4, %r10d
-               	movq	%r10, 0x30(%rsp)
+               	movq	$0x1, 0x8(%rsp)
+               	movq	$0x2, 0x10(%rsp)
+               	movq	$0x4, 0x30(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x20(%rsp)
@@ -693,8 +685,7 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movq	%rsi, (%rsp)
                	movq	%rsi, 0x8(%rsp)
-               	movl	$0x5, %r10d
-               	movq	%r10, 0x20(%rsp)
+               	movq	$0x5, 0x20(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
@@ -720,8 +711,7 @@ Disassembly of section .text:
                	movq	%rsi, (%rsp)
                	movq	%rsi, 0x8(%rsp)
                	movq	%rsi, 0x10(%rsp)
-               	movl	$0x3, %r10d
-               	movq	%r10, 0x30(%rsp)
+               	movq	$0x3, 0x30(%rsp)
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x20(%rsp)

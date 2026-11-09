@@ -440,10 +440,8 @@ Disassembly of section .text:
                	movq	$-0x6, %r8
                	movl	$0x7, %r9d
                	subq	$0x10, %rsp
-               	movq	$-0x1, %r10
-               	movq	%r10, (%rsp)
-               	movl	$0xff, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$-0x1, (%rsp)
+               	movq	$0xff, 0x8(%rsp)
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp
@@ -468,10 +466,8 @@ Disassembly of section .text:
                	movq	$-0x6, %r8
                	movl	$0x7, %r9d
                	subq	$0x10, %rsp
-               	movq	$-0x1, %r10
-               	movq	%r10, (%rsp)
-               	movl	$0xff, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$-0x1, (%rsp)
+               	movq	$0xff, 0x8(%rsp)
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp
@@ -854,10 +850,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	vdivsd	%xmm0, %xmm14, %xmm1
                	subq	$0x10, %rsp
-               	movl	$0x77, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x12c, %r10d           # imm = 0x12C
-               	movq	%r10, 0x8(%rsp)
+               	movq	$0x77, (%rsp)
+               	movq	$0x12c, 0x8(%rsp)       # imm = 0x12C
                	movapd	%xmm1, %xmm0
                	movb	$0x1, %al
                	callq	<addr>

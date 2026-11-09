@@ -124,10 +124,8 @@ Disassembly of section .text:
                	movl	$0x6, %r9d
                	leaq	-0x10(%rbp), %rax
                	subq	$0x20, %rsp
-               	movl	$0x7, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x309, %r10d           # imm = 0x309
-               	movq	%r10, 0x18(%rsp)
+               	movq	$0x7, (%rsp)
+               	movq	$0x309, 0x18(%rsp)      # imm = 0x309
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x8(%rsp)

@@ -4002,6 +4002,13 @@ fn constant_stack_arguments_take_no_register() {
         .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map_or(0, |i| i.imm);
     assert!(frame <= 16, "x86-64 frame of {frame} bytes");
+    // Each fits `mov m64, imm32`: of the 125 stack slots, all but the five
+    // whose constant (0, 1, 2, 45) a register argument also takes.
+    let stores = insns
+        .iter()
+        .filter(|i| i.op == 0xC7 && i.rex & 0x08 != 0)
+        .count();
+    assert_eq!(stores, 120, "immediate stores");
     // AArch64: the outgoing area of 123 stack slots, nothing past it.
     let sub_sp = |w: u32| {
         (w & 0xFF80_03FF == 0xD100_03FF)

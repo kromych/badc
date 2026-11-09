@@ -131,6 +131,14 @@ impl Marshal<'_> {
     fn stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::Stack(off) = placement {
+                // `mov m64, imm32` sign-extends: a constant in its range
+                // goes to the slot from the instruction itself.
+                if let Some(&k) = self.alloc.stack_imm.get(&self.args[i])
+                    && let Ok(k) = i32::try_from(k)
+                {
+                    super::encode::emit_mi(code, Mnem::Mov, 8, Reg::RSP, off as i32, k);
+                    continue;
+                }
                 let Some(src) = self.arg_int(code, i, SCRATCH_R10) else {
                     return self.fail("stack arg not in int reg / spill");
                 };

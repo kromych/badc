@@ -1188,10 +1188,8 @@ Disassembly of section .text:
                	movl	$0x3, %r8d
                	movl	$0x4, %r9d
                	subq	$0x10, %rsp
-               	movl	$0x5, %r10d
-               	movq	%r10, (%rsp)
-               	movl	$0x6, %r10d
-               	movq	%r10, 0x8(%rsp)
+               	movq	$0x5, (%rsp)
+               	movq	$0x6, 0x8(%rsp)
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	callq	<addr>

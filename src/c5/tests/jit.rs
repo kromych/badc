@@ -70,6 +70,7 @@ const WINDOWS_GAPS: &[(&str, &str)] = &[
     ("seh_in_named_code_section.c", SEH),
     ("unwind_from_epilogue.c", UNWIND),
     ("unwind_restores_callee_saved.c", UNWIND),
+    ("windows_unwind_api_walks_to_the_caller.c", UNWIND),
     ("inline_asm_section_label.c", ASM_SECTION),
     ("pthread_lifecycle.c", THREADS),
     ("pthread_once_keys.c", THREADS),

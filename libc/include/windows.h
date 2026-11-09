@@ -1858,6 +1858,70 @@ typedef struct _EXCEPTION_POINTERS {
 #pragma binding(kernel32::RtlCaptureContext, "RtlCaptureContext")
 VOID RtlCaptureContext(PCONTEXT ContextRecord);
 
+// winnt.h's table-based unwinding: the function entry covering a code
+// address, one frame's unwind from a context, and the image holding an
+// address.
+#define UNW_FLAG_NHANDLER  0x0
+#define UNW_FLAG_EHANDLER  0x1
+#define UNW_FLAG_UHANDLER  0x2
+#define UNW_FLAG_CHAININFO 0x4
+#define UNWIND_HISTORY_TABLE_SIZE 12
+typedef struct _UNWIND_HISTORY_TABLE_ENTRY {
+    DWORD64 ImageBase;
+    PRUNTIME_FUNCTION FunctionEntry;
+} UNWIND_HISTORY_TABLE_ENTRY, *PUNWIND_HISTORY_TABLE_ENTRY;
+typedef struct _UNWIND_HISTORY_TABLE {
+    DWORD Count;
+    BYTE LocalHint;
+    BYTE GlobalHint;
+    BYTE Search;
+    BYTE Once;
+    DWORD64 LowAddress;
+    DWORD64 HighAddress;
+    UNWIND_HISTORY_TABLE_ENTRY Entry[UNWIND_HISTORY_TABLE_SIZE];
+} UNWIND_HISTORY_TABLE, *PUNWIND_HISTORY_TABLE;
+#ifdef __aarch64__
+typedef struct _KNONVOLATILE_CONTEXT_POINTERS_ARM64 {
+    PDWORD64 X19, X20, X21, X22, X23, X24, X25, X26, X27, X28;
+    PDWORD64 Fp, Lr;
+    PDWORD64 D8, D9, D10, D11, D12, D13, D14, D15;
+} KNONVOLATILE_CONTEXT_POINTERS_ARM64, *PKNONVOLATILE_CONTEXT_POINTERS_ARM64;
+typedef KNONVOLATILE_CONTEXT_POINTERS_ARM64 KNONVOLATILE_CONTEXT_POINTERS,
+    *PKNONVOLATILE_CONTEXT_POINTERS;
+#else
+typedef struct _KNONVOLATILE_CONTEXT_POINTERS {
+    union {
+        PM128A FloatingContext[16];
+        struct {
+            PM128A Xmm0, Xmm1, Xmm2, Xmm3, Xmm4, Xmm5, Xmm6, Xmm7;
+            PM128A Xmm8, Xmm9, Xmm10, Xmm11, Xmm12, Xmm13, Xmm14, Xmm15;
+        };
+    };
+    union {
+        PDWORD64 IntegerContext[16];
+        struct {
+            PDWORD64 Rax, Rcx, Rdx, Rbx, Rsp, Rbp, Rsi, Rdi;
+            PDWORD64 R8, R9, R10, R11, R12, R13, R14, R15;
+        };
+    };
+} KNONVOLATILE_CONTEXT_POINTERS, *PKNONVOLATILE_CONTEXT_POINTERS;
+#endif
+typedef EXCEPTION_DISPOSITION EXCEPTION_ROUTINE(PEXCEPTION_RECORD ExceptionRecord,
+                                                PVOID EstablisherFrame,
+                                                PCONTEXT ContextRecord,
+                                                PVOID DispatcherContext);
+typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
+#pragma binding(kernel32::RtlLookupFunctionEntry, "RtlLookupFunctionEntry")
+#pragma binding(kernel32::RtlVirtualUnwind,       "RtlVirtualUnwind")
+#pragma binding(kernel32::RtlPcToFileHeader,      "RtlPcToFileHeader")
+PRUNTIME_FUNCTION RtlLookupFunctionEntry(DWORD64 ControlPc, PDWORD64 ImageBase,
+                                         PUNWIND_HISTORY_TABLE HistoryTable);
+PEXCEPTION_ROUTINE RtlVirtualUnwind(DWORD HandlerType, DWORD64 ImageBase, DWORD64 ControlPc,
+                                    PRUNTIME_FUNCTION FunctionEntry, PCONTEXT ContextRecord,
+                                    PVOID *HandlerData, PDWORD64 EstablisherFrame,
+                                    PKNONVOLATILE_CONTEXT_POINTERS ContextPointers);
+PVOID RtlPcToFileHeader(PVOID PcValue, PVOID *BaseOfImage);
+
 struct _SYSTEMTIME {
     WORD wYear;
     WORD wMonth;
@@ -2643,6 +2707,7 @@ LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwTy
 #pragma binding(kernel32::FlushViewOfFile,         "FlushViewOfFile")
 #pragma binding(kernel32::GetModuleHandleA,        "GetModuleHandleA")
 #pragma binding(kernel32::GetModuleHandleW,        "GetModuleHandleW")
+#pragma binding(kernel32::GetModuleHandleExA,      "GetModuleHandleExA")
 #pragma binding(kernel32::GetModuleHandleExW,      "GetModuleHandleExW")
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
@@ -2849,6 +2914,7 @@ HMODULE GetModuleHandleW(LPCWSTR lpModuleName);
 #define GET_MODULE_HANDLE_EX_FLAG_PIN                0x1
 #define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 0x2
 #define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       0x4
+BOOL GetModuleHandleExA(DWORD dwFlags, LPCSTR lpModuleName, HMODULE *phModule);
 BOOL GetModuleHandleExW(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule);
 VOID GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(VOID);

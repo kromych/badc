@@ -2092,3 +2092,196 @@ mod differential {
         );
     }
 }
+
+/// The VEX forms of the SSE integer instructions -- saturating, averaging,
+/// min/max, multiply-high, horizontal, interleave and pack -- at 128 and
+/// 256 bits, byte-exact against GNU as.
+#[test]
+fn vex_integer_forms_match_gas() {
+    let cases: &[(&str, &[u8])] = &[
+        (
+            "vpmulhuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE4, 0xC2],
+        ),
+        ("vpmulhuw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE4, 0xC2]),
+        (
+            "vpsadbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xF6, 0xC2],
+        ),
+        ("vpsadbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xF6, 0xC2]),
+        (
+            "vpunpcklbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x60, 0xC2],
+        ),
+        ("vpunpcklbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x60, 0xC2]),
+        (
+            "vpunpcklwd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x61, 0xC2],
+        ),
+        ("vpunpcklwd %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x61, 0xC2]),
+        (
+            "vpunpckhbw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x68, 0xC2],
+        ),
+        ("vpunpckhbw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x68, 0xC2]),
+        (
+            "vpunpckhwd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x69, 0xC2],
+        ),
+        ("vpunpckhwd %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x69, 0xC2]),
+        (
+            "vpacksswb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x63, 0xC2],
+        ),
+        ("vpacksswb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x63, 0xC2]),
+        (
+            "vpackssdw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x6B, 0xC2],
+        ),
+        ("vpackssdw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x6B, 0xC2]),
+        (
+            "vpackuswb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0x67, 0xC2],
+        ),
+        ("vpackuswb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0x67, 0xC2]),
+        (
+            "vpaddsb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEC, 0xC2],
+        ),
+        ("vpaddsb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEC, 0xC2]),
+        (
+            "vpaddsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xED, 0xC2],
+        ),
+        ("vpaddsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xED, 0xC2]),
+        (
+            "vpaddusb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDC, 0xC2],
+        ),
+        ("vpaddusb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDC, 0xC2]),
+        (
+            "vpaddusw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDD, 0xC2],
+        ),
+        ("vpaddusw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDD, 0xC2]),
+        (
+            "vpsubsb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE8, 0xC2],
+        ),
+        ("vpsubsb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE8, 0xC2]),
+        (
+            "vpsubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xE9, 0xC2],
+        ),
+        ("vpsubsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE9, 0xC2]),
+        (
+            "vpsubusb %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xD8, 0xC2],
+        ),
+        ("vpsubusb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xD8, 0xC2]),
+        (
+            "vpsubusw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xD9, 0xC2],
+        ),
+        ("vpsubusw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xD9, 0xC2]),
+        ("vpavgb %ymm10,%ymm9,%ymm8", &[0xC4, 0x41, 0x35, 0xE0, 0xC2]),
+        ("vpavgb %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE0, 0xC2]),
+        ("vpavgw %ymm10,%ymm9,%ymm8", &[0xC4, 0x41, 0x35, 0xE3, 0xC2]),
+        ("vpavgw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xE3, 0xC2]),
+        (
+            "vpminub %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDA, 0xC2],
+        ),
+        ("vpminub %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDA, 0xC2]),
+        (
+            "vpmaxub %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xDE, 0xC2],
+        ),
+        ("vpmaxub %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xDE, 0xC2]),
+        (
+            "vpminsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEA, 0xC2],
+        ),
+        ("vpminsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEA, 0xC2]),
+        (
+            "vpmaxsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x41, 0x35, 0xEE, 0xC2],
+        ),
+        ("vpmaxsw %xmm2,%xmm1,%xmm0", &[0xC5, 0xF1, 0xEE, 0xC2]),
+        (
+            "vpminuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3A, 0xC2],
+        ),
+        ("vpminuw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3A, 0xC2]),
+        (
+            "vpminud %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3B, 0xC2],
+        ),
+        ("vpminud %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3B, 0xC2]),
+        (
+            "vpmaxuw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3E, 0xC2],
+        ),
+        ("vpmaxuw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3E, 0xC2]),
+        (
+            "vpmaxud %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x3F, 0xC2],
+        ),
+        ("vpmaxud %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x3F, 0xC2]),
+        (
+            "vphaddw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x01, 0xC2],
+        ),
+        ("vphaddw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x01, 0xC2]),
+        (
+            "vphaddd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x02, 0xC2],
+        ),
+        ("vphaddd %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x02, 0xC2]),
+        (
+            "vphaddsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x03, 0xC2],
+        ),
+        (
+            "vphaddsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x03, 0xC2],
+        ),
+        (
+            "vpmaddubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x04, 0xC2],
+        ),
+        (
+            "vpmaddubsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x04, 0xC2],
+        ),
+        (
+            "vphsubw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x05, 0xC2],
+        ),
+        ("vphsubw %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x05, 0xC2]),
+        (
+            "vphsubd %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x06, 0xC2],
+        ),
+        ("vphsubd %xmm2,%xmm1,%xmm0", &[0xC4, 0xE2, 0x71, 0x06, 0xC2]),
+        (
+            "vphsubsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x07, 0xC2],
+        ),
+        (
+            "vphsubsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x07, 0xC2],
+        ),
+        (
+            "vpmulhrsw %ymm10,%ymm9,%ymm8",
+            &[0xC4, 0x42, 0x35, 0x0B, 0xC2],
+        ),
+        (
+            "vpmulhrsw %xmm2,%xmm1,%xmm0",
+            &[0xC4, 0xE2, 0x71, 0x0B, 0xC2],
+        ),
+    ];
+    for &(text, bytes) in cases {
+        gas(text, bytes);
+    }
+}

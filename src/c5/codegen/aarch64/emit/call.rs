@@ -1005,6 +1005,23 @@ impl CallArgs<'_> {
             load_imm64(code, into, k as u64);
             return Some(into);
         }
+        // A frame load it left to the call (`Allocation::stack_load`): an
+        // ordinary local, read while sp stands lowered for the call.
+        if let Some(&(off, disp, kind)) = self.alloc.stack_load.get(&self.args[i]) {
+            let op = int_load_op(kind)?;
+            let fp_off =
+                super::ssa::emit_common::c5_slot_to_fp_offset(off, 16, self.frame.locals_shift());
+            let loc = FrameLoc::at_fp(self.frame, fp_off)
+                .shifted(disp)
+                .sp_lowered(self.sp_shift());
+            let t = if into == self.scratch.secondary {
+                self.scratch.primary
+            } else {
+                self.scratch.secondary
+            };
+            emit_frame_mem(code, op, into.0, loc, t);
+            return Some(into);
+        }
         materialize_int_shifted(code, self.arg_place(i), into, self.frame, self.sp_shift())
     }
 

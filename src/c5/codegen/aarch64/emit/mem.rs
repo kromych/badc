@@ -1139,7 +1139,7 @@ fn scratch_other(scratch: &ScratchPool, r: Reg) -> Reg {
     }
 }
 
-fn int_load_op(kind: LoadKind) -> Option<MemOp> {
+pub(super) fn int_load_op(kind: LoadKind) -> Option<MemOp> {
     Some(match kind {
         LoadKind::I64 => LDR_X,
         LoadKind::I32 => LDRSW,

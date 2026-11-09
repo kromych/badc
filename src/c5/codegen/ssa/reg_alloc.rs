@@ -154,6 +154,9 @@ pub(crate) struct Allocation {
     /// constants. Such a value takes no place: the call's marshaling sets
     /// it from its encoding, so it holds no register ahead of the call.
     pub stack_imm: alloc::collections::BTreeMap<ValueId, i64>,
+    /// The frame loads ([`stack_arg_loads`]) the call's marshaling performs
+    /// itself, as `(slot, disp, kind)`, taking no place as `stack_imm` does.
+    pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
     /// Per instruction whose lowering writes registers besides its result,
@@ -1349,7 +1352,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // Unread, a stack argument's constant is unemitted, and the liveness
     // reading only emitted values keeps it out of the coloring.
     let stack_imm = stack_arg_immediates(func, target, &use_counts);
-    for &v in stack_imm.keys() {
+    let stack_load = stack_arg_loads(func, target, &use_counts);
+    for &v in stack_imm.keys().chain(stack_load.keys()) {
         use_counts[v as usize] = 0;
     }
     let reads = operands_read(func, &use_counts);
@@ -1379,6 +1383,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             branch_fused: Vec::new(),
             imm_store: Vec::new(),
             stack_imm: alloc::collections::BTreeMap::new(),
+            stack_load: alloc::collections::BTreeMap::new(),
             fp_const,
             implicit_live: Vec::new(),
             hints,
@@ -1568,7 +1573,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         coloring = color(&node_cons);
     }
     places = coloring.places;
-    for &v in stack_imm.keys() {
+    for &v in stack_imm.keys().chain(stack_load.keys()) {
         places[v as usize] = Place::None;
     }
     let spill_count = coloring.spill_count;
@@ -2076,6 +2081,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         branch_fused,
         imm_store,
         stack_imm,
+        stack_load,
         fp_const,
         implicit_live,
         hints,
@@ -3614,6 +3620,59 @@ fn stack_arg_immediates(
             _ => None,
         })
         .collect()
+}
+
+/// The integer `LoadLocal`s whose one reader is an argument a call in the
+/// same block places on the stack, with no instruction between the load
+/// and the call that writes memory or ends a lifetime: the slot holds the
+/// loaded bytes at the call, so its marshaling reads them there
+/// (`Allocation::stack_load`). An over-aligned object, whose base may be
+/// sp, stays out.
+fn stack_arg_loads(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)> {
+    let mut out = alloc::collections::BTreeMap::new();
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            let inst = &func.insts[pc as usize];
+            let Some((args, fp, plan)) = call_plan(func, inst, target) else {
+                continue;
+            };
+            for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
+                let Some(&Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                }) = func.insts.get(v as usize)
+                else {
+                    continue;
+                };
+                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
+                    && !fp.has(i)
+                    && off < 0
+                    && !matches!(
+                        kind,
+                        LoadKind::F32
+                            | LoadKind::F64
+                            | LoadKind::F80
+                            | LoadKind::F128
+                            | LoadKind::V128
+                    )
+                    && !func.over_aligned.iter().any(|m| m.slot == off)
+                    && use_counts.get(v as usize) == Some(&1)
+                    && blk.inst_range.contains(&v)
+                    && v < pc
+                    && ((v + 1)..pc).all(|w| func.insts[w as usize].is_pure())
+                {
+                    out.insert(v, (off, disp, kind));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Populate per-call-argument coalescing hints. The i-th integer or

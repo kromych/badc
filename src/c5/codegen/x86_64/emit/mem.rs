@@ -217,7 +217,7 @@ pub(super) fn seg_prefix(seg: AsmSeg) -> Option<u8> {
 /// Width-dispatched integer load `rd = *(kind*)[base + disp]`
 /// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3); an `I32` takes `movsxd`
 /// only when `hi`, a reader of its upper half, else the plain 32-bit `mov`.
-fn emit_load_kind_mem(
+pub(super) fn emit_load_kind_mem(
     code: &mut Vec<u8>,
     kind: LoadKind,
     rd: Reg,

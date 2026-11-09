@@ -4028,6 +4028,32 @@ fn constant_stack_arguments_take_no_register() {
     assert_eq!(zr_stores, 3, "{zr:08x?}");
 }
 
+/// A stack argument read from a local array, with nothing between the read
+/// and the call that writes memory, is read by the call's marshaling into
+/// its slot: the 63 elements take no register ahead of the call and spill
+/// none, so the frame is the array and the outgoing area.
+#[test]
+fn local_array_stack_arguments_take_no_register() {
+    let args: String = (0..63).map(|i| format!(", tmp[{i}]")).collect();
+    let src = format!(
+        "struct par {{ void (*w)(struct par *p, int len, ...); }};\n\
+         int set_gamma(struct par *par, const unsigned *curves) {{\n\
+           unsigned long tmp[63]; int i, acc = 0;\n\
+           for (i = 0; i < 63; i++) {{ acc += curves[i]; tmp[i] = acc; if (acc > 180) return -22; }}\n\
+           par->w(par, 0xB8{args}); return 0; }}\n"
+    );
+    let insns = x64_insns(&function_bytes(
+        &object_at(&src, Target::LinuxX64, true),
+        "set_gamma",
+    ));
+    let frame = insns
+        .iter()
+        .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
+        .map_or(0, |i| i.imm);
+    // The 504-byte array and the frame's own 16.
+    assert!(frame <= 504 + 16, "x86-64 frame of {frame} bytes");
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

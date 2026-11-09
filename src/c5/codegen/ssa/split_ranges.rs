@@ -399,6 +399,7 @@ mod tests {
             branch_fused: vec![false; n],
             imm_store: vec![false; n],
             stack_imm: alloc::collections::BTreeMap::new(),
+            stack_load: alloc::collections::BTreeMap::new(),
             fp_const: vec![false; n],
             implicit_live: Vec::new(),
             hints: vec![None; n],

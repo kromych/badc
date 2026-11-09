@@ -107,6 +107,15 @@ impl Marshal<'_> {
             emit_mov_r_imm64(code, scratch, k);
             return Some(scratch);
         }
+        // A frame load it left to the call (`Allocation::stack_load`): an
+        // ordinary local, at its rbp-relative home.
+        if let Some(&(off, disp, kind)) = self.alloc.stack_load.get(&self.args[i]) {
+            let fp_off =
+                super::ssa::emit_common::c5_slot_to_fp_offset(off, 16, self.frame.locals_shift());
+            let disp = i32::try_from(fp_off + i64::from(disp)).ok()?;
+            emit_load_kind_mem(code, kind, scratch, Reg::RBP, disp, None, false);
+            return Some(scratch);
+        }
         materialize_int_shifted(
             code,
             self.arg_place(i),

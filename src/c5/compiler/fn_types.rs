@@ -101,7 +101,7 @@ impl Compiler {
         &mut self,
         to: (i64, &Option<(FnType, i64)>),
         from: (i64, &Option<(FnType, i64)>),
-        line: usize,
+        at: super::Site,
         what: (&str, &str, &str),
     ) -> Result<(), C5Error> {
         let ((to_ty, Some((tf, td))), (from_ty, Some((ff, fd)))) = (to, from) else {
@@ -136,7 +136,7 @@ impl Compiler {
             Some(m) => {
                 self.warn_at(
                     m.code,
-                    line,
+                    self.value_site(at),
                     alloc::format!("{} in {context} {sides}", m.reason),
                 );
                 Ok(())
@@ -144,7 +144,7 @@ impl Compiler {
             None => {
                 let text =
                     alloc::format!("incompatible function pointer types in {context} {sides}");
-                self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
+                self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, self.value_site(at), text)
             }
         }
     }
@@ -163,14 +163,14 @@ impl Compiler {
         to: (i64, &Option<(FnType, i64)>),
         from: (i64, &Option<(FnType, i64)>),
         to_declared: bool,
-        line: usize,
+        at: super::Site,
         what: (&str, &str, &str),
     ) -> Result<bool, C5Error> {
         use super::types::is_void_ptr_ty;
         let (fn_side, other) = match (to.1, from.1) {
             (None, None) => return Ok(false),
             (Some(_), Some(_)) => {
-                self.check_fn_pointer_conversion(to, from, line, what)?;
+                self.check_fn_pointer_conversion(to, from, at, what)?;
                 return Ok(true);
             }
             (Some(_), None) => (to, from),
@@ -196,12 +196,12 @@ impl Compiler {
                 && let Some(m) = Self::discarded_qualifiers(&self.structs, to.0, from.0)
             {
                 let text = alloc::format!("{} in {context} {sides}", m.reason);
-                self.warn_at(m.code, line, text);
+                self.warn_at(m.code, self.value_site(at), text);
             }
             return Ok(true);
         }
         let text = alloc::format!("incompatible pointer types in {context} {sides}");
-        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)?;
+        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, self.value_site(at), text)?;
         Ok(true)
     }
 
@@ -455,7 +455,7 @@ impl Compiler {
         &mut self,
         (to_ty, to): (i64, &FnType),
         (from_ty, from): (i64, &FnType),
-        line: usize,
+        at: super::Site,
     ) {
         let void = super::types::void_ty();
         let generic = |ret: i64, f: &FnType| {
@@ -505,7 +505,7 @@ impl Compiler {
             self.typed_text(from_ty, &Some((from.clone(), 1))),
             self.typed_text(to_ty, &Some((to.clone(), 1))),
         );
-        self.warn_at(Code::CAST_FUNCTION_TYPE, line, text);
+        self.warn_at(Code::CAST_FUNCTION_TYPE, at, text);
     }
 
     /// Whether two values, each with the function type it leads to at its

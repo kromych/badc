@@ -263,13 +263,13 @@ impl Compiler {
         let mut rest = alloc::vec::Vec::new();
         let mut tys = alloc::vec::Vec::new();
         while self.list_separator(')', "argument")? {
-            let line = self.lex.line;
+            let at = self.site();
             let (node, ty) = self.discard_unevaluated_typed()?;
-            rest.push((line, node));
+            rest.push((at, node));
             tys.push(ty);
         }
-        if let [(line, last)] = rest[..] {
-            self.check_va_start_operand(last, line);
+        if let [(at, last)] = rest[..] {
+            self.check_va_start_operand(last, at);
         }
         // arm64's form, `__va_start(&ap, &v, _SLOTSIZEOF(v), __alignof(v), &v)`:
         // the operands go unevaluated, and clang checks the named

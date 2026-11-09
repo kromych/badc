@@ -44,6 +44,7 @@ mod stmt;
 mod type_layout;
 mod value_builtin;
 mod vla_bound;
+pub(crate) use diag::Site;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 #[cfg(test)]
@@ -1523,7 +1524,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// surrounding assignment / address-of rewrites does not
     /// permanently drop the dead-store entries -- they restore
     /// alongside `was_read`.
-    pub last_loaded_local_prior_pending: Vec<usize>,
+    pub last_loaded_local_prior_pending: Vec<diag::Site>,
 
     /// The latest scalar assignment to a local, with the local and the
     /// `was_read` it marked: an assignment whose value is used reads its
@@ -2117,7 +2118,7 @@ pub struct Compiler {
     fallthrough_marks: hashbrown::HashSet<super::ast::StmtId>,
     /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
     /// reports: `(id, file, line)`.
-    unprototyped_lists: Vec<(u32, String, usize)>,
+    unprototyped_lists: Vec<(u32, String, diag::Site)>,
     /// The functions a file-scope declaration that is no definition named,
     /// and whether one of those declarations had a prototype.
     file_scope_fn_decls: hashbrown::HashMap<String, bool>,
@@ -2519,11 +2520,8 @@ pub struct Compiler {
     /// Where the operand the precedence loop is extending begins, so a
     /// diagnostic about a call can spell the callee expression.
     operand_start: usize,
-    /// The line and unit offset where the last expression parsed began.
-    value_start: (usize, u32),
-    /// The position a diagnostic on its line resolves the pragmas at,
-    /// rather than the lexer's token.
-    diag_anchor: Option<(usize, u32)>,
+    /// Where the last expression parsed began.
+    value_start: diag::Site,
     /// The function type the elements of the array being initialized lead
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
@@ -3248,8 +3246,7 @@ impl Compiler {
             dylibs,
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
-            value_start: (0, 0),
-            diag_anchor: None,
+            value_start: diag::Site::default(),
             array_elem_fn: None,
             measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),

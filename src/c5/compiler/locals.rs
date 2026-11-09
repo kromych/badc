@@ -504,11 +504,11 @@ impl Compiler {
                 ty: lbt,
                 enum_tag: base_enum_tag,
             };
-            let declarator_line = self.lex.line;
+            let declarator_at = self.site();
             if let Some(fn_idx) = self.try_parse_block_fn_prototype(base, is_static)? {
                 if implicit_int {
                     let what = super::decl_base::ImplicitInt::Declarator(fn_idx);
-                    self.report_implicit_int(what, declarator_line)?;
+                    self.report_implicit_int(what, declarator_at)?;
                 }
                 self.accept_declarator_separator()?;
                 continue;
@@ -528,7 +528,7 @@ impl Compiler {
             array_size = array_size_vla;
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
-                self.report_implicit_int(what, declarator_line)?;
+                self.report_implicit_int(what, declarator_at)?;
             }
             self.pending.attrs.transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
@@ -700,14 +700,15 @@ impl Compiler {
     }
 
     pub(super) fn set_decl_site(&mut self, idx: usize) {
-        let (line, file, in_user) = (
-            self.lex.line,
+        let (at, file, in_user) = (
+            self.site(),
             self.intern_source_file() as u32,
             self.in_user_source(),
         );
         self.decl_count += 1;
         let b = &mut self.symbols[idx].binding;
-        (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
+        b.set_decl_site(at);
+        (b.decl_file, b.decl_in_user_source) = (file, in_user);
         b.decl_seq = self.decl_count;
     }
 
@@ -1684,9 +1685,9 @@ impl Compiler {
                     ),
                 ));
             }
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(ty, 0, line)?;
+            self.check_initializer_expr(ty, 0, at)?;
             if let Some(rhs) = self.ast_acc.take() {
                 // Fill `[i, range_end]`. A range reuses the value node;
                 // the walker re-walks it per store, which is safe for the
@@ -2050,7 +2051,7 @@ impl Compiler {
         // bookkeeping.
         if self.lex.tk == Token::Assign {
             self.symbols[loc_idx].binding.was_written = true;
-            self.record_local_store(loc_idx, self.lex.line);
+            self.record_local_store(loc_idx, self.site());
         }
         if declared_array_size == -1 {
             return self.allocate_deferred_size_local(loc_idx, ty, zero_len, fill);
@@ -2636,9 +2637,9 @@ impl Compiler {
                 return Err(self.compile_err(Code::SYNTAX, "`{` expected in compound literal"));
             }
             self.next()?;
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(t, 0, line)?;
+            self.check_initializer_expr(t, 0, at)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
             self.accept(',')?;

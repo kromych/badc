@@ -27,7 +27,11 @@ impl Compiler {
         self.fallthrough_sites(body, true, &mut lines);
         for line in lines {
             let text = "this statement may fall through".into();
-            self.warn_at(Code::IMPLICIT_FALLTHROUGH, line as usize, text);
+            self.warn_at(
+                Code::IMPLICIT_FALLTHROUGH,
+                super::Site::line(line as usize),
+                text,
+            );
         }
     }
 

@@ -317,7 +317,7 @@ impl Compiler {
                 self.pending.attrs.packed = false;
                 if implicit_int {
                     let what = super::decl_base::ImplicitInt::Declarator(usize::MAX);
-                    self.report_implicit_int(what, self.lex.line)?;
+                    self.report_implicit_int(what, self.site())?;
                 }
                 if group_alignas {
                     return Err(self.compile_err(
@@ -356,13 +356,13 @@ impl Compiler {
             let saved_member_ctx = self.pending.in_member_declarator;
             self.pending.in_member_declarator = true;
             self.pending.member_decl_save = None;
-            let declarator_line = self.lex.line;
+            let declarator_at = self.site();
             let declared = self.parse_declarator(field_base);
             self.pending.in_member_declarator = saved_member_ctx;
             let (id_idx, mut field_ty, mut field_array_size, mut field_zero_len) = declared?;
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
-                self.report_implicit_int(what, declarator_line)?;
+                self.report_implicit_int(what, declarator_at)?;
             }
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
@@ -1374,10 +1374,9 @@ impl Compiler {
         if honored {
             self.structs[struct_id].is_transparent_union = true;
         } else {
-            let line = self.lex.line;
             self.warn_at(
                 Code::ATTRIBUTES,
-                line,
+                self.site(),
                 alloc::string::String::from("`transparent_union` attribute ignored"),
             );
         }

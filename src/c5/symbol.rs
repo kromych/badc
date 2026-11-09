@@ -663,14 +663,17 @@ pub(crate) struct BindingInfo {
     /// also clear the list (conservatively; the analysis is
     /// intra-segment to avoid flow-sensitivity false positives).
     /// Drained at function exit to emit the dead-store
-    /// diagnostic for any line still present.
-    pub pending_stores: Vec<usize>,
+    /// diagnostic for any store still present.
+    pub pending_stores: Vec<crate::c5::compiler::Site>,
 
     /// Source line where this declaration was parsed. Captured at
     /// declaration time so unused-variable diagnostics can point
     /// at the declaration rather than the surrounding block's
     /// closing brace.
     pub decl_line: usize,
+    /// Unit offset of the declaration, where the diagnostic pragmas
+    /// governing its diagnostics resolve.
+    pub decl_offset: Option<u32>,
 
     /// `Compiler::source_files` index of the file the declaration
     /// was parsed from. Captured at declaration time alongside
@@ -707,6 +710,17 @@ impl BindingInfo {
         self.was_read |= inner.was_read;
         self.was_written |= inner.was_written;
         self.address_escaped |= inner.address_escaped;
+    }
+
+    pub(crate) fn decl_site(&self) -> crate::c5::compiler::Site {
+        crate::c5::compiler::Site {
+            line: self.decl_line,
+            offset: self.decl_offset,
+        }
+    }
+
+    pub(crate) fn set_decl_site(&mut self, at: crate::c5::compiler::Site) {
+        (self.decl_line, self.decl_offset) = (at.line, at.offset);
     }
 }
 

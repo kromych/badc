@@ -1018,7 +1018,11 @@ impl Compiler {
                 "initializer string is too long for an array of {bound} ({} dropped)",
                 lit.chars - bound
             );
-            self.warn_at(Code::EXCESS_INITIALIZERS, lit.line, text);
+            let at = super::Site {
+                line: lit.line,
+                offset: Some(lit.pos as u32),
+            };
+            self.warn_at(Code::EXCESS_INITIALIZERS, at, text);
         }
     }
 
@@ -2066,17 +2070,17 @@ impl Compiler {
             self.skip_init_element_value()?;
             return Ok(InitLeaf::of(0, InitElemReloc::None, ty));
         }
-        let line = self.lex.line;
-        let fn_checked = self.check_designator_initializer(ty, target_fn, line)?;
+        let at = self.site();
+        let fn_checked = self.check_designator_initializer(ty, target_fn, at)?;
         let leaf = self.parse_constant_init_value()?;
         if !fn_checked {
             let flags = (leaf.is_zero_int(), false);
-            self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, line)?;
+            self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, at)?;
         }
         if matches!(leaf.reloc, InitElemReloc::None) {
-            self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
+            self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, at);
             if !self.initializes_as_is(leaf.ty, ty) {
-                self.check_enum_conversion(leaf.enumeration.or(Some(leaf.ty)), ty, bits, line);
+                self.check_enum_conversion(leaf.enumeration.or(Some(leaf.ty)), ty, bits, at);
             }
         }
         Ok(leaf)
@@ -4183,7 +4187,7 @@ impl Compiler {
                      `designated_init`",
                     self.structs[struct_id].name
                 );
-                self.warn_at(Code::DESIGNATED_INIT, self.lex.line, text);
+                self.warn_at(Code::DESIGNATED_INIT, self.site(), text);
             }
             // C99 6.7.8p2, p17: a union holds one object to initialize,
             // so a positional initializer after the list's first item
@@ -4741,7 +4745,7 @@ impl Compiler {
         if braced_scalar {
             self.next()?;
         }
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         if braced_scalar {
             self.accept(',')?;
@@ -4781,7 +4785,7 @@ impl Compiler {
             ));
         }
         let field_fn = self.field_fn_type(field);
-        self.check_initializer_expr_to((field.ty, &field_fn), field.bit_width, line)?;
+        self.check_initializer_expr_to((field.ty, &field_fn), field.bit_width, at)?;
         self.convert_assign_rhs(field.ty);
         let field_ast = self.ast_acc;
         self.ast_assign();
@@ -4870,14 +4874,14 @@ impl Compiler {
                 self.ast_psh();
                 // Assignment precedence: a `,` between entries is the
                 // list delimiter, not a comma operator.
-                let line = self.lex.line;
+                let site = self.site();
                 self.expr(Token::Assign as i64)?;
                 // C99 6.7.9p11: convert as in assignment (integer leaf
                 // of a floating member rounds through IEEE-754).
                 if target_fn.is_some() {
-                    self.check_initializer_expr_to((ty, target_fn), 0, line)?;
+                    self.check_initializer_expr_to((ty, target_fn), 0, site)?;
                 } else {
-                    self.check_initializer_expr(ty, 0, line)?;
+                    self.check_initializer_expr(ty, 0, site)?;
                 }
                 self.convert_assign_rhs(ty);
                 let v = self.ast_acc;
@@ -5054,7 +5058,7 @@ impl Compiler {
         ty: i64,
         target_fn: Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
-        let init_line = self.lex.line;
+        let init_at = self.site();
         self.emit_lea(local_val);
         self.ast_psh();
         // C99 6.7.8p11: a scalar initializer is a single expression,
@@ -5079,7 +5083,7 @@ impl Compiler {
         }
         // C99 6.7.8p11: a scalar object's initializer converts as if by
         // assignment; function pointers are compared by their types.
-        self.check_initializer_expr_to((ty, &target_fn), 0, init_line)?;
+        self.check_initializer_expr_to((ty, &target_fn), 0, init_at)?;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
         // destination with an integer-typed initializer (a

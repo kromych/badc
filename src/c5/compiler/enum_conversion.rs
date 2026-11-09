@@ -96,7 +96,7 @@ impl Compiler {
         from: Option<i64>,
         to: i64,
         bits: u32,
-        line: usize,
+        at: super::Site,
     ) {
         let Some(from) = from.filter(|&f| is_enum_value_ty(f)) else {
             return;
@@ -112,6 +112,6 @@ impl Compiler {
             format_type(from, &self.structs),
             format_type(to, &self.structs)
         );
-        self.warn_at_value(Code::ENUM_CONVERSION, line, text);
+        self.warn_at(Code::ENUM_CONVERSION, self.value_site(at), text);
     }
 }

@@ -208,20 +208,20 @@ impl Compiler {
 
     /// An integer constant operand; outside `0..=max` it warns and is 0, as in gcc.
     fn builtin_constant(&mut self, name: &str, pos: usize, max: i64) -> Result<i64, C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         let Ok(v) = self.parse_constant_int() else {
             let text = format!(
                 "argument {} of `{name}` is not an integer constant expression",
                 pos + 1
             );
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         };
         if !(0..=max).contains(&v) {
             let text = format!(
                 "argument {} of `{name}` is {v}, not 0 to {max}; using 0",
                 pos + 1
             );
-            self.warn_at(Code::BUILTIN_ARGUMENT_RANGE, line, text);
+            self.warn_at(Code::BUILTIN_ARGUMENT_RANGE, at, text);
             return Ok(0);
         }
         Ok(v)
@@ -375,20 +375,20 @@ impl Compiler {
         pos: usize,
         want: i64,
     ) -> Result<ExprId, C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         self.reject_void_value(self.ty)?;
-        self.convert_builtin_value(name, pos, want, line)
+        self.convert_builtin_value(name, pos, want, at)
     }
 
-    /// The operand just parsed, at `pos` of `name` from `line`, converted
+    /// The operand just parsed, at `pos` of `name` from `at`, converted
     /// as [`Self::parse_builtin_value`] converts it.
     pub(super) fn convert_builtin_value(
         &mut self,
         name: &str,
         pos: usize,
         want: i64,
-        line: usize,
+        at: super::Site,
     ) -> Result<ExprId, C5Error> {
         let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
@@ -404,15 +404,15 @@ impl Compiler {
                 self.typed_text(self.ty, &None),
             );
             if m.no_conversion {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, at.line, text));
             }
-            self.report_mismatch(&m, line, text)?;
+            self.report_mismatch(&m, at, text)?;
         }
-        self.check_value_conversion_of(self.ast_acc, want, 0, line);
+        self.check_value_conversion_of(self.ast_acc, want, 0, at);
         self.convert_assign_rhs(want);
         let Some(value) = self.ast_acc.take() else {
             let text = format!("argument {} of `{name}` has no value", pos + 1);
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         };
         let converted = super::super::ast::expr_ty(self.ast.expr(value)) == Some(want);
         Ok(if converted {

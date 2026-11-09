@@ -17,7 +17,7 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::declarator::Derivation;
-use super::diag::{Category, Operand};
+use super::diag::{Category, Operand, Site};
 
 /// Largest byte count `__builtin_memcpy` is expanded inline for; gcc's
 /// threshold on both supported targets. The copy rides `Inst::Mcpy`,
@@ -517,7 +517,7 @@ impl Compiler {
                         format!("too many arguments to `{name}` (expected 3)"),
                     ));
                 };
-                let line = self.lex.line;
+                let at = self.site();
                 self.expr(Token::Assign as i64)?;
                 self.reject_void_value(self.ty)?;
                 // The pointer operands guarantee their pointee type's
@@ -532,7 +532,7 @@ impl Compiler {
                     };
                     ptr_align = ptr_align.min(a.max(1));
                 }
-                args.push(self.convert_builtin_value(name, args.len(), want, line)?);
+                args.push(self.convert_builtin_value(name, args.len(), want, at)?);
                 if !self.list_separator(')', "argument")? {
                     break;
                 }
@@ -839,7 +839,7 @@ impl Compiler {
                 "discards `const` qualifier from pointer target type in argument {} of `{name}`",
                 i + 1
             );
-            self.warn_at(Code::DISCARDED_QUALIFIERS, self.lex.line, text);
+            self.warn_at(Code::DISCARDED_QUALIFIERS, self.site(), text);
         }
 
         let seq = MemOrder::SeqCst;
@@ -1360,7 +1360,7 @@ impl Compiler {
     }
 
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
-        let start = (self.lex.line, self.lex.tok_start() as u32);
+        let start = self.site();
         let outer = core::mem::replace(&mut self.operand_start, self.lex.tok_start());
         let r = self.parse_unary().and_then(|()| {
             while self.lex.tk == '(' || (self.lex.tk >= lev && is_operator(self.lex.tk)) {
@@ -1692,12 +1692,12 @@ impl Compiler {
     fn declare_implicitly(&mut self, idx: usize) -> Result<(), C5Error> {
         use super::redeclaration::{DeclaredType, LinkClaim, Params, Spelled};
         let name = self.symbols[idx].name.clone();
-        let line = self.lex.line;
+        let at = self.site();
         let text = format!("implicit declaration of function `{name}`");
-        self.warn_at(Code::IMPLICIT_FUNCTION_DECLARATION, line, text);
+        self.warn_at(Code::IMPLICIT_FUNCTION_DECLARATION, at, text);
         let int = Spelled::plain(Ty::Int as i64);
         let declared = DeclaredType::Function(int, Params::Unspecified, None, None);
-        self.declare_linked(idx, declared, line, false, LinkClaim::Prior)?;
+        self.declare_linked(idx, declared, at.line, false, LinkClaim::Prior)?;
         let in_user_source = self.in_user_source();
         let sym = &mut self.symbols[idx];
         sym.class = Token::Fun as i64;
@@ -1708,7 +1708,7 @@ impl Compiler {
         sym.is_extern_decl = true;
         sym.saw_extern_decl = true;
         sym.saw_noninline_decl = true;
-        sym.binding.decl_line = line;
+        sym.binding.set_decl_site(at);
         sym.binding.decl_in_user_source = in_user_source;
         Ok(())
     }
@@ -2010,12 +2010,12 @@ impl Compiler {
                 ));
             }
             self.next()?;
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
             if is(Intrinsic::VaCopy) {
                 self.va_list_operand_address();
             } else {
-                self.check_va_start_operand(self.ast_acc, line);
+                self.check_va_start_operand(self.ast_acc, at);
                 self.va_operand_take_address();
             }
             if let Some(a) = self.ast_acc {
@@ -2084,7 +2084,7 @@ impl Compiler {
         fn_name: &str,
         index: usize,
     ) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.expr(Token::Assign as i64)?;
         // C99 6.5.2.2p7: the operand converts as if by assignment to the
         // builtin's parameter type, as gcc and clang check it.
@@ -2098,9 +2098,9 @@ impl Compiler {
             let (reason, n) = (m.reason, index + 1);
             let text = format!("{reason} in argument {n} of `{fn_name}` (param={want}, arg={got})");
             if m.no_conversion {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, at.line, text));
             }
-            self.report_mismatch(&m, line, text)?;
+            self.report_mismatch(&m, at, text)?;
         }
         if let Some(child) = self.ast_acc {
             let pos = self.ast_src_pos();
@@ -2206,7 +2206,7 @@ impl Compiler {
     pub(super) fn check_va_start_operand(
         &mut self,
         operand: Option<super::super::ast::ExprId>,
-        line: usize,
+        at: super::Site,
     ) {
         use super::super::ast::Expr;
         let mut node = operand;
@@ -2237,7 +2237,7 @@ impl Compiler {
             }
             _ => String::from("second operand of `va_start` is not the last named parameter"),
         };
-        self.warn_at(Code::VARARGS, line, text);
+        self.warn_at(Code::VARARGS, at, text);
     }
 
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
@@ -2267,7 +2267,7 @@ impl Compiler {
                 format!("intrinsic `{fn_name}` second operand must be a type name"),
             ));
         }
-        let line = self.lex.line;
+        let at = self.site();
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
@@ -2279,7 +2279,7 @@ impl Compiler {
             let text = format!(
                 "`va_arg` of type `{t}` is undefined: the argument arrives promoted to `{p}`"
             );
-            self.warn_at(Code::VARARGS, line, text);
+            self.warn_at(Code::VARARGS, at, text);
         }
         let arg_fn = self.type_name_fn(type_name);
         // C99 7.15.1.1p2: the type is an object type a pointer to which is
@@ -2542,11 +2542,11 @@ impl Compiler {
                 callee.name,
                 callee.params.len(),
             );
-            let line = self.lex.line;
+            let at = self.site();
             self.report_arity(
                 callee.count_is_constraint,
                 Code::TOO_FEW_ARGUMENTS,
-                line,
+                at,
                 text,
             )?;
         }
@@ -2601,7 +2601,7 @@ impl Compiler {
         callee: &DirectCallee,
         nargs: i64,
     ) -> Result<(i64, Option<super::super::ast::ExprId>), C5Error> {
-        let arg_line = self.lex.line;
+        let arg_at = self.site();
         let temp_off = self.reserve_slots(1);
 
         self.emit_lea(temp_off);
@@ -2623,7 +2623,7 @@ impl Compiler {
             .and_then(|r| r.sub);
 
         if (nargs as usize) < callee.params.len() {
-            self.convert_declared_argument(callee, nargs, arg_line)?;
+            self.convert_declared_argument(callee, nargs, arg_at)?;
         } else {
             if callee.count_known && !callee.is_variadic {
                 let text = format!(
@@ -2633,7 +2633,7 @@ impl Compiler {
                     nargs + 1,
                 );
                 let constraint = callee.count_is_constraint;
-                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_line, text)?;
+                self.report_arity(constraint, Code::TOO_MANY_ARGUMENTS, arg_at, text)?;
             }
             // C99 6.5.2.2p6: an argument past the declared parameters, or to a
             // callee with no prototype, undergoes the default argument
@@ -2666,13 +2666,13 @@ impl Compiler {
         &mut self,
         constraint: bool,
         code: Code,
-        line: usize,
+        at: Site,
         text: String,
     ) -> Result<(), C5Error> {
         if constraint {
-            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, line, text));
+            return Err(self.compile_err_at(Code::INVALID_ARGUMENTS, at.line, text));
         }
-        self.warn_at(code, line, text);
+        self.warn_at(code, at, text);
         Ok(())
     }
 
@@ -2683,7 +2683,7 @@ impl Compiler {
         &mut self,
         callee: &DirectCallee,
         nargs: i64,
-        arg_line: usize,
+        arg_at: Site,
     ) -> Result<(), C5Error> {
         let want = callee.params[nargs as usize];
         let arg_ty = self.ty;
@@ -2706,7 +2706,7 @@ impl Compiler {
             let context = format!("argument {} of `{}`", nargs + 1, callee.name);
             let what = (context.as_str(), "param", "arg");
             let (to, from) = ((want, &want_fn), (self.ty, &arg_fn));
-            self.check_function_conversion(to, from, true, arg_line, what)?
+            self.check_function_conversion(to, from, true, arg_at, what)?
         };
         if tu_member.is_none()
             && !fn_checked
@@ -2732,12 +2732,12 @@ impl Compiler {
             // C99 6.5.2.2p2: an argument the parameter type cannot take by
             // assignment violates the constraint, a library prototype's too.
             if m.no_conversion {
-                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_line, text));
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_at.line, text));
             }
-            self.report_mismatch(&m, arg_line, text)?;
+            self.report_mismatch(&m, arg_at, text)?;
         }
         if tu_member.is_none() && !callee.is_sys_call && callee.prototyped {
-            self.check_value_conversion_of(self.ast_acc, want, 0, arg_line);
+            self.check_value_conversion_of(self.ast_acc, want, 0, arg_at);
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
@@ -3185,7 +3185,7 @@ impl Compiler {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
-        let line = self.lex.line;
+        let at = self.site();
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
@@ -3195,7 +3195,7 @@ impl Compiler {
         if let Some(to) = type_name.fn_ty.as_ref().filter(|f| f.ptr_depth == 1)
             && let Some(from) = self.value_fn_type(self.ast_acc).filter(|f| f.1 == 1)
         {
-            self.check_function_cast((t, &to.f), (self.ty, &from.0), line);
+            self.check_function_cast((t, &to.f), (self.ty, &from.0), at);
         }
         if let Some(member) = self.union_cast_member(t, self.ty) {
             return self.union_cast_literal(t, member);
@@ -3758,12 +3758,12 @@ impl Compiler {
         self.rewrite_trailing_load_as_psh().ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {what}"))
         })?;
-        let line = self.lex.line;
+        let at = self.site();
         if let Some(idx) = self.take_last_loaded_local() {
             self.symbols[idx].binding.was_read = true;
             self.symbols[idx].binding.was_written = true;
             self.record_local_read(idx);
-            self.record_local_store(idx, line);
+            self.record_local_store(idx, at);
         }
         self.mark_emit_other();
         self.ast_psh();
@@ -3926,13 +3926,13 @@ impl Compiler {
         if self.lex.tk != ')' {
             loop {
                 let temp_off = self.reserve_slots(1);
-                let arg_line = self.lex.line;
+                let arg_at = self.site();
                 self.emit_lea(temp_off);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 match &callee {
                     Some(c) if arg_idx < c.params.len() => {
-                        self.convert_declared_argument(c, arg_idx as i64, arg_line)?;
+                        self.convert_declared_argument(c, arg_idx as i64, arg_at)?;
                     }
                     // C99 6.5.2.2p6: past the prototype, or with none, `float` becomes `double`.
                     Some(_) if is_float_ty(self.ty) => self.convert_assign_rhs(Ty::Double as i64),
@@ -4058,10 +4058,10 @@ impl Compiler {
             });
         let lhs_is_struct_value = is_struct_value_ty(lhs_ty);
         if let Some((obj, field_off, desc)) = bf_lvalue {
-            let line = self.lex.line;
+            let at = self.site();
             self.expr(Token::Assign as i64)?;
             let bits = u32::from(desc.bit_width);
-            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, line);
+            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, at);
             if let Some(rhs) = self.ast_acc {
                 self.ty = Ty::Int as i64;
                 let res_ty = self.ty;
@@ -4073,7 +4073,7 @@ impl Compiler {
             // The trailing load becomes a push of the address. The dead-store
             // record follows the right operand's parse: `x = x + 1` reads the
             // prior value.
-            let line = self.lex.line;
+            let at = self.site();
             let assigned_local = self.take_last_loaded_local();
             if let Some(idx) = assigned_local {
                 self.symbols[idx].binding.was_written = true;
@@ -4084,7 +4084,7 @@ impl Compiler {
             let rhs_fn = self.value_fn_type(self.ast_acc);
             let what = ("assignment", "lhs", "rhs");
             let (to, from) = ((lhs_ty, &lhs_fn), (self.ty, &rhs_fn));
-            if !self.check_function_conversion(to, from, false, line, what)?
+            if !self.check_function_conversion(to, from, false, at, what)?
                 && let Some(m) = Self::type_warning_with_flags(
                     &self.structs,
                     lhs_ty,
@@ -4098,16 +4098,16 @@ impl Compiler {
                 let rhs_s = self.typed_text(self.ty, &rhs_fn);
                 let text = format!("{} in assignment (lhs={lhs_s}, rhs={rhs_s})", m.reason);
                 if m.no_conversion {
-                    return Err(self.compile_err_at(Code::INVALID_OPERANDS, line, text));
+                    return Err(self.compile_err_at(Code::INVALID_OPERANDS, at.line, text));
                 }
-                self.report_mismatch(&m, line, text)?;
+                self.report_mismatch(&m, at, text)?;
             }
-            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, line);
+            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, at);
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;
             self.ast_assign();
             if let Some(idx) = assigned_local {
-                self.record_local_store(idx, line);
+                self.record_local_store(idx, at);
                 let prior = core::mem::replace(&mut self.symbols[idx].binding.was_read, true);
                 self.pending.value_assignment = self.ast_acc.map(|id| (id, idx, prior));
             }
@@ -4343,7 +4343,7 @@ impl Compiler {
         // The operand is read and stored; the dead-store record follows
         // the operator so a self-referencing right operand does not cancel
         // the store.
-        let line = self.lex.line;
+        let at = self.site();
         let assigned_local = self.take_last_loaded_local();
         if let Some(idx) = assigned_local {
             self.symbols[idx].binding.was_read = true;
@@ -4361,7 +4361,7 @@ impl Compiler {
         self.ty = lhs_ty;
         self.ast_assign();
         if let Some(idx) = assigned_local {
-            self.record_local_store(idx, line);
+            self.record_local_store(idx, at);
         }
         if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
             // The operation is performed in the lvalue's own type, or the
@@ -5496,7 +5496,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // The token after the member decides between a store, which
         // preserves the other bits of the storage unit, and an extraction.
-        let line = self.lex.line;
+        let at = self.site();
         let is_bf_assign = self.lex.tk == Token::Assign;
         let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
         if is_bf_assign || is_bf_incdec {
@@ -5544,7 +5544,7 @@ impl Compiler {
                 // The stored value was parsed inside `emit_bitfield_access` and
                 // kept in `pending.bf_assign_rhs`.
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
-                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, line);
+                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, at);
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
                 }

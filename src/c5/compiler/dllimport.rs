@@ -33,7 +33,7 @@ impl Compiler {
             "`dllimport` attribute ignored: {} images have no import table",
             self.target.binary_format().name()
         );
-        self.warn_at(Code::ATTRIBUTES, self.lex.line, text);
+        self.warn_at(Code::ATTRIBUTES, self.site(), text);
         false
     }
 
@@ -42,7 +42,7 @@ impl Compiler {
         if self.pending.attrs.dllimport && !was_set {
             self.pending.attrs.dllimport = false;
             let text = "`dllimport` attribute ignored on a type".into();
-            self.warn_at(Code::ATTRIBUTES, self.lex.line, text);
+            self.warn_at(Code::ATTRIBUTES, self.site(), text);
         }
     }
 
@@ -57,7 +57,7 @@ impl Compiler {
         let marked = self.dllimport_requested();
         let name = self.symbols[id_idx].name.clone();
         let is_object = self.symbols[id_idx].class == crate::c5::token::Token::Glo as i64;
-        let line = self.lex.line;
+        let at = self.site();
         if !marked {
             if self.symbols[id_idx].dllimport {
                 self.symbols[id_idx].dllimport = false;
@@ -73,7 +73,7 @@ impl Compiler {
                         "`{name}` redeclared without dllimport attribute: previous dllimport ignored"
                     )
                 };
-                self.warn_at(Code::ATTRIBUTES, line, text);
+                self.warn_at(Code::ATTRIBUTES, at, text);
             }
             return Ok(());
         }
@@ -93,7 +93,7 @@ impl Compiler {
         }
         if d.inline {
             let text = format!("inline function `{name}` declared as dllimport: attribute ignored");
-            self.warn_at(Code::ATTRIBUTES, line, text);
+            self.warn_at(Code::ATTRIBUTES, at, text);
             return Ok(());
         }
         if defined {
@@ -103,7 +103,7 @@ impl Compiler {
         if self.pending_exports.contains(&name) {
             let text =
                 format!("`{name}` already declared with dllexport attribute: dllimport ignored");
-            self.warn_at(Code::ATTRIBUTES, line, text);
+            self.warn_at(Code::ATTRIBUTES, at, text);
             return Ok(());
         }
         self.symbols[id_idx].dllimport = true;

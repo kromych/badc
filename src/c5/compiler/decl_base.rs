@@ -792,10 +792,9 @@ impl Compiler {
                 self.set_asm_label(id_idx, name)?;
             } else {
                 let ident = self.symbols[id_idx].name.clone();
-                let line = self.lex.line;
                 self.warn_at(
                     Code::IGNORED_ASM_LABEL,
-                    line,
+                    self.site(),
                     format!("assembler name ignored for the automatic variable `{ident}`"),
                 );
             }
@@ -892,6 +891,7 @@ impl Compiler {
         // Binds `Loc` without a `shadow_symbol`, so list it explicitly;
         // it stays bound past every scope exit.
         self.scope_bound.push(id_idx as u32);
+        let at = self.site();
         let sym = &mut self.symbols[id_idx];
         sym.class = Token::Loc as i64;
         sym.type_ = ty;
@@ -900,7 +900,7 @@ impl Compiler {
         sym.array_size = 0;
         sym.asm_register = Some(reg);
         sym.is_global_register = true;
-        sym.binding.decl_line = self.lex.line;
+        sym.binding.set_decl_site(at);
         // The binding is the outermost scope: make the shadow slots hold
         // the binding itself so the per-function `Loc` cleanup restore
         // (and any block-scope shadowing) round-trips back to it.
@@ -2144,7 +2144,7 @@ impl Compiler {
     pub(super) fn report_implicit_int(
         &mut self,
         what: ImplicitInt,
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         let name = |c: &Self, idx: usize| c.symbols[idx].name.clone();
         let text = match what {
@@ -2160,15 +2160,15 @@ impl Compiler {
                 format!("type of `{}` defaults to `int`", name(self, idx))
             }
         };
-        self.report_at(Code::IMPLICIT_INT, line, text)
+        self.report_at(Code::IMPLICIT_INT, at, text)
     }
 
     /// The base type of a type name (C99 6.7.6), reporting an implicit `int`.
     pub(super) fn parse_type_name_base(&mut self) -> Result<i64, C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         let ty = self.parse_decl_base_type()?;
         if core::mem::take(&mut self.pending.base_implicit_int) {
-            self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), line)?;
+            self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), at)?;
         }
         Ok(ty)
     }

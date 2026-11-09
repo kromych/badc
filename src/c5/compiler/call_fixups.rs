@@ -134,11 +134,11 @@ impl Compiler {
         undeclared.dedup();
         for sym_idx in undeclared {
             let name = self.symbols[sym_idx].name.clone();
-            let line = self.symbols[sym_idx].binding.decl_line;
+            let at = self.symbols[sym_idx].binding.decl_site();
             let suggestion = self.include_hint(&name);
             self.warn_at(
                 Code::UNDEFINED_FUNCTION,
-                line,
+                at,
                 alloc::format!(
                     "`{name}` is declared `static` and used as a function in an initializer, but this unit does not define it{suggestion}"
                 ),

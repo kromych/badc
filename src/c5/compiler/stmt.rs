@@ -596,7 +596,7 @@ impl Compiler {
     /// Breaks inside the body decrement the break depth at switch
     /// exit through [`Self::close_loop_breaks`].
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         self.next()?;
         self.open_statement_scope();
         self.consume(b'(', "open paren expected")?;
@@ -640,7 +640,7 @@ impl Compiler {
             if outside || (has_default && low == Some(0) && high == Some(1)) {
                 self.warn_at(
                     Code::SWITCH_BOOL,
-                    line,
+                    at,
                     "switch condition has boolean value".into(),
                 );
             }
@@ -683,7 +683,7 @@ impl Compiler {
     /// drop it.
     fn case_label_range(
         &mut self,
-        line: usize,
+        at: super::Site,
         lo: ConstVal,
         hi: Option<ConstVal>,
     ) -> Result<Option<(i128, i128)>, C5Error> {
@@ -728,7 +728,7 @@ impl Compiler {
             let t = format_type(own, &self.structs);
             self.warn_at(
                 Code::SWITCH_OUTSIDE_RANGE,
-                line,
+                at,
                 format!("{label} is not within the range of `{t}`, the type of the controlling expression"),
             );
         }
@@ -750,7 +750,7 @@ impl Compiler {
         if less(b, a) {
             self.warn_at(
                 Code::EMPTY_CASE_RANGE,
-                line,
+                at,
                 format!(
                     "case range `{} ... {}` is empty; the label is dropped",
                     spell(a),
@@ -824,7 +824,7 @@ impl Compiler {
                 self.pending.fn_ptr_type,
                 self.pending.base_is_function_type,
             ) = base_fn.clone();
-            let declarator_line = self.lex.line;
+            let declarator_at = self.site();
             // C99 6.7.7p3: a variably modified typedef's size expression is
             // evaluated when the declaration is reached; the type keeps the
             // byte count that evaluation stores.
@@ -870,7 +870,7 @@ impl Compiler {
             }
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
-                self.report_implicit_int(what, declarator_line)?;
+                self.report_implicit_int(what, declarator_at)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
@@ -1480,7 +1480,7 @@ impl Compiler {
                 continue;
             }
             let name = sym.name.clone();
-            let line = sym.binding.decl_line;
+            let at = sym.binding.decl_site();
             // `was_referenced` is true when the parser emitted any
             // expression mention (assignment LHS, increment, ...).
             // Without it the only "write" possible is the
@@ -1498,7 +1498,7 @@ impl Compiler {
                     alloc::format!("unused variable `{name}`"),
                 )
             };
-            self.warn_at(code, line, msg);
+            self.warn_at(code, at, msg);
         }
 
         self.emit_scope_dead_stores(&block_symbols);
@@ -1681,18 +1681,18 @@ impl Compiler {
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true, line);
+            return self.parse_extended_asm(template, is_volatile, true, at);
         }
         // A naked function's templates are assembled as written.
         if self.current_func_attrs.is_naked {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, false, line);
+            return self.parse_extended_asm(template, is_volatile, false, at);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1877,7 +1877,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false, line)
+        self.parse_extended_asm(template, is_volatile, false, at)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1916,13 +1916,13 @@ impl Compiler {
     /// clobber is a bare string; a label is an identifier naming a C
     /// label of the enclosing function. On entry the template is
     /// consumed and the cursor is at the first `:` (or `)` when there
-    /// is no operand list); `line` is the statement's first.
+    /// is no operand list); `at` is the statement's first token.
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
         is_goto: bool,
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
@@ -2408,7 +2408,7 @@ impl Compiler {
         if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {
             let text = "the stack pointer is listed as clobbered or written through an \
                 output; GNU C requires it to hold the same value after an `asm` statement";
-            self.warn_at(Code::INLINE_ASM, line, text.into());
+            self.warn_at(Code::INLINE_ASM, at, text.into());
         }
         let idx = self.ast.asm_blocks.len() as u32;
         let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
@@ -3648,7 +3648,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Switch {
             self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case {
-            let line = self.lex.line;
+            let at = self.site();
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
@@ -3666,8 +3666,8 @@ impl Compiler {
                 None
             };
             self.consume(b':', "expected colon after case")?;
-            self.check_switch_label(line)?;
-            let range = self.case_label_range(line, lo, hi)?;
+            self.check_switch_label(at.line)?;
+            let range = self.case_label_range(at, lo, hi)?;
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
             // block-local declarations in the enclosing block loop, where
@@ -3794,7 +3794,7 @@ impl Compiler {
             self.ast_emit_continue();
             self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Return {
-            let line = self.lex.line;
+            let at = self.site();
             self.check_seh_exit("`return`", None)?;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
@@ -3817,7 +3817,7 @@ impl Compiler {
                         let got = super::types::format_type(self.ty, &self.structs);
                         self.report_at(
                             Code::RETURN_MISMATCH,
-                            line,
+                            at,
                             format!(
                                 "`return` with a value of type `{got}` in a function \
                                  returning `void`"
@@ -3867,9 +3867,13 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                            return Err(self.compile_err_at(
+                                Code::INCOMPATIBLE_TYPES,
+                                at.line,
+                                text,
+                            ));
                         }
-                        self.report_mismatch(&m, line, text)?;
+                        self.report_mismatch(&m, at, text)?;
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3893,7 +3897,7 @@ impl Compiler {
                     let value_fn = self.value_fn_type(self.ast_acc);
                     let what = ("return", "declared", "returned");
                     let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
-                    if !self.check_function_conversion(to, from, true, line, what)?
+                    if !self.check_function_conversion(to, from, true, at, what)?
                         && let Some(m) = Self::type_warning_with_flags(
                             &self.structs,
                             ret_ty,
@@ -3908,11 +3912,15 @@ impl Compiler {
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
-                            return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+                            return Err(self.compile_err_at(
+                                Code::INCOMPATIBLE_TYPES,
+                                at.line,
+                                text,
+                            ));
                         }
-                        self.report_mismatch(&m, line, text)?;
+                        self.report_mismatch(&m, at, text)?;
                     }
-                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, line);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, at);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing
@@ -3929,7 +3937,7 @@ impl Compiler {
                 // brace does.
                 self.report_at(
                     Code::RETURN_MISMATCH,
-                    line,
+                    at,
                     "`return` with no value in a function returning non-void".into(),
                 )?;
             }

@@ -156,7 +156,7 @@ impl Compiler {
         &mut self,
         var_ty: i64,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
-        line: usize,
+        at: super::Site,
     ) -> Result<bool, C5Error> {
         if target_fn.is_none() {
             return Ok(false);
@@ -165,12 +165,7 @@ impl Compiler {
             return Ok(false);
         };
         let what = ("initializer", "declared", "init");
-        self.check_fn_pointer_conversion(
-            (var_ty, target_fn),
-            (init_ty, &Some(init_fn)),
-            line,
-            what,
-        )?;
+        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &Some(init_fn)), at, what)?;
         Ok(true)
     }
 
@@ -349,7 +344,7 @@ impl Compiler {
         is_thread_local: bool,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
-        let line = self.lex.line;
+        let at = self.site();
         // C11 6.5.1.1 generic selection as a static initializer element:
         // select the association, initialize this slot from the winning
         // expression, then resume past the `_Generic(...)`.
@@ -368,7 +363,7 @@ impl Compiler {
             if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     Code::INVALID_INITIALIZER,
-                    line,
+                    at.line,
                     "scalar initializer wrapped in `{ ... }` must hold a single value",
                 ));
             }
@@ -384,11 +379,11 @@ impl Compiler {
                 && !matches!(reloc, InitElemReloc::None)
             {
                 let text = "a `__ptr32` pointer's static initializer is not an integer constant";
-                return Err(self.compile_err_at(Code::UNSUPPORTED, line, text));
+                return Err(self.compile_err_at(Code::UNSUPPORTED, at.line, text));
             }
             self.restore_init_checkpoint(cp);
         }
-        let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
+        let fn_checked = self.check_designator_initializer(var_ty, target_fn, at)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
         // whole because a leading cast sets the stride of a trailing
@@ -410,11 +405,11 @@ impl Compiler {
                             target_fn,
                             ty,
                             (false, false),
-                            line,
+                            at,
                         )?;
                     }
                     if is_thread_local {
-                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                        self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
                         self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
                     }
@@ -460,7 +455,13 @@ impl Compiler {
             if matches!(self.init_reloc_for(reloc, var_ty)?, InitElemReloc::None) {
                 let value = self.to_storage_bits(ent_pc as i128, reloc, var_ty);
                 return if is_thread_local {
-                    self.write_tls_init_value(line, var_offset, value, InitElemReloc::None, var_ty)
+                    self.write_tls_init_value(
+                        at.line,
+                        var_offset,
+                        value,
+                        InitElemReloc::None,
+                        var_ty,
+                    )
                 } else {
                     self.write_init_value(
                         var_offset as usize,
@@ -520,7 +521,7 @@ impl Compiler {
                 && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
-                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), line)?;
+                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), at)?;
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
@@ -580,9 +581,9 @@ impl Compiler {
                         value, reloc, ty, ..
                     } = leaf;
                     let flags = (leaf.is_zero_int(), false);
-                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
+                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, at)?;
                     if is_thread_local {
-                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                        self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
                         self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
                     }
@@ -592,7 +593,7 @@ impl Compiler {
             }
         }
 
-        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, line)
+        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, at)
     }
 
     /// The conversion check of a constant initializer of type `init_ty`
@@ -606,12 +607,12 @@ impl Compiler {
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
         init_ty: i64,
         flags: (bool, bool),
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         let what = ("initializer", "declared", "init");
         let (declared, init) = ((var_ty, target_fn), (init_ty, &None));
-        if !self.check_function_conversion(declared, init, true, line, what)? {
-            self.check_initializer_conversion(declared, init, flags, line)?;
+        if !self.check_function_conversion(declared, init, true, at, what)? {
+            self.check_initializer_conversion(declared, init, flags, at)?;
         }
         Ok(())
     }
@@ -684,7 +685,7 @@ impl Compiler {
         var_offset: i64,
         is_thread_local: bool,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
-        line: usize,
+        at: super::Site,
     ) -> Result<(), C5Error> {
         // A floating destination takes the f64 folder: the integer
         // constant evaluator does not fold arithmetic on float
@@ -697,11 +698,11 @@ impl Compiler {
         // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
-        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
+        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), at)?;
         if let ConstVal::Int { val, ty, .. } = cv {
-            self.check_constant_conversion(val, ty, var_ty, 0, line);
+            self.check_constant_conversion(val, ty, var_ty, 0, at);
             if !self.initializes_as_is(ty, var_ty) {
-                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, line);
+                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, at);
             }
         }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width

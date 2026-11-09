@@ -13,7 +13,6 @@ use alloc::vec::Vec;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
 use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
@@ -21,6 +20,7 @@ use super::types::{
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
     struct_ptr_depth,
 };
+use super::{Compiler, Site};
 
 /// The declaration specifiers a file-scope declarator list shares: the base
 /// type and its spelling, the storage classes, and the carriers a typedef
@@ -52,7 +52,7 @@ struct DeclaratorBinding {
     ty: i64,
     array_size: i64,
     prior_array_size: i64,
-    signature_line: usize,
+    signature_at: Site,
     declarator_is_bare_void: bool,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
@@ -605,7 +605,7 @@ impl Compiler {
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
-        let signature_line = self.lex.line;
+        let signature_at = self.site();
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
         // A list the declarator consumed (`T (*f(args))(...)`) may name a
         // parameter like `f`; the rest of the declarator describes `f`.
@@ -623,7 +623,7 @@ impl Compiler {
             && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))
         {
             let what = decl_base::ImplicitInt::Declarator(id_idx);
-            self.report_implicit_int(what, signature_line)?;
+            self.report_implicit_int(what, signature_at)?;
         }
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
@@ -761,7 +761,7 @@ impl Compiler {
             ty,
             array_size,
             prior_array_size,
-            signature_line,
+            signature_at,
             declarator_is_bare_void,
             fn_ptr_indirection,
             fn_ptr_ret_indirection,
@@ -1037,7 +1037,8 @@ impl Compiler {
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
-        let declarator_line = self.lex.line;
+        let declarator_at = self.site();
+        let declarator_line = declarator_at.line;
         let mut params = if let Some(pp) = preconsumed_params {
             pp
         } else {
@@ -1078,7 +1079,7 @@ impl Compiler {
             } else {
                 decl_base::ImplicitInt::Declarator(id_idx)
             };
-            self.report_implicit_int(what, b.signature_line)?;
+            self.report_implicit_int(what, b.signature_at)?;
         }
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
@@ -1187,7 +1188,7 @@ impl Compiler {
                 .clone()
                 .map(|(r, d)| (*r, d)),
             conv: named,
-            line: declarator_line,
+            at: declarator_at,
             implicit_int,
             extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
             claim: if static_seen {
@@ -1212,11 +1213,12 @@ impl Compiler {
         {
             let text =
                 String::from("`main` is declared `static`, so the program startup cannot call it");
-            self.warn_at(Code::MAIN, self.lex.line, text);
+            self.warn_at(Code::MAIN, self.site(), text);
         }
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
-            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            let at = self.site();
+            self.symbols[id_idx].binding.set_decl_site(at);
             self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         // Census one file-scope declaration of this name for
@@ -1352,7 +1354,7 @@ impl Compiler {
     /// definition, neither `inline` nor `main`, that no file-scope
     /// declaration with a prototype / at all preceded. A block-scope
     /// declaration is not visible there and counts for neither.
-    fn report_missing_declaration(&mut self, id_idx: usize, line: usize) {
+    fn report_missing_declaration(&mut self, id_idx: usize, at: Site) {
         let s = &self.symbols[id_idx];
         if s.saw_static_decl
             || s.saw_plain_inline_decl
@@ -1366,11 +1368,11 @@ impl Compiler {
         let declared = self.file_scope_fn_decls.get(&name).copied();
         if declared != Some(true) {
             let text = format!("no previous prototype for `{name}`");
-            self.warn_at(Code::MISSING_PROTOTYPES, line, text);
+            self.warn_at(Code::MISSING_PROTOTYPES, at, text);
         }
         if declared.is_none() {
             let text = format!("no previous declaration for `{name}`");
-            self.warn_at(Code::MISSING_DECLARATIONS, line, text);
+            self.warn_at(Code::MISSING_DECLARATIONS, at, text);
         }
     }
 
@@ -1393,18 +1395,18 @@ impl Compiler {
                 "`{name}` is an intrinsic, which cannot be defined; \
                  `#pragma function({name})` makes it a function"
             );
-            return Err(self.compile_err_at(Code::INVALID_DECLARATION, def.line, text));
+            return Err(self.compile_err_at(Code::INVALID_DECLARATION, def.at.line, text));
         }
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
-        self.symbols[id_idx].binding.decl_line = def.line;
+        self.symbols[id_idx].binding.set_decl_site(def.at);
         self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
         self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
                 Code::INVALID_DECLARATION,
-                def.line,
+                def.at.line,
                 "parameter name omitted in a function definition",
             ));
         }
@@ -1418,11 +1420,11 @@ impl Compiler {
             self.unpark_param(id_idx);
         }
         self.open_param_list_scope();
-        let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
+        let kr = self.parse_kr_parameter_declarations(&mut params, def.at);
         let enumerators = self.close_param_list_scope();
         kr?;
         params.enumerators.extend(enumerators);
-        self.check_complete_parameters(&params, def.line)?;
+        self.check_complete_parameters(&params, def.at.line)?;
         self.park_self_named_param(id_idx, &params);
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1431,7 +1433,7 @@ impl Compiler {
             let name = &self.symbols[id_idx].name;
             return Err(self.compile_err_at(
                 Code::INVALID_DECLARATION,
-                def.line,
+                def.at.line,
                 format!("incomplete result type `{ty}` in the definition of `{name}`"),
             ));
         }
@@ -1445,9 +1447,9 @@ impl Compiler {
         self.claim_unprototyped_list(&params);
         if !prototyped && self.in_user_source() {
             let text = alloc::string::String::from("function declaration is not a prototype");
-            self.warn_at(Code::STRICT_PROTOTYPES, def.line, text);
+            self.warn_at(Code::STRICT_PROTOTYPES, def.at, text);
         }
-        self.report_missing_declaration(id_idx, def.line);
+        self.report_missing_declaration(id_idx, def.at);
         self.symbols[id_idx].unprototyped_def = !prototyped;
         self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
@@ -1532,7 +1534,7 @@ impl Compiler {
     fn parse_kr_parameter_declarations(
         &mut self,
         params: &mut super::function::ParsedParams,
-        line: usize,
+        at: Site,
     ) -> Result<(), C5Error> {
         let mut declared = alloc::vec![false; params.indices.len()];
         // C99 6.9.1: an old-style (K&R) definition lists the
@@ -1589,11 +1591,11 @@ impl Compiler {
                     self.pending.base_is_function_type,
                 ) = base_fn.clone();
                 self.pending.param_decl_context = true;
-                let decl_line = self.lex.line;
+                let decl_at = self.site();
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
                 if implicit_int {
                     let what = decl_base::ImplicitInt::Declarator(decl_idx);
-                    self.report_implicit_int(what, decl_line)?;
+                    self.report_implicit_int(what, decl_at)?;
                 }
                 let carriers = self.take_param_fn_ptr_carriers()?;
                 let (fn_ptr_indirection, fn_ptr_ret_indirection, _) = carriers;
@@ -1645,7 +1647,7 @@ impl Compiler {
             for (pos, &idx) in params.indices.iter().enumerate() {
                 if !declared[pos] {
                     let what = decl_base::ImplicitInt::UndeclaredParameter(idx);
-                    self.report_implicit_int(what, line)?;
+                    self.report_implicit_int(what, at)?;
                 }
             }
         }
@@ -2248,7 +2250,7 @@ impl Compiler {
             Parameter,
             ValueSet,
         }
-        let mut unused: Vec<(u32, usize, String, UnusedKind)> = Vec::new();
+        let mut unused: Vec<(u32, Site, String, UnusedKind)> = Vec::new();
         for &bi in bound {
             let i = bi as usize;
             let sym = &self.symbols[i];
@@ -2281,10 +2283,10 @@ impl Compiler {
                 UnusedKind::Variable
             };
             let b = &sym.binding;
-            unused.push((b.decl_seq, b.decl_line, sym.name.clone(), kind));
+            unused.push((b.decl_seq, b.decl_site(), sym.name.clone(), kind));
         }
         unused.sort_by_key(|u| u.0);
-        for (_, line, name, kind) in unused {
+        for (_, at, name, kind) in unused {
             let (code, msg) = match kind {
                 UnusedKind::Variable => (
                     Code::UNUSED_VARIABLE,
@@ -2299,7 +2301,7 @@ impl Compiler {
                     alloc::format!("variable `{name}` set but never used"),
                 ),
             };
-            self.warn_at(code, line, msg);
+            self.warn_at(code, at, msg);
         }
         // Drain dead-store entries for this function's
         // locals via the shared helper -- a store that
@@ -2338,9 +2340,10 @@ impl Compiler {
             ty,
             array_size,
             prior_array_size,
-            signature_line,
+            signature_at,
             ..
         } = b;
+        let signature_line = signature_at.line;
 
         let zero_len = array_size < 0 && self.symbols[id_idx].is_zero_len_array;
         let bounds = self.declared_bounds(id_idx, array_size, zero_len);
@@ -2493,7 +2496,8 @@ impl Compiler {
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
         if self.symbols[id_idx].binding.decl_line == 0 {
-            self.symbols[id_idx].binding.decl_line = self.lex.line;
+            let at = self.site();
+            self.symbols[id_idx].binding.set_decl_site(at);
             self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
             self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
@@ -3470,7 +3474,7 @@ impl Compiler {
         // not unused (matching gcc / clang, which never warn on it).
         let init_names: alloc::collections::BTreeSet<&str> =
             self.init_funcs.iter().map(|f| f.name.as_str()).collect();
-        let mut unused: Vec<(u32, usize, String)> = Vec::new();
+        let mut unused: Vec<(u32, Site, String)> = Vec::new();
         for sym in self.symbols.iter() {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
@@ -3492,13 +3496,13 @@ impl Compiler {
                 continue;
             }
             let b = &sym.binding;
-            unused.push((b.decl_file, b.decl_line, sym.name.clone()));
+            unused.push((b.decl_file, b.decl_site(), sym.name.clone()));
         }
         // The unit is parsed, so each report names its declaration's file.
-        for (file, line, name) in unused {
+        for (file, at, name) in unused {
             let file = self.source_files[file as usize].clone();
             let msg = alloc::format!("unused function `{name}`");
-            self.warn_at_file(Code::UNUSED_FUNCTION, &file, line, msg);
+            self.warn_at_file(Code::UNUSED_FUNCTION, &file, at, msg);
         }
     }
 

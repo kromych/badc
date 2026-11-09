@@ -445,6 +445,44 @@ fn pragma_operators_scope_the_conversion_of_a_value_within_an_expression() {
     );
 }
 
+/// Diagnostic pragmas around a construct inside a macro govern the reports
+/// about it, which resolve at the construct rather than at its line's start
+/// or the token after it: a cast, and an unused local, an unused function
+/// and an unprototyped declaration reported when their scope ends. clang
+/// reports the same four of the eight.
+#[test]
+fn pragma_operators_scope_the_construct_a_diagnostic_reports() {
+    let src = "#define QUIET(w, s) _Pragma(\"GCC diagnostic push\") _Pragma(w) s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               #define NO_CFT \"GCC diagnostic ignored \\\"-Wcast-function-type\\\"\"\n\
+               #define NO_UV \"GCC diagnostic ignored \\\"-Wunused-variable\\\"\"\n\
+               #define NO_UF \"GCC diagnostic ignored \\\"-Wunused-function\\\"\"\n\
+               #define NO_SP \"GCC diagnostic ignored \\\"-Wstrict-prototypes\\\"\"\n\
+               typedef void (*one)(int);\n\
+               long g(long a, long b);\n\
+               one quiet_cast(void) { return QUIET(NO_CFT, (one)g); }\n\
+               one loud_cast(void) { return (one)g; }\n\
+               void quiet_local(void) { QUIET(NO_UV, int u;)\n}\n\
+               void loud_local(void) { int v;\n}\n\
+               QUIET(NO_UF, static void quiet_fn(void) {})\n\
+               static void loud_fn(void) {}\n\
+               QUIET(NO_SP, void quiet_old();)\n\
+               void loud_old();\n\
+               int main(void) { return 0; }\n";
+    let rows = [
+        "cast-function-type",
+        "unused-variable",
+        "unused-function",
+        "strict-prototypes",
+    ];
+    let p = super::compile_str_bare_with_diags(src, &rows);
+    let mut got: alloc::vec::Vec<u32> = (p.warnings.iter())
+        .map(|d| d.loc.as_ref().map_or(0, |l| l.line))
+        .collect();
+    got.sort_unstable();
+    assert_eq!(got, [9, 12, 15, 17], "{:?}", p.warnings);
+}
+
 /// The MSVC spelling reaches the same rows through the catalogue's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]

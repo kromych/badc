@@ -2507,7 +2507,7 @@ pub(crate) struct FunctionSsa {
     /// `ssa_slot_coalesce` confines itself to the synthetic range when
     /// debug info is emitted (preserving per-local `DW_OP_fbreg`
     /// locations); without debug info it coalesces the declared range
-    /// too. 0 for SSA built outside the walker, which disables coalescing.
+    /// too. -1 for SSA built outside the walker, which disables coalescing.
     pub synthetic_base: i64,
     /// `(base_offset, cells)` for each slot group -- a declared aggregate of
     /// any cell count / a multi-cell scalar (seeded from the parser) or a

@@ -45,9 +45,7 @@ pub(crate) fn walk_function(
     } else {
         fun.n_locals
     };
-    if effective_locals != 0 {
-        b.set_locals(effective_locals);
-    }
+    b.set_locals(effective_locals);
     // A non-zero `alloca_top_slot` marks the function dynamic-sp for the
     // codegen: spill slots move to fp-based addressing and the epilogue
     // re-establishes sp.

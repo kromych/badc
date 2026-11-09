@@ -247,12 +247,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // names is not, so such a function still drops its unreferenced slots and
     // renumbers the survivors one-to-one below.
     let dedicated = f.has_returns_twice_call || f.has_sp_asm();
-    // `synthetic_base > 0` marks a walker-built function with declared
-    // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
-    // left alone -- its slot model is not the walker's.
+    // A non-negative `synthetic_base` marks a walker-built function, one
+    // with no declared locals included; hand-built SSA (sys-trampolines)
+    // carries -1 and is left alone -- its slot model is not the walker's.
     let synth_base = f.synthetic_base;
     let total = f.locals;
-    if synth_base <= 0 || total <= 0 {
+    if synth_base < 0 || total <= 0 {
         return BTreeMap::new();
     }
     // The whole movable frame is coalesced; a slot at offset 0 is not movable.

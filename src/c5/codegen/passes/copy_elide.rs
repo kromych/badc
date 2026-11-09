@@ -67,7 +67,7 @@ fn base_of(f: &FunctionSsa, v: ValueId) -> Option<(i64, i64)> {
 }
 
 fn run_one(f: &mut FunctionSsa) {
-    if f.synthetic_base <= 0 || !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })) {
+    if f.synthetic_base < 0 || !f.insts.iter().any(|i| matches!(i, Inst::Mcpy { .. })) {
         return;
     }
     // Where each slot is named, and by what. A slot this pass may

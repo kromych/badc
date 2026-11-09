@@ -3846,6 +3846,46 @@ fn a64_counts_are_the_same_over_a_nonzero_operand() {
     m.finish();
 }
 
+/// A function whose locals all come from the callees it inlines has its
+/// frame compacted like any other: the spliced slots the promotion leaves
+/// unreferenced are dropped and the live-disjoint ones share.
+#[test]
+fn a_frame_built_only_by_inlining_is_compacted() {
+    let mut src = String::from(
+        "extern int parse(const char *s, unsigned base, unsigned long long *res);\n\
+         extern void report(const char *fmt, ...);\n\
+         extern const char *const names[8];\n",
+    );
+    for k in 0..12 {
+        src.push_str(&format!(
+            "static void test{k}(void) {{\n\
+               for (unsigned i = 0; i < 8; i++) {{\n\
+                 unsigned long long res;\n\
+                 int rv = parse(names[i], {k} + 2, &res);\n\
+                 if (rv < 0 || res != i) report(\"%u %d %llu\", i, rv, res);\n\
+               }}\n\
+             }}\n"
+        ));
+    }
+    src.push_str("int init(void) {\n");
+    for k in 0..12 {
+        src.push_str(&format!("    test{k}();\n"));
+    }
+    src.push_str("    return 0;\n}\n");
+    let code = function_bytes(&object_at(&src, Target::LinuxX64, true), "init");
+    // push %rbp; mov %rsp, %rbp; then `sub $imm, %rsp` sizes the frame.
+    let frame = match code[4..] {
+        [0x48, 0x83, 0xec, imm8, ..] => u32::from(imm8),
+        [0x48, 0x81, 0xec, a, b, c, d, ..] => u32::from_le_bytes([a, b, c, d]),
+        _ => 0,
+    };
+    assert!(
+        frame <= 32,
+        "init's frame is {frame} bytes: {:02x?}",
+        &code[..16]
+    );
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

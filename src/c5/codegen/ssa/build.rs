@@ -267,7 +267,7 @@ impl SsaBuilder {
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
-            synthetic_base: 0,
+            synthetic_base: -1,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
             over_aligned: Vec::new(),

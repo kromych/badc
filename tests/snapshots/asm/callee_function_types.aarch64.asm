@@ -104,11 +104,10 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x2e0
-               	str	d8, [sp]
+               	str	d8, [sp, #-0x50]!
                	stp	x20, x21, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x40]
+               	add	x29, sp, #0x40
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
@@ -209,10 +208,9 @@ Disassembly of section .text:
                	orr	x20, x20, #0x4000
                	cbz	w20, <addr>
                	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	d8, [sp], #0x50
                	ret
                	mov	x20, #0x0               // =0
                	fcmp	d1, d1
@@ -291,10 +289,9 @@ Disassembly of section .text:
                	orr	x20, x20, #0x20000
                	cbz	w20, <addr>
                	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	d8, [sp], #0x50
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -349,10 +346,9 @@ Disassembly of section .text:
                	orr	x20, x20, #0x200
                	cbz	w20, <addr>
                	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	d8, [sp], #0x50
                	ret
                	fmov	d0, #3.00000000
                	bl	<addr>
@@ -422,16 +418,14 @@ Disassembly of section .text:
                	orr	x20, x20, #0x80
                	cbz	w20, <addr>
                	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	d8, [sp], #0x50
                	ret
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp]
-               	add	sp, sp, #0x2e0
-               	ldp	x29, x30, [sp], #0x10
+               	ldr	d8, [sp], #0x50
                	ret
                	mov	x20, #0x0               // =0
                	b	<addr>

@@ -288,7 +288,6 @@ impl Compiler {
                     .any(|&p| is_float_ty(p) || is_double_ty(p));
             if is_variadic || touches_fp {
                 let mut sb = SsaBuilder::new(ent_pc, 0, false);
-                sb.set_locals(0);
                 sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
                 sb.alloca_init(0);
                 sb.tail_ext(binding_idx);
@@ -318,7 +317,6 @@ impl Compiler {
             // the trampoline's flag to `false` leaves the libc-
             // side `al = xmm_count` setup intact.
             let mut sb = SsaBuilder::new(ent_pc, nargs_ssa, false);
-            sb.set_locals(0);
             // Synthetic trampoline body forwarding to the libc
             // binding `self.symbols[sys_idx].name`; tag the
             // FunctionSsa with a deterministic name so the symbol

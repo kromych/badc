@@ -28,11 +28,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x10, %rsp
                	movabsq	$0x43ec000000000000, %rax # imm = 0x43EC000000000000
                	movabsq	$0x4020000000000000, %rcx # imm = 0x4020000000000000
-               	movq	%rcx, -0x18(%rbp)
-               	movsd	-0x18(%rbp), %xmm0
+               	movq	%rcx, -0x8(%rbp)
+               	movsd	-0x8(%rbp), %xmm0
                	movq	%rax, %xmm14
                	vmulsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x441c000000000000, %rax # imm = 0x441C000000000000

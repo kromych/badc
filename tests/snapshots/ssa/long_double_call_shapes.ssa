@@ -13,14 +13,14 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=ret_int
-fn ent_pc=1 n_params=0 variadic=false locals=2
+fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(7)                                           -> x0
     v2   Imm(4619567317775286272)                         -> x1
-    v3   LocalAddr(-2)                                    -> x0
-    v4   StoreLocal { off=-2, value=v2, kind=F80 }        -> -
+    v3   LocalAddr(-3)                                    -> x0
+    v4   StoreLocal { off=-3, value=v2, kind=F80 }        -> -
     terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=ret_float
@@ -1256,7 +1256,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=__c5_fini_trampoline
-fn ent_pc=2 n_params=1 variadic=false locals=2
+fn ent_pc=2 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

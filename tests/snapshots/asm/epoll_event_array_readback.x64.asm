@@ -28,18 +28,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
+               	subq	$0x40, %rsp
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	-0x38(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x30(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -62,11 +62,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movabsq	$0x1122334455667788, %r12 # imm = 0x1122334455667788
                	movabsq	$-0x778899aabbccddef, %r13 # imm = 0x8877665544332211
-               	leaq	-0x38(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rcx
                	movl	$0x1, %esi
                	movl	%esi, (%rcx)
                	movq	%r12, 0x4(%rcx)
-               	movl	-0x8(%rbp), %edx
+               	movl	-0x38(%rbp), %edx
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -75,10 +75,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	leaq	-0x38(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rcx
                	movq	%r13, 0x4(%rcx)
                	movl	$0x1, %esi
-               	movl	-0x10(%rbp), %edx
+               	movl	-0x30(%rbp), %edx
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -87,14 +87,14 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	movl	-0x4(%rbp), %edi
+               	movl	-0x34(%rbp), %edi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	movl	-0xc(%rbp), %edi
+               	movl	-0x2c(%rbp), %edi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
                	xorl	%eax, %eax
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	jmp	<addr>
-               	leaq	-0x50(%rbp), %rsi
+               	leaq	-0x18(%rbp), %rsi
                	movl	$0x2, %edx
                	movl	$0x3e8, %ecx            # imm = 0x3E8
                	movq	%r14, %rdi
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	movq	%rax, %rbx
-               	leaq	-0x50(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rdx
                	imulq	$0xc, %rax, %rcx
                	addq	%rcx, %rdx
                	movl	(%rdx), %esi
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	jne	<addr>
                	orq	$0x1, %rbx
                	jmp	<addr>
-               	leaq	-0x50(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rdx
                	addq	%rdx, %rcx
                	movq	0x4(%rcx), %rcx
                	cmpq	%r13, %rcx
@@ -139,16 +139,16 @@ Disassembly of section .text:
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	-0x8(%rbp), %edi
+               	movl	-0x38(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	-0x4(%rbp), %edi
+               	movl	-0x34(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	-0x10(%rbp), %edi
+               	movl	-0x30(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	-0xc(%rbp), %edi
+               	movl	-0x2c(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x3, %ebx

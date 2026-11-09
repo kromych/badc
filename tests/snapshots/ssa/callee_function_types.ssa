@@ -80,7 +80,7 @@ fn ent_pc=5 n_params=1 variadic=true locals=3
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=21 ---
 ; name=main
-fn ent_pc=21 n_params=0 variadic=false locals=87
+fn ent_pc=21 n_params=0 variadic=false locals=3
   spill_count=1 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -876,7 +876,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=87
     v572 Phi { incoming=[b113:v553, b109:v570], kind=I64 } -> x3
     v573 Extend { value=v572, kind=I32 }                  -> x0
     v574 Extend { value=v572, kind=I32 }                  -> x0
-    v575 LifetimeEnd(-7)                                  -> -
+    v575 LifetimeEnd(0)                                   -> -
     v576 LifetimeEnd(-3)                                  -> -
     v577 Extend { value=v572, kind=I32 }                  -> x0
     v578 BinopI { op=ne, lhs=v572, rhs_imm=0 }            -> x0
@@ -1004,7 +1004,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=__c5_fini_trampoline
-fn ent_pc=2 n_params=1 variadic=false locals=2
+fn ent_pc=2 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

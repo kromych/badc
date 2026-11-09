@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write doc/diagnostics.md from the catalogue golden.
+"""Write doc/diagnostics.md from the catalog golden.
 
 `tests/diagnostics/catalog.txt` is what `badc --list-diagnostics`
 prints, pinned by a unit test; this turns the same rows into the
@@ -28,7 +28,7 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
 
 A code and a name stay with the diagnostic they were given, and a code is
 never reused. Options and pragmas select a diagnostic by either one. The
-[catalogue](#catalogue) at the end of this page lists every diagnostic.
+[catalog](#catalog) at the end of this page lists every diagnostic.
 
 ## Contents
 
@@ -43,8 +43,8 @@ A selector names one diagnostic or one group:
 | alias, including an MSVC warning number | `unused`, `C4101` |
 | group | `all`, `extra`, `pedantic` |
 
-`badc --explain <selector>` prints one row of the catalogue with its aliases.
-`badc --list-diagnostics` prints the whole catalogue.
+`badc --explain <selector>` prints one row of the catalog with its aliases.
+`badc --list-diagnostics` prints the whole catalog.
 
 ## Options
 
@@ -64,8 +64,8 @@ A warning name of another compiler that badc does not implement is accepted.
 Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.
 
-A warning at a line of a system header -- one found through `-isystem` or a
-system directory, and the compiler's own headers -- is not reported, as gcc
+A warning at a line of a system header--one found through `-isystem` or a
+system directory, and the compiler's own headers--is not reported, as gcc
 and clang do not report it; a `#warning` there is, and an error always is.
 
 ## Pragmas
@@ -75,7 +75,7 @@ These pragmas take effect from their position in the source:
 * `#pragma GCC diagnostic ignored "-W<sel>"`, and the same with `warning` or
   `error`; `#pragma GCC diagnostic push` and `pop`.
 * `#pragma clang diagnostic` in the same forms.
-* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once` or
+* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once`, or
   `suppress` in place of `disable`, and `#pragma warning(push)` and `(pop)`.
   The number `<n>` selects the diagnostic whose alias is `C<n>`.
 
@@ -85,7 +85,7 @@ compiler's warning badc does not implement, and changes nothing else.
 ## Levels and classes
 
 The `default` column gives the level with no option or pragma: `error`,
-`warning` or `ignore`. The `class` column says whether that level can change:
+`warning`, or `ignore`. The `class` column says whether that level can change:
 
 | class | behavior |
 |---|---|
@@ -99,7 +99,7 @@ an option or pragma that names it is accepted and has no effect.
 Default levels and groups may change between releases. Codes and names do
 not.
 
-## Catalogue
+## Catalog
 
 `scripts/diagnostics_doc.py` generates this table from
 `tests/diagnostics/catalog.txt`. A unit test checks that file against the

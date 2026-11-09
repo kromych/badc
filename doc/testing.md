@@ -88,9 +88,9 @@ to get right:
 
 * `c4.c`: the original c4 compiler, which badc compiles and which runs itself.
 * `fma_numeric_kernels.c`: Horner polynomial evaluation, a dense matrix
-  product and a fourth-order Runge-Kutta step, checked within a tolerance at
+  product, and a fourth-order Runge-Kutta step, checked within a tolerance at
   `-O`, where badc fuses multiply-adds, and at `-O0`, where it does not.
-* `fma_contraction.c`: the `a*b+c`, `a*b-c` and `c-a*b` contraction shapes,
+* `fma_contraction.c`: the `a*b+c`, `a*b-c`, and `c-a*b` contraction shapes,
   and C99 `fma` and `fmaf`.
 * `aapcs64_variadic_host_abi.c`, `sysv_variadic_host_abi.c`: variadic calls
   under the AArch64 and x86-64 calling conventions.
@@ -144,16 +144,16 @@ python3 scripts/csmith_fuzz.py --minutes 5 --badc target/release/badc
 ```
 
 `scripts/csmith_fuzz.py` generates C programs with csmith. It builds each
-with a reference compiler (`clang`, else `gcc`, else `cc`), with `badc -O0`
-and with `badc -O`, runs the three binaries and compares the checksums they
+with a reference compiler (`clang`, else `gcc`, else `cc`), with `badc -O0`,
+and with `badc -O`; runs the three binaries; and compares the checksums they
 print. csmith's programs have no undefined behavior, so a disagreement, a
-crash or a failed build is a compiler defect. Every badc build runs with
+crash, or a failed build is a compiler defect. Every badc build runs with
 `--verify-ssa`.
 
 The reference compiler decides which cases count:
 
 * A case is skipped unless the reference, without optimization, builds it,
-  finishes within a second and prints a checksum. Some csmith programs never
+  finishes within a second, and prints a checksum. Some csmith programs never
   terminate, and this drops them.
 * A runtime finding is confirmed by rebuilding the case with the reference at
   `-O2`. A case on which the two reference builds disagree is dropped.
@@ -215,7 +215,7 @@ x86-64 and AArch64 instruction encodings with the system assembler's.
 `tests/perf/` holds ten benchmark programs, each of which prints its own
 run time. `tests/perf/run.py` builds each with every compiler it finds, runs
 each binary three times, and prints a Markdown table per program: the median
-run time, the binary size and the ratio to `badc -O`.
+run time, the binary size, and the ratio to `badc -O`.
 
 ```sh
 cargo build --release --features full     # run.py takes target/release/badc, or $BADC
@@ -235,7 +235,7 @@ The compilers it looks for:
 
 A compiler it does not find is skipped with an `info:` line. The other six
 programs need sources that the demos fetch: run `python3 demos/<name>/setup.py`
-for `tweetnacl`, `miniz`, `stb`, `sqlite3` and `quickjs`. Binaries go to
+for `tweetnacl`, `miniz`, `stb`, `sqlite3`, and `quickjs`. Binaries go to
 `tests/perf/build/`, which git ignores. `--json PATH` also writes the run as
 JSON. The script exits 1 if any build or run fails.
 
@@ -266,7 +266,7 @@ build comparisons from the Linux runners.
 | `kernel` | Linux x86-64 and ARM64 | a Linux `defconfig` kernel compiled and linked by badc and booted on the badc-built QEMU; see [the kernel page](linux-kernel.md) |
 
 "All five" are `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`,
-`windows-latest` and `windows-11-arm`. The runners have no display, so the
+`windows-latest`, and `windows-11-arm`. The runners have no display, so the
 GUI demos only build their programs. [`demos/`](../demos/) says what each
 demo exercises.
 
@@ -280,7 +280,7 @@ into `.git/hooks/`:
 * `pre-push` rejects non-ASCII bytes in source files, then runs
   `cargo fmt --check`, clippy with `-D warnings` with and without
   `--features full` and for each other Rust target installed,
-  `cargo build --no-default-features --lib` and
+  `cargo build --no-default-features --lib`, and
   `cargo check --all-features --lib`.
 * `post-commit` regenerates `tests/snapshots/` and prints what changed, to
   be folded into the commit.
@@ -298,7 +298,7 @@ python3 scripts/validate_local_boxes.py \
 
 `NAME=HOST:PATH:KIND` names a checkout reached over ssh, where `KIND` is
 `linux` or `windows`. The script adds a git remote called `NAME`, pushes the
-commit to it and checks it out there. `NAME=macos` runs in the host's own
+commit to it, and checks it out there. `NAME=macos` runs in the host's own
 working tree; macOS is the only Mach-O target. By default the script gates
 the committed `HEAD` and refuses a tree with uncommitted changes;
 `--allow-dirty` gates the working tree instead.
@@ -317,7 +317,7 @@ The gating demos are `GATING_DEMOS` in the script, with the reason for each.
 At this commit they are Tcl, edk2, QEMU at `-O0` and at `-O`, BearSSL,
 SQLite, Lua, miniz, Monocypher, stb, TweetNaCl, QuickJS, raylib, curl,
 libmill, libdill, coroutines, nasm, bzip2, kissfft, gui_hello, nt_loader,
-the demo kernel, TinyCC, chibicc, uemacs and picocom; each runs on the
+the demo kernel, TinyCC, chibicc, uemacs, and picocom; each runs on the
 systems it supports. A machine without `qemu-system-<arch>` compiles and links
 the kernel without booting it, and says so in its summary.
 

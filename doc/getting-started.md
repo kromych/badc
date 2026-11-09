@@ -17,8 +17,8 @@ builds need. `badc --help` describes the rest.
 ## Install
 
 Each [release](https://github.com/kromych/badc/releases/latest) has an
-archive for Linux x86-64, Linux ARM64, macOS ARM64, Windows x64 and Windows
-ARM64. The archive holds the `badc` binary, `README.md` and `LICENSE`. The
+archive for Linux x86-64, Linux ARM64, macOS ARM64, Windows x64, and Windows
+ARM64. The archive holds the `badc` binary, `README.md`, and `LICENSE`. The
 headers and the C runtime are built into the binary.
 
 With Rust installed, build from a clone or from crates.io:
@@ -29,7 +29,7 @@ cargo install badc --features full       # from crates.io
 ```
 
 The `badc` binary requires the `full` feature. The default feature set builds
-only the library: the compiler, the optimizer, the interpreter and the JIT,
+only the library: the compiler, the optimizer, the interpreter, and the JIT,
 without the object writers and the linker.
 
 ## First run
@@ -103,8 +103,8 @@ info: wrote file hello for target macos-aarch64
 | `--jit` | compiles for the host in memory and calls `main` |
 | `--interp` | runs the program in badc's SSA interpreter |
 
-Two or more inputs, or any of `-c`, `-l` and `-L`, go through badc's linker.
-An input may be a `.c`, `.i`, `.s` or `.S` source, a `.o` object or a `.a`
+Two or more inputs, or any of `-c`, `-l`, and `-L`, go through badc's linker.
+An input may be a `.c`, `.i`, `.s`, or `.S` source, a `.o` object, or a `.a`
 archive. [`--interp` and `--jit`](interpreter.md) describes the two modes
 that run the program.
 
@@ -155,17 +155,17 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
     return 1 +;
 ```
 
-`-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select a
+`-W<name>`, `-Wno-<name>`, `-Werror=<name>`, and `-Wno-error=<name>` select a
 diagnostic by its name or its code. `-Wall`, `-Wextra`, `-Wpedantic`,
-`-Werror` and `-w` select groups and severities. `#pragma GCC diagnostic`,
-`#pragma clang diagnostic` and MSVC's `#pragma warning(...)` apply from their
+`-Werror`, and `-w` select groups and severities. `#pragma GCC diagnostic`,
+`#pragma clang diagnostic`, and MSVC's `#pragma warning(...)` apply from their
 position in the source. `badc --explain <name>` describes one diagnostic, and
-`badc --list-diagnostics` prints the catalogue that
+`badc --list-diagnostics` prints the catalog that
 [diagnostics](diagnostics.md) also holds.
 
 ## Debugging
 
-`-g` writes DWARF 4, which lldb, gdb and the profilers read:
+`-g` writes DWARF 4, which lldb, gdb, and the profilers read:
 
 ```sh
 badc -g hello.c

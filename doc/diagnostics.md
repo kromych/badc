@@ -9,7 +9,7 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
 
 A code and a name stay with the diagnostic they were given, and a code is
 never reused. Options and pragmas select a diagnostic by either one. The
-[catalogue](#catalogue) at the end of this page lists every diagnostic.
+[catalog](#catalog) at the end of this page lists every diagnostic.
 
 ## Contents
 
@@ -17,7 +17,7 @@ never reused. Options and pragmas select a diagnostic by either one. The
 * [Options](#options)
 * [Pragmas](#pragmas)
 * [Levels and classes](#levels-and-classes)
-* [Catalogue](#catalogue)
+* [Catalog](#catalog)
 
 ## Selectors
 
@@ -30,8 +30,8 @@ A selector names one diagnostic or one group:
 | alias, including an MSVC warning number | `unused`, `C4101` |
 | group | `all`, `extra`, `pedantic` |
 
-`badc --explain <selector>` prints one row of the catalogue with its aliases.
-`badc --list-diagnostics` prints the whole catalogue.
+`badc --explain <selector>` prints one row of the catalog with its aliases.
+`badc --list-diagnostics` prints the whole catalog.
 
 ## Options
 
@@ -51,8 +51,8 @@ A warning name of another compiler that badc does not implement is accepted.
 Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.
 
-A warning at a line of a system header -- one found through `-isystem` or a
-system directory, and the compiler's own headers -- is not reported, as gcc
+A warning at a line of a system header--one found through `-isystem` or a
+system directory, and the compiler's own headers--is not reported, as gcc
 and clang do not report it; a `#warning` there is, and an error always is.
 
 ## Pragmas
@@ -62,7 +62,7 @@ These pragmas take effect from their position in the source:
 * `#pragma GCC diagnostic ignored "-W<sel>"`, and the same with `warning` or
   `error`; `#pragma GCC diagnostic push` and `pop`.
 * `#pragma clang diagnostic` in the same forms.
-* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once` or
+* MSVC's `#pragma warning(disable: <n>)`, with `error`, `default`, `once`, or
   `suppress` in place of `disable`, and `#pragma warning(push)` and `(pop)`.
   The number `<n>` selects the diagnostic whose alias is `C<n>`.
 
@@ -72,7 +72,7 @@ compiler's warning badc does not implement, and changes nothing else.
 ## Levels and classes
 
 The `default` column gives the level with no option or pragma: `error`,
-`warning` or `ignore`. The `class` column says whether that level can change:
+`warning`, or `ignore`. The `class` column says whether that level can change:
 
 | class | behavior |
 |---|---|
@@ -86,7 +86,7 @@ an option or pragma that names it is accepted and has no effect.
 Default levels and groups may change between releases. Codes and names do
 not.
 
-## Catalogue
+## Catalog
 
 `scripts/diagnostics_doc.py` generates this table from
 `tests/diagnostics/catalog.txt`. A unit test checks that file against the
@@ -129,7 +129,7 @@ output of `badc --list-diagnostics`.
 | B2017 | `implicit-fallthrough=5` | ignore | controllable | - | a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates |
 | B2018 | `vla-larger-than` | ignore | controllable | - | under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count |
 | B2019 | `main` | warning | controllable | default | a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point |
-| B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
+| B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronization point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
@@ -193,7 +193,7 @@ output of `badc --list-diagnostics`.
 | B6015 | `object-format` | error | hard | - | a construct the selected object format cannot express |
 | B6016 | `link` | error | hard | - | a link-time failure with no more specific row |
 | B7001 | `unknown-argument` | error | hard | - | command-line option or operand the driver does not implement |
-| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning |
+| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is neither in the catalog nor a gcc or clang warning |
 | B7003 | `unused-command-line-argument` | ignore | controllable | all,extra | an accepted option that selects nothing in the mode the command line picked |
 | B7004 | `no-input-files` | error | hard | - | the command line names nothing to compile, assemble or link |
 | B7005 | `input-unreadable` | error | hard | - | an input file the driver cannot read |

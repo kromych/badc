@@ -34,7 +34,7 @@ B2016  missing-declarations                            ignore   controllable  - 
 B2017  implicit-fallthrough=5                          ignore   controllable  -                  live     a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates
 B2018  vla-larger-than                                 ignore   controllable  -                  live     under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count
 B2019  main                                            warning  controllable  default            live     a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point
-B2020  syntax                                          error    hard          -                  live     a token the grammar does not admit at its position; the parser has no resynchronisation point
+B2020  syntax                                          error    hard          -                  live     a token the grammar does not admit at its position; the parser has no resynchronization point
 B2021  invalid-declaration                             error    hard          -                  live     a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range
 B2022  undeclared-identifier                           error    hard          -                  live     a name no declaration in scope introduces
 B2023  static-assert                                   error    hard          -                  live     a static assertion whose controlling expression is zero
@@ -98,7 +98,7 @@ B6014  malformed-input                                 error    hard          - 
 B6015  object-format                                   error    hard          -                  live     a construct the selected object format cannot express
 B6016  link                                            error    hard          -                  live     a link-time failure with no more specific row
 B7001  unknown-argument                                error    hard          -                  live     command-line option or operand the driver does not implement
-B7002  unknown-warning-option                          warning  controllable  default            live     a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning
+B7002  unknown-warning-option                          warning  controllable  default            live     a diagnostic pragma names a selector that is neither in the catalog nor a gcc or clang warning
 B7003  unused-command-line-argument                    ignore   controllable  all,extra          live     an accepted option that selects nothing in the mode the command line picked
 B7004  no-input-files                                  error    hard          -                  live     the command line names nothing to compile, assemble or link
 B7005  input-unreadable                                error    hard          -                  live     an input file the driver cannot read

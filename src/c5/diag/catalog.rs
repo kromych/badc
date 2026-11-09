@@ -160,7 +160,7 @@ catalog! {
         "a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point";
     2020, "syntax", [], Error, Hard,
         [], Live,
-        "a token the grammar does not admit at its position; the parser has no resynchronisation point";
+        "a token the grammar does not admit at its position; the parser has no resynchronization point";
     2021, "invalid-declaration", [], Error, Hard,
         [], Live,
         "a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range";
@@ -352,7 +352,7 @@ catalog! {
         "command-line option or operand the driver does not implement";
     7002, "unknown-warning-option", ["pragmas"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning";
+        "a diagnostic pragma names a selector that is neither in the catalog nor a gcc or clang warning";
     7003, "unused-command-line-argument", [], Ignore, Controllable,
         [ALL, EXTRA], Live,
         "an accepted option that selects nothing in the mode the command line picked";

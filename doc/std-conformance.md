@@ -2,14 +2,14 @@
 
 badc implements C17 (ISO/IEC 9899:2018, C11 with its corrections). Without
 `-std=` it compiles C17: `__STDC_VERSION__` is `201710L`. `-std=` selects C90,
-C99 or C11 instead, or C23, of which badc implements part. Where this document
+C99, or C11 instead, or C23, of which badc implements part. Where this document
 says nothing, badc follows C17. It records:
 
 - the implementation-defined choices badc makes;
 - the divergences, where badc departs from C17, or from gcc and clang where
   the standard leaves the choice open;
 - the C11 features badc implements, and its extensions: C23 features, POSIX
-  interfaces, and the GCC, MSVC and badc-specific ones.
+  interfaces, and the GCC, MSVC, and badc-specific ones.
 
 ## Contents
 
@@ -70,7 +70,7 @@ Byte order is little-endian on every target: `__BYTE_ORDER__` is
 
 `long double` is stored in the format of the target ABI; C99 6.2.5p10 allows
 any format at least as wide as `double`. `sizeof`, `_Alignof`, struct offsets,
-array stride, static initializers, `<float.h>` and the `__LDBL_*` and
+array stride, static initializers, `<float.h>`, and the `__LDBL_*` and
 `__SIZEOF_LONG_DOUBLE__` predefines all follow it:
 
 | target                                    | format              | size / align |
@@ -79,7 +79,7 @@ array stride, static initializers, `<float.h>` and the `__LDBL_*` and
 | linux-aarch64                             | IEEE binary128      | 16 / 16      |
 | macos-aarch64, windows-x64, windows-arm64 | IEEE binary64       | 8 / 8        |
 
-An object has the platform's layout and encoding, so a struct, an array or a
+An object has the platform's layout and encoding, so a struct, an array, or a
 `.data` object shared with code built by the platform toolchain agrees byte for
 byte. A load converts the stored value to binary64, and a store converts it
 back exactly. On linux-x64 the conversions are `fld` and `fstp`, which match
@@ -120,9 +120,9 @@ the product has no other use.
 `#pragma STDC FENV_ACCESS` and `#pragma STDC CX_LIMITED_RANGE` are accepted
 and have no effect.
 
-The relational operators `<`, `>`, `<=` and `>=` on floating operands raise
+The relational operators `<`, `>`, `<=`, and `>=` on floating operands raise
 `FE_INVALID` for an unordered operand, as IEC 60559's signaling predicates do
-(C99 F.3) and gcc's code does; `==`, `!=` and the 7.12.14 comparison macros
+(C99 F.3) and gcc's code does; `==`, `!=`, and the 7.12.14 comparison macros
 are quiet, raising it only for a signaling NaN.
 
 ### `_Atomic` objects
@@ -130,13 +130,13 @@ are quiet, raising it only for a signaling NaN.
 `_Atomic` qualifies a type (C17 6.7.2.4, 6.7.3), so `_Atomic int` and `int`
 are different types: a pointer to one does not convert to a pointer to the
 other without a cast, as under gcc and clang. Reading an `_Atomic` object,
-assigning to it, `++`, `--` and compound assignment are seq_cst atomic
+assigning to it, `++`, `--`, and compound assignment are seq_cst atomic
 operations (C17 6.2.6.1p9, 6.5.2.4p2, 6.5.16.2p3). They take the lowering of
 the `<stdatomic.h>` functions ([C11 and C23](#c11-and-c23)):
 
-- An object of 1, 2, 4 or 8 bytes, a structure included, is aligned to its
+- An object of 1, 2, 4, or 8 bytes, a structure included, is aligned to its
   size. A read is a load (`mov` on x86-64, `ldar` on AArch64) and an assignment
-  a store (`xchg`, `stlr`). `++`, `--`, `+=`, `-=`, `&=`, `|=` and `^=` on an
+  a store (`xchg`, `stlr`). `++`, `--`, `+=`, `-=`, `&=`, `|=`, and `^=` on an
   integer or a pointer are one locked instruction or one LSE instruction. Any
   other update is a compare-exchange retried after a load: `*=`, `/=`, `%=`, a
   shift, a floating object, a `_Bool`, and an operation carried out in a
@@ -157,11 +157,11 @@ A unit compiled with `-ffreestanding` or `-fno-hosted` takes the Windows
 layout and access on every target, so a freestanding image needs no runtime
 function for its atomic objects. A freestanding unit and a hosted one lay out
 such an object differently and cannot share it. MSVC does not document the
-values of its lock word, so an `_Atomic` object of a size other than 1, 2, 4
+values of its lock word, so an `_Atomic` object of a size other than 1, 2, 4,
 or 8 bytes cannot be shared with code MSVC compiled.
 
 A lock word starts clear in a static object (zero-initialized), an automatic
-object, a compound literal and a parameter, and `atomic_init` clears it
+object, a compound literal, and a parameter, and `atomic_init` clears it
 without taking it, so an object in allocated storage becomes valid through
 `atomic_init` (C17 7.17.2.2). A copy of an atomic object's bytes, by `memcpy`
 or by assigning a structure holding one, copies its lock word, which is clear
@@ -184,7 +184,7 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 
 `-ffreestanding` also implies `-fno-builtin`, which keeps library calls such as
 `strlen` calls; their `__builtin_` spellings still fold, as in gcc. Without it a
-`memcpy`, `memmove` or `memset` of a constant size the unit does not define
+`memcpy`, `memmove`, or `memset` of a constant size the unit does not define
 expands inline at every optimization level, as gcc and clang expand it.
 `--freestanding`, the link
 option that leaves out the startup runtime, does not change
@@ -197,7 +197,7 @@ atomic ([`_Atomic` objects](#_atomic-objects)). Under `--msvc` it and
 - Trigraphs (5.2.1.1) are replaced under an ISO dialect before C23
   (`-std=c89` through `-std=c17`, `-std=iso9899:*`) and under `-trigraphs` or
   `-ftrigraphs`; `-fno-trigraphs` turns them off. The default dialect, the
-  GNU dialects and C23, which removed them, keep `??` sequences as written.
+  GNU dialects, and C23, which removed them, keep `??` sequences as written.
 - `MB_LEN_MAX` is the C library's: 16 on Linux, 6 on macOS, 5 on Windows.
 - `<uchar.h>` (7.28) on every target. glibc defines its conversions; on macOS
   and Windows badc's runtime defines them over `mbrtowc` and `wcrtomb`. A
@@ -213,17 +213,17 @@ atomic ([`_Atomic` objects](#_atomic-objects)). Under `--msvc` it and
 
 ### Features not implemented
 
-- The optional complex types (6.10.8.3): `_Complex`, `_Imaginary` and
+- The optional complex types (6.10.8.3): `_Complex`, `_Imaginary`, and
   `<complex.h>`. `__STDC_NO_COMPLEX__` is `1`.
 - The optional `<threads.h>` (7.26): `__STDC_NO_THREADS__` is `1`.
   `_Thread_local` is implemented.
-- Most of C23. `-std=c23` sets the version macro and makes `bool`, `true` and
+- Most of C23. `-std=c23` sets the version macro and makes `bool`, `true`, and
   `false` keywords, and the C23 features under [C11 and C23](#c11-and-c23) are
   available in every dialect. Not implemented: `nullptr`, `constexpr`, `auto`
   type inference, `_BitInt`, `#elifdef` and `#elifndef`,
   `__has_c_attribute`, digit separators, `u8` character constants, the
-  `alignas`, `alignof` and `thread_local` keywords, a label before a
-  declaration, `unreachable`, one-argument `va_start` and `<stdbit.h>`.
+  `alignas`, `alignof`, and `thread_local` keywords, a label before a
+  declaration, `unreachable`, one-argument `va_start`, and `<stdbit.h>`.
 
 In the same areas, these are implemented: digraphs (C99 6.4.6); universal
 character names in literals (6.4.3) and in identifiers, where 6.4.2.1 limits
@@ -250,7 +250,7 @@ PE targets use MSVC's inline linkage instead ([MSVC](#msvc)).
 
 badc implements a subset of gcc's options and has no list of options it
 accepts and ignores. Any other option is an error. Options that fail this way
-include `-static`, `-nostdlib`, `-fno-common`, `-fomit-frame-pointer`, `-pipe`
+include `-static`, `-nostdlib`, `-fno-common`, `-fomit-frame-pointer`, `-pipe`,
 and `-march=native`. A build that passes another compiler's full flag set has
 to filter it. [Command-line compatibility](#command-line-compatibility) lists
 the options badc accepts with a narrower meaning than gcc's.
@@ -303,9 +303,9 @@ passes in `rdi` and `rsi`. clang finds `a[1].x` at offset 5 and passes the
 structure in memory.
 
 **System V AMD64: a floating-point vector of one element.** The psABI classes
-`__m64`, `__m128` and the wider vector types. A `float` or `double` vector of
+`__m64`, `__m128`, and the wider vector types. A `float` or `double` vector of
 its own width is none of them. badc follows gcc: such a vector is MEMORY class,
-alone or as a member of a struct, union or array, so it is passed on the stack
+alone or as a member of a struct, union, or array, so it is passed on the stack
 and returned through the pointer the caller passes in `rdi`. clang passes the
 `float` vector, and a struct holding it, in a general-purpose register, and
 returns a lone `double` vector in `xmm0`. The compilers therefore disagree on
@@ -321,7 +321,7 @@ the low word of the next general-purpose register, else in the stack slot an
 `int` takes, which is 4 bytes at a 4-byte boundary for a named argument on
 macOS and 8 bytes elsewhere. It is returned in `v0`.
 `float __attribute__((vector_size(4)))` and a one-element vector occupy the
-low bytes (`s0`, `h0` or `b0`). A vector of several integer elements has each
+low bytes (`s0`, `h0`, or `b0`). A vector of several integer elements has each
 element widened to an equal lane of `d0`: 16-bit lanes for four `char`s,
 32-bit lanes for two `short`s or two `char`s. gcc on Linux passes the `float`
 vector, and the arguments after it, on the stack, and returns it and the
@@ -342,14 +342,14 @@ badc accepts these gcc options with a narrower meaning than gcc's:
 | `-Wa,<opt>`, `-Xassembler <opt>` | Checked against the built-in assembler. `-L` and `--keep-locals` keep the local labels in the symbol table, as GNU as does. `--fatal-warnings`, `-mrelax-relocations=`, `--noexecstack`, `--no-warn-rwx-segments` and `-march=` are accepted and change nothing, because the assembler already behaves that way; `-march=` does not reject instructions above a lower ceiling. Any other option is refused as `unsupported assembler option`. |
 
 **Warnings.** `-w`, `-Werror`, `-Wno-error`, `-Werror=<sel>`,
-`-Wno-error=<sel>`, `-W<sel>`, `-Wno-<sel>`, `-Wall`, `-Wextra` and
+`-Wno-error=<sel>`, `-W<sel>`, `-Wno-<sel>`, `-Wall`, `-Wextra`, and
 `-Wpedantic` are implemented. A selector is a diagnostic's name, one of its
-aliases, its `B` code or a group name; `--list-diagnostics` prints the
-catalogue. A gcc or clang warning badc does not implement is accepted and
+aliases, its `B` code, or a group name; `--list-diagnostics` prints the
+catalog. A gcc or clang warning badc does not implement is accepted and
 reported as `unimplemented-warning-option` (B7012). `-Wno-` takes any name, as
 in gcc. Any other selector is refused.
 
-`#pragma GCC diagnostic`, `#pragma clang diagnostic` and MSVC's
+`#pragma GCC diagnostic`, `#pragma clang diagnostic`, and MSVC's
 `#pragma warning(...)` take the same selectors. Each sets a diagnostic's level
 from the position it appears at, for preprocessor and parser diagnostics
 alike. A pragma that covers a position overrides the command line, and `push`
@@ -369,7 +369,7 @@ other. It sets `__STDC_VERSION__` as gcc does:
 | `c23`, `c2x`, `gnu23`, `gnu2x`, `iso9899:2024`                | `202311L`          |
 | `c2y`, `gnu2y`                                                | `202500L`          |
 
-From `c23` on, `bool`, `true` and `false` are keywords, `1` and `0` in `#if`
+From `c23` on, `bool`, `true`, and `false` are keywords, `1` and `0` in `#if`
 as well, and `<stdbool.h>` defines only `__bool_true_false_are_defined`. An
 empty parameter list declares no parameters, as `(void)` does (C23
 6.7.7.4p13), and an identifier list is an error, C23 having removed K&R
@@ -390,19 +390,19 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
 
 ### C11 and C23
 
-- `_Static_assert`, C23's `static_assert` spelling and its form without a
+- `_Static_assert`, C23's `static_assert` spelling, and its form without a
   message, at file and block scope. The condition is a full C99 6.6 constant
   expression, floating casts and arithmetic included.
 - `_Generic` (C11 6.5.1.1).
 - Anonymous structure and union members (C11 6.7.2.1p13).
-- `_Alignas`, `_Alignof`, `<stdalign.h>`, `_Noreturn` and `<stdnoreturn.h>`.
+- `_Alignas`, `_Alignof`, `<stdalign.h>`, `_Noreturn`, and `<stdnoreturn.h>`.
 - `typeof` and `typeof_unqual` (C23 6.7.2.5), also spelled `__typeof__`,
-  `__typeof`, `__typeof_unqual__` and `__typeof_unqual`. `typeof_unqual`
+  `__typeof`, `__typeof_unqual__`, and `__typeof_unqual`. `typeof_unqual`
   removes the qualifiers of the type itself: a pointee keeps its qualifiers,
   and array elements lose theirs.
-- `bool`, `true` and `false` as keywords under `-std=c23` and later (C23
+- `bool`, `true`, and `false` as keywords under `-std=c23` and later (C23
   6.4.1).
-- The `u8` string prefix (C11 6.4.5p2), alongside `L`, `u` and `U`. A
+- The `u8` string prefix (C11 6.4.5p2), alongside `L`, `u`, and `U`. A
   universal character name encodes as UTF-8 in a narrow literal and as its
   code point in a wide one.
 - Binary integer constants `0b...` and `0B...` (C23), with the same suffixes as
@@ -412,7 +412,7 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
   target. `--jit` refuses them. A block-scope `static _Thread_local` has one
   instance per thread. A thread-local object takes the initializers of an
   object with static storage duration (C11 6.7.9): arrays, a deferred size,
-  structures, string literals and address constants, but not a label address.
+  structures, string literals, and address constants, but not a label address.
   - ELF: the objects are in `.tdata` and `.tbss` with `STT_TLS` symbols. An
     object whose image is all zeros goes to `.tbss` even when it has an
     initializer, as gcc places it. TLS relocations let a badc object link
@@ -427,7 +427,7 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
   the other forms to the `_explicit` ones with seq_cst order, so they work
   under `-fno-builtin` and `-ffreestanding`. On an `_Atomic` object of any type an operation
   takes the access the operators do ([`_Atomic` objects](#_atomic-objects)).
-  On another object, the object is a scalar of 1, 2, 4 or 8 bytes, or a 16-byte
+  On another object, the object is a scalar of 1, 2, 4, or 8 bytes, or a 16-byte
   integer. An object in a named address space is rejected at compile time.
   Each operation carries the order it names
   (7.17.1). `consume` is treated as acquire. An order the operation may not
@@ -438,7 +438,7 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
   `atomic_compare_exchange_weak` is the strong form. `atomic_flag` is
   a byte, and `atomic_init` is a plain store that clears the object's lock
   word without taking it (7.17.2.2). The optimizer does
-  not forward, merge, hoist or remove an atomic access.
+  not forward, merge, hoist, or remove an atomic access.
 
   | operation                               | x86-64                                   | AArch64                                    |
   |-----------------------------------------|------------------------------------------|--------------------------------------------|
@@ -458,7 +458,7 @@ bundled header that declares it; `-Wall` reports both, as in gcc.
 ### POSIX
 
 On macOS and Linux the bundled headers declare the platform C library's POSIX
-interfaces, `<dlfcn.h>`, `<pthread.h>`, `<dirent.h>` and `<setjmp.h>` among
+interfaces, `<dlfcn.h>`, `<pthread.h>`, `<dirent.h>`, and `<setjmp.h>` among
 them. `struct dirent` has the host C library's layout, so `readdir` finds
 `d_name` where the library writes it.
 
@@ -470,7 +470,7 @@ them. `struct dirent` has the host C library's layout, so `readdir` finds
 On the Windows targets a header declares what mingw-w64's header of the same
 name declares ([native-compilation.md](native-compilation.md#headers-and-bindings)
 states the rule). Sources in `libc/lib/` define the POSIX names mingw-w64
-declares and msvcrt.dll does not, over kernel32, msvcrt and ucrtbase:
+declares and msvcrt.dll does not, over kernel32, msvcrt, and ucrtbase:
 
 | header | names |
 |--------|-------|
@@ -485,8 +485,8 @@ declares and msvcrt.dll does not, over kernel32, msvcrt and ucrtbase:
 | `<fnmatch.h>`, `<regex.h>`, `<search.h>` | `fnmatch`; `regcomp`, `regexec`, `regerror` and `regfree` (basic and extended syntax); `tsearch`, `tfind`, `tdelete`, `twalk`, `tdestroy` |
 | `<fenv.h>` | `feraiseexcept` |
 
-The CRT's `chmod`, `mktemp` and exec family are bound under their POSIX names.
-`iswblank`, `wctype`, `wctrans` and `towctrans`, which msvcrt.dll lacks, are
+The CRT's `chmod`, `mktemp`, and exec family are bound under their POSIX names.
+`iswblank`, `wctype`, `wctrans`, and `towctrans`, which msvcrt.dll lacks, are
 bound to ucrtbase.dll. A POSIX name mingw-w64 does not declare is not
 declared.
 
@@ -505,7 +505,7 @@ declared.
 - The x86-64 named address spaces `__seg_gs` and `__seg_fs`, which become a
   segment override on each access. AArch64 refuses them.
 - The vector extension: `vector_size(N)` types with element-wise arithmetic,
-  comparison and subscripting.
+  comparison, and subscripting.
 - Named variadic macro parameters (`#define f(args...)`).
 - `__FUNCTION__` and `__PRETTY_FUNCTION__`, alongside C99's `__func__`.
 - GNU line markers (`# N "file"`), alongside C99's `#line N "file"`.
@@ -518,7 +518,7 @@ declared.
   6.7.4p7. With `--gnu`, `__GNUC_STDC_INLINE__` or `__GNUC_GNU_INLINE__` names
   the model in force.
 - `--gnu`, off by default, defines the GCC identity macros: `__GNUC__` 4,
-  `__GNUC_MINOR__` 3, `__GNUC_PATCHLEVEL__` 0 and `__VERSION__`, with
+  `__GNUC_MINOR__` 3, `__GNUC_PATCHLEVEL__` 0, and `__VERSION__`, with
   `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{1,2,4,8,16}`, the
   `__GCC_ATOMIC_*_LOCK_FREE` set, `__GCC_ATOMIC_TEST_AND_SET_TRUEVAL` and, on
   x86-64, `__GCC_ASM_FLAG_OUTPUTS__`. `__STRICT_ANSI__` follows `-std=`
@@ -526,20 +526,20 @@ declared.
 
 **Builtins.** These are available without a header:
 
-- bit counting: `__builtin_clz`, `ctz`, `popcount`, `clrsb`, `parity` and
+- bit counting: `__builtin_clz`, `ctz`, `popcount`, `clrsb`, `parity`, and
   `ffs`, each with `l` and `ll` forms;
-- byte swapping: `__builtin_bswap16`, `32` and `64`;
+- byte swapping: `__builtin_bswap16`, `32`, and `64`;
 - control: `__builtin_expect`, `__builtin_unreachable`, `__builtin_trap`,
   `__builtin_prefetch`, `__builtin_assume_aligned`;
 - frame: `__builtin_frame_address`, `__builtin_return_address` (any constant
   level, by walking the frame-pointer chain), `__builtin_alloca`;
-- variadic: `__builtin_va_list`, `__builtin_va_start`, `va_arg`, `va_end` and
+- variadic: `__builtin_va_list`, `__builtin_va_start`, `va_arg`, `va_end`, and
   `va_copy`;
 - compile-time queries: `__builtin_constant_p`, `__builtin_choose_expr`,
   `__builtin_types_compatible_p`, `__builtin_offsetof`,
   `__builtin_object_size`;
-- checked arithmetic: `__builtin_add_overflow`, `sub` and `mul`;
-- memory: `__builtin_memcpy`, `memmove` and `memset`.
+- checked arithmetic: `__builtin_add_overflow`, `sub`, and `mul`;
+- memory: `__builtin_memcpy`, `memmove`, and `memset`.
 
 `__builtin_clz(0)` and `__builtin_ctz(0)` return the operand width on every
 target and in the interpreter; gcc leaves them undefined.
@@ -548,16 +548,16 @@ target and in the interpreter; gcc leaves them undefined.
 
 The `__builtin_` spelling of a library function that gcc or clang provide as
 the function itself calls the library function of that name. This covers the
-stdio, stdlib, string, ctype, wide-character and math functions, among others.
+stdio, stdlib, string, ctype, wide-character, and math functions, among others.
 The parser binds the call through the symbol table. The call takes the function's
 declaration, a header the unit did not include is included as for the plain
 name, and a macro of the library name in the unit, as fortified string headers
 define, does not capture the builtin spelling. gcc's `__builtin_setjmp` and
 `__builtin_longjmp`, which take a five-word buffer, are not provided.
-`__builtin_isdigit`, `__builtin_isascii` and `__builtin_toascii` fold from
+`__builtin_isdigit`, `__builtin_isascii`, and `__builtin_toascii` fold from
 their operand as gcc folds them. `__builtin_strlen`, `strcmp`, `strncmp`,
-`memcmp`, `abs` and its wider forms also fold with literal operands.
-`__builtin_expect`, `__builtin_prefetch`, `__builtin_assume_aligned` and the
+`memcmp`, `abs`, and its wider forms also fold with literal operands.
+`__builtin_expect`, `__builtin_prefetch`, `__builtin_assume_aligned`, and the
 infinity and NaN constants are parsed at the call site with gcc's signatures
 and operand checks, so they work in preprocessed input too. `__builtin_nan`
 folds a string literal's payload as gcc does and calls `nan` for any other
@@ -572,14 +572,14 @@ seq_cst.
 
 **Inline assembly.** `asm` and `__asm__` (C99 J.5.10) on both architectures:
 the basic form, the extended form `asm(template : outputs : inputs : clobbers)`
-with register, memory and immediate constraints, `asm goto`,
+with register, memory, and immediate constraints, `asm goto`,
 `__attribute__((naked))` function bodies, and file-scope `asm(...)`. The same
 assembler builds `.s` and `.S` files (`badc -c foo.S -o foo.o`). It implements
 a subset of GNU as; [linux-kernel.md](linux-kernel.md) has coverage figures.
 On the Windows targets it takes GNU as's `.seh_*` unwind directives, which
 give the function its PE unwind row: x64's `.seh_pushreg`, `.seh_stackalloc`,
 `.seh_setframe` (rbp) and `.seh_savexmm`, and arm64's save, allocation,
-frame-pointer and `.seh_nop` forms, one per prologue and epilogue
+frame-pointer, and `.seh_nop` forms, one per prologue and epilogue
 instruction, with `.seh_startepilogue` / `.seh_endepilogue`. A language
 handler (`.seh_handler`) is refused. The `.def` / `.scl` / `.type` /
 `.endef` block is accepted.
@@ -592,7 +592,7 @@ template inside a function body is kept.
 Where the Intel SDM and GNU as encode an x86 instruction differently, badc
 follows the SDM, and the operand width as written selects the encoding. Six
 forms differ from GNU as. With a 64-bit register, `mov` to and from a segment
-register (`8C`, `8E`), `sldt`, `str`, `lar` and `lsl` (`0F 00 /0`,
+register (`8C`, `8E`), `sldt`, `str`, `lar`, and `lsl` (`0F 00 /0`,
 `0F 00 /1`, `0F 02`, `0F 03`) take the `REX.W` prefix, which GNU as omits and
 clang emits. Both forms write 16 bits and zero the rest. `smsw` with a 64-bit
 register keeps `REX.W` in GNU as too, and the control- and debug-register moves
@@ -600,9 +600,9 @@ take no prefix in either.
 
 **Assembler names.** `T name asm("label")` on an object or a function, at file
 or block scope, sets the assembler symbol name the declaration emits. The
-identifier stays the lookup key, the redeclaration match and the name
-diagnostics use. The label composes with `extern`, `static`, `weak`, `alias`
-and the visibility attributes, and reaches the object writers, the linker and
+identifier stays the lookup key, the redeclaration match, and the name
+diagnostics use. The label composes with `extern`, `static`, `weak`, `alias`,
+and the visibility attributes, and reaches the object writers, the linker, and
 inline-asm references to the name. Two declarations of one identifier with
 different labels are rejected. A label on an automatic object is ignored with
 a warning (`ignored-asm-label`). The symbol is the label as written. On
@@ -611,7 +611,7 @@ the C name `f` and `asm("f")` a symbol without the underscore; asm text names
 symbols the same way. An `alias("target")` names the label without that
 underscore.
 
-**Attributes.** `__attribute__((...))`, `__declspec(...)` and C23 `[[...]]`
+**Attributes.** `__attribute__((...))`, `__declspec(...)`, and C23 `[[...]]`
 attributes are parsed. These take effect:
 
 | attribute | effect |
@@ -643,13 +643,13 @@ attributes are parsed. These take effect:
 | `__declspec(thread)` | As `_Thread_local`. |
 | `dllexport`, `dllimport` | PE targets: exports the definition; a dllimport reference reads the import-address slot `__imp_<name>`, as MSVC, mingw-w64 gcc and clang emit it. Elsewhere `dllimport` is ignored with a warning and `dllexport` without one. |
 
-Other attributes, such as `format`, `pure`, `const`, `deprecated` and
+Other attributes, such as `format`, `pure`, `const`, `deprecated`, and
 `fallthrough`, are parsed and discarded without a diagnostic.
 `__has_attribute` answers 1 for a fixed list of gcc attribute names wider than
 the set above. It answers 0 for `vector_size`, `mode`, `ms_abi`, `sysv_abi`,
-`selectany` and `weak_import`, although badc honours them, and for `dllexport`
-and `dllimport` outside the PE targets. The `[[...]]` form honours
-the attributes without arguments plus `aligned`, `constructor` and
+`selectany`, and `weak_import`, although badc honors them, and for `dllexport`
+and `dllimport` outside the PE targets. The `[[...]]` form honors
+the attributes without arguments plus `aligned`, `constructor`, and
 `destructor`. It drops any other attribute with arguments, so
 `[[gnu::section("x")]]` has no effect while `__attribute__((section("x")))`
 does.
@@ -676,7 +676,7 @@ Intel intrinsics, reached through `<x86intrin.h>` or `<immintrin.h>`. Most
 operations lower to the instruction the Intel SDM gives for them, through
 `__builtin_ia32_*` builtins with gcc's names. The composition intrinsics
 (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`), `_mm_loadl_epi64`,
-`_mm_storel_epi64`, the 16-, 32- and 64-bit `_mm_loadu_si*` and
+`_mm_storel_epi64`, the 16-, 32-, and 64-bit `_mm_loadu_si*` and
 `_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations, the
 SSE4.1 operations whose instruction reads `xmm0` or yields a flag, rounds, or
 forms dot products or sums of differences, and the string compares are
@@ -710,30 +710,30 @@ On the AArch64 targets `<arm_neon.h>` provides a subset of the ACLE NEON
 intrinsics, and `<intrin.h>` includes it on windows-arm64 as MSVC's includes
 its own NEON header. For the integer vectors: `vld1` and `vst1`, bitwise operations,
 immediate shifts, `vdup`, the polynomial byte multiply, table lookups, byte
-equality, halfword reversal, the across-lanes minimum and 64-bit lane
+equality, halfword reversal, the across-lanes minimum, and 64-bit lane
 composition; the halfword broadcast and equality, the narrowing shift right,
-the doubleword load and store, the integer lane reads and the
+the doubleword load and store, the integer lane reads, and the
 reinterpretations between lane widths; on 32- and 64-bit lanes the broadcasts,
 add, multiply, the widening multiply-accumulate `vmlal` and `vmlal_high`, the
 narrowing `vmovn` and `vshrn_n`, `vshrq_n_u64`, the shift-and-insert `vsli_n`
 and `vsriq_n`, `vuzpq_u32`, `vget_low` and `vget_high`; and `vld2q_u16` and
 `vld4q_u8`, which deinterleave lane by lane. The FEAT_AES rounds and the 64-bit carry-less multiply. For
-`float32x2_t`, `float32x4_t`, `float64x1_t` and `float64x2_t`: loads and
+`float32x2_t`, `float32x4_t`, `float64x1_t`, and `float64x2_t`: loads and
 stores, arithmetic, square root, fused multiply-add, compares, `vbsl`,
-conversions, lane access, `vget_low`, `vget_high`, `vcombine` and the
+conversions, lane access, `vget_low`, `vget_high`, `vcombine`, and the
 reinterpretations. Lane-indexed multiplies, rounding, estimates, the other
-structure loads, float16 and bfloat16 are not provided.
+structure loads, float16, and bfloat16 are not provided.
 
 ### MSVC
 
 - `#pragma warning(push)`, `pop`, `disable : N`, `enable`, `default`, `error`,
-  `once` and `suppress`, with MSVC's meanings: `error` makes the diagnostic an
+  `once`, and `suppress`, with MSVC's meanings: `error` makes the diagnostic an
   error, `once` reports it once, and `suppress` covers the next line only. `N`
   is a `B` code or an MSVC warning number badc carries as an alias. The Borland
   and Watcom form `#pragma warn -N` is accepted too.
 - `__pragma(...)`, MSVC's counterpart of `_Pragma`.
 - Structured exception handling on the PE targets: `__try`, `__except`,
-  `__finally`, `__leave`, and `GetExceptionCode`, `GetExceptionInformation`
+  `__finally`, `__leave`, and `GetExceptionCode`, `GetExceptionInformation`,
   and `AbnormalTermination`, with cl's placement rules. A linked image carries
   scope tables for `__C_specific_handler`. A filter other than the constant
   `EXCEPTION_EXECUTE_HANDLER`, and a `__finally` block, are funclets that reach
@@ -748,7 +748,7 @@ structure loads, float16 and bfloat16 are not provided.
 - `#pragma section("name", ...)` and `__declspec(allocate("name"))` on the
   PE targets: the object goes to the named section, as with GNU `section`, and
   the image keeps it under the name's first eight bytes.
-- `#pragma data_seg`, `const_seg`, `bss_seg` and `code_seg`, with their
+- `#pragma data_seg`, `const_seg`, `bss_seg`, and `code_seg`, with their
   `push` / `pop` forms, and `#pragma alloc_text` on the PE targets: a
   definition without a section of its own takes the one in effect for its
   kind. The image keeps each named section under its name, a code section
@@ -757,7 +757,7 @@ structure loads, float16 and bfloat16 are not provided.
   `#pragma comment(linker, "options")`, link.exe options the object carries as
   cl's `.drectve` does: `/EXPORT:` (under another name, or forwarded as
   `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`,
-  `/FAILIFMISMATCH:`, `/merge:` and `/GUARDSYM:`, which changes nothing in an
+  `/FAILIFMISMATCH:`, `/merge:`, and `/GUARDSYM:`, which changes nothing in an
   image without Control Flow Guard tables. Elsewhere it warns and is ignored, as in
   clang. `#pragma detect_mismatch("name", "value")` gives the object cl's
   `/FAILIFMISMATCH:"name=value"`. Macros in the operands expand, as in cl
@@ -774,17 +774,17 @@ structure loads, float16 and bfloat16 are not provided.
   external linkage without `gnu_inline` is emitted, as an
   `IMAGE_COMDAT_SELECT_ANY` definition, by each unit that references it and by
   no other; the link keeps one. A unit with a declaration that spells `extern`
-  emits it even when nothing references it. `__inline`, `_inline` and
+  emits it even when nothing references it. `__inline`, `_inline`, and
   `__forceinline` are keywords; `__forceinline` is `inline` with
   `always_inline`.
 - On windows-x64 the string intrinsics `__stosb`, `__stosw`, `__stosd`,
-  `__stosq`, `__movsb`, `__movsw`, `__movsd` and `__movsq` lower to `rep stos`
+  `__stosq`, `__movsb`, `__movsw`, `__movsd`, and `__movsq` lower to `rep stos`
   and `rep movs`, and the system intrinsics a kernel-mode driver calls to
-  their instructions: the control, debug and model-specific registers
+  their instructions: the control, debug, and model-specific registers
   (`__readcr0`, `__writedr`, `__readmsr`, `__readpmc`, `_xsetbv`), the
   descriptor tables, `__invlpg`, `_invpcid`, `__segmentlimit`, `__wbinvd`,
   `_disable` and `_enable`, the VMX family (`__vmx_on` through
-  `__vmx_vmwrite`, returning 0, 1 or 2 as the instruction succeeds or fails
+  `__vmx_vmwrite`, returning 0, 1, or 2 as the instruction succeeds or fails
   with or without a VM-instruction error), the SVM family (`__svm_clgi`
   through `__svm_vmrun`) and port I/O (`__inbyte` through
   `__outdwordstring`), `__int2c` and `_m_prefetchw`.
@@ -794,15 +794,15 @@ structure loads, float16 and bfloat16 are not provided.
   reach and a unit may define; `#pragma intrinsic(name)` takes that back.
 - The `_Interlocked` intrinsics are each one atomic instruction:
   `lock`-prefixed on x64, and the FEAT_LSE form on arm64, with the `_acq`,
-  `_rel` and `_nf` orders. cl emits the LSE form under `/arch:armv8.1`; its
+  `_rel`, and `_nf` orders. cl emits the LSE form under `/arch:armv8.1`; its
   default calls out-of-line helpers. `<windows.h>` maps winnt.h's Interlocked
   names onto them. The `_InterlockedMax`, `_InterlockedMin`,
-  `_InterlockedUMax`, `_InterlockedUMin` and `_InterlockedNand` families are
+  `_InterlockedUMax`, `_InterlockedUMin`, and `_InterlockedNand` families are
   not provided.
-- `__int8`, `__int16`, `__int32` and `__int64` on the Windows targets.
+- `__int8`, `__int16`, `__int32`, and `__int64` on the Windows targets.
 - `--msvc`, off by default and taken by the Windows targets only, gives the
   identity of cl 19.28, the first with `/std:c17`: `_MSC_VER` 1928,
-  `_MSC_FULL_VER`, `_MSC_BUILD`, `_MSC_EXTENSIONS`, `_INTEGRAL_MAX_BITS` and
+  `_MSC_FULL_VER`, `_MSC_BUILD`, `_MSC_EXTENSIONS`, `_INTEGRAL_MAX_BITS`, and
   `_M_X64` / `_M_AMD64` or `_M_ARM64`. `__STDC__` is then undefined, as cl
   leaves it without `/Zc:__STDC__`, so the SDK headers that test it take their
   Microsoft layouts; `__STDC_VERSION__` stays, and `__STDC_NO_ATOMICS__` and
@@ -814,7 +814,7 @@ structure loads, float16 and bfloat16 are not provided.
 
 ### badc-specific
 
-- `#pragma dylib`, `#pragma binding` and `#pragma export`: per-target loader
+- `#pragma dylib`, `#pragma binding`, and `#pragma export`: per-target loader
   symbol resolution, and the functions and objects a shared library exports. A
   struct passed to or returned from a bound import by value follows the
   platform ABI like any other call.
@@ -854,23 +854,23 @@ structure loads, float16 and bfloat16 are not provided.
 - The `-M` dependency options: `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`,
   `-MQ`, `-MP`, and the `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` spellings.
   `-MM` and `-MMD` leave out system headers: the compiler's own headers, the
-  `-isystem` directories and the system fallback directories. A header from
-  `-I`, `-iquote` or the including file's directory is a user header; the
+  `-isystem` directories, and the system fallback directories. A header from
+  `-I`, `-iquote`, or the including file's directory is a user header; the
   unused-binding warnings draw the same line. A header from the in-binary set
   has no file and is never a prerequisite.
-- The `__has_include`, `__has_include_next`, `__has_builtin` and
+- The `__has_include`, `__has_include_next`, `__has_builtin`, and
   `__has_attribute` operators. `__has_feature` is not implemented.
 - A directive name badc does not implement is an error in a group that is
   not skipped (`directive`, B1010), as in gcc and clang; `#ident` and `#sccs`
   are accepted without effect. A missing `#include` file is an error.
 - C23 6.10.4 `#embed` is accepted in every edition, as gcc and clang accept
-  it: the `limit`, `prefix`, `suffix` and `if_empty` parameters, gcc's and
-  clang's `offset`, the `__has_embed` operator and the
+  it: the `limit`, `prefix`, `suffix`, and `if_empty` parameters, gcc's and
+  clang's `offset`, the `__has_embed` operator, and the
   `__STDC_EMBED_NOT_FOUND__` / `__STDC_EMBED_FOUND__` / `__STDC_EMBED_EMPTY__`
   values. `#embed "..."` searches the including file's directory and then the
   `--embed-dir` directories; `#embed <...>` searches only the latter. An unknown `#pragma` warns
   too (`unknown-pragmas`, B1004), except that pragmas headed `pack`, `once`,
-  `STDC`, `GCC`, `clang`, `region` or `endregion` are accepted silently.
+  `STDC`, `GCC`, `clang`, `region`, or `endregion` are accepted silently.
 - The predefines `__BADC_VERSION__` and `__BADC_TARGET__`, both string
   literals, on every target, and `__BADC_WINDOWS__` on the Windows targets.
 - A `#if` or `#elif` condition accepts a string operand in one position: as an
@@ -882,7 +882,7 @@ structure loads, float16 and bfloat16 are not provided.
   constant expression; badc admits this comparison so the string-valued
   predefines can select source. A string anywhere else is an error naming the
   operator, whether or not that operand is evaluated: the whole condition, an
-  operand of a unary, arithmetic, bitwise, shift, relational or logical
+  operand of a unary, arithmetic, bitwise, shift, relational, or logical
   operator, a `?:` condition or arm, or the other side of an integer in `==`
   or `!=`. Adjacent string literals do not concatenate. An identifier left
   after macro expansion is 0, as in C99.

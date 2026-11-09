@@ -420,8 +420,7 @@
 /* Define to 1 if you have the <minix/config.h> header file. */
 /* #undef HAVE_MINIX_CONFIG_H */
 
-/* Define to 1 if you have a working 'mmap' system call. The probe calls
-   creat(), which badc's <fcntl.h> does not declare: TODO(#1998). */
+/* Define to 1 if you have a working 'mmap' system call. */
 #define HAVE_MMAP 1
 
 /* Define to 1 if you have the 'pathconf' function. */

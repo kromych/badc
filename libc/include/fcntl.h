@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <sys/types.h>
+
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR   2
@@ -276,3 +278,14 @@ int fallocate(int fd, int mode, long offset, long len);
 #define SYNC_FILE_RANGE_WAIT_AFTER  4
 int sync_file_range(int fd, long long offset, long long nbytes, unsigned int flags);
 #endif
+
+// creat(path, mode) is open(path, O_WRONLY | O_CREAT | O_TRUNC, mode) (POSIX).
+#ifdef __APPLE__
+#pragma binding(libc::creat, "_creat")
+#elif defined(__linux__)
+#pragma binding(libc::creat, "creat")
+#elif defined(_WIN32)
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::creat, "_creat")
+#endif
+int creat(const char *path, mode_t mode);

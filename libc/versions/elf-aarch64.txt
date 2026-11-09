@@ -120,6 +120,7 @@ closelog                                 GLIBC_2.17
 confstr                                  GLIBC_2.17
 connect                                  GLIBC_2.17
 copy_file_range                          GLIBC_2.27
+creat                                    GLIBC_2.17
 ctermid                                  GLIBC_2.17
 ctime                                    GLIBC_2.17
 ctime_r                                  GLIBC_2.17

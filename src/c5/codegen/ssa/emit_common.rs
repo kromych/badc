@@ -2349,11 +2349,9 @@ pub(crate) trait LowerTarget {
     fn install(&mut self, build: &mut super::Build);
 }
 
-/// Where the function entered at `ent_pc` is defined, for a report the
-/// lowering makes about it; `None` when no symbol records a line.
 /// gcc's `error` and `warning` function attributes: each call `func` still
 /// makes to such a function, which the optimizer did not remove, is
-/// diagnosed with the attribute's message.
+/// diagnosed with the attribute's message at the call.
 fn report_call_diagnostics(
     sink: &mut Sink,
     program: &super::super::program::Program,
@@ -2370,7 +2368,7 @@ fn report_call_diagnostics(
         return;
     }
 
-    for inst in &func.insts {
+    for (at, inst) in func.insts.iter().enumerate() {
         let callee = match inst {
             // A function's `val` is its entry, or an undefined one's stub.
             Inst::Call { target_pc, .. } => marked().find(|s| s.val as usize == *target_pc),
@@ -2387,9 +2385,15 @@ fn report_call_diagnostics(
             true => (Code::ATTRIBUTE_ERROR, "error"),
             false => (Code::ATTRIBUTE_WARNING, "warning"),
         };
+        let call = (func.inst_src.get(at).copied())
+            .filter(|&(line, _)| line > 0)
+            .and_then(|(line, file)| {
+                let file = program.source_files.get(file as usize)?;
+                Some(crate::c5::diag::Loc::new(file.clone(), line))
+            });
         sink.emit(
             code,
-            function_loc(program, func.ent_pc),
+            call.or_else(|| function_loc(program, func.ent_pc)),
             alloc::format!(
                 "call to `{}` declared with attribute {kind}: {message} (in `{}`)",
                 sym.name,
@@ -2399,6 +2403,8 @@ fn report_call_diagnostics(
     }
 }
 
+/// Where the function entered at `ent_pc` is defined, for a report the
+/// lowering makes about it; `None` when no symbol records a line.
 fn function_loc(
     program: &super::super::program::Program,
     ent_pc: usize,

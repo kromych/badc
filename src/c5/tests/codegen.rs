@@ -19320,3 +19320,26 @@ fn a_call_left_to_an_error_or_warning_function_is_diagnosed() {
         assert!(err.contains(error), "{target:?}: {err}");
     }
 }
+
+/// A call to a `warning` function reports at the call, as gcc does, not at
+/// the function making it.
+#[test]
+fn an_attribute_warning_reports_at_the_call() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "extern void old(void) __attribute__((warning(\"old\")));\n\
+               void use(int a) {\n\
+                   if (a)\n\
+                       old();\n\
+               }\n";
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::with_options(src.into(), Target::LinuxX64, opts)
+        .compile()
+        .expect("compile");
+    let mut native = NativeOptions::new();
+    native.output_kind = OutputKind::Relocatable;
+    let build = crate::c5::codegen::lower_for(&program, Target::LinuxX64, native).expect("lower");
+    let lines: alloc::vec::Vec<u32> = (build.diagnostics.iter())
+        .map(|d| d.loc.as_ref().map_or(0, |l| l.line))
+        .collect();
+    assert_eq!(lines, [4], "{:?}", build.diagnostics);
+}

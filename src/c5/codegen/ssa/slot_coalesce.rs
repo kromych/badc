@@ -1164,6 +1164,24 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 first_escape.entry(sg).or_insert(pc);
             }
         }
+        // The events that start a scoped group's instance: its first after
+        // its end marker, or in a block it enters dead. Before one, the
+        // group holds nothing a later read can see.
+        let mut fresh: BTreeSet<(u32, usize)> = BTreeSet::new();
+        let mut ended: BTreeMap<usize, bool> = BTreeMap::new();
+        for &(pc, sg, kind) in evs {
+            let bit = 1u64 << (sg % 64);
+            if scoped_mask[sg / 64] & bit == 0 {
+                continue;
+            }
+            let after_end = *ended
+                .entry(sg)
+                .or_insert(dead_in[b * gwords + sg / 64] & bit != 0);
+            if after_end && kind & END == 0 {
+                fresh.insert((pc, sg));
+            }
+            ended.insert(sg, kind & END != 0);
+        }
         let escaped_before = |sg: usize, pc: u32| {
             x_in[b * gwords + sg / 64] & (1u64 << (sg % 64)) != 0
                 || first_escape.get(&sg).is_some_and(|&ep| ep < pc)
@@ -1226,9 +1244,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                 {
                     live[sg / 64] |= 1u64 << (sg % 64);
                 }
-                // Dead on entry, the group holds nothing before its first
-                // event in the block.
-                if dead && scoped_mask[sg / 64] & (1u64 << (sg % 64)) != 0 && first_ev[&sg] == pc {
+                if fresh.contains(&(pc, sg)) {
                     live[sg / 64] &= !(1u64 << (sg % 64));
                 }
             }

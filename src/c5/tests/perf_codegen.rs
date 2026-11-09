@@ -3889,8 +3889,10 @@ fn a_frame_built_only_by_inlining_is_compacted() {
 /// Two escaped objects of disjoint blocks in a loop body share a slot,
 /// declared there or inlined there: each one's end marker ends the value a
 /// read in the next iteration could see (C17 6.2.4p6). An object read
-/// after the loop keeps its own slot. The callees are `always_inline`, as
-/// their frames are past the large-stack-frame bound of the caller's.
+/// after the loop keeps its own slot, and in straight-line code two
+/// instances of one callee's object around another's share with it. The
+/// callees are `always_inline`, as their frames are past the
+/// large-stack-frame bound of the caller's.
 #[test]
 fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
     const SRC: &str = "struct big { char buf[600]; };\n\
@@ -3908,7 +3910,8 @@ fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
         int kept(int n) { struct big k; __builtin_memset(&k, 1, sizeof k); use(&k);\n\
           int s = 0; for (int i = 0; i < n; i++) {\n\
           struct big d; __builtin_memset(&d, 0, sizeof d); use(&d); s += d.buf[1]; }\n\
-          return s + k.buf[2]; }\n";
+          return s + k.buf[2]; }\n\
+        int alternating(int n) { return a() + c() + a() + n; }\n";
     let obj = object_at(SRC, Target::LinuxX64, true);
     // The first `sub $imm, %rsp` sizes the frame.
     let frame = |name: &str| {
@@ -3918,7 +3921,7 @@ fn escaped_block_scope_objects_in_a_loop_share_a_slot() {
             .map_or(0, |i| i.imm)
     };
     let mut m = Misses::default();
-    for name in ["inlined", "blocks"] {
+    for name in ["inlined", "blocks", "alternating"] {
         let size = frame(name);
         m.expect((600..1200).contains(&size), || {
             format!("{name}: frame of {size} bytes")

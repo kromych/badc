@@ -123,39 +123,39 @@ Disassembly of section .text:
 <aes128_known_answer>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x210, %rsp            # imm = 0x210
-               	leaq	-0x210(%rbp), %rcx
+               	subq	$0x1f0, %rsp            # imm = 0x1F0
+               	leaq	-0x1f0(%rbp), %rcx
                	leaq	<rip>, %rdx # <addr>
-               	leaq	-0x150(%rbp), %rax
+               	leaq	-0x130(%rbp), %rax
                	movdqu	(%rdx), %xmm15
                	movdqu	%xmm15, (%rax)
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x140(%rbp), %rdx
+               	leaq	-0x120(%rbp), %rdx
                	movdqu	(%rcx), %xmm14
                	aeskeygenassist	$0x1, %xmm14, %xmm15
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x90(%rbp), %rax
+               	leaq	-0x70(%rbp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rcx
+               	leaq	-0x60(%rbp), %rcx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
                	leaq	-0x50(%rbp), %rdx
                	movdqu	(%rcx), %xmm14
                	pshufd	$0xff, %xmm14, %xmm15   # xmm15 = xmm14[3,3,3,3]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rcx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
                	pxor	%xmm14, %xmm15
@@ -168,79 +168,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rax)
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	movdqu	(%rax), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x20(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	movdqu	(%rdx), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	-0x70(%rbp), %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movdqu	(%rax), %xmm15
-               	movdqu	(%rcx), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	-0x10(%rbp), %xmm0
-               	movups	%xmm0, -0x200(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x10, %rdx
-               	leaq	-0x130(%rbp), %rsi
-               	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x2, %xmm14, %xmm15
-               	movdqu	%xmm15, (%rsi)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	-0x80(%rbp), %rax
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rdx
-               	movdqu	(%rax), %xmm14
-               	pshufd	$0xff, %xmm14, %xmm15   # xmm15 = xmm14[3,3,3,3]
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x40(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	movdqu	(%rax), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x30(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -253,86 +183,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movdqu	(%rax), %xmm15
-               	movdqu	(%rcx), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	-0x10(%rbp), %xmm0
-               	movups	%xmm0, -0x1f0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x20, %rdx
-               	leaq	-0x120(%rbp), %rsi
-               	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x4, %xmm14, %xmm15
-               	movdqu	%xmm15, (%rsi)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
-               	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rdx
-               	movdqu	(%rax), %xmm14
-               	pshufd	$0xff, %xmm14, %xmm15   # xmm15 = xmm14[3,3,3,3]
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x40(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	movdqu	(%rax), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x30(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
-               	movdqu	(%rcx), %xmm15
-               	movdqu	(%rax), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rdx)
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	-0x20(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	movdqu	(%rdx), %xmm14
-               	pxor	%xmm14, %xmm15
-               	movdqu	%xmm15, (%rcx)
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -340,15 +200,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x1e0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x30, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x10, %rdx
                	leaq	-0x110(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x8, %xmm14, %xmm15
+               	aeskeygenassist	$0x2, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -357,15 +217,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -378,9 +238,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -393,16 +253,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -410,15 +270,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x1d0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x40, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x20, %rdx
                	leaq	-0x100(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x10, %xmm14, %xmm15
+               	aeskeygenassist	$0x4, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -427,15 +287,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -448,9 +308,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -463,16 +323,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -480,15 +340,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x1c0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x50, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x30, %rdx
                	leaq	-0xf0(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x20, %xmm14, %xmm15
+               	aeskeygenassist	$0x8, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -497,15 +357,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -518,9 +378,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -533,16 +393,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -550,15 +410,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x1b0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x60, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x40, %rdx
                	leaq	-0xe0(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x40, %xmm14, %xmm15
+               	aeskeygenassist	$0x10, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -567,15 +427,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -588,9 +448,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -603,16 +463,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -620,15 +480,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x1a0(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x70, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x50, %rdx
                	leaq	-0xd0(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x80, %xmm14, %xmm15
+               	aeskeygenassist	$0x20, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -637,15 +497,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -658,9 +518,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -673,16 +533,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -690,15 +550,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x190(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x80, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x60, %rdx
                	leaq	-0xc0(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x1b, %xmm14, %xmm15
+               	aeskeygenassist	$0x40, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -707,15 +567,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -728,9 +588,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -743,16 +603,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -760,15 +620,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x180(%rbp)
-               	leaq	-0x210(%rbp), %rdx
-               	addq	$0x90, %rdx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x70, %rdx
                	leaq	-0xb0(%rbp), %rsi
                	movdqu	(%rdx), %xmm14
-               	aeskeygenassist	$0x36, %xmm14, %xmm15
+               	aeskeygenassist	$0x80, %xmm14, %xmm15
                	movdqu	%xmm15, (%rsi)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	-0x50(%rbp), %rdx
@@ -777,15 +637,15 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x90(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x40(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
                	movdqu	%xmm15, (%rdx)
-               	leaq	-0x60(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x160(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -798,9 +658,9 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rcx
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0xa0(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rax), %xmm14
                	pxor	%xmm14, %xmm15
@@ -813,16 +673,16 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x90(%rbp), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
                	movdqu	%xmm15, (%rcx)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx
                	movdqu	(%rax), %xmm15
                	movdqu	(%rcx), %xmm14
@@ -830,13 +690,153 @@ Disassembly of section .text:
                	movdqu	%xmm15, (%rdx)
                	movups	-0x10(%rbp), %xmm0
                	movups	%xmm0, -0x170(%rbp)
-               	leaq	-0x160(%rbp), %rcx
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x80, %rdx
+               	leaq	-0xa0(%rbp), %rsi
+               	movdqu	(%rdx), %xmm14
+               	aeskeygenassist	$0x1b, %xmm14, %xmm15
+               	movdqu	%xmm15, (%rsi)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x60(%rbp), %rax
+               	movups	(%rsi), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x50(%rbp), %rdx
+               	movdqu	(%rax), %xmm14
+               	pshufd	$0xff, %xmm14, %xmm15   # xmm15 = xmm14[3,3,3,3]
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x40(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rdx)
+               	leaq	-0x80(%rbp), %rax
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x130(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	movdqu	(%rax), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x30(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	movdqu	(%rax), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x20(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	movdqu	(%rdx), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x140(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rdx
+               	movdqu	(%rax), %xmm15
+               	movdqu	(%rcx), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	-0x10(%rbp), %xmm0
+               	movups	%xmm0, -0x160(%rbp)
+               	leaq	-0x1f0(%rbp), %rdx
+               	addq	$0x90, %rdx
+               	leaq	-0x90(%rbp), %rsi
+               	movdqu	(%rdx), %xmm14
+               	aeskeygenassist	$0x36, %xmm14, %xmm15
+               	movdqu	%xmm15, (%rsi)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x60(%rbp), %rax
+               	movups	(%rsi), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x50(%rbp), %rdx
+               	movdqu	(%rax), %xmm14
+               	pshufd	$0xff, %xmm14, %xmm15   # xmm15 = xmm14[3,3,3,3]
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x40(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rdx)
+               	leaq	-0x80(%rbp), %rax
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x130(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	movdqu	(%rax), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x30(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x70(%rbp), %rcx
+               	leaq	-0x80(%rbp), %rax
+               	leaq	-0x130(%rbp), %rdx
+               	movdqu	(%rcx), %xmm15
+               	movdqu	(%rax), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	-0x20(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	pslldq	$0x4, %xmm15            # xmm15 = zero,zero,zero,zero,xmm15[0,1,2,3,4,5,6,7,8,9,10,11]
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x70(%rbp), %rax
+               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rcx
+               	movdqu	(%rax), %xmm15
+               	movdqu	(%rdx), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rcx)
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	-0x140(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rdx
+               	movdqu	(%rax), %xmm15
+               	movdqu	(%rcx), %xmm14
+               	pxor	%xmm14, %xmm15
+               	movdqu	%xmm15, (%rdx)
+               	movups	-0x10(%rbp), %xmm0
+               	movups	%xmm0, -0x150(%rbp)
+               	leaq	-0x140(%rbp), %rcx
                	leaq	<rip>, %rdx # <addr>
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movdqu	(%rdx), %xmm15
                	movdqu	%xmm15, (%rax)
-               	leaq	-0x210(%rbp), %rdx
-               	leaq	-0x150(%rbp), %rsi
+               	leaq	-0x1f0(%rbp), %rdx
+               	leaq	-0x130(%rbp), %rsi
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdx), %xmm14
                	pxor	%xmm14, %xmm15
@@ -847,21 +847,21 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	addq	%rdx, %rsi
-               	leaq	-0x150(%rbp), %rdi
+               	leaq	-0x130(%rbp), %rdi
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rsi), %xmm14
                	aesenc	%xmm14, %xmm15
                	movdqu	%xmm15, (%rdi)
-               	leaq	-0x150(%rbp), %rsi
+               	leaq	-0x130(%rbp), %rsi
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rcx)
                	incq	%rax
                	cmpl	$0xa, %eax
                	jl	<addr>
-               	leaq	-0x160(%rbp), %r9
-               	leaq	-0x210(%rbp), %rax
+               	leaq	-0x140(%rbp), %r9
+               	leaq	-0x1f0(%rbp), %rax
                	leaq	0xa0(%rax), %rcx
-               	leaq	-0x150(%rbp), %rax
+               	leaq	-0x130(%rbp), %rax
                	movdqu	(%r9), %xmm15
                	movdqu	(%rcx), %xmm14
                	aesenclast	%xmm14, %xmm15
@@ -877,14 +877,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	leaq	-0x160(%rbp), %rcx
+               	leaq	-0x140(%rbp), %rcx
                	leaq	<rip>, %rdx # <addr>
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x80(%rbp), %rax
                	movdqu	(%rdx), %xmm15
                	movdqu	%xmm15, (%rax)
-               	leaq	-0x210(%rbp), %rdx
+               	leaq	-0x1f0(%rbp), %rdx
                	leaq	0xa0(%rdx), %rdi
-               	leaq	-0x150(%rbp), %rsi
+               	leaq	-0x130(%rbp), %rsi
                	movdqu	(%rax), %xmm15
                	movdqu	(%rdi), %xmm14
                	pxor	%xmm14, %xmm15
@@ -895,25 +895,25 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	addq	%rdx, %rsi
-               	leaq	-0xa0(%rbp), %rdi
+               	leaq	-0x80(%rbp), %rdi
                	movdqu	(%rsi), %xmm14
                	aesimc	%xmm14, %xmm15
                	movdqu	%xmm15, (%rdi)
-               	leaq	-0xa0(%rbp), %rsi
-               	leaq	-0x150(%rbp), %rdi
+               	leaq	-0x80(%rbp), %rsi
+               	leaq	-0x130(%rbp), %rdi
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rsi), %xmm14
                	aesdec	%xmm14, %xmm15
                	movdqu	%xmm15, (%rdi)
-               	leaq	-0x150(%rbp), %rsi
+               	leaq	-0x130(%rbp), %rsi
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rcx)
                	decq	%rax
                	testl	%eax, %eax
                	jg	<addr>
-               	leaq	-0x160(%rbp), %r9
-               	leaq	-0x210(%rbp), %rcx
-               	leaq	-0x150(%rbp), %rax
+               	leaq	-0x140(%rbp), %r9
+               	leaq	-0x1f0(%rbp), %rcx
+               	leaq	-0x130(%rbp), %rax
                	movdqu	(%r9), %xmm15
                	movdqu	(%rcx), %xmm14
                	aesdeclast	%xmm14, %xmm15

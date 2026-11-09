@@ -2542,7 +2542,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::inline::run mandatory", &mut ssa_funcs, |funcs| {
             super::super::passes::inline::run(
                 funcs,
-                0,
+                super::super::passes::inline::Limits {
+                    cap: 0,
+                    stack: super::super::passes::inline::StackGrowth::DEFAULT,
+                },
                 target.abi(),
                 &code_syms,
                 &extern_fns,
@@ -2658,9 +2661,17 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::inline::run", &mut ssa_funcs, |funcs| {
             let escaping =
                 super::super::passes::ipa_const_param::escaping_functions(funcs, program, target);
+            let stack = if native.conserve_stack {
+                super::super::passes::inline::StackGrowth::CONSERVE
+            } else {
+                super::super::passes::inline::StackGrowth::DEFAULT
+            };
             super::super::passes::inline::run(
                 funcs,
-                native.inline_cap,
+                super::super::passes::inline::Limits {
+                    cap: native.inline_cap,
+                    stack,
+                },
                 target.abi(),
                 &code_syms,
                 &extern_fns,

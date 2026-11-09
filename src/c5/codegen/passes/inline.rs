@@ -148,12 +148,42 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// What keeps that safe is the probing prologue, not this bound.
 const CALLER_FRAME_ABS_SLOTS: i64 = 512;
 
-/// gcc's `large-stack-frame` (256 bytes, in 8-byte cells) and
-/// `large-stack-frame-growth` (1000%, as a factor of the caller's own
-/// frame): an optional splice that grows the caller's frame past both is
-/// refused, as gcc refuses it to a plain `inline` hint.
-const LARGE_STACK_FRAME_CELLS: i64 = 32;
-const LARGE_STACK_FRAME_GROWTH: i64 = 11;
+/// gcc's `large-stack-frame` and `large-stack-frame-growth`: an optional
+/// splice that takes the caller's frame past both is refused, as gcc
+/// refuses it to a plain `inline` hint.
+#[derive(Clone, Copy)]
+pub(crate) struct StackGrowth {
+    /// Bytes.
+    frame: i64,
+    /// Percent over the caller's own frame.
+    growth: i64,
+}
+
+/// The bounds of the optional splices: the body cap (`--inline-cap`) and
+/// the stack growth.
+#[derive(Clone, Copy)]
+pub(crate) struct Limits {
+    pub(crate) cap: u32,
+    pub(crate) stack: StackGrowth,
+}
+
+impl StackGrowth {
+    pub(crate) const DEFAULT: Self = Self {
+        frame: 256,
+        growth: 1000,
+    };
+    /// `-fconserve-stack`.
+    pub(crate) const CONSERVE: Self = Self {
+        frame: 100,
+        growth: 400,
+    };
+
+    /// Whether a frame of `cells` exceeds both bounds over a caller whose
+    /// own frame is `own` cells.
+    fn exceeded(self, cells: i64, own: i64) -> bool {
+        cells * 8 > self.frame && cells > own + own * self.growth / 100
+    }
+}
 
 #[derive(Clone, Copy)]
 enum RegionKey {
@@ -188,6 +218,8 @@ struct SlotPlacement<'a> {
     orig_locals: i64,
     /// The cells of that frame its live instructions name.
     own_cells: i64,
+    /// The stack-growth bounds of an optional splice.
+    stack: StackGrowth,
     /// The component of each function on a call cycle.
     cycle_of: &'a BTreeMap<usize, usize>,
     /// Per component, the optional splices of its members the caller
@@ -4265,8 +4297,7 @@ fn inline_caller(
                     if !c.is_always_inline
                         && charge > 0
                         && (grown > CALLER_FRAME_ABS_SLOTS
-                            || frame > LARGE_STACK_FRAME_CELLS
-                                && frame > placement.own_cells * LARGE_STACK_FRAME_GROWTH)
+                            || placement.stack.exceeded(frame, placement.own_cells))
                     {
                         unaffordable.insert(*target_pc);
                         continue;
@@ -4322,7 +4353,7 @@ fn inline_caller(
 /// reachable other than through the `Inst::Call` sites in `funcs`.
 pub(crate) fn run(
     funcs: &mut [FunctionSsa],
-    cap: u32,
+    Limits { cap, stack }: Limits,
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
@@ -4534,6 +4565,7 @@ pub(crate) fn run(
                         sp_tainted: &sp_tainted,
                         orig_locals: orig_locals[fi],
                         own_cells: own_cells[fi],
+                        stack,
                         cycle_of: &cycle_of,
                         cycle_budget: cycle_budgets.entry(caller.ent_pc).or_default(),
                     },
@@ -5290,7 +5322,8 @@ mod tests {
         caller.blocks[0].exit_acc = 2;
         // An own frame 11 times which holds both splices, so the absolute
         // bound alone decides.
-        let caller = with_own_object(caller, 2 * half / LARGE_STACK_FRAME_GROWTH + 1);
+        let factor = 1 + StackGrowth::DEFAULT.growth / 100;
+        let caller = with_own_object(caller, 2 * half / factor + 1);
         let wide = |pc: usize| {
             let mut c = calling_callee(pc, half, 600);
             // One object spans the whole frame, so the splice keeps every cell.
@@ -5324,7 +5357,7 @@ mod tests {
             (2, 40, false, false),
             (2, 40, true, true),
             (4, 30, false, true),
-            (0, LARGE_STACK_FRAME_CELLS, false, true),
+            (0, StackGrowth::DEFAULT.frame / 8, false, true),
         ] {
             let caller = multi_call_caller(1, 0, 500, 1);
             let caller = if own > 0 {
@@ -5339,6 +5372,22 @@ mod tests {
                 spliced,
                 "own={own} callee={cells} always={always}"
             );
+        }
+        // `-fconserve-stack`: 192 bytes is within 256 but past 100, and
+        // 24 cells past 400% over 4.
+        for (stack, spliced) in [(StackGrowth::DEFAULT, true), (StackGrowth::CONSERVE, false)] {
+            let caller = with_own_object(multi_call_caller(1, 0, 500, 1), 4);
+            let mut funcs = alloc::vec![caller, wide(20, false), leaf(600)];
+            super::run(
+                &mut funcs,
+                Limits { cap: 32, stack },
+                abi,
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &BTreeSet::new(),
+                &mut Sink::default(),
+            );
+            assert_eq!(calls_to(&funcs[0], 500) == 0, spliced, "{}%", stack.growth);
         }
     }
 
@@ -7114,7 +7163,10 @@ mod tests {
     fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
         super::run(
             funcs,
-            cap,
+            Limits {
+                cap,
+                stack: StackGrowth::DEFAULT,
+            },
             abi,
             code_syms,
             &BTreeMap::new(),

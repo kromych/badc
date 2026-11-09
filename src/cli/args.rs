@@ -164,6 +164,7 @@ pub(crate) struct Codegen {
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
+    pub(crate) conserve_stack: bool,
     pub(crate) sibling_calls: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
@@ -202,6 +203,7 @@ impl Default for Codegen {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            conserve_stack: false,
             sibling_calls: true,
             keep_local_labels: false,
             min_function_alignment: 1,
@@ -1677,6 +1679,10 @@ impl Parser {
             // must not take.
             "-fjump-tables" => code.jump_tables = true,
             "-fno-jump-tables" => code.jump_tables = false,
+            // gcc `-fconserve-stack`: the inliner's stack-growth bounds
+            // tighten to gcc's values under the option.
+            "-fconserve-stack" => code.conserve_stack = true,
+            "-fno-conserve-stack" => code.conserve_stack = false,
             // gcc / clang `-fno-optimize-sibling-calls`: every call returns
             // into its caller's frame, so a frame-pointer unwinder sees each
             // caller on the chain.
@@ -2954,6 +2960,7 @@ impl Codegen {
         opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
+        opts.conserve_stack = self.conserve_stack;
         opts.sibling_calls = self.sibling_calls;
         opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
         opts.patchable_function_entry = self.patchable_function_entry;
@@ -3945,6 +3952,7 @@ mod tests {
         let cli = parse(&[
             "-fPIC",
             "-fno-jump-tables",
+            "-fconserve-stack",
             "-fno-optimize-sibling-calls",
             "-fsigned-char",
             "-fshort-wchar",
@@ -3958,6 +3966,7 @@ mod tests {
         ]);
         assert!(cli.codegen.fpic && !cli.codegen.fno_pic);
         assert!(!cli.codegen.jump_tables);
+        assert!(cli.codegen.conserve_stack);
         assert!(!cli.codegen.sibling_calls);
         assert_eq!(cli.front.char_signed, Some(true));
         assert!(cli.front.short_wchar);

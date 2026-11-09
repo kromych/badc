@@ -4551,6 +4551,11 @@ pub struct NativeOptions {
     /// taken and no table reaches the image -- what a build under
     /// retpolines or indirect-branch tracking requires.
     pub jump_tables: bool,
+    /// `-fconserve-stack`: the inliner refuses an optional splice that
+    /// takes the caller's frame past 100 bytes and 400% growth over its
+    /// own, gcc's `large-stack-frame` and `large-stack-frame-growth` under
+    /// the option, in place of their defaults, 256 bytes and 1000%.
+    pub conserve_stack: bool,
     /// Whether a call whose result the function returns unchanged may
     /// become a jump after the epilogue (gcc and clang
     /// `-foptimize-sibling-calls`; `-fno-optimize-sibling-calls` clears
@@ -5021,6 +5026,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            conserve_stack: false,
             sibling_calls: true,
             pic: false,
             pie: false,

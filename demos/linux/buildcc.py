@@ -142,6 +142,9 @@ FORWARD_EXACT = {
     # dispatch is an indirect branch, which those configurations forbid
     # unthunked and require a landing pad at.
     "-fno-jump-tables", "-fjump-tables",
+    # The top-level Makefile adds this: the inliner's stack-growth bounds
+    # tighten to gcc's values under it.
+    "-fconserve-stack",
     # Early-boot units that run with the MMU off are built with this: memory
     # is Device-typed there and an unaligned access raises an alignment
     # fault. badc caps every compiler-generated access at the alignment its
@@ -305,7 +308,7 @@ IGNORE_EXACT = {
     # Passes badc does not have: it runs no global common subexpression
     # elimination, invents no store, and turns no return-of-call into a
     # branch -- an aarch64 `return g(x)` emits BL, not B.
-    "-fno-gcse", "-fno-allow-store-data-races", "-fconserve-stack",
+    "-fno-gcse", "-fno-allow-store-data-races",
     "-foptimize-sibling-calls", "-fno-optimize-sibling-calls",
     # Debug-info detail. badc emits one DWARF form per construct, so these
     # change nothing outside the .debug_* sections.
@@ -709,6 +712,7 @@ def _self_test() -> int:
     assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
     assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
     assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
+    assert rewrite(["-fconserve-stack"]).argv == ["-fconserve-stack"]
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]

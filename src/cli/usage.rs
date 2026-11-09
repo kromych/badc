@@ -453,6 +453,9 @@ Compile knobs:
                            declared [] or [0], at 3 only []. The bare
                            form selects level 3. A [] member is
                            unbounded at every level.
+  -fconserve-stack         Inline only while the caller's frame stays
+                           within 100 bytes or 400% growth over its own,
+                           in place of 256 bytes and 1000%.
   -fno-jump-tables         Dispatch every switch through the compare
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores

@@ -436,10 +436,10 @@ Disassembly of section .text:
                	mov	x5, #0x1e               // =30
                	mov	x6, #0x28               // =40
                	mov	x7, #0x32               // =50
-               	mov	x8, #0x64               // =100
-               	mov	x9, #0x3e8              // =1000
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
+               	mov	x16, #0x64              // =100
+               	str	x16, [sp]
+               	mov	x16, #0x3e8             // =1000
+               	str	x16, [sp, #0x8]
                	bl	<addr>
                	cmp	x0, #0xc59
                	b.eq	<addr>

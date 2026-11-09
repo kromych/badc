@@ -92,13 +92,13 @@ Disassembly of section .text:
                	mov	x4, #-0x32              // =-50
                	mov	x5, #0x3c               // =60
                	mov	x7, #0x320              // =800
-               	mov	x10, #0x9               // =9
-               	adrp	x11, <page>
-               	ldr	x11, [x11, <lo12>]
-               	str	x10, [sp]
+               	adrp	x10, <page>
+               	ldr	x10, [x10, <lo12>]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
                	str	x8, [sp, #0x8]
                	str	x9, [sp, #0x10]
-               	blr	x11
+               	blr	x10
                	mov	x17, #0x8602            // =34306
                	movk	x17, #0xb2d2, lsl #16
                	cmp	x0, x17

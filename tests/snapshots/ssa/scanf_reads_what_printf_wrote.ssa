@@ -13,52 +13,52 @@ fn ent_pc=1 n_params=0 variadic=false locals=82
     v7   Imm(0)                                           -> x0
     v8   StoreLocal { off=-81, value=v7, kind=I32 }       -> -
     v9   StoreLocal { off=-80, value=v7, kind=I32 }       -> -
-    v10  Imm(-1234567890)                                 -> x0
-    v11  Imm(0)                                           -> x2
-    v12  Imm(9007199254740993)                            -> x2
-    v13  Imm(0)                                           -> x6
-    v14  Imm(4000000000)                                  -> x6
-    v15  Imm(0)                                           -> x7
-    v16  Imm(3735928559)                                  -> x7
-    v17  Imm(0)                                           -> x3
-    v18  Imm(1036831949)                                  -> x3 [f32]
-    v19  Imm(0)                                           -> x3
-    v20  Imm(4613303445314885481)                         -> x3
-    v21  Imm(0)                                           -> x12
-    v22  Imm(4614500768194494464)                         -> x12
+    v10  Imm(-1234567890)                                 -> -
+    v11  Imm(0)                                           -> x0
+    v12  Imm(9007199254740993)                            -> -
+    v13  Imm(0)                                           -> x0
+    v14  Imm(4000000000)                                  -> -
+    v15  Imm(0)                                           -> x0
+    v16  Imm(3735928559)                                  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(1036831949)                                  -> x0 [f32]
+    v19  Imm(0)                                           -> x0
+    v20  Imm(4613303445314885481)                         -> x0
+    v21  Imm(0)                                           -> x2
+    v22  Imm(4614500768194494464)                         -> x2
     v23  StoreLocal { off=-138, value=v22, kind=F80 }     -> -
-    v24  Imm(118622047889322841)                          -> x12
-    v25  Imm(-9104749988965452967)                        -> x12
+    v24  Imm(118622047889322841)                          -> x2
+    v25  Imm(-9104749988965452967)                        -> x2
     v26  StoreLocal { off=-139, value=v25, kind=F80 }     -> -
-    v27  Imm(4609434218613702656)                         -> x12
+    v27  Imm(4609434218613702656)                         -> x2
     v28  StoreLocal { off=-140, value=v27, kind=F80 }     -> -
-    v29  Imm(4660)                                        -> x12
-    v30  Imm(0)                                           -> x13
-    v31  LocalAddr(-64)                                   -> x13
-    v32  Imm(256)                                         -> x14
-    v33  ImmData(12)                                      -> x15
-    v34  Imm(0)                                           -> [spill 0]
-    v35  Imm(0)                                           -> [spill 0]
-    v36  Imm(0)                                           -> [spill 0]
-    v37  Imm(0)                                           -> [spill 0]
-    v38  Imm(0)                                           -> [spill 0]
-    v39  Imm(0)                                           -> [spill 0]
-    v40  Imm(0)                                           -> [spill 0]
-    v41  Imm(493)                                         -> [spill 0]
-    v42  Imm(0)                                           -> [spill 1] [f32]
-    v43  Imm(4591870180174331904)                         -> [spill 1]
-    v44  Imm(0)                                           -> [spill 2]
+    v29  Imm(4660)                                        -> -
+    v30  Imm(0)                                           -> x2
+    v31  LocalAddr(-64)                                   -> x7
+    v32  Imm(256)                                         -> x6
+    v33  ImmData(12)                                      -> x2
+    v34  Imm(0)                                           -> x3
+    v35  Imm(0)                                           -> x3
+    v36  Imm(0)                                           -> x3
+    v37  Imm(0)                                           -> x3
+    v38  Imm(0)                                           -> x3
+    v39  Imm(0)                                           -> x3
+    v40  Imm(0)                                           -> x3
+    v41  Imm(493)                                         -> -
+    v42  Imm(0)                                           -> x3 [f32]
+    v43  Imm(4591870180174331904)                         -> x3
+    v44  Imm(0)                                           -> x12
     v45  LoadLocal { off=-138, kind=F80 }                 -> d0
     v46  LoadLocal { off=-139, kind=F80 }                 -> d1
     v47  LoadLocal { off=-140, kind=F80 }                 -> d2
-    v48  ImmData(75)                                      -> [spill 2]
-    v49  Imm(113)                                         -> [spill 3]
-    v50  Imm(0)                                           -> [spill 4]
-    v51  LocalAddr(-144)                                  -> [spill 4]
+    v48  ImmData(75)                                      -> x12
+    v49  Imm(113)                                         -> -
+    v50  Imm(0)                                           -> x13
+    v51  LocalAddr(-144)                                  -> x13
     v52  StoreLocal { off=-144, value=v45, kind=F80 }     -> -
-    v53  LocalAddr(-145)                                  -> [spill 5]
+    v53  LocalAddr(-145)                                  -> x14
     v54  StoreLocal { off=-145, value=v46, kind=F80 }     -> -
-    v55  LocalAddr(-146)                                  -> [spill 6]
+    v55  LocalAddr(-146)                                  -> x15
     v56  StoreLocal { off=-146, value=v47, kind=F80 }     -> -
     v57  CallExt { binding_idx=3, args=[v31, v32, v33, v1, v3, v5, v10, v12, v14, v16, v41, v43, v20, v51, v53, v55, v48, v49, v29], fp_arg_mask=0x1800 } -> x0
     v58  ImmData(80)                                      -> x7

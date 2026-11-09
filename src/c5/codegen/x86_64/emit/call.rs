@@ -102,6 +102,11 @@ impl Marshal<'_> {
     /// else `scratch`, through the rsp shift the plan's outgoing area
     /// produced.
     fn arg_int(&self, code: &mut Vec<u8>, i: usize, scratch: Reg) -> Option<Reg> {
+        // A constant the allocator left to the call (`Allocation::stack_imm`).
+        if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
+            emit_mov_r_imm64(code, scratch, k);
+            return Some(scratch);
+        }
         materialize_int_shifted(
             code,
             self.arg_place(i),

@@ -222,9 +222,9 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movl	$0x3, %r8d
                	movl	$0x4, %r9d
-               	movl	$0x5, %eax
                	subq	$0x30, %rsp
-               	movq	%rax, 0x20(%rsp)
+               	movl	$0x5, %r10d
+               	movq	%r10, 0x20(%rsp)
                	callq	<addr>
                	addq	$0x30, %rsp
                	imulq	$0x64, %rax, %rbx
@@ -407,7 +407,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%cl, -0x73(%rax)
 
 <ms_ext>:
                	leaq	(%rdx,%rcx,8), %rax

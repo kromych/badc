@@ -387,7 +387,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -410,20 +410,18 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movl	$0x4, %r8d
                	movl	$0x5, %r9d
-               	movl	$0x6, %eax
-               	movl	$0x7, %r12d
-               	movl	$0x8, %r13d
-               	movl	$0x9, %r14d
-               	movl	$0xa, %r15d
-               	movl	$0xb, %r10d
-               	movq	%r10, 0x38(%rsp)
                	subq	$0x40, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
-               	movq	%r15, 0x20(%rsp)
-               	movq	0x78(%rsp), %r10
+               	movl	$0x6, %r10d
+               	movq	%r10, (%rsp)
+               	movl	$0x7, %r10d
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x8, %r10d
+               	movq	%r10, 0x10(%rsp)
+               	movl	$0x9, %r10d
+               	movq	%r10, 0x18(%rsp)
+               	movl	$0xa, %r10d
+               	movq	%r10, 0x20(%rsp)
+               	movl	$0xb, %r10d
                	movq	%r10, 0x28(%rsp)
                	movq	%rdi, 0x30(%rsp)
                	movb	$0x0, %al
@@ -512,24 +510,20 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movl	$0x7, %eax
-               	movl	$0x8, %r12d
-               	movl	$0x9, %r13d
-               	movl	$0xa, %r14d
-               	movl	$0x64, %r15d
-               	movl	$0xc8, %r10d
-               	movq	%r10, 0x38(%rsp)
-               	movl	$0x12c, %r10d           # imm = 0x12C
-               	movq	%r10, 0x30(%rsp)
                	subq	$0x40, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	movq	%r14, 0x18(%rsp)
-               	movq	%r15, 0x20(%rsp)
-               	movq	0x78(%rsp), %r10
+               	movl	$0x7, %r10d
+               	movq	%r10, (%rsp)
+               	movl	$0x8, %r10d
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x9, %r10d
+               	movq	%r10, 0x10(%rsp)
+               	movl	$0xa, %r10d
+               	movq	%r10, 0x18(%rsp)
+               	movl	$0x64, %r10d
+               	movq	%r10, 0x20(%rsp)
+               	movl	$0xc8, %r10d
                	movq	%r10, 0x28(%rsp)
-               	movq	0x70(%rsp), %r10
+               	movl	$0x12c, %r10d           # imm = 0x12C
                	movq	%r10, 0x30(%rsp)
                	movb	$0x0, %al
                	callq	<addr>

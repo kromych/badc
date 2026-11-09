@@ -499,14 +499,14 @@ Disassembly of section .text:
                	mov	x5, #0x5                // =5
                	mov	x6, #0x6                // =6
                	mov	x7, #0x7                // =7
-               	mov	x8, #0x8                // =8
-               	mov	x9, #0x9                // =9
-               	mov	x10, #0xa               // =10
-               	mov	x11, #0xb               // =11
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
+               	mov	x16, #0x8               // =8
+               	str	x16, [sp]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x10]
+               	mov	x16, #0xb               // =11
+               	str	x16, [sp, #0x18]
                	str	x0, [sp, #0x20]
                	bl	<addr>
                	cmp	w0, #0x4e
@@ -570,16 +570,16 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0xa                // =10
-               	mov	x10, #0x64              // =100
-               	mov	x11, #0xc8              // =200
-               	mov	x12, #0x12c             // =300
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
-               	str	x12, [sp, #0x20]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x64              // =100
+               	str	x16, [sp, #0x10]
+               	mov	x16, #0xc8              // =200
+               	str	x16, [sp, #0x18]
+               	mov	x16, #0x12c             // =300
+               	str	x16, [sp, #0x20]
                	bl	<addr>
                	cmp	w0, #0x28f
                	b.eq	<addr>

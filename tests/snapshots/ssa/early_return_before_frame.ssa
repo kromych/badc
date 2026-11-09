@@ -678,10 +678,10 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     v192 Imm(10)                                          -> x1
     v193 Imm(20)                                          -> x8
     v194 Imm(30)                                          -> x9
-    v195 Imm(40)                                          -> x0
-    v196 Imm(50)                                          -> x3
-    v197 Imm(100)                                         -> x12
-    v198 Imm(1000)                                        -> x13
+    v195 Imm(40)                                          -> -
+    v196 Imm(50)                                          -> -
+    v197 Imm(100)                                         -> -
+    v198 Imm(1000)                                        -> -
     v199 Call { target_pc=5, args=[v189, v190, v191, v192, v193, v194, v195, v196, v197, v198], fixed_args=10, fp_return=false, fp_arg_mask=0x0 } -> x0
     v200 Imm(301)                                         -> x1
     v201 Imm(3002)                                        -> x1

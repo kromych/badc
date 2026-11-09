@@ -191,7 +191,7 @@ fn ent_pc=1037 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=1038 ---
 ; name=round_of
 fn ent_pc=1038 n_params=0 variadic=false locals=16
-  spill_count=21 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=5 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-12)                                   -> x2
@@ -6595,37 +6595,37 @@ fn ent_pc=1038 n_params=0 variadic=false locals=16
     v5025 Imm(128)                                         -> x1
     v5026 Imm(-128)                                        -> x1
     v5027 Extend { value=v4994, kind=I8 }                  -> x0
-    v5028 Imm(1)                                           -> x1
-    v5029 Imm(2)                                           -> x2
-    v5030 Imm(3)                                           -> x6
-    v5031 Imm(4)                                           -> x8
-    v5032 Imm(-128)                                        -> x9
-    v5033 Imm(30)                                          -> x3
-    v5034 Imm(29)                                          -> x12
-    v5035 Imm(28)                                          -> x13
-    v5036 Imm(27)                                          -> x14
-    v5037 Imm(26)                                          -> x15
-    v5038 Imm(25)                                          -> [spill 0]
-    v5039 Imm(24)                                          -> [spill 1]
-    v5040 Imm(23)                                          -> [spill 2]
-    v5041 Imm(22)                                          -> [spill 3]
-    v5042 Imm(21)                                          -> [spill 4]
-    v5043 Imm(20)                                          -> [spill 5]
-    v5044 Imm(19)                                          -> [spill 6]
-    v5045 Imm(18)                                          -> [spill 7]
-    v5046 Imm(17)                                          -> [spill 8]
-    v5047 Imm(16)                                          -> [spill 9]
-    v5048 Imm(15)                                          -> [spill 10]
-    v5049 Imm(14)                                          -> [spill 11]
-    v5050 Imm(13)                                          -> [spill 12]
-    v5051 Imm(12)                                          -> [spill 13]
-    v5052 Imm(11)                                          -> [spill 14]
-    v5053 Imm(10)                                          -> [spill 15]
-    v5054 Imm(9)                                           -> [spill 16]
-    v5055 Imm(8)                                           -> [spill 17]
-    v5056 Imm(7)                                           -> [spill 18]
-    v5057 Imm(6)                                           -> [spill 19]
-    v5058 Imm(5)                                           -> [spill 20]
+    v5028 Imm(1)                                           -> -
+    v5029 Imm(2)                                           -> -
+    v5030 Imm(3)                                           -> -
+    v5031 Imm(4)                                           -> -
+    v5032 Imm(-128)                                        -> x6
+    v5033 Imm(30)                                          -> x2
+    v5034 Imm(29)                                          -> x1
+    v5035 Imm(28)                                          -> x8
+    v5036 Imm(27)                                          -> x9
+    v5037 Imm(26)                                          -> -
+    v5038 Imm(25)                                          -> -
+    v5039 Imm(24)                                          -> -
+    v5040 Imm(23)                                          -> -
+    v5041 Imm(22)                                          -> -
+    v5042 Imm(21)                                          -> -
+    v5043 Imm(20)                                          -> -
+    v5044 Imm(19)                                          -> -
+    v5045 Imm(18)                                          -> -
+    v5046 Imm(17)                                          -> -
+    v5047 Imm(16)                                          -> -
+    v5048 Imm(15)                                          -> -
+    v5049 Imm(14)                                          -> -
+    v5050 Imm(13)                                          -> -
+    v5051 Imm(12)                                          -> -
+    v5052 Imm(11)                                          -> -
+    v5053 Imm(10)                                          -> -
+    v5054 Imm(9)                                           -> -
+    v5055 Imm(8)                                           -> -
+    v5056 Imm(7)                                           -> -
+    v5057 Imm(6)                                           -> -
+    v5058 Imm(5)                                           -> -
     v5059 Call { target_pc=565, args=[v4989, v5032, v5033, v5034, v5035, v5036, v5037, v5038, v5039, v5040, v5041, v5042, v5043, v5044, v5045, v5046, v5047, v5048, v5049, v5050, v5051, v5052, v5053, v5054, v5055, v5056, v5057, v5058, v5031, v5030, v5029, v5028, v5027], fixed_args=33, fp_return=false, fp_arg_mask=0x0 } -> x0
     v5060 LocalAddr(-1505)                                 -> x0
     v5061 LocalAddr(-1501)                                 -> x6
@@ -6651,34 +6651,34 @@ fn ent_pc=1038 n_params=0 variadic=false locals=16
     v5081 Imm(2)                                           -> x1
     v5082 Imm(3)                                           -> x8
     v5083 Imm(4)                                           -> x9
-    v5084 Imm(5)                                           -> x0
-    v5085 Imm(6)                                           -> x3
-    v5086 Imm(7)                                           -> x12
-    v5087 Imm(8)                                           -> x13
-    v5088 Imm(9)                                           -> x14
-    v5089 Imm(10)                                          -> x15
-    v5090 Imm(11)                                          -> [spill 0]
-    v5091 Imm(12)                                          -> [spill 1]
-    v5092 Imm(13)                                          -> [spill 2]
-    v5093 Imm(14)                                          -> [spill 3]
-    v5094 Imm(15)                                          -> [spill 4]
-    v5095 Imm(16)                                          -> [spill 5]
-    v5096 Imm(17)                                          -> [spill 6]
-    v5097 Imm(18)                                          -> [spill 7]
-    v5098 Imm(19)                                          -> [spill 8]
-    v5099 Imm(20)                                          -> [spill 9]
-    v5100 Imm(21)                                          -> [spill 10]
-    v5101 Imm(22)                                          -> [spill 11]
-    v5102 Imm(23)                                          -> [spill 12]
-    v5103 Imm(24)                                          -> [spill 13]
-    v5104 Imm(25)                                          -> [spill 14]
-    v5105 Imm(26)                                          -> [spill 15]
-    v5106 Imm(27)                                          -> [spill 16]
-    v5107 Imm(28)                                          -> [spill 17]
-    v5108 Imm(29)                                          -> [spill 18]
-    v5109 Imm(30)                                          -> [spill 19]
-    v5110 Imm(128)                                         -> [spill 20]
-    v5111 Imm(-128)                                        -> [spill 20]
+    v5084 Imm(5)                                           -> -
+    v5085 Imm(6)                                           -> -
+    v5086 Imm(7)                                           -> -
+    v5087 Imm(8)                                           -> -
+    v5088 Imm(9)                                           -> -
+    v5089 Imm(10)                                          -> -
+    v5090 Imm(11)                                          -> -
+    v5091 Imm(12)                                          -> -
+    v5092 Imm(13)                                          -> -
+    v5093 Imm(14)                                          -> -
+    v5094 Imm(15)                                          -> -
+    v5095 Imm(16)                                          -> -
+    v5096 Imm(17)                                          -> -
+    v5097 Imm(18)                                          -> -
+    v5098 Imm(19)                                          -> -
+    v5099 Imm(20)                                          -> -
+    v5100 Imm(21)                                          -> -
+    v5101 Imm(22)                                          -> -
+    v5102 Imm(23)                                          -> -
+    v5103 Imm(24)                                          -> -
+    v5104 Imm(25)                                          -> -
+    v5105 Imm(26)                                          -> -
+    v5106 Imm(27)                                          -> -
+    v5107 Imm(28)                                          -> -
+    v5108 Imm(29)                                          -> -
+    v5109 Imm(30)                                          -> -
+    v5110 Imm(128)                                         -> x0
+    v5111 Imm(-128)                                        -> -
     v5112 Call { target_pc=565, args=[v5074, v5079, v5080, v5081, v5082, v5083, v5084, v5085, v5086, v5087, v5088, v5089, v5090, v5091, v5092, v5093, v5094, v5095, v5096, v5097, v5098, v5099, v5100, v5101, v5102, v5103, v5104, v5105, v5106, v5107, v5108, v5109, v5111], fixed_args=33, fp_return=false, fp_arg_mask=0x0 } -> x0
     v5113 LocalAddr(-1506)                                 -> x0
     v5114 LocalAddr(-1502)                                 -> x6

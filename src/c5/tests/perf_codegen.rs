@@ -3982,6 +3982,39 @@ fn an_inlined_call_cycle_is_not_unrolled() {
     assert!(insns.len() < 200, "set_attrs: {} instructions", insns.len());
 }
 
+/// A constant passed on the stack is set from its encoding by the call's
+/// marshaling, so a call with more constant arguments than registers holds
+/// none of them in a register ahead of it and spills none.
+#[test]
+fn constant_stack_arguments_take_no_register() {
+    let args: String = (0..128).map(|i| format!(", {}", i % 64)).collect();
+    let src = format!(
+        "struct par {{ void (*w)(struct par *p, int len, ...); }};\n\
+         int init(struct par *par) {{ par->w(par, 129{args}); return 0; }}\n"
+    );
+    // x86-64: below the frame record, room for the one callee-saved push.
+    let insns = x64_insns(&function_bytes(
+        &object_at(&src, Target::LinuxX64, true),
+        "init",
+    ));
+    let frame = insns
+        .iter()
+        .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
+        .map_or(0, |i| i.imm);
+    assert!(frame <= 16, "x86-64 frame of {frame} bytes");
+    // AArch64: the outgoing area of 123 stack slots, nothing past it.
+    let sub_sp = |w: u32| {
+        (w & 0xFF80_03FF == 0xD100_03FF)
+            .then(|| ((w >> 10) & 0xFFF) << if w & (1 << 22) != 0 { 12 } else { 0 })
+    };
+    let frame = a64(&src, "init")
+        .into_iter()
+        .filter_map(sub_sp)
+        .max()
+        .unwrap_or(0);
+    assert!(frame <= 123 * 8 + 16, "aarch64 frame of {frame} bytes");
+}
+
 /// Arithmetic on floating-point constants is evaluated at translation
 /// time, as an integer argument or result computed from it is: a function
 /// that computes no floating-point value at run time compiles under

@@ -512,9 +512,9 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v253 Imm(2)                                           -> x2
     v254 Imm(3)                                           -> x8
     v255 Imm(4)                                           -> x9
-    v256 Imm(5)                                           -> x0
-    v257 Imm(6)                                           -> x6
-    v258 Imm(0)                                           -> x7
+    v256 Imm(5)                                           -> -
+    v257 Imm(6)                                           -> -
+    v258 Imm(0)                                           -> x0
     v259 Call { target_pc=3, args=[v252, v253, v254, v255, v256, v257], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v260 BinopI { op=ne, lhs=v259, rhs_imm=91 }           -> x0
     terminator Bz { cond=v260, target=b36, fall=b35 }   (exit_acc=v260)

@@ -114,24 +114,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r15
-               	pushq	%r14
-               	pushq	%r13
-               	pushq	%r12
-               	pushq	%rbx
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x1, %edi
                	movq	$-0x2, %rsi
@@ -139,36 +128,26 @@ Disassembly of section .text:
                	movl	$0xf0000003, %ecx       # imm = 0xF0000003
                	movq	$-0x5, %r8
                	movl	$0xfa, %r9d
-               	movq	$-0x7, %rax
-               	movabsq	$0x11111111ea60, %rbx   # imm = 0x11111111EA60
-               	movl	$0x9, %r12d
-               	movq	$-0xa, %r13
-               	movabsq	$0x123456789abcdef0, %r14 # imm = 0x123456789ABCDEF0
-               	movq	<rip>, %r15 # <addr>
+               	movq	<rip>, %rax # <addr>
                	subq	$0x30, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%rbx, 0x8(%rsp)
-               	movq	%r12, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
-               	movq	%r14, 0x20(%rsp)
-               	callq	*%r15
+               	movq	$-0x7, %r10
+               	movq	%r10, (%rsp)
+               	movabsq	$0x11111111ea60, %r10   # imm = 0x11111111EA60
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x9, %r10d
+               	movq	%r10, 0x10(%rsp)
+               	movq	$-0xa, %r10
+               	movq	%r10, 0x18(%rsp)
+               	movabsq	$0x123456789abcdef0, %r10 # imm = 0x123456789ABCDEF0
+               	movq	%r10, 0x20(%rsp)
+               	callq	*%rax
                	addq	$0x30, %rsp
                	testl	%eax, %eax
                	je	<addr>
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
-               	leave
+               	popq	%rbp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$-0x2, %eax

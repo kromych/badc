@@ -4704,979 +4704,509 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0xa                // =10
-               	mov	x10, #0xb               // =11
-               	mov	x11, #0xc               // =12
-               	mov	x12, #0xd               // =13
-               	mov	x13, #0xe               // =14
-               	mov	x14, #0xf               // =15
-               	mov	x15, #0x10              // =16
-               	mov	x20, #0x11              // =17
-               	mov	x21, #0x12              // =18
-               	mov	x22, #0x13              // =19
-               	mov	x23, #0x14              // =20
-               	mov	x24, #0x15              // =21
-               	mov	x25, #0x16              // =22
-               	mov	x26, #0x17              // =23
-               	mov	x27, #0x18              // =24
-               	mov	x28, #0x19              // =25
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0xb               // =11
+               	str	x16, [sp, #0x10]
+               	mov	x16, #0xc               // =12
+               	str	x16, [sp, #0x18]
+               	mov	x16, #0xd               // =13
+               	str	x16, [sp, #0x20]
+               	mov	x16, #0xe               // =14
+               	str	x16, [sp, #0x28]
+               	mov	x16, #0xf               // =15
+               	str	x16, [sp, #0x30]
+               	mov	x16, #0x10              // =16
+               	str	x16, [sp, #0x38]
+               	mov	x16, #0x11              // =17
+               	str	x16, [sp, #0x40]
+               	mov	x16, #0x12              // =18
+               	str	x16, [sp, #0x48]
+               	mov	x16, #0x13              // =19
+               	str	x16, [sp, #0x50]
+               	mov	x16, #0x14              // =20
+               	str	x16, [sp, #0x58]
+               	mov	x16, #0x15              // =21
+               	str	x16, [sp, #0x60]
+               	mov	x16, #0x16              // =22
+               	str	x16, [sp, #0x68]
+               	mov	x16, #0x17              // =23
+               	str	x16, [sp, #0x70]
+               	mov	x16, #0x18              // =24
+               	str	x16, [sp, #0x78]
+               	mov	x16, #0x19              // =25
+               	str	x16, [sp, #0x80]
                	mov	x16, #0x1a              // =26
-               	str	x16, [sp, #0x17c8]
-               	mov	x16, #0x1b              // =27
-               	str	x16, [sp, #0x17c0]
-               	mov	x16, #0x1c              // =28
-               	str	x16, [sp, #0x17b8]
-               	mov	x16, #0x1d              // =29
-               	str	x16, [sp, #0x17b0]
-               	mov	x16, #0x1e              // =30
-               	str	x16, [sp, #0x17a8]
-               	mov	x16, #0x1f              // =31
-               	str	x16, [sp, #0x17a0]
-               	mov	x16, #0x20              // =32
-               	str	x16, [sp, #0x1798]
-               	mov	x16, #0x21              // =33
-               	str	x16, [sp, #0x1790]
-               	mov	x16, #0x22              // =34
-               	str	x16, [sp, #0x1788]
-               	mov	x16, #0x23              // =35
-               	str	x16, [sp, #0x1780]
-               	mov	x16, #0x24              // =36
-               	str	x16, [sp, #0x1778]
-               	mov	x16, #0x25              // =37
-               	str	x16, [sp, #0x1770]
-               	mov	x16, #0x26              // =38
-               	str	x16, [sp, #0x1768]
-               	mov	x16, #0x27              // =39
-               	str	x16, [sp, #0x1760]
-               	mov	x16, #0x28              // =40
-               	str	x16, [sp, #0x1758]
-               	mov	x16, #0x29              // =41
-               	str	x16, [sp, #0x1750]
-               	mov	x16, #0x2a              // =42
-               	str	x16, [sp, #0x1748]
-               	mov	x16, #0x2b              // =43
-               	str	x16, [sp, #0x1740]
-               	mov	x16, #0x2c              // =44
-               	str	x16, [sp, #0x1738]
-               	mov	x16, #0x2d              // =45
-               	str	x16, [sp, #0x1730]
-               	mov	x16, #0x2e              // =46
-               	str	x16, [sp, #0x1728]
-               	mov	x16, #0x2f              // =47
-               	str	x16, [sp, #0x1720]
-               	mov	x16, #0x30              // =48
-               	str	x16, [sp, #0x1718]
-               	mov	x16, #0x31              // =49
-               	str	x16, [sp, #0x1710]
-               	mov	x16, #0x32              // =50
-               	str	x16, [sp, #0x1708]
-               	mov	x16, #0x33              // =51
-               	str	x16, [sp, #0x1700]
-               	mov	x16, #0x34              // =52
-               	str	x16, [sp, #0x16f8]
-               	mov	x16, #0x35              // =53
-               	str	x16, [sp, #0x16f0]
-               	mov	x16, #0x36              // =54
-               	str	x16, [sp, #0x16e8]
-               	mov	x16, #0x37              // =55
-               	str	x16, [sp, #0x16e0]
-               	mov	x16, #0x38              // =56
-               	str	x16, [sp, #0x16d8]
-               	mov	x16, #0x39              // =57
-               	str	x16, [sp, #0x16d0]
-               	mov	x16, #0x3a              // =58
-               	str	x16, [sp, #0x16c8]
-               	mov	x16, #0x3b              // =59
-               	str	x16, [sp, #0x16c0]
-               	mov	x16, #0x3c              // =60
-               	str	x16, [sp, #0x16b8]
-               	mov	x16, #0x3d              // =61
-               	str	x16, [sp, #0x16b0]
-               	mov	x16, #0x3e              // =62
-               	str	x16, [sp, #0x16a8]
-               	mov	x16, #0x3f              // =63
-               	str	x16, [sp, #0x16a0]
-               	mov	x16, #0x40              // =64
-               	str	x16, [sp, #0x1698]
-               	mov	x16, #0x41              // =65
-               	str	x16, [sp, #0x1690]
-               	mov	x16, #0x42              // =66
-               	str	x16, [sp, #0x1688]
-               	mov	x16, #0x43              // =67
-               	str	x16, [sp, #0x1680]
-               	mov	x16, #0x44              // =68
-               	str	x16, [sp, #0x1678]
-               	mov	x16, #0x45              // =69
-               	str	x16, [sp, #0x1670]
-               	mov	x16, #0x46              // =70
-               	str	x16, [sp, #0x1668]
-               	mov	x16, #0x47              // =71
-               	str	x16, [sp, #0x1660]
-               	mov	x16, #0x48              // =72
-               	str	x16, [sp, #0x1658]
-               	mov	x16, #0x49              // =73
-               	str	x16, [sp, #0x1650]
-               	mov	x16, #0x4a              // =74
-               	str	x16, [sp, #0x1648]
-               	mov	x16, #0x4b              // =75
-               	str	x16, [sp, #0x1640]
-               	mov	x16, #0x4c              // =76
-               	str	x16, [sp, #0x1638]
-               	mov	x16, #0x4d              // =77
-               	str	x16, [sp, #0x1630]
-               	mov	x16, #0x4e              // =78
-               	str	x16, [sp, #0x1628]
-               	mov	x16, #0x4f              // =79
-               	str	x16, [sp, #0x1620]
-               	mov	x16, #0x50              // =80
-               	str	x16, [sp, #0x1618]
-               	mov	x16, #0x51              // =81
-               	str	x16, [sp, #0x1610]
-               	mov	x16, #0x52              // =82
-               	str	x16, [sp, #0x1608]
-               	mov	x16, #0x53              // =83
-               	str	x16, [sp, #0x1600]
-               	mov	x16, #0x54              // =84
-               	str	x16, [sp, #0x15f8]
-               	mov	x16, #0x55              // =85
-               	str	x16, [sp, #0x15f0]
-               	mov	x16, #0x56              // =86
-               	str	x16, [sp, #0x15e8]
-               	mov	x16, #0x57              // =87
-               	str	x16, [sp, #0x15e0]
-               	mov	x16, #0x58              // =88
-               	str	x16, [sp, #0x15d8]
-               	mov	x16, #0x59              // =89
-               	str	x16, [sp, #0x15d0]
-               	mov	x16, #0x5a              // =90
-               	str	x16, [sp, #0x15c8]
-               	mov	x16, #0x5b              // =91
-               	str	x16, [sp, #0x15c0]
-               	mov	x16, #0x5c              // =92
-               	str	x16, [sp, #0x15b8]
-               	mov	x16, #0x5d              // =93
-               	str	x16, [sp, #0x15b0]
-               	mov	x16, #0x5e              // =94
-               	str	x16, [sp, #0x15a8]
-               	mov	x16, #0x5f              // =95
-               	str	x16, [sp, #0x15a0]
-               	mov	x16, #0x60              // =96
-               	str	x16, [sp, #0x1598]
-               	mov	x16, #0x61              // =97
-               	str	x16, [sp, #0x1590]
-               	mov	x16, #0x62              // =98
-               	str	x16, [sp, #0x1588]
-               	mov	x16, #0x63              // =99
-               	str	x16, [sp, #0x1580]
-               	mov	x16, #0x64              // =100
-               	str	x16, [sp, #0x1578]
-               	mov	x16, #0x65              // =101
-               	str	x16, [sp, #0x1570]
-               	mov	x16, #0x66              // =102
-               	str	x16, [sp, #0x1568]
-               	mov	x16, #0x67              // =103
-               	str	x16, [sp, #0x1560]
-               	mov	x16, #0x68              // =104
-               	str	x16, [sp, #0x1558]
-               	mov	x16, #0x69              // =105
-               	str	x16, [sp, #0x1550]
-               	mov	x16, #0x6a              // =106
-               	str	x16, [sp, #0x1548]
-               	mov	x16, #0x6b              // =107
-               	str	x16, [sp, #0x1540]
-               	mov	x16, #0x6c              // =108
-               	str	x16, [sp, #0x1538]
-               	mov	x16, #0x6d              // =109
-               	str	x16, [sp, #0x1530]
-               	mov	x16, #0x6e              // =110
-               	str	x16, [sp, #0x1528]
-               	mov	x16, #0x6f              // =111
-               	str	x16, [sp, #0x1520]
-               	mov	x16, #0x70              // =112
-               	str	x16, [sp, #0x1518]
-               	mov	x16, #0x71              // =113
-               	str	x16, [sp, #0x1510]
-               	mov	x16, #0x72              // =114
-               	str	x16, [sp, #0x1508]
-               	mov	x16, #0x73              // =115
-               	str	x16, [sp, #0x1500]
-               	mov	x16, #0x74              // =116
-               	str	x16, [sp, #0x14f8]
-               	mov	x16, #0x75              // =117
-               	str	x16, [sp, #0x14f0]
-               	mov	x16, #0x76              // =118
-               	str	x16, [sp, #0x14e8]
-               	mov	x16, #0x77              // =119
-               	str	x16, [sp, #0x14e0]
-               	mov	x16, #0x78              // =120
-               	str	x16, [sp, #0x14d8]
-               	mov	x16, #0x79              // =121
-               	str	x16, [sp, #0x14d0]
-               	mov	x16, #0x7a              // =122
-               	str	x16, [sp, #0x14c8]
-               	mov	x16, #0x7b              // =123
-               	str	x16, [sp, #0x14c0]
-               	mov	x16, #0x7c              // =124
-               	str	x16, [sp, #0x14b8]
-               	mov	x16, #0x7d              // =125
-               	str	x16, [sp, #0x14b0]
-               	mov	x16, #0x7e              // =126
-               	str	x16, [sp, #0x14a8]
-               	mov	x16, #0x7f              // =127
-               	str	x16, [sp, #0x14a0]
-               	mov	x16, #0x80              // =128
-               	str	x16, [sp, #0x1498]
-               	mov	x16, #0x81              // =129
-               	str	x16, [sp, #0x1490]
-               	mov	x16, #0x82              // =130
-               	str	x16, [sp, #0x1488]
-               	mov	x16, #0x83              // =131
-               	str	x16, [sp, #0x1480]
-               	mov	x16, #0x84              // =132
-               	str	x16, [sp, #0x1478]
-               	mov	x16, #0x85              // =133
-               	str	x16, [sp, #0x1470]
-               	mov	x16, #0x86              // =134
-               	str	x16, [sp, #0x1468]
-               	mov	x16, #0x87              // =135
-               	str	x16, [sp, #0x1460]
-               	mov	x16, #0x88              // =136
-               	str	x16, [sp, #0x1458]
-               	mov	x16, #0x89              // =137
-               	str	x16, [sp, #0x1450]
-               	mov	x16, #0x8a              // =138
-               	str	x16, [sp, #0x1448]
-               	mov	x16, #0x8b              // =139
-               	str	x16, [sp, #0x1440]
-               	mov	x16, #0x8c              // =140
-               	str	x16, [sp, #0x1438]
-               	mov	x16, #0x8d              // =141
-               	str	x16, [sp, #0x1430]
-               	mov	x16, #0x8e              // =142
-               	str	x16, [sp, #0x1428]
-               	mov	x16, #0x8f              // =143
-               	str	x16, [sp, #0x1420]
-               	mov	x16, #0x90              // =144
-               	str	x16, [sp, #0x1418]
-               	mov	x16, #0x91              // =145
-               	str	x16, [sp, #0x1410]
-               	mov	x16, #0x92              // =146
-               	str	x16, [sp, #0x1408]
-               	mov	x16, #0x93              // =147
-               	str	x16, [sp, #0x1400]
-               	mov	x16, #0x94              // =148
-               	str	x16, [sp, #0x13f8]
-               	mov	x16, #0x95              // =149
-               	str	x16, [sp, #0x13f0]
-               	mov	x16, #0x96              // =150
-               	str	x16, [sp, #0x13e8]
-               	mov	x16, #0x97              // =151
-               	str	x16, [sp, #0x13e0]
-               	mov	x16, #0x98              // =152
-               	str	x16, [sp, #0x13d8]
-               	mov	x16, #0x99              // =153
-               	str	x16, [sp, #0x13d0]
-               	mov	x16, #0x9a              // =154
-               	str	x16, [sp, #0x13c8]
-               	mov	x16, #0x9b              // =155
-               	str	x16, [sp, #0x13c0]
-               	mov	x16, #0x9c              // =156
-               	str	x16, [sp, #0x13b8]
-               	mov	x16, #0x9d              // =157
-               	str	x16, [sp, #0x13b0]
-               	mov	x16, #0x9e              // =158
-               	str	x16, [sp, #0x13a8]
-               	mov	x16, #0x9f              // =159
-               	str	x16, [sp, #0x13a0]
-               	mov	x16, #0xa0              // =160
-               	str	x16, [sp, #0x1398]
-               	mov	x16, #0xa1              // =161
-               	str	x16, [sp, #0x1390]
-               	mov	x16, #0xa2              // =162
-               	str	x16, [sp, #0x1388]
-               	mov	x16, #0xa3              // =163
-               	str	x16, [sp, #0x1380]
-               	mov	x16, #0xa4              // =164
-               	str	x16, [sp, #0x1378]
-               	mov	x16, #0xa5              // =165
-               	str	x16, [sp, #0x1370]
-               	mov	x16, #0xa6              // =166
-               	str	x16, [sp, #0x1368]
-               	mov	x16, #0xa7              // =167
-               	str	x16, [sp, #0x1360]
-               	mov	x16, #0xa8              // =168
-               	str	x16, [sp, #0x1358]
-               	mov	x16, #0xa9              // =169
-               	str	x16, [sp, #0x1350]
-               	mov	x16, #0xaa              // =170
-               	str	x16, [sp, #0x1348]
-               	mov	x16, #0xab              // =171
-               	str	x16, [sp, #0x1340]
-               	mov	x16, #0xac              // =172
-               	str	x16, [sp, #0x1338]
-               	mov	x16, #0xad              // =173
-               	str	x16, [sp, #0x1330]
-               	mov	x16, #0xae              // =174
-               	str	x16, [sp, #0x1328]
-               	mov	x16, #0xaf              // =175
-               	str	x16, [sp, #0x1320]
-               	mov	x16, #0xb0              // =176
-               	str	x16, [sp, #0x1318]
-               	mov	x16, #0xb1              // =177
-               	str	x16, [sp, #0x1310]
-               	mov	x16, #0xb2              // =178
-               	str	x16, [sp, #0x1308]
-               	mov	x16, #0xb3              // =179
-               	str	x16, [sp, #0x1300]
-               	mov	x16, #0xb4              // =180
-               	str	x16, [sp, #0x12f8]
-               	mov	x16, #0xb5              // =181
-               	str	x16, [sp, #0x12f0]
-               	mov	x16, #0xb6              // =182
-               	str	x16, [sp, #0x12e8]
-               	mov	x16, #0xb7              // =183
-               	str	x16, [sp, #0x12e0]
-               	mov	x16, #0xb8              // =184
-               	str	x16, [sp, #0x12d8]
-               	mov	x16, #0xb9              // =185
-               	str	x16, [sp, #0x12d0]
-               	mov	x16, #0xba              // =186
-               	str	x16, [sp, #0x12c8]
-               	mov	x16, #0xbb              // =187
-               	str	x16, [sp, #0x12c0]
-               	mov	x16, #0xbc              // =188
-               	str	x16, [sp, #0x12b8]
-               	mov	x16, #0xbd              // =189
-               	str	x16, [sp, #0x12b0]
-               	mov	x16, #0xbe              // =190
-               	str	x16, [sp, #0x12a8]
-               	mov	x16, #0xbf              // =191
-               	str	x16, [sp, #0x12a0]
-               	mov	x16, #0xc0              // =192
-               	str	x16, [sp, #0x1298]
-               	mov	x16, #0xc1              // =193
-               	str	x16, [sp, #0x1290]
-               	mov	x16, #0xc2              // =194
-               	str	x16, [sp, #0x1288]
-               	mov	x16, #0xc3              // =195
-               	str	x16, [sp, #0x1280]
-               	mov	x16, #0xc4              // =196
-               	str	x16, [sp, #0x1278]
-               	mov	x16, #0xc5              // =197
-               	str	x16, [sp, #0x1270]
-               	mov	x16, #0xc6              // =198
-               	str	x16, [sp, #0x1268]
-               	mov	x16, #0xc7              // =199
-               	str	x16, [sp, #0x1260]
-               	mov	x16, #0xc8              // =200
-               	str	x16, [sp, #0x1258]
-               	mov	x16, #0xc9              // =201
-               	str	x16, [sp, #0x1250]
-               	mov	x16, #0xca              // =202
-               	str	x16, [sp, #0x1248]
-               	mov	x16, #0xcb              // =203
-               	str	x16, [sp, #0x1240]
-               	mov	x16, #0xcc              // =204
-               	str	x16, [sp, #0x1238]
-               	mov	x16, #0xcd              // =205
-               	str	x16, [sp, #0x1230]
-               	mov	x16, #0xce              // =206
-               	str	x16, [sp, #0x1228]
-               	mov	x16, #0xcf              // =207
-               	str	x16, [sp, #0x1220]
-               	mov	x16, #0xd0              // =208
-               	str	x16, [sp, #0x1218]
-               	mov	x16, #0xd1              // =209
-               	str	x16, [sp, #0x1210]
-               	mov	x16, #0xd2              // =210
-               	str	x16, [sp, #0x1208]
-               	mov	x16, #0xd3              // =211
-               	str	x16, [sp, #0x1200]
-               	mov	x16, #0xd4              // =212
-               	str	x16, [sp, #0x11f8]
-               	mov	x16, #0xd5              // =213
-               	str	x16, [sp, #0x11f0]
-               	mov	x16, #0xd6              // =214
-               	str	x16, [sp, #0x11e8]
-               	mov	x16, #0xd7              // =215
-               	str	x16, [sp, #0x11e0]
-               	mov	x16, #0xd8              // =216
-               	str	x16, [sp, #0x11d8]
-               	mov	x16, #0xd9              // =217
-               	str	x16, [sp, #0x11d0]
-               	mov	x16, #0xda              // =218
-               	str	x16, [sp, #0x11c8]
-               	mov	x16, #0xdb              // =219
-               	str	x16, [sp, #0x11c0]
-               	mov	x16, #0xdc              // =220
-               	str	x16, [sp, #0x11b8]
-               	mov	x16, #0xdd              // =221
-               	str	x16, [sp, #0x11b0]
-               	mov	x16, #0xde              // =222
-               	str	x16, [sp, #0x11a8]
-               	mov	x16, #0xdf              // =223
-               	str	x16, [sp, #0x11a0]
-               	mov	x16, #0xe0              // =224
-               	str	x16, [sp, #0x1198]
-               	mov	x16, #0xe1              // =225
-               	str	x16, [sp, #0x1190]
-               	mov	x16, #0xe2              // =226
-               	str	x16, [sp, #0x1188]
-               	mov	x16, #0xe3              // =227
-               	str	x16, [sp, #0x1180]
-               	mov	x16, #0xe4              // =228
-               	str	x16, [sp, #0x1178]
-               	mov	x16, #0xe5              // =229
-               	str	x16, [sp, #0x1170]
-               	mov	x16, #0xe6              // =230
-               	str	x16, [sp, #0x1168]
-               	mov	x16, #0xe7              // =231
-               	str	x16, [sp, #0x1160]
-               	mov	x16, #0xe8              // =232
-               	str	x16, [sp, #0x1158]
-               	mov	x16, #0xe9              // =233
-               	str	x16, [sp, #0x1150]
-               	mov	x16, #0xea              // =234
-               	str	x16, [sp, #0x1148]
-               	mov	x16, #0xeb              // =235
-               	str	x16, [sp, #0x1140]
-               	mov	x16, #0xec              // =236
-               	str	x16, [sp, #0x1138]
-               	mov	x16, #0xed              // =237
-               	str	x16, [sp, #0x1130]
-               	mov	x16, #0xee              // =238
-               	str	x16, [sp, #0x1128]
-               	mov	x16, #0xef              // =239
-               	str	x16, [sp, #0x1120]
-               	mov	x16, #0xf0              // =240
-               	str	x16, [sp, #0x1118]
-               	mov	x16, #0xf1              // =241
-               	str	x16, [sp, #0x1110]
-               	mov	x16, #0xf2              // =242
-               	str	x16, [sp, #0x1108]
-               	mov	x16, #0xf3              // =243
-               	str	x16, [sp, #0x1100]
-               	mov	x16, #0xf4              // =244
-               	str	x16, [sp, #0x10f8]
-               	mov	x16, #0xf5              // =245
-               	str	x16, [sp, #0x10f0]
-               	mov	x16, #0xf6              // =246
-               	str	x16, [sp, #0x10e8]
-               	mov	x16, #0xf7              // =247
-               	str	x16, [sp, #0x10e0]
-               	mov	x16, #0xf8              // =248
-               	str	x16, [sp, #0x10d8]
-               	mov	x16, #0xf9              // =249
-               	str	x16, [sp, #0x10d0]
-               	mov	x16, #0xfa              // =250
-               	str	x16, [sp, #0x10c8]
-               	mov	x16, #0xfb              // =251
-               	str	x16, [sp, #0x10c0]
-               	mov	x16, #0xfc              // =252
-               	str	x16, [sp, #0x10b8]
-               	mov	x16, #0xfd              // =253
-               	str	x16, [sp, #0x10b0]
-               	mov	x16, #0xfe              // =254
-               	str	x16, [sp, #0x10a8]
-               	mov	x16, #0xff              // =255
-               	str	x16, [sp, #0x10a0]
-               	mov	x16, #0x100             // =256
-               	str	x16, [sp, #0x1098]
-               	mov	x16, #0x101             // =257
-               	str	x16, [sp, #0x1090]
-               	mov	x16, #0x102             // =258
-               	str	x16, [sp, #0x1088]
-               	mov	x16, #0x103             // =259
-               	str	x16, [sp, #0x1080]
-               	mov	x16, #0x104             // =260
-               	str	x16, [sp, #0x1078]
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	str	x11, [sp, #0x18]
-               	str	x12, [sp, #0x20]
-               	str	x13, [sp, #0x28]
-               	str	x14, [sp, #0x30]
-               	str	x15, [sp, #0x38]
-               	str	x20, [sp, #0x40]
-               	str	x21, [sp, #0x48]
-               	str	x22, [sp, #0x50]
-               	str	x23, [sp, #0x58]
-               	str	x24, [sp, #0x60]
-               	str	x25, [sp, #0x68]
-               	str	x26, [sp, #0x70]
-               	str	x27, [sp, #0x78]
-               	str	x28, [sp, #0x80]
-               	ldr	x16, [sp, #0x17c8]
                	str	x16, [sp, #0x88]
-               	ldr	x16, [sp, #0x17c0]
+               	mov	x16, #0x1b              // =27
                	str	x16, [sp, #0x90]
-               	ldr	x16, [sp, #0x17b8]
+               	mov	x16, #0x1c              // =28
                	str	x16, [sp, #0x98]
-               	ldr	x16, [sp, #0x17b0]
+               	mov	x16, #0x1d              // =29
                	str	x16, [sp, #0xa0]
-               	ldr	x16, [sp, #0x17a8]
+               	mov	x16, #0x1e              // =30
                	str	x16, [sp, #0xa8]
-               	ldr	x16, [sp, #0x17a0]
+               	mov	x16, #0x1f              // =31
                	str	x16, [sp, #0xb0]
-               	ldr	x16, [sp, #0x1798]
+               	mov	x16, #0x20              // =32
                	str	x16, [sp, #0xb8]
-               	ldr	x16, [sp, #0x1790]
+               	mov	x16, #0x21              // =33
                	str	x16, [sp, #0xc0]
-               	ldr	x16, [sp, #0x1788]
+               	mov	x16, #0x22              // =34
                	str	x16, [sp, #0xc8]
-               	ldr	x16, [sp, #0x1780]
+               	mov	x16, #0x23              // =35
                	str	x16, [sp, #0xd0]
-               	ldr	x16, [sp, #0x1778]
+               	mov	x16, #0x24              // =36
                	str	x16, [sp, #0xd8]
-               	ldr	x16, [sp, #0x1770]
+               	mov	x16, #0x25              // =37
                	str	x16, [sp, #0xe0]
-               	ldr	x16, [sp, #0x1768]
+               	mov	x16, #0x26              // =38
                	str	x16, [sp, #0xe8]
-               	ldr	x16, [sp, #0x1760]
+               	mov	x16, #0x27              // =39
                	str	x16, [sp, #0xf0]
-               	ldr	x16, [sp, #0x1758]
+               	mov	x16, #0x28              // =40
                	str	x16, [sp, #0xf8]
-               	ldr	x16, [sp, #0x1750]
+               	mov	x16, #0x29              // =41
                	str	x16, [sp, #0x100]
-               	ldr	x16, [sp, #0x1748]
+               	mov	x16, #0x2a              // =42
                	str	x16, [sp, #0x108]
-               	ldr	x16, [sp, #0x1740]
+               	mov	x16, #0x2b              // =43
                	str	x16, [sp, #0x110]
-               	ldr	x16, [sp, #0x1738]
+               	mov	x16, #0x2c              // =44
                	str	x16, [sp, #0x118]
-               	ldr	x16, [sp, #0x1730]
+               	mov	x16, #0x2d              // =45
                	str	x16, [sp, #0x120]
-               	ldr	x16, [sp, #0x1728]
+               	mov	x16, #0x2e              // =46
                	str	x16, [sp, #0x128]
-               	ldr	x16, [sp, #0x1720]
+               	mov	x16, #0x2f              // =47
                	str	x16, [sp, #0x130]
-               	ldr	x16, [sp, #0x1718]
+               	mov	x16, #0x30              // =48
                	str	x16, [sp, #0x138]
-               	ldr	x16, [sp, #0x1710]
+               	mov	x16, #0x31              // =49
                	str	x16, [sp, #0x140]
-               	ldr	x16, [sp, #0x1708]
+               	mov	x16, #0x32              // =50
                	str	x16, [sp, #0x148]
-               	ldr	x16, [sp, #0x1700]
+               	mov	x16, #0x33              // =51
                	str	x16, [sp, #0x150]
-               	ldr	x16, [sp, #0x16f8]
+               	mov	x16, #0x34              // =52
                	str	x16, [sp, #0x158]
-               	ldr	x16, [sp, #0x16f0]
+               	mov	x16, #0x35              // =53
                	str	x16, [sp, #0x160]
-               	ldr	x16, [sp, #0x16e8]
+               	mov	x16, #0x36              // =54
                	str	x16, [sp, #0x168]
-               	ldr	x16, [sp, #0x16e0]
+               	mov	x16, #0x37              // =55
                	str	x16, [sp, #0x170]
-               	ldr	x16, [sp, #0x16d8]
+               	mov	x16, #0x38              // =56
                	str	x16, [sp, #0x178]
-               	ldr	x16, [sp, #0x16d0]
+               	mov	x16, #0x39              // =57
                	str	x16, [sp, #0x180]
-               	ldr	x16, [sp, #0x16c8]
+               	mov	x16, #0x3a              // =58
                	str	x16, [sp, #0x188]
-               	ldr	x16, [sp, #0x16c0]
+               	mov	x16, #0x3b              // =59
                	str	x16, [sp, #0x190]
-               	ldr	x16, [sp, #0x16b8]
+               	mov	x16, #0x3c              // =60
                	str	x16, [sp, #0x198]
-               	ldr	x16, [sp, #0x16b0]
+               	mov	x16, #0x3d              // =61
                	str	x16, [sp, #0x1a0]
-               	ldr	x16, [sp, #0x16a8]
+               	mov	x16, #0x3e              // =62
                	str	x16, [sp, #0x1a8]
-               	ldr	x16, [sp, #0x16a0]
+               	mov	x16, #0x3f              // =63
                	str	x16, [sp, #0x1b0]
-               	ldr	x16, [sp, #0x1698]
+               	mov	x16, #0x40              // =64
                	str	x16, [sp, #0x1b8]
-               	ldr	x16, [sp, #0x1690]
+               	mov	x16, #0x41              // =65
                	str	x16, [sp, #0x1c0]
-               	ldr	x16, [sp, #0x1688]
+               	mov	x16, #0x42              // =66
                	str	x16, [sp, #0x1c8]
-               	ldr	x16, [sp, #0x1680]
+               	mov	x16, #0x43              // =67
                	str	x16, [sp, #0x1d0]
-               	ldr	x16, [sp, #0x1678]
+               	mov	x16, #0x44              // =68
                	str	x16, [sp, #0x1d8]
-               	ldr	x16, [sp, #0x1670]
+               	mov	x16, #0x45              // =69
                	str	x16, [sp, #0x1e0]
-               	ldr	x16, [sp, #0x1668]
+               	mov	x16, #0x46              // =70
                	str	x16, [sp, #0x1e8]
-               	ldr	x16, [sp, #0x1660]
+               	mov	x16, #0x47              // =71
                	str	x16, [sp, #0x1f0]
-               	ldr	x16, [sp, #0x1658]
+               	mov	x16, #0x48              // =72
                	str	x16, [sp, #0x1f8]
-               	ldr	x16, [sp, #0x1650]
+               	mov	x16, #0x49              // =73
                	str	x16, [sp, #0x200]
-               	ldr	x16, [sp, #0x1648]
+               	mov	x16, #0x4a              // =74
                	str	x16, [sp, #0x208]
-               	ldr	x16, [sp, #0x1640]
+               	mov	x16, #0x4b              // =75
                	str	x16, [sp, #0x210]
-               	ldr	x16, [sp, #0x1638]
+               	mov	x16, #0x4c              // =76
                	str	x16, [sp, #0x218]
-               	ldr	x16, [sp, #0x1630]
+               	mov	x16, #0x4d              // =77
                	str	x16, [sp, #0x220]
-               	ldr	x16, [sp, #0x1628]
+               	mov	x16, #0x4e              // =78
                	str	x16, [sp, #0x228]
-               	ldr	x16, [sp, #0x1620]
+               	mov	x16, #0x4f              // =79
                	str	x16, [sp, #0x230]
-               	ldr	x16, [sp, #0x1618]
+               	mov	x16, #0x50              // =80
                	str	x16, [sp, #0x238]
-               	ldr	x16, [sp, #0x1610]
+               	mov	x16, #0x51              // =81
                	str	x16, [sp, #0x240]
-               	ldr	x16, [sp, #0x1608]
+               	mov	x16, #0x52              // =82
                	str	x16, [sp, #0x248]
-               	ldr	x16, [sp, #0x1600]
+               	mov	x16, #0x53              // =83
                	str	x16, [sp, #0x250]
-               	ldr	x16, [sp, #0x15f8]
+               	mov	x16, #0x54              // =84
                	str	x16, [sp, #0x258]
-               	ldr	x16, [sp, #0x15f0]
+               	mov	x16, #0x55              // =85
                	str	x16, [sp, #0x260]
-               	ldr	x16, [sp, #0x15e8]
+               	mov	x16, #0x56              // =86
                	str	x16, [sp, #0x268]
-               	ldr	x16, [sp, #0x15e0]
+               	mov	x16, #0x57              // =87
                	str	x16, [sp, #0x270]
-               	ldr	x16, [sp, #0x15d8]
+               	mov	x16, #0x58              // =88
                	str	x16, [sp, #0x278]
-               	ldr	x16, [sp, #0x15d0]
+               	mov	x16, #0x59              // =89
                	str	x16, [sp, #0x280]
-               	ldr	x16, [sp, #0x15c8]
+               	mov	x16, #0x5a              // =90
                	str	x16, [sp, #0x288]
-               	ldr	x16, [sp, #0x15c0]
+               	mov	x16, #0x5b              // =91
                	str	x16, [sp, #0x290]
-               	ldr	x16, [sp, #0x15b8]
+               	mov	x16, #0x5c              // =92
                	str	x16, [sp, #0x298]
-               	ldr	x16, [sp, #0x15b0]
+               	mov	x16, #0x5d              // =93
                	str	x16, [sp, #0x2a0]
-               	ldr	x16, [sp, #0x15a8]
+               	mov	x16, #0x5e              // =94
                	str	x16, [sp, #0x2a8]
-               	ldr	x16, [sp, #0x15a0]
+               	mov	x16, #0x5f              // =95
                	str	x16, [sp, #0x2b0]
-               	ldr	x16, [sp, #0x1598]
+               	mov	x16, #0x60              // =96
                	str	x16, [sp, #0x2b8]
-               	ldr	x16, [sp, #0x1590]
+               	mov	x16, #0x61              // =97
                	str	x16, [sp, #0x2c0]
-               	ldr	x16, [sp, #0x1588]
+               	mov	x16, #0x62              // =98
                	str	x16, [sp, #0x2c8]
-               	ldr	x16, [sp, #0x1580]
+               	mov	x16, #0x63              // =99
                	str	x16, [sp, #0x2d0]
-               	ldr	x16, [sp, #0x1578]
+               	mov	x16, #0x64              // =100
                	str	x16, [sp, #0x2d8]
-               	ldr	x16, [sp, #0x1570]
+               	mov	x16, #0x65              // =101
                	str	x16, [sp, #0x2e0]
-               	ldr	x16, [sp, #0x1568]
+               	mov	x16, #0x66              // =102
                	str	x16, [sp, #0x2e8]
-               	ldr	x16, [sp, #0x1560]
+               	mov	x16, #0x67              // =103
                	str	x16, [sp, #0x2f0]
-               	ldr	x16, [sp, #0x1558]
+               	mov	x16, #0x68              // =104
                	str	x16, [sp, #0x2f8]
-               	ldr	x16, [sp, #0x1550]
+               	mov	x16, #0x69              // =105
                	str	x16, [sp, #0x300]
-               	ldr	x16, [sp, #0x1548]
+               	mov	x16, #0x6a              // =106
                	str	x16, [sp, #0x308]
-               	ldr	x16, [sp, #0x1540]
+               	mov	x16, #0x6b              // =107
                	str	x16, [sp, #0x310]
-               	ldr	x16, [sp, #0x1538]
+               	mov	x16, #0x6c              // =108
                	str	x16, [sp, #0x318]
-               	ldr	x16, [sp, #0x1530]
+               	mov	x16, #0x6d              // =109
                	str	x16, [sp, #0x320]
-               	ldr	x16, [sp, #0x1528]
+               	mov	x16, #0x6e              // =110
                	str	x16, [sp, #0x328]
-               	ldr	x16, [sp, #0x1520]
+               	mov	x16, #0x6f              // =111
                	str	x16, [sp, #0x330]
-               	ldr	x16, [sp, #0x1518]
+               	mov	x16, #0x70              // =112
                	str	x16, [sp, #0x338]
-               	ldr	x16, [sp, #0x1510]
+               	mov	x16, #0x71              // =113
                	str	x16, [sp, #0x340]
-               	ldr	x16, [sp, #0x1508]
+               	mov	x16, #0x72              // =114
                	str	x16, [sp, #0x348]
-               	ldr	x16, [sp, #0x1500]
+               	mov	x16, #0x73              // =115
                	str	x16, [sp, #0x350]
-               	ldr	x16, [sp, #0x14f8]
+               	mov	x16, #0x74              // =116
                	str	x16, [sp, #0x358]
-               	ldr	x16, [sp, #0x14f0]
+               	mov	x16, #0x75              // =117
                	str	x16, [sp, #0x360]
-               	ldr	x16, [sp, #0x14e8]
+               	mov	x16, #0x76              // =118
                	str	x16, [sp, #0x368]
-               	ldr	x16, [sp, #0x14e0]
+               	mov	x16, #0x77              // =119
                	str	x16, [sp, #0x370]
-               	ldr	x16, [sp, #0x14d8]
+               	mov	x16, #0x78              // =120
                	str	x16, [sp, #0x378]
-               	ldr	x16, [sp, #0x14d0]
+               	mov	x16, #0x79              // =121
                	str	x16, [sp, #0x380]
-               	ldr	x16, [sp, #0x14c8]
+               	mov	x16, #0x7a              // =122
                	str	x16, [sp, #0x388]
-               	ldr	x16, [sp, #0x14c0]
+               	mov	x16, #0x7b              // =123
                	str	x16, [sp, #0x390]
-               	ldr	x16, [sp, #0x14b8]
+               	mov	x16, #0x7c              // =124
                	str	x16, [sp, #0x398]
-               	ldr	x16, [sp, #0x14b0]
+               	mov	x16, #0x7d              // =125
                	str	x16, [sp, #0x3a0]
-               	ldr	x16, [sp, #0x14a8]
+               	mov	x16, #0x7e              // =126
                	str	x16, [sp, #0x3a8]
-               	ldr	x16, [sp, #0x14a0]
+               	mov	x16, #0x7f              // =127
                	str	x16, [sp, #0x3b0]
-               	ldr	x16, [sp, #0x1498]
+               	mov	x16, #0x80              // =128
                	str	x16, [sp, #0x3b8]
-               	ldr	x16, [sp, #0x1490]
+               	mov	x16, #0x81              // =129
                	str	x16, [sp, #0x3c0]
-               	ldr	x16, [sp, #0x1488]
+               	mov	x16, #0x82              // =130
                	str	x16, [sp, #0x3c8]
-               	ldr	x16, [sp, #0x1480]
+               	mov	x16, #0x83              // =131
                	str	x16, [sp, #0x3d0]
-               	ldr	x16, [sp, #0x1478]
+               	mov	x16, #0x84              // =132
                	str	x16, [sp, #0x3d8]
-               	ldr	x16, [sp, #0x1470]
+               	mov	x16, #0x85              // =133
                	str	x16, [sp, #0x3e0]
-               	ldr	x16, [sp, #0x1468]
+               	mov	x16, #0x86              // =134
                	str	x16, [sp, #0x3e8]
-               	ldr	x16, [sp, #0x1460]
+               	mov	x16, #0x87              // =135
                	str	x16, [sp, #0x3f0]
-               	ldr	x16, [sp, #0x1458]
+               	mov	x16, #0x88              // =136
                	str	x16, [sp, #0x3f8]
-               	ldr	x16, [sp, #0x1450]
+               	mov	x16, #0x89              // =137
                	str	x16, [sp, #0x400]
-               	ldr	x16, [sp, #0x1448]
+               	mov	x16, #0x8a              // =138
                	str	x16, [sp, #0x408]
-               	ldr	x16, [sp, #0x1440]
+               	mov	x16, #0x8b              // =139
                	str	x16, [sp, #0x410]
-               	ldr	x16, [sp, #0x1438]
+               	mov	x16, #0x8c              // =140
                	str	x16, [sp, #0x418]
-               	ldr	x16, [sp, #0x1430]
+               	mov	x16, #0x8d              // =141
                	str	x16, [sp, #0x420]
-               	ldr	x16, [sp, #0x1428]
+               	mov	x16, #0x8e              // =142
                	str	x16, [sp, #0x428]
-               	ldr	x16, [sp, #0x1420]
+               	mov	x16, #0x8f              // =143
                	str	x16, [sp, #0x430]
-               	ldr	x16, [sp, #0x1418]
+               	mov	x16, #0x90              // =144
                	str	x16, [sp, #0x438]
-               	ldr	x16, [sp, #0x1410]
+               	mov	x16, #0x91              // =145
                	str	x16, [sp, #0x440]
-               	ldr	x16, [sp, #0x1408]
+               	mov	x16, #0x92              // =146
                	str	x16, [sp, #0x448]
-               	ldr	x16, [sp, #0x1400]
+               	mov	x16, #0x93              // =147
                	str	x16, [sp, #0x450]
-               	ldr	x16, [sp, #0x13f8]
+               	mov	x16, #0x94              // =148
                	str	x16, [sp, #0x458]
-               	ldr	x16, [sp, #0x13f0]
+               	mov	x16, #0x95              // =149
                	str	x16, [sp, #0x460]
-               	ldr	x16, [sp, #0x13e8]
+               	mov	x16, #0x96              // =150
                	str	x16, [sp, #0x468]
-               	ldr	x16, [sp, #0x13e0]
+               	mov	x16, #0x97              // =151
                	str	x16, [sp, #0x470]
-               	ldr	x16, [sp, #0x13d8]
+               	mov	x16, #0x98              // =152
                	str	x16, [sp, #0x478]
-               	ldr	x16, [sp, #0x13d0]
+               	mov	x16, #0x99              // =153
                	str	x16, [sp, #0x480]
-               	ldr	x16, [sp, #0x13c8]
+               	mov	x16, #0x9a              // =154
                	str	x16, [sp, #0x488]
-               	ldr	x16, [sp, #0x13c0]
+               	mov	x16, #0x9b              // =155
                	str	x16, [sp, #0x490]
-               	ldr	x16, [sp, #0x13b8]
+               	mov	x16, #0x9c              // =156
                	str	x16, [sp, #0x498]
-               	ldr	x16, [sp, #0x13b0]
+               	mov	x16, #0x9d              // =157
                	str	x16, [sp, #0x4a0]
-               	ldr	x16, [sp, #0x13a8]
+               	mov	x16, #0x9e              // =158
                	str	x16, [sp, #0x4a8]
-               	ldr	x16, [sp, #0x13a0]
+               	mov	x16, #0x9f              // =159
                	str	x16, [sp, #0x4b0]
-               	ldr	x16, [sp, #0x1398]
+               	mov	x16, #0xa0              // =160
                	str	x16, [sp, #0x4b8]
-               	ldr	x16, [sp, #0x1390]
+               	mov	x16, #0xa1              // =161
                	str	x16, [sp, #0x4c0]
-               	ldr	x16, [sp, #0x1388]
+               	mov	x16, #0xa2              // =162
                	str	x16, [sp, #0x4c8]
-               	ldr	x16, [sp, #0x1380]
+               	mov	x16, #0xa3              // =163
                	str	x16, [sp, #0x4d0]
-               	ldr	x16, [sp, #0x1378]
+               	mov	x16, #0xa4              // =164
                	str	x16, [sp, #0x4d8]
-               	ldr	x16, [sp, #0x1370]
+               	mov	x16, #0xa5              // =165
                	str	x16, [sp, #0x4e0]
-               	ldr	x16, [sp, #0x1368]
+               	mov	x16, #0xa6              // =166
                	str	x16, [sp, #0x4e8]
-               	ldr	x16, [sp, #0x1360]
+               	mov	x16, #0xa7              // =167
                	str	x16, [sp, #0x4f0]
-               	ldr	x16, [sp, #0x1358]
+               	mov	x16, #0xa8              // =168
                	str	x16, [sp, #0x4f8]
-               	ldr	x16, [sp, #0x1350]
+               	mov	x16, #0xa9              // =169
                	str	x16, [sp, #0x500]
-               	ldr	x16, [sp, #0x1348]
+               	mov	x16, #0xaa              // =170
                	str	x16, [sp, #0x508]
-               	ldr	x16, [sp, #0x1340]
+               	mov	x16, #0xab              // =171
                	str	x16, [sp, #0x510]
-               	ldr	x16, [sp, #0x1338]
+               	mov	x16, #0xac              // =172
                	str	x16, [sp, #0x518]
-               	ldr	x16, [sp, #0x1330]
+               	mov	x16, #0xad              // =173
                	str	x16, [sp, #0x520]
-               	ldr	x16, [sp, #0x1328]
+               	mov	x16, #0xae              // =174
                	str	x16, [sp, #0x528]
-               	ldr	x16, [sp, #0x1320]
+               	mov	x16, #0xaf              // =175
                	str	x16, [sp, #0x530]
-               	ldr	x16, [sp, #0x1318]
+               	mov	x16, #0xb0              // =176
                	str	x16, [sp, #0x538]
-               	ldr	x16, [sp, #0x1310]
+               	mov	x16, #0xb1              // =177
                	str	x16, [sp, #0x540]
-               	ldr	x16, [sp, #0x1308]
+               	mov	x16, #0xb2              // =178
                	str	x16, [sp, #0x548]
-               	ldr	x16, [sp, #0x1300]
+               	mov	x16, #0xb3              // =179
                	str	x16, [sp, #0x550]
-               	ldr	x16, [sp, #0x12f8]
+               	mov	x16, #0xb4              // =180
                	str	x16, [sp, #0x558]
-               	ldr	x16, [sp, #0x12f0]
+               	mov	x16, #0xb5              // =181
                	str	x16, [sp, #0x560]
-               	ldr	x16, [sp, #0x12e8]
+               	mov	x16, #0xb6              // =182
                	str	x16, [sp, #0x568]
-               	ldr	x16, [sp, #0x12e0]
+               	mov	x16, #0xb7              // =183
                	str	x16, [sp, #0x570]
-               	ldr	x16, [sp, #0x12d8]
+               	mov	x16, #0xb8              // =184
                	str	x16, [sp, #0x578]
-               	ldr	x16, [sp, #0x12d0]
+               	mov	x16, #0xb9              // =185
                	str	x16, [sp, #0x580]
-               	ldr	x16, [sp, #0x12c8]
+               	mov	x16, #0xba              // =186
                	str	x16, [sp, #0x588]
-               	ldr	x16, [sp, #0x12c0]
+               	mov	x16, #0xbb              // =187
                	str	x16, [sp, #0x590]
-               	ldr	x16, [sp, #0x12b8]
+               	mov	x16, #0xbc              // =188
                	str	x16, [sp, #0x598]
-               	ldr	x16, [sp, #0x12b0]
+               	mov	x16, #0xbd              // =189
                	str	x16, [sp, #0x5a0]
-               	ldr	x16, [sp, #0x12a8]
+               	mov	x16, #0xbe              // =190
                	str	x16, [sp, #0x5a8]
-               	ldr	x16, [sp, #0x12a0]
+               	mov	x16, #0xbf              // =191
                	str	x16, [sp, #0x5b0]
-               	ldr	x16, [sp, #0x1298]
+               	mov	x16, #0xc0              // =192
                	str	x16, [sp, #0x5b8]
-               	ldr	x16, [sp, #0x1290]
+               	mov	x16, #0xc1              // =193
                	str	x16, [sp, #0x5c0]
-               	ldr	x16, [sp, #0x1288]
+               	mov	x16, #0xc2              // =194
                	str	x16, [sp, #0x5c8]
-               	ldr	x16, [sp, #0x1280]
+               	mov	x16, #0xc3              // =195
                	str	x16, [sp, #0x5d0]
-               	ldr	x16, [sp, #0x1278]
+               	mov	x16, #0xc4              // =196
                	str	x16, [sp, #0x5d8]
-               	ldr	x16, [sp, #0x1270]
+               	mov	x16, #0xc5              // =197
                	str	x16, [sp, #0x5e0]
-               	ldr	x16, [sp, #0x1268]
+               	mov	x16, #0xc6              // =198
                	str	x16, [sp, #0x5e8]
-               	ldr	x16, [sp, #0x1260]
+               	mov	x16, #0xc7              // =199
                	str	x16, [sp, #0x5f0]
-               	ldr	x16, [sp, #0x1258]
+               	mov	x16, #0xc8              // =200
                	str	x16, [sp, #0x5f8]
-               	ldr	x16, [sp, #0x1250]
+               	mov	x16, #0xc9              // =201
                	str	x16, [sp, #0x600]
-               	ldr	x16, [sp, #0x1248]
+               	mov	x16, #0xca              // =202
                	str	x16, [sp, #0x608]
-               	ldr	x16, [sp, #0x1240]
+               	mov	x16, #0xcb              // =203
                	str	x16, [sp, #0x610]
-               	ldr	x16, [sp, #0x1238]
+               	mov	x16, #0xcc              // =204
                	str	x16, [sp, #0x618]
-               	ldr	x16, [sp, #0x1230]
+               	mov	x16, #0xcd              // =205
                	str	x16, [sp, #0x620]
-               	ldr	x16, [sp, #0x1228]
+               	mov	x16, #0xce              // =206
                	str	x16, [sp, #0x628]
-               	ldr	x16, [sp, #0x1220]
+               	mov	x16, #0xcf              // =207
                	str	x16, [sp, #0x630]
-               	ldr	x16, [sp, #0x1218]
+               	mov	x16, #0xd0              // =208
                	str	x16, [sp, #0x638]
-               	ldr	x16, [sp, #0x1210]
+               	mov	x16, #0xd1              // =209
                	str	x16, [sp, #0x640]
-               	ldr	x16, [sp, #0x1208]
+               	mov	x16, #0xd2              // =210
                	str	x16, [sp, #0x648]
-               	ldr	x16, [sp, #0x1200]
+               	mov	x16, #0xd3              // =211
                	str	x16, [sp, #0x650]
-               	ldr	x16, [sp, #0x11f8]
+               	mov	x16, #0xd4              // =212
                	str	x16, [sp, #0x658]
-               	ldr	x16, [sp, #0x11f0]
+               	mov	x16, #0xd5              // =213
                	str	x16, [sp, #0x660]
-               	ldr	x16, [sp, #0x11e8]
+               	mov	x16, #0xd6              // =214
                	str	x16, [sp, #0x668]
-               	ldr	x16, [sp, #0x11e0]
+               	mov	x16, #0xd7              // =215
                	str	x16, [sp, #0x670]
-               	ldr	x16, [sp, #0x11d8]
+               	mov	x16, #0xd8              // =216
                	str	x16, [sp, #0x678]
-               	ldr	x16, [sp, #0x11d0]
+               	mov	x16, #0xd9              // =217
                	str	x16, [sp, #0x680]
-               	ldr	x16, [sp, #0x11c8]
+               	mov	x16, #0xda              // =218
                	str	x16, [sp, #0x688]
-               	ldr	x16, [sp, #0x11c0]
+               	mov	x16, #0xdb              // =219
                	str	x16, [sp, #0x690]
-               	ldr	x16, [sp, #0x11b8]
+               	mov	x16, #0xdc              // =220
                	str	x16, [sp, #0x698]
-               	ldr	x16, [sp, #0x11b0]
+               	mov	x16, #0xdd              // =221
                	str	x16, [sp, #0x6a0]
-               	ldr	x16, [sp, #0x11a8]
+               	mov	x16, #0xde              // =222
                	str	x16, [sp, #0x6a8]
-               	ldr	x16, [sp, #0x11a0]
+               	mov	x16, #0xdf              // =223
                	str	x16, [sp, #0x6b0]
-               	ldr	x16, [sp, #0x1198]
+               	mov	x16, #0xe0              // =224
                	str	x16, [sp, #0x6b8]
-               	ldr	x16, [sp, #0x1190]
+               	mov	x16, #0xe1              // =225
                	str	x16, [sp, #0x6c0]
-               	ldr	x16, [sp, #0x1188]
+               	mov	x16, #0xe2              // =226
                	str	x16, [sp, #0x6c8]
-               	ldr	x16, [sp, #0x1180]
+               	mov	x16, #0xe3              // =227
                	str	x16, [sp, #0x6d0]
-               	ldr	x16, [sp, #0x1178]
+               	mov	x16, #0xe4              // =228
                	str	x16, [sp, #0x6d8]
-               	ldr	x16, [sp, #0x1170]
+               	mov	x16, #0xe5              // =229
                	str	x16, [sp, #0x6e0]
-               	ldr	x16, [sp, #0x1168]
+               	mov	x16, #0xe6              // =230
                	str	x16, [sp, #0x6e8]
-               	ldr	x16, [sp, #0x1160]
+               	mov	x16, #0xe7              // =231
                	str	x16, [sp, #0x6f0]
-               	ldr	x16, [sp, #0x1158]
+               	mov	x16, #0xe8              // =232
                	str	x16, [sp, #0x6f8]
-               	ldr	x16, [sp, #0x1150]
+               	mov	x16, #0xe9              // =233
                	str	x16, [sp, #0x700]
-               	ldr	x16, [sp, #0x1148]
+               	mov	x16, #0xea              // =234
                	str	x16, [sp, #0x708]
-               	ldr	x16, [sp, #0x1140]
+               	mov	x16, #0xeb              // =235
                	str	x16, [sp, #0x710]
-               	ldr	x16, [sp, #0x1138]
+               	mov	x16, #0xec              // =236
                	str	x16, [sp, #0x718]
-               	ldr	x16, [sp, #0x1130]
+               	mov	x16, #0xed              // =237
                	str	x16, [sp, #0x720]
-               	ldr	x16, [sp, #0x1128]
+               	mov	x16, #0xee              // =238
                	str	x16, [sp, #0x728]
-               	ldr	x16, [sp, #0x1120]
+               	mov	x16, #0xef              // =239
                	str	x16, [sp, #0x730]
-               	ldr	x16, [sp, #0x1118]
+               	mov	x16, #0xf0              // =240
                	str	x16, [sp, #0x738]
-               	ldr	x16, [sp, #0x1110]
+               	mov	x16, #0xf1              // =241
                	str	x16, [sp, #0x740]
-               	ldr	x16, [sp, #0x1108]
+               	mov	x16, #0xf2              // =242
                	str	x16, [sp, #0x748]
-               	ldr	x16, [sp, #0x1100]
+               	mov	x16, #0xf3              // =243
                	str	x16, [sp, #0x750]
-               	ldr	x16, [sp, #0x10f8]
+               	mov	x16, #0xf4              // =244
                	str	x16, [sp, #0x758]
-               	ldr	x16, [sp, #0x10f0]
+               	mov	x16, #0xf5              // =245
                	str	x16, [sp, #0x760]
-               	ldr	x16, [sp, #0x10e8]
+               	mov	x16, #0xf6              // =246
                	str	x16, [sp, #0x768]
-               	ldr	x16, [sp, #0x10e0]
+               	mov	x16, #0xf7              // =247
                	str	x16, [sp, #0x770]
-               	ldr	x16, [sp, #0x10d8]
+               	mov	x16, #0xf8              // =248
                	str	x16, [sp, #0x778]
-               	ldr	x16, [sp, #0x10d0]
+               	mov	x16, #0xf9              // =249
                	str	x16, [sp, #0x780]
-               	ldr	x16, [sp, #0x10c8]
+               	mov	x16, #0xfa              // =250
                	str	x16, [sp, #0x788]
-               	ldr	x16, [sp, #0x10c0]
+               	mov	x16, #0xfb              // =251
                	str	x16, [sp, #0x790]
-               	ldr	x16, [sp, #0x10b8]
+               	mov	x16, #0xfc              // =252
                	str	x16, [sp, #0x798]
-               	ldr	x16, [sp, #0x10b0]
+               	mov	x16, #0xfd              // =253
                	str	x16, [sp, #0x7a0]
-               	ldr	x16, [sp, #0x10a8]
+               	mov	x16, #0xfe              // =254
                	str	x16, [sp, #0x7a8]
-               	ldr	x16, [sp, #0x10a0]
+               	mov	x16, #0xff              // =255
                	str	x16, [sp, #0x7b0]
-               	ldr	x16, [sp, #0x1098]
+               	mov	x16, #0x100             // =256
                	str	x16, [sp, #0x7b8]
-               	ldr	x16, [sp, #0x1090]
+               	mov	x16, #0x101             // =257
                	str	x16, [sp, #0x7c0]
-               	ldr	x16, [sp, #0x1088]
+               	mov	x16, #0x102             // =258
                	str	x16, [sp, #0x7c8]
-               	ldr	x16, [sp, #0x1080]
+               	mov	x16, #0x103             // =259
                	str	x16, [sp, #0x7d0]
-               	ldr	x16, [sp, #0x1078]
+               	mov	x16, #0x104             // =260
                	str	x16, [sp, #0x7d8]
                	bl	<addr>
                	mov	x17, #0x848a            // =33930

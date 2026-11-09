@@ -70,10 +70,10 @@ Disassembly of section .text:
                	stur	x5, [x29, #-0x8]
                	lsl	x1, x1, #1
                	add	x1, x1, #0x5
-               	mov	x5, #0x34ac             // =13484
-               	movk	x5, #0x1, lsl #16
                	str	x1, [sp]
-               	str	x5, [sp, #0x8]
+               	mov	x16, #0x34ac            // =13484
+               	movk	x16, #0x1, lsl #16
+               	str	x16, [sp, #0x8]
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	ldr	x5, [x4, #0x8]

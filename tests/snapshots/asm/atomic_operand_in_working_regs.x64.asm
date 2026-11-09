@@ -110,24 +110,21 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movl	$0x7, %eax
-               	movl	$0x8, %ebx
                	subq	$0x10, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%rbx, 0x8(%rsp)
+               	movl	$0x7, %r10d
+               	movq	%r10, (%rsp)
+               	movl	$0x8, %r10d
+               	movq	%r10, 0x8(%rsp)
                	callq	<addr>
                	addq	$0x10, %rsp
                	cmpq	$0x24, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq

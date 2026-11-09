@@ -22,7 +22,7 @@ fn ent_pc=19 n_params=3 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=20 ---
 ; name=narrow
 fn ent_pc=20 n_params=0 variadic=false locals=3
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -434,8 +434,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v293 Imm(5)                                           -> x1
     v294 Imm(-6)                                          -> x8
     v295 Imm(7)                                           -> x9
-    v296 Imm(-1)                                          -> x0
-    v297 Imm(255)                                         -> x3
+    v296 Imm(-1)                                          -> -
+    v297 Imm(255)                                         -> -
     v298 CallExt { binding_idx=9, args=[v290, v291, v292, v293, v294, v295, v296, v297], fp_arg_mask=0x0 } -> x3
     v299 Imm(0)                                           -> x0
     v300 Extend { value=v298, kind=I32 }                  -> x0
@@ -463,8 +463,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
     v360 Imm(5)                                           -> x1
     v361 Imm(-6)                                          -> x8
     v362 Imm(7)                                           -> x9
-    v363 Imm(-1)                                          -> x0
-    v364 Imm(255)                                         -> x12
+    v363 Imm(-1)                                          -> -
+    v364 Imm(255)                                         -> -
     v365 Call { target_pc=19, args=[v357, v358, v359, v360, v361, v362, v363, v364], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v366 Extend { value=v365, kind=I32 }                  -> x1
     v367 Extend { value=v298, kind=I32 }                  -> x1
@@ -906,7 +906,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=3
 ; --- SSA dump (ok=true) ent_pc=21 ---
 ; name=wide
 fn ent_pc=21 n_params=0 variadic=false locals=35
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -917,9 +917,9 @@ fn ent_pc=21 n_params=0 variadic=false locals=35
     v6   ImmData(1116)                                    -> x1
     v7   ImmData(1120)                                    -> x8
     v8   Imm(99)                                          -> x9
-    v9   Imm(119)                                         -> x0
-    v10  Imm(300)                                         -> x3
-    v11  Imm(4607182418800017408)                         -> x12
+    v9   Imm(119)                                         -> -
+    v10  Imm(300)                                         -> -
+    v11  Imm(4607182418800017408)                         -> x0
     v12  LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v13  Binop { op=fdiv, lhs=v11, rhs=v12 }              -> d1
     v14  CallExt { binding_idx=155, args=[v3, v4, v5, v6, v7, v8, v9, v10, v13], fp_arg_mask=0x100 } -> x0

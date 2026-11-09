@@ -293,10 +293,10 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0x28               // =40
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0x28              // =40
+               	str	x16, [sp, #0x8]
                	bl	<addr>
                	cmp	x0, #0x27
                	b.eq	<addr>

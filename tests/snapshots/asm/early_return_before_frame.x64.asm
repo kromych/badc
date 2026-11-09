@@ -452,15 +452,15 @@ Disassembly of section .text:
                	movl	$0xa, %ecx
                	movl	$0x14, %r8d
                	movl	$0x1e, %r9d
-               	movl	$0x28, %eax
-               	movl	$0x32, %ebx
-               	movl	$0x64, %r12d
-               	movl	$0x3e8, %r13d           # imm = 0x3E8
                	subq	$0x20, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%rbx, 0x8(%rsp)
-               	movq	%r12, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
+               	movl	$0x28, %r10d
+               	movq	%r10, (%rsp)
+               	movl	$0x32, %r10d
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x64, %r10d
+               	movq	%r10, 0x10(%rsp)
+               	movl	$0x3e8, %r10d           # imm = 0x3E8
+               	movq	%r10, 0x18(%rsp)
                	callq	<addr>
                	addq	$0x20, %rsp
                	cmpq	$0xc59, %rax            # imm = 0xC59

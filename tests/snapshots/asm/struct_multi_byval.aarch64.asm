@@ -100,22 +100,22 @@ Disassembly of section .text:
                	stp	x16, x17, [x5]
                	mov	x1, #0x3e8              // =1000
                	mov	x7, #0x7d0              // =2000
-               	mov	x3, #0xbb8              // =3000
-               	sub	x6, x29, #0x18
-               	mov	x8, #0x64               // =100
-               	stur	w8, [x29, #-0x18]
-               	mov	x8, #0x65               // =101
-               	stur	w8, [x29, #-0x14]
-               	mov	x8, #0x66               // =102
-               	stur	w8, [x29, #-0x10]
-               	mov	x8, #0x67               // =103
-               	stur	w8, [x29, #-0xc]
-               	mov	x8, #0x68               // =104
-               	stur	w8, [x29, #-0x8]
-               	mov	x8, #0x69               // =105
-               	stur	w8, [x29, #-0x4]
-               	str	x6, [sp]
-               	str	x3, [sp, #0x8]
+               	sub	x3, x29, #0x18
+               	mov	x6, #0x64               // =100
+               	stur	w6, [x29, #-0x18]
+               	mov	x6, #0x65               // =101
+               	stur	w6, [x29, #-0x14]
+               	mov	x6, #0x66               // =102
+               	stur	w6, [x29, #-0x10]
+               	mov	x6, #0x67               // =103
+               	stur	w6, [x29, #-0xc]
+               	mov	x6, #0x68               // =104
+               	stur	w6, [x29, #-0x8]
+               	mov	x6, #0x69               // =105
+               	stur	w6, [x29, #-0x4]
+               	str	x3, [sp]
+               	mov	x16, #0xbb8             // =3000
+               	str	x16, [sp, #0x8]
                	ldr	x0, [x0]
                	ldr	w3, [x2, #0x8]
                	ldr	x2, [x2]

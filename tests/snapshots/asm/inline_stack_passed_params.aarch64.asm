@@ -124,18 +124,18 @@ Disassembly of section .text:
                	mov	x7, #0xea60             // =60000
                	movk	x7, #0x1111, lsl #16
                	movk	x7, #0x1111, lsl #32
-               	mov	x8, #0x9                // =9
-               	mov	x9, #-0xa               // =-10
-               	mov	x10, #0xdef0            // =57072
-               	movk	x10, #0x9abc, lsl #16
-               	movk	x10, #0x5678, lsl #32
-               	movk	x10, #0x1234, lsl #48
-               	adrp	x11, <page>
-               	ldr	x11, [x11, <lo12>]
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	blr	x11
+               	adrp	x8, <page>
+               	ldr	x9, [x8, #0x70]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #-0xa              // =-10
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0xdef0            // =57072
+               	movk	x16, #0x9abc, lsl #16
+               	movk	x16, #0x5678, lsl #32
+               	movk	x16, #0x1234, lsl #48
+               	str	x16, [sp, #0x10]
+               	blr	x9
                	cbz	w0, <addr>
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

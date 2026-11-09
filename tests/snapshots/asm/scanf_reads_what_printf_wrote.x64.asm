@@ -39,34 +39,26 @@ Disassembly of section .text:
                	movq	$-0x7fffffff, %r9       # imm = 0x80000001
                	movl	$0x0, -0x288(%rbp)
                	movl	$0x0, -0x280(%rbp)
-               	movq	$-0x499602d2, %rax      # imm = 0xB669FD2E
-               	movabsq	$0x20000000000001, %rdx # imm = 0x20000000000001
-               	movl	$0xee6b2800, %esi       # imm = 0xEE6B2800
-               	movl	$0xdeadbeef, %edi       # imm = 0xDEADBEEF
-               	movabsq	$0x4005bf0a8b145769, %rbx # imm = 0x4005BF0A8B145769
-               	movabsq	$0x400a000000000000, %r12 # imm = 0x400A000000000000
-               	movq	%r12, %xmm14
+               	movabsq	$0x4005bf0a8b145769, %rax # imm = 0x4005BF0A8B145769
+               	movabsq	$0x400a000000000000, %rdx # imm = 0x400A000000000000
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x330(%rbp)
-               	movabsq	$-0x7e5a91e03d070ca7, %r12 # imm = 0x81A56E1FC2F8F359
-               	movq	%r12, %xmm14
+               	movabsq	$-0x7e5a91e03d070ca7, %rdx # imm = 0x81A56E1FC2F8F359
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x320(%rbp)
-               	movabsq	$0x3ff8000000000000, %r12 # imm = 0x3FF8000000000000
-               	movq	%r12, %xmm14
+               	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x310(%rbp)
-               	movl	$0x1234, %r12d          # imm = 0x1234
-               	leaq	-0x200(%rbp), %r13
-               	movl	$0x100, %r14d           # imm = 0x100
-               	leaq	<rip>, %r15
-               	movl	$0x1ed, %r10d           # imm = 0x1ED
-               	movq	%r10, 0xc8(%rsp)
-               	movabsq	$0x3fb99999a0000000, %r10 # imm = 0x3FB99999A0000000
-               	movq	%r10, 0xc0(%rsp)
+               	leaq	-0x200(%rbp), %rdi
+               	movl	$0x100, %esi            # imm = 0x100
+               	leaq	<rip>, %rdx
+               	movabsq	$0x3fb99999a0000000, %rbx # imm = 0x3FB99999A0000000
                	fldt	-0x330(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
@@ -76,57 +68,52 @@ Disassembly of section .text:
                	fldt	-0x310(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm2
-               	leaq	<rip>, %r10
-               	movq	%r10, 0xb8(%rsp)
-               	movl	$0x71, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	leaq	-0x330(%rbp), %r10
-               	movq	%r10, 0xa8(%rsp)
+               	leaq	<rip>, %r12
+               	leaq	-0x330(%rbp), %r13
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x330(%rbp)
-               	leaq	-0x320(%rbp), %r10
-               	movq	%r10, 0xa0(%rsp)
+               	leaq	-0x320(%rbp), %r14
                	movsd	%xmm1, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x320(%rbp)
-               	leaq	-0x310(%rbp), %r10
-               	movq	%r10, 0x98(%rsp)
+               	leaq	-0x310(%rbp), %r15
                	movsd	%xmm2, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x310(%rbp)
                	subq	$0x80, %rsp
-               	movq	%rax, (%rsp)
-               	movq	%rdx, 0x8(%rsp)
-               	movq	%rsi, 0x10(%rsp)
-               	movq	%rdi, 0x18(%rsp)
-               	movq	0x148(%rsp), %r10
+               	movq	$-0x499602d2, %r10      # imm = 0xB669FD2E
+               	movq	%r10, (%rsp)
+               	movabsq	$0x20000000000001, %r10 # imm = 0x20000000000001
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0xee6b2800, %r10d      # imm = 0xEE6B2800
+               	movq	%r10, 0x10(%rsp)
+               	movl	$0xdeadbeef, %r10d      # imm = 0xDEADBEEF
+               	movq	%r10, 0x18(%rsp)
+               	movl	$0x1ed, %r10d           # imm = 0x1ED
                	movq	%r10, 0x20(%rsp)
-               	movq	0x138(%rsp), %r10
-               	movq	%r10, 0x60(%rsp)
-               	movq	0x130(%rsp), %r10
+               	movq	%r12, 0x60(%rsp)
+               	movl	$0x71, %r10d
                	movq	%r10, 0x68(%rsp)
-               	movq	%r12, 0x70(%rsp)
-               	movq	0x128(%rsp), %r10
+               	movl	$0x1234, %r10d          # imm = 0x1234
+               	movq	%r10, 0x70(%rsp)
+               	movq	%r13, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x30(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x38(%rsp)
-               	movq	0x120(%rsp), %r10
+               	movq	%r14, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x40(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x48(%rsp)
-               	movq	0x118(%rsp), %r10
+               	movq	%r15, %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x50(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x58(%rsp)
-               	movsd	0x140(%rsp), %xmm0
-               	movq	%rbx, %xmm1
-               	movq	%r13, %rdi
-               	movq	%r15, %rdx
-               	movq	%r14, %rsi
+               	movq	%rbx, %xmm0
+               	movq	%rax, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	addq	$0x80, %rsp

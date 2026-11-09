@@ -85,11 +85,11 @@ Disassembly of section .text:
                	movq	$0x6, -0x8(%rbp)
                	shlq	%rsi
                	leaq	0x5(%rsi), %rax
-               	movl	$0x134ac, %esi          # imm = 0x134AC
                	movq	0x18(%rbp), %rbx
                	subq	$0x20, %rsp
                	movq	%rax, 0x10(%rsp)
-               	movq	%rsi, 0x18(%rsp)
+               	movl	$0x134ac, %r10d         # imm = 0x134AC
+               	movq	%r10, 0x18(%rsp)
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)

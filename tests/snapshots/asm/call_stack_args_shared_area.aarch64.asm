@@ -62,13 +62,13 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x8, #0x9                // =9
-               	mov	x9, #0xa                // =10
-               	adrp	x10, <page>
-               	ldr	x10, [x10, <lo12>]
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	blr	x10
+               	adrp	x8, <page>
+               	ldr	x9, [x8, #0x18]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x8]
+               	blr	x9
                	mov	x20, x0
                	mov	x0, #0xa                // =10
                	mov	x1, #0x9                // =9
@@ -78,15 +78,15 @@ Disassembly of section .text:
                	mov	x5, #0x5                // =5
                	mov	x6, #0x4                // =4
                	mov	x7, #0x3                // =3
-               	mov	x8, #0x2                // =2
-               	mov	x9, #0x1                // =1
-               	mov	x10, #0x0               // =0
-               	adrp	x11, <page>
-               	ldr	x11, [x11, <lo12>]
-               	str	x8, [sp]
-               	str	x9, [sp, #0x8]
-               	str	x10, [sp, #0x10]
-               	blr	x11
+               	adrp	x8, <page>
+               	ldr	x9, [x8, #0x20]
+               	mov	x16, #0x2               // =2
+               	str	x16, [sp]
+               	mov	x16, #0x1               // =1
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0x0               // =0
+               	str	x16, [sp, #0x10]
+               	blr	x9
                	add	x0, x20, x0
                	sub	x0, x0, #0x6e
                	ldr	x20, [sp, #0x20]

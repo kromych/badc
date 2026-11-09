@@ -129,7 +129,7 @@ fn ent_pc=1 n_params=9 variadic=false locals=6
     v53  BinopI { op=shl, lhs=v5, rhs_imm=1 }             -> x6
     v54  BinopI { op=add, lhs=v53, rhs_imm=5 }            -> x0
     v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x6
-    v56  Imm(79020)                                       -> x6
+    v56  Imm(79020)                                       -> -
     v57  LoadLocal { off=10, kind=I64 }                   -> x3
     v58  CallIndirect { target=v57, args=[v15, v26, v29, v40, v48, v54, v56], callee_variadic=false, fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Return(v58)   (exit_acc=v58)

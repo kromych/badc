@@ -1000,6 +1000,11 @@ impl CallArgs<'_> {
     /// Argument `i`'s value in an integer register, reloaded into `into`
     /// when spilled, with the call's sp lowering applied.
     fn arg_int(&self, code: &mut Vec<u8>, i: usize, into: Reg) -> Option<Reg> {
+        // A constant the allocator left to the call (`Allocation::stack_imm`).
+        if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
+            load_imm64(code, into, k as u64);
+            return Some(into);
+        }
         materialize_int_shifted(code, self.arg_place(i), into, self.frame, self.sp_shift())
     }
 

@@ -149,6 +149,11 @@ pub(crate) struct Allocation {
     /// a store, so its use count is zero and it is never materialized;
     /// the store's own value is unread.
     pub imm_store: Vec<bool>,
+    /// The `Imm` values every reader of which is an integer argument a
+    /// call places on the stack ([`stack_arg_immediates`]), with their
+    /// constants. Such a value takes no place: the call's marshaling sets
+    /// it from its encoding, so it holds no register ahead of the call.
+    pub stack_imm: alloc::collections::BTreeMap<ValueId, i64>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
     /// Per instruction whose lowering writes registers besides its result,
@@ -1341,6 +1346,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
     drop_unread_incomes(func, &mut use_counts);
+    // Unread, a stack argument's constant is unemitted, and the liveness
+    // reading only emitted values keeps it out of the coloring.
+    let stack_imm = stack_arg_immediates(func, target, &use_counts);
+    for &v in stack_imm.keys() {
+        use_counts[v as usize] = 0;
+    }
     let reads = operands_read(func, &use_counts);
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
@@ -1367,6 +1378,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             imm_store: Vec::new(),
+            stack_imm: alloc::collections::BTreeMap::new(),
             fp_const,
             implicit_live: Vec::new(),
             hints,
@@ -1556,6 +1568,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         coloring = color(&node_cons);
     }
     places = coloring.places;
+    for &v in stack_imm.keys() {
+        places[v as usize] = Place::None;
+    }
     let spill_count = coloring.spill_count;
     // A copy or an atomic read-modify-write may take any register as a
     // temporary, so its record covers them all; the x86-64 shift and
@@ -2060,6 +2075,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_k,
         branch_fused,
         imm_store,
+        stack_imm,
         fp_const,
         implicit_live,
         hints,
@@ -3504,6 +3520,102 @@ fn result_kind(inst: &Inst) -> ResultKind {
     }
 }
 
+/// A call's arguments and their placements. An import's variadic count
+/// is unknown here, so its arguments plan as fixed; the emitter, which
+/// knows it, may place a variadic one differently.
+fn call_plan<'f>(
+    func: &FunctionSsa,
+    inst: &'f Inst,
+    target: Target,
+) -> Option<(
+    &'f [ValueId],
+    &'f crate::c5::ir::FpMask,
+    crate::c5::codegen::CallPlan,
+)> {
+    let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
+        Inst::Call {
+            args,
+            fixed_args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
+        Inst::CallIndirect {
+            args,
+            callee_variadic,
+            fixed_args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => {
+            let fixed = if *callee_variadic {
+                *fixed_args
+            } else {
+                args.len()
+            };
+            (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
+        }
+        Inst::CallExt {
+            args,
+            fp_arg_mask,
+            arg_aggs,
+            arg_widths,
+            ..
+        } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
+        _ => return None,
+    };
+    let abi = target.abi_for(inst.call_conv()?);
+    let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+    let plan = crate::c5::codegen::plan_call_args_aggs(
+        args.len(),
+        fixed,
+        fp_arg_mask,
+        abi,
+        &aggs,
+        false,
+        widths,
+    );
+    Some((args, fp_arg_mask, plan))
+}
+
+/// The `Imm` values every reader of which is an integer argument a call
+/// places on the stack, with their constants (`Allocation::stack_imm`).
+fn stack_arg_immediates(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeMap<ValueId, i64> {
+    let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
+        alloc::collections::BTreeMap::new();
+    for blk in &func.blocks {
+        for pc in blk.inst_range.clone() {
+            let inst = &func.insts[pc as usize];
+            let Some((args, fp, plan)) = call_plan(func, inst, target) else {
+                continue;
+            };
+            for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
+                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
+                    && !fp.has(i)
+                    && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
+                    && !func.f32_values.get(v as usize).copied().unwrap_or(false)
+                {
+                    *readers.entry(v).or_default() += 1;
+                }
+            }
+        }
+    }
+    readers
+        .into_iter()
+        .filter(|&(v, n)| use_counts.get(v as usize) == Some(&n))
+        .filter_map(|(v, _)| match func.insts[v as usize] {
+            Inst::Imm(k) => Some((v, k)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Populate per-call-argument coalescing hints. The i-th integer or
 /// FP argument value at each `Inst::Call*` is hinted to the matching
 /// host argument register so the allocator parks the value there from
@@ -3537,55 +3649,13 @@ fn populate_call_arg_hints(
         })
         .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
-        // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
-            Inst::Call {
-                args,
-                fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
-            Inst::CallIndirect {
-                args,
-                callee_variadic,
-                fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => {
-                let fixed = if *callee_variadic {
-                    *fixed_args
-                } else {
-                    args.len()
-                };
-                (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
-            }
-            Inst::CallExt {
-                args,
-                fp_arg_mask,
-                arg_aggs,
-                arg_widths,
-                ..
-            } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
-            _ => continue,
+        let Some((args, _, plan)) = call_plan(func, inst, target) else {
+            continue;
         };
         let Some(conv) = inst.call_conv() else {
             continue;
         };
         let abi = target.abi_for(conv);
-        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
-        let plan = crate::c5::codegen::plan_call_args_aggs(
-            args.len(),
-            fixed,
-            fp_arg_mask,
-            abi,
-            &aggs,
-            false,
-            widths,
-        );
         // An aggregate address: its first integer slot's register, else a free one.
         let taken = plan
             .placements

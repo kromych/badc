@@ -215,6 +215,16 @@ fn reads_at(reads: &[bool], idx: ValueId) -> bool {
     reads.get(idx as usize).copied().unwrap_or(true)
 }
 
+/// `inst`'s operands that are emitted values: one whose instruction emits
+/// nothing (`reads` clear for it) holds no place, so it keeps nothing live.
+fn for_each_read_operand(inst: &Inst, reads: &[bool], mut f: impl FnMut(ValueId)) {
+    super::reg_alloc::for_each_operand(inst, |op| {
+        if reads_at(reads, op) {
+            f(op);
+        }
+    });
+}
+
 /// A phi income whose edge move reads no place, which keeps nothing live.
 fn reads_no_place(func: &FunctionSsa, kind: LoadKind, v: ValueId) -> bool {
     super::emit_common::phi_income_reads_no_place(func, kind, v)
@@ -254,7 +264,7 @@ impl BlockLiveness {
                 if !reads_at(reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |v| {
+                for_each_read_operand(&func.insts[idx as usize], reads, |v| {
                     if v != NO_VALUE && (v < start || v >= end) && (v as usize) < n {
                         crossing[v as usize] = true;
                     }
@@ -363,7 +373,7 @@ impl BlockLiveness {
                     continue;
                 }
                 if reads_at(reads, idx) {
-                    super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                    for_each_read_operand(&func.insts[idx as usize], reads, &mut mark);
                 }
             }
             Self::for_each_exit_use(blk, &mut mark);
@@ -473,7 +483,7 @@ impl BlockLiveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+                for_each_read_operand(&func.insts[idx as usize], reads, &mut mark);
             }
             Self::for_each_exit_use(blk, &mut mark);
         }
@@ -588,7 +598,7 @@ impl Liveness {
                 if matches!(func.insts[idx as usize], Inst::Phi { .. }) || !reads_at(&reads, idx) {
                     continue;
                 }
-                super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+                for_each_read_operand(&func.insts[idx as usize], &reads, |op| {
                     if (op as usize) < n && last_use_pos[op as usize] < idx {
                         last_use_pos[op as usize] = idx;
                     }
@@ -722,7 +732,7 @@ impl Liveness {
                 continue;
             }
             let mut found = false;
-            super::reg_alloc::for_each_operand(&func.insts[idx as usize], |op| {
+            for_each_read_operand(&func.insts[idx as usize], &self.reads, |op| {
                 if op == x {
                     found = true;
                 }
@@ -822,7 +832,7 @@ impl Liveness {
                     live.remove(idx, node_of);
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op, node_of);
                         }
@@ -912,7 +922,7 @@ impl Liveness {
                     live.for_each(|v| out[v as usize] = true);
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.set::<TRACK>(op);
                         }
@@ -967,7 +977,7 @@ impl Liveness {
                     out.push((idx, vals));
                 }
                 if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
-                    super::reg_alloc::for_each_operand(inst, |op| {
+                    for_each_read_operand(inst, &self.reads, |op| {
                         if op != NO_VALUE && (op as usize) < n {
                             live.insert(op);
                         }

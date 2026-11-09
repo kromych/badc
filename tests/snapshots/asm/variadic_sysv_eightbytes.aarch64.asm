@@ -684,8 +684,8 @@ Disassembly of section .text:
                	sub	x7, x29, #0xd0
                	sub	x2, x29, #0xc0
                	sub	x4, x29, #0xb0
-               	mov	x6, #0x3                // =3
-               	str	x6, [sp, #0x20]
+               	mov	x16, #0x3               // =3
+               	str	x16, [sp, #0x20]
                	mov	x16, x7
                	ldr	x17, [x16]
                	str	x17, [sp]

@@ -4470,1010 +4470,514 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %r8d
                	movl	$0x6, %r9d
-               	movl	$0x7, %eax
-               	movl	$0x8, %ebx
-               	movl	$0x9, %r12d
-               	movl	$0xa, %r13d
-               	movl	$0xb, %r14d
-               	movl	$0xc, %r15d
-               	movl	$0xd, %r10d
-               	movq	%r10, 0x7f8(%rsp)
-               	movl	$0xe, %r10d
-               	movq	%r10, 0x7f0(%rsp)
-               	movl	$0xf, %r10d
-               	movq	%r10, 0x7e8(%rsp)
-               	movl	$0x10, %r10d
-               	movq	%r10, 0x7e0(%rsp)
-               	movl	$0x11, %r10d
-               	movq	%r10, 0x7d8(%rsp)
-               	movl	$0x12, %r10d
-               	movq	%r10, 0x7d0(%rsp)
-               	movl	$0x13, %r10d
-               	movq	%r10, 0x7c8(%rsp)
-               	movl	$0x14, %r10d
-               	movq	%r10, 0x7c0(%rsp)
-               	movl	$0x15, %r10d
-               	movq	%r10, 0x7b8(%rsp)
-               	movl	$0x16, %r10d
-               	movq	%r10, 0x7b0(%rsp)
-               	movl	$0x17, %r10d
-               	movq	%r10, 0x7a8(%rsp)
-               	movl	$0x18, %r10d
-               	movq	%r10, 0x7a0(%rsp)
-               	movl	$0x19, %r10d
-               	movq	%r10, 0x798(%rsp)
-               	movl	$0x1a, %r10d
-               	movq	%r10, 0x790(%rsp)
-               	movl	$0x1b, %r10d
-               	movq	%r10, 0x788(%rsp)
-               	movl	$0x1c, %r10d
-               	movq	%r10, 0x780(%rsp)
-               	movl	$0x1d, %r10d
-               	movq	%r10, 0x778(%rsp)
-               	movl	$0x1e, %r10d
-               	movq	%r10, 0x770(%rsp)
-               	movl	$0x1f, %r10d
-               	movq	%r10, 0x768(%rsp)
-               	movl	$0x20, %r10d
-               	movq	%r10, 0x760(%rsp)
-               	movl	$0x21, %r10d
-               	movq	%r10, 0x758(%rsp)
-               	movl	$0x22, %r10d
-               	movq	%r10, 0x750(%rsp)
-               	movl	$0x23, %r10d
-               	movq	%r10, 0x748(%rsp)
-               	movl	$0x24, %r10d
-               	movq	%r10, 0x740(%rsp)
-               	movl	$0x25, %r10d
-               	movq	%r10, 0x738(%rsp)
-               	movl	$0x26, %r10d
-               	movq	%r10, 0x730(%rsp)
-               	movl	$0x27, %r10d
-               	movq	%r10, 0x728(%rsp)
-               	movl	$0x28, %r10d
-               	movq	%r10, 0x720(%rsp)
-               	movl	$0x29, %r10d
-               	movq	%r10, 0x718(%rsp)
-               	movl	$0x2a, %r10d
-               	movq	%r10, 0x710(%rsp)
-               	movl	$0x2b, %r10d
-               	movq	%r10, 0x708(%rsp)
-               	movl	$0x2c, %r10d
-               	movq	%r10, 0x700(%rsp)
-               	movl	$0x2d, %r10d
-               	movq	%r10, 0x6f8(%rsp)
-               	movl	$0x2e, %r10d
-               	movq	%r10, 0x6f0(%rsp)
-               	movl	$0x2f, %r10d
-               	movq	%r10, 0x6e8(%rsp)
-               	movl	$0x30, %r10d
-               	movq	%r10, 0x6e0(%rsp)
-               	movl	$0x31, %r10d
-               	movq	%r10, 0x6d8(%rsp)
-               	movl	$0x32, %r10d
-               	movq	%r10, 0x6d0(%rsp)
-               	movl	$0x33, %r10d
-               	movq	%r10, 0x6c8(%rsp)
-               	movl	$0x34, %r10d
-               	movq	%r10, 0x6c0(%rsp)
-               	movl	$0x35, %r10d
-               	movq	%r10, 0x6b8(%rsp)
-               	movl	$0x36, %r10d
-               	movq	%r10, 0x6b0(%rsp)
-               	movl	$0x37, %r10d
-               	movq	%r10, 0x6a8(%rsp)
-               	movl	$0x38, %r10d
-               	movq	%r10, 0x6a0(%rsp)
-               	movl	$0x39, %r10d
-               	movq	%r10, 0x698(%rsp)
-               	movl	$0x3a, %r10d
-               	movq	%r10, 0x690(%rsp)
-               	movl	$0x3b, %r10d
-               	movq	%r10, 0x688(%rsp)
-               	movl	$0x3c, %r10d
-               	movq	%r10, 0x680(%rsp)
-               	movl	$0x3d, %r10d
-               	movq	%r10, 0x678(%rsp)
-               	movl	$0x3e, %r10d
-               	movq	%r10, 0x670(%rsp)
-               	movl	$0x3f, %r10d
-               	movq	%r10, 0x668(%rsp)
-               	movl	$0x40, %r10d
-               	movq	%r10, 0x660(%rsp)
-               	movl	$0x41, %r10d
-               	movq	%r10, 0x658(%rsp)
-               	movl	$0x42, %r10d
-               	movq	%r10, 0x650(%rsp)
-               	movl	$0x43, %r10d
-               	movq	%r10, 0x648(%rsp)
-               	movl	$0x44, %r10d
-               	movq	%r10, 0x640(%rsp)
-               	movl	$0x45, %r10d
-               	movq	%r10, 0x638(%rsp)
-               	movl	$0x46, %r10d
-               	movq	%r10, 0x630(%rsp)
-               	movl	$0x47, %r10d
-               	movq	%r10, 0x628(%rsp)
-               	movl	$0x48, %r10d
-               	movq	%r10, 0x620(%rsp)
-               	movl	$0x49, %r10d
-               	movq	%r10, 0x618(%rsp)
-               	movl	$0x4a, %r10d
-               	movq	%r10, 0x610(%rsp)
-               	movl	$0x4b, %r10d
-               	movq	%r10, 0x608(%rsp)
-               	movl	$0x4c, %r10d
-               	movq	%r10, 0x600(%rsp)
-               	movl	$0x4d, %r10d
-               	movq	%r10, 0x5f8(%rsp)
-               	movl	$0x4e, %r10d
-               	movq	%r10, 0x5f0(%rsp)
-               	movl	$0x4f, %r10d
-               	movq	%r10, 0x5e8(%rsp)
-               	movl	$0x50, %r10d
-               	movq	%r10, 0x5e0(%rsp)
-               	movl	$0x51, %r10d
-               	movq	%r10, 0x5d8(%rsp)
-               	movl	$0x52, %r10d
-               	movq	%r10, 0x5d0(%rsp)
-               	movl	$0x53, %r10d
-               	movq	%r10, 0x5c8(%rsp)
-               	movl	$0x54, %r10d
-               	movq	%r10, 0x5c0(%rsp)
-               	movl	$0x55, %r10d
-               	movq	%r10, 0x5b8(%rsp)
-               	movl	$0x56, %r10d
-               	movq	%r10, 0x5b0(%rsp)
-               	movl	$0x57, %r10d
-               	movq	%r10, 0x5a8(%rsp)
-               	movl	$0x58, %r10d
-               	movq	%r10, 0x5a0(%rsp)
-               	movl	$0x59, %r10d
-               	movq	%r10, 0x598(%rsp)
-               	movl	$0x5a, %r10d
-               	movq	%r10, 0x590(%rsp)
-               	movl	$0x5b, %r10d
-               	movq	%r10, 0x588(%rsp)
-               	movl	$0x5c, %r10d
-               	movq	%r10, 0x580(%rsp)
-               	movl	$0x5d, %r10d
-               	movq	%r10, 0x578(%rsp)
-               	movl	$0x5e, %r10d
-               	movq	%r10, 0x570(%rsp)
-               	movl	$0x5f, %r10d
-               	movq	%r10, 0x568(%rsp)
-               	movl	$0x60, %r10d
-               	movq	%r10, 0x560(%rsp)
-               	movl	$0x61, %r10d
-               	movq	%r10, 0x558(%rsp)
-               	movl	$0x62, %r10d
-               	movq	%r10, 0x550(%rsp)
-               	movl	$0x63, %r10d
-               	movq	%r10, 0x548(%rsp)
-               	movl	$0x64, %r10d
-               	movq	%r10, 0x540(%rsp)
-               	movl	$0x65, %r10d
-               	movq	%r10, 0x538(%rsp)
-               	movl	$0x66, %r10d
-               	movq	%r10, 0x530(%rsp)
-               	movl	$0x67, %r10d
-               	movq	%r10, 0x528(%rsp)
-               	movl	$0x68, %r10d
-               	movq	%r10, 0x520(%rsp)
-               	movl	$0x69, %r10d
-               	movq	%r10, 0x518(%rsp)
-               	movl	$0x6a, %r10d
-               	movq	%r10, 0x510(%rsp)
-               	movl	$0x6b, %r10d
-               	movq	%r10, 0x508(%rsp)
-               	movl	$0x6c, %r10d
-               	movq	%r10, 0x500(%rsp)
-               	movl	$0x6d, %r10d
-               	movq	%r10, 0x4f8(%rsp)
-               	movl	$0x6e, %r10d
-               	movq	%r10, 0x4f0(%rsp)
-               	movl	$0x6f, %r10d
-               	movq	%r10, 0x4e8(%rsp)
-               	movl	$0x70, %r10d
-               	movq	%r10, 0x4e0(%rsp)
-               	movl	$0x71, %r10d
-               	movq	%r10, 0x4d8(%rsp)
-               	movl	$0x72, %r10d
-               	movq	%r10, 0x4d0(%rsp)
-               	movl	$0x73, %r10d
-               	movq	%r10, 0x4c8(%rsp)
-               	movl	$0x74, %r10d
-               	movq	%r10, 0x4c0(%rsp)
-               	movl	$0x75, %r10d
-               	movq	%r10, 0x4b8(%rsp)
-               	movl	$0x76, %r10d
-               	movq	%r10, 0x4b0(%rsp)
-               	movl	$0x77, %r10d
-               	movq	%r10, 0x4a8(%rsp)
-               	movl	$0x78, %r10d
-               	movq	%r10, 0x4a0(%rsp)
-               	movl	$0x79, %r10d
-               	movq	%r10, 0x498(%rsp)
-               	movl	$0x7a, %r10d
-               	movq	%r10, 0x490(%rsp)
-               	movl	$0x7b, %r10d
-               	movq	%r10, 0x488(%rsp)
-               	movl	$0x7c, %r10d
-               	movq	%r10, 0x480(%rsp)
-               	movl	$0x7d, %r10d
-               	movq	%r10, 0x478(%rsp)
-               	movl	$0x7e, %r10d
-               	movq	%r10, 0x470(%rsp)
-               	movl	$0x7f, %r10d
-               	movq	%r10, 0x468(%rsp)
-               	movl	$0x80, %r10d
-               	movq	%r10, 0x460(%rsp)
-               	movl	$0x81, %r10d
-               	movq	%r10, 0x458(%rsp)
-               	movl	$0x82, %r10d
-               	movq	%r10, 0x450(%rsp)
-               	movl	$0x83, %r10d
-               	movq	%r10, 0x448(%rsp)
-               	movl	$0x84, %r10d
-               	movq	%r10, 0x440(%rsp)
-               	movl	$0x85, %r10d
-               	movq	%r10, 0x438(%rsp)
-               	movl	$0x86, %r10d
-               	movq	%r10, 0x430(%rsp)
-               	movl	$0x87, %r10d
-               	movq	%r10, 0x428(%rsp)
-               	movl	$0x88, %r10d
-               	movq	%r10, 0x420(%rsp)
-               	movl	$0x89, %r10d
-               	movq	%r10, 0x418(%rsp)
-               	movl	$0x8a, %r10d
-               	movq	%r10, 0x410(%rsp)
-               	movl	$0x8b, %r10d
-               	movq	%r10, 0x408(%rsp)
-               	movl	$0x8c, %r10d
-               	movq	%r10, 0x400(%rsp)
-               	movl	$0x8d, %r10d
-               	movq	%r10, 0x3f8(%rsp)
-               	movl	$0x8e, %r10d
-               	movq	%r10, 0x3f0(%rsp)
-               	movl	$0x8f, %r10d
-               	movq	%r10, 0x3e8(%rsp)
-               	movl	$0x90, %r10d
-               	movq	%r10, 0x3e0(%rsp)
-               	movl	$0x91, %r10d
-               	movq	%r10, 0x3d8(%rsp)
-               	movl	$0x92, %r10d
-               	movq	%r10, 0x3d0(%rsp)
-               	movl	$0x93, %r10d
-               	movq	%r10, 0x3c8(%rsp)
-               	movl	$0x94, %r10d
-               	movq	%r10, 0x3c0(%rsp)
-               	movl	$0x95, %r10d
-               	movq	%r10, 0x3b8(%rsp)
-               	movl	$0x96, %r10d
-               	movq	%r10, 0x3b0(%rsp)
-               	movl	$0x97, %r10d
-               	movq	%r10, 0x3a8(%rsp)
-               	movl	$0x98, %r10d
-               	movq	%r10, 0x3a0(%rsp)
-               	movl	$0x99, %r10d
-               	movq	%r10, 0x398(%rsp)
-               	movl	$0x9a, %r10d
-               	movq	%r10, 0x390(%rsp)
-               	movl	$0x9b, %r10d
-               	movq	%r10, 0x388(%rsp)
-               	movl	$0x9c, %r10d
-               	movq	%r10, 0x380(%rsp)
-               	movl	$0x9d, %r10d
-               	movq	%r10, 0x378(%rsp)
-               	movl	$0x9e, %r10d
-               	movq	%r10, 0x370(%rsp)
-               	movl	$0x9f, %r10d
-               	movq	%r10, 0x368(%rsp)
-               	movl	$0xa0, %r10d
-               	movq	%r10, 0x360(%rsp)
-               	movl	$0xa1, %r10d
-               	movq	%r10, 0x358(%rsp)
-               	movl	$0xa2, %r10d
-               	movq	%r10, 0x350(%rsp)
-               	movl	$0xa3, %r10d
-               	movq	%r10, 0x348(%rsp)
-               	movl	$0xa4, %r10d
-               	movq	%r10, 0x340(%rsp)
-               	movl	$0xa5, %r10d
-               	movq	%r10, 0x338(%rsp)
-               	movl	$0xa6, %r10d
-               	movq	%r10, 0x330(%rsp)
-               	movl	$0xa7, %r10d
-               	movq	%r10, 0x328(%rsp)
-               	movl	$0xa8, %r10d
-               	movq	%r10, 0x320(%rsp)
-               	movl	$0xa9, %r10d
-               	movq	%r10, 0x318(%rsp)
-               	movl	$0xaa, %r10d
-               	movq	%r10, 0x310(%rsp)
-               	movl	$0xab, %r10d
-               	movq	%r10, 0x308(%rsp)
-               	movl	$0xac, %r10d
-               	movq	%r10, 0x300(%rsp)
-               	movl	$0xad, %r10d
-               	movq	%r10, 0x2f8(%rsp)
-               	movl	$0xae, %r10d
-               	movq	%r10, 0x2f0(%rsp)
-               	movl	$0xaf, %r10d
-               	movq	%r10, 0x2e8(%rsp)
-               	movl	$0xb0, %r10d
-               	movq	%r10, 0x2e0(%rsp)
-               	movl	$0xb1, %r10d
-               	movq	%r10, 0x2d8(%rsp)
-               	movl	$0xb2, %r10d
-               	movq	%r10, 0x2d0(%rsp)
-               	movl	$0xb3, %r10d
-               	movq	%r10, 0x2c8(%rsp)
-               	movl	$0xb4, %r10d
-               	movq	%r10, 0x2c0(%rsp)
-               	movl	$0xb5, %r10d
-               	movq	%r10, 0x2b8(%rsp)
-               	movl	$0xb6, %r10d
-               	movq	%r10, 0x2b0(%rsp)
-               	movl	$0xb7, %r10d
-               	movq	%r10, 0x2a8(%rsp)
-               	movl	$0xb8, %r10d
-               	movq	%r10, 0x2a0(%rsp)
-               	movl	$0xb9, %r10d
-               	movq	%r10, 0x298(%rsp)
-               	movl	$0xba, %r10d
-               	movq	%r10, 0x290(%rsp)
-               	movl	$0xbb, %r10d
-               	movq	%r10, 0x288(%rsp)
-               	movl	$0xbc, %r10d
-               	movq	%r10, 0x280(%rsp)
-               	movl	$0xbd, %r10d
-               	movq	%r10, 0x278(%rsp)
-               	movl	$0xbe, %r10d
-               	movq	%r10, 0x270(%rsp)
-               	movl	$0xbf, %r10d
-               	movq	%r10, 0x268(%rsp)
-               	movl	$0xc0, %r10d
-               	movq	%r10, 0x260(%rsp)
-               	movl	$0xc1, %r10d
-               	movq	%r10, 0x258(%rsp)
-               	movl	$0xc2, %r10d
-               	movq	%r10, 0x250(%rsp)
-               	movl	$0xc3, %r10d
-               	movq	%r10, 0x248(%rsp)
-               	movl	$0xc4, %r10d
-               	movq	%r10, 0x240(%rsp)
-               	movl	$0xc5, %r10d
-               	movq	%r10, 0x238(%rsp)
-               	movl	$0xc6, %r10d
-               	movq	%r10, 0x230(%rsp)
-               	movl	$0xc7, %r10d
-               	movq	%r10, 0x228(%rsp)
-               	movl	$0xc8, %r10d
-               	movq	%r10, 0x220(%rsp)
-               	movl	$0xc9, %r10d
-               	movq	%r10, 0x218(%rsp)
-               	movl	$0xca, %r10d
-               	movq	%r10, 0x210(%rsp)
-               	movl	$0xcb, %r10d
-               	movq	%r10, 0x208(%rsp)
-               	movl	$0xcc, %r10d
-               	movq	%r10, 0x200(%rsp)
-               	movl	$0xcd, %r10d
-               	movq	%r10, 0x1f8(%rsp)
-               	movl	$0xce, %r10d
-               	movq	%r10, 0x1f0(%rsp)
-               	movl	$0xcf, %r10d
-               	movq	%r10, 0x1e8(%rsp)
-               	movl	$0xd0, %r10d
-               	movq	%r10, 0x1e0(%rsp)
-               	movl	$0xd1, %r10d
-               	movq	%r10, 0x1d8(%rsp)
-               	movl	$0xd2, %r10d
-               	movq	%r10, 0x1d0(%rsp)
-               	movl	$0xd3, %r10d
-               	movq	%r10, 0x1c8(%rsp)
-               	movl	$0xd4, %r10d
-               	movq	%r10, 0x1c0(%rsp)
-               	movl	$0xd5, %r10d
-               	movq	%r10, 0x1b8(%rsp)
-               	movl	$0xd6, %r10d
-               	movq	%r10, 0x1b0(%rsp)
-               	movl	$0xd7, %r10d
-               	movq	%r10, 0x1a8(%rsp)
-               	movl	$0xd8, %r10d
-               	movq	%r10, 0x1a0(%rsp)
-               	movl	$0xd9, %r10d
-               	movq	%r10, 0x198(%rsp)
-               	movl	$0xda, %r10d
-               	movq	%r10, 0x190(%rsp)
-               	movl	$0xdb, %r10d
-               	movq	%r10, 0x188(%rsp)
-               	movl	$0xdc, %r10d
-               	movq	%r10, 0x180(%rsp)
-               	movl	$0xdd, %r10d
-               	movq	%r10, 0x178(%rsp)
-               	movl	$0xde, %r10d
-               	movq	%r10, 0x170(%rsp)
-               	movl	$0xdf, %r10d
-               	movq	%r10, 0x168(%rsp)
-               	movl	$0xe0, %r10d
-               	movq	%r10, 0x160(%rsp)
-               	movl	$0xe1, %r10d
-               	movq	%r10, 0x158(%rsp)
-               	movl	$0xe2, %r10d
-               	movq	%r10, 0x150(%rsp)
-               	movl	$0xe3, %r10d
-               	movq	%r10, 0x148(%rsp)
-               	movl	$0xe4, %r10d
-               	movq	%r10, 0x140(%rsp)
-               	movl	$0xe5, %r10d
-               	movq	%r10, 0x138(%rsp)
-               	movl	$0xe6, %r10d
-               	movq	%r10, 0x130(%rsp)
-               	movl	$0xe7, %r10d
-               	movq	%r10, 0x128(%rsp)
-               	movl	$0xe8, %r10d
-               	movq	%r10, 0x120(%rsp)
-               	movl	$0xe9, %r10d
-               	movq	%r10, 0x118(%rsp)
-               	movl	$0xea, %r10d
-               	movq	%r10, 0x110(%rsp)
-               	movl	$0xeb, %r10d
-               	movq	%r10, 0x108(%rsp)
-               	movl	$0xec, %r10d
-               	movq	%r10, 0x100(%rsp)
-               	movl	$0xed, %r10d
-               	movq	%r10, 0xf8(%rsp)
-               	movl	$0xee, %r10d
-               	movq	%r10, 0xf0(%rsp)
-               	movl	$0xef, %r10d
-               	movq	%r10, 0xe8(%rsp)
-               	movl	$0xf0, %r10d
-               	movq	%r10, 0xe0(%rsp)
-               	movl	$0xf1, %r10d
-               	movq	%r10, 0xd8(%rsp)
-               	movl	$0xf2, %r10d
-               	movq	%r10, 0xd0(%rsp)
-               	movl	$0xf3, %r10d
-               	movq	%r10, 0xc8(%rsp)
-               	movl	$0xf4, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movl	$0xf5, %r10d
-               	movq	%r10, 0xb8(%rsp)
-               	movl	$0xf6, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movl	$0xf7, %r10d
-               	movq	%r10, 0xa8(%rsp)
-               	movl	$0xf8, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movl	$0xf9, %r10d
-               	movq	%r10, 0x98(%rsp)
-               	movl	$0xfa, %r10d
-               	movq	%r10, 0x90(%rsp)
-               	movl	$0xfb, %r10d
-               	movq	%r10, 0x88(%rsp)
-               	movl	$0xfc, %r10d
-               	movq	%r10, 0x80(%rsp)
-               	movl	$0xfd, %r10d
-               	movq	%r10, 0x78(%rsp)
-               	movl	$0xfe, %r10d
-               	movq	%r10, 0x70(%rsp)
-               	movl	$0xff, %r10d
-               	movq	%r10, 0x68(%rsp)
-               	movl	$0x100, %r10d           # imm = 0x100
-               	movq	%r10, 0x60(%rsp)
-               	movl	$0x101, %r10d           # imm = 0x101
-               	movq	%r10, 0x58(%rsp)
-               	movl	$0x102, %r10d           # imm = 0x102
-               	movq	%r10, 0x50(%rsp)
-               	movl	$0x103, %r10d           # imm = 0x103
-               	movq	%r10, 0x48(%rsp)
-               	movl	$0x104, %r10d           # imm = 0x104
-               	movq	%r10, 0x40(%rsp)
                	subq	$0x7f0, %rsp            # imm = 0x7F0
-               	movq	%rax, (%rsp)
-               	movq	%rbx, 0x8(%rsp)
-               	movq	%r12, 0x10(%rsp)
-               	movq	%r13, 0x18(%rsp)
-               	movq	%r14, 0x20(%rsp)
-               	movq	%r15, 0x28(%rsp)
-               	movq	0xfe8(%rsp), %r10
+               	movl	$0x7, %r10d
+               	movq	%r10, (%rsp)
+               	movl	$0x8, %r10d
+               	movq	%r10, 0x8(%rsp)
+               	movl	$0x9, %r10d
+               	movq	%r10, 0x10(%rsp)
+               	movl	$0xa, %r10d
+               	movq	%r10, 0x18(%rsp)
+               	movl	$0xb, %r10d
+               	movq	%r10, 0x20(%rsp)
+               	movl	$0xc, %r10d
+               	movq	%r10, 0x28(%rsp)
+               	movl	$0xd, %r10d
                	movq	%r10, 0x30(%rsp)
-               	movq	0xfe0(%rsp), %r10
+               	movl	$0xe, %r10d
                	movq	%r10, 0x38(%rsp)
-               	movq	0xfd8(%rsp), %r10
+               	movl	$0xf, %r10d
                	movq	%r10, 0x40(%rsp)
-               	movq	0xfd0(%rsp), %r10
+               	movl	$0x10, %r10d
                	movq	%r10, 0x48(%rsp)
-               	movq	0xfc8(%rsp), %r10
+               	movl	$0x11, %r10d
                	movq	%r10, 0x50(%rsp)
-               	movq	0xfc0(%rsp), %r10
+               	movl	$0x12, %r10d
                	movq	%r10, 0x58(%rsp)
-               	movq	0xfb8(%rsp), %r10
+               	movl	$0x13, %r10d
                	movq	%r10, 0x60(%rsp)
-               	movq	0xfb0(%rsp), %r10
+               	movl	$0x14, %r10d
                	movq	%r10, 0x68(%rsp)
-               	movq	0xfa8(%rsp), %r10
+               	movl	$0x15, %r10d
                	movq	%r10, 0x70(%rsp)
-               	movq	0xfa0(%rsp), %r10
+               	movl	$0x16, %r10d
                	movq	%r10, 0x78(%rsp)
-               	movq	0xf98(%rsp), %r10
+               	movl	$0x17, %r10d
                	movq	%r10, 0x80(%rsp)
-               	movq	0xf90(%rsp), %r10
+               	movl	$0x18, %r10d
                	movq	%r10, 0x88(%rsp)
-               	movq	0xf88(%rsp), %r10
+               	movl	$0x19, %r10d
                	movq	%r10, 0x90(%rsp)
-               	movq	0xf80(%rsp), %r10
+               	movl	$0x1a, %r10d
                	movq	%r10, 0x98(%rsp)
-               	movq	0xf78(%rsp), %r10
+               	movl	$0x1b, %r10d
                	movq	%r10, 0xa0(%rsp)
-               	movq	0xf70(%rsp), %r10
+               	movl	$0x1c, %r10d
                	movq	%r10, 0xa8(%rsp)
-               	movq	0xf68(%rsp), %r10
+               	movl	$0x1d, %r10d
                	movq	%r10, 0xb0(%rsp)
-               	movq	0xf60(%rsp), %r10
+               	movl	$0x1e, %r10d
                	movq	%r10, 0xb8(%rsp)
-               	movq	0xf58(%rsp), %r10
+               	movl	$0x1f, %r10d
                	movq	%r10, 0xc0(%rsp)
-               	movq	0xf50(%rsp), %r10
+               	movl	$0x20, %r10d
                	movq	%r10, 0xc8(%rsp)
-               	movq	0xf48(%rsp), %r10
+               	movl	$0x21, %r10d
                	movq	%r10, 0xd0(%rsp)
-               	movq	0xf40(%rsp), %r10
+               	movl	$0x22, %r10d
                	movq	%r10, 0xd8(%rsp)
-               	movq	0xf38(%rsp), %r10
+               	movl	$0x23, %r10d
                	movq	%r10, 0xe0(%rsp)
-               	movq	0xf30(%rsp), %r10
+               	movl	$0x24, %r10d
                	movq	%r10, 0xe8(%rsp)
-               	movq	0xf28(%rsp), %r10
+               	movl	$0x25, %r10d
                	movq	%r10, 0xf0(%rsp)
-               	movq	0xf20(%rsp), %r10
+               	movl	$0x26, %r10d
                	movq	%r10, 0xf8(%rsp)
-               	movq	0xf18(%rsp), %r10
+               	movl	$0x27, %r10d
                	movq	%r10, 0x100(%rsp)
-               	movq	0xf10(%rsp), %r10
+               	movl	$0x28, %r10d
                	movq	%r10, 0x108(%rsp)
-               	movq	0xf08(%rsp), %r10
+               	movl	$0x29, %r10d
                	movq	%r10, 0x110(%rsp)
-               	movq	0xf00(%rsp), %r10
+               	movl	$0x2a, %r10d
                	movq	%r10, 0x118(%rsp)
-               	movq	0xef8(%rsp), %r10
+               	movl	$0x2b, %r10d
                	movq	%r10, 0x120(%rsp)
-               	movq	0xef0(%rsp), %r10
+               	movl	$0x2c, %r10d
                	movq	%r10, 0x128(%rsp)
-               	movq	0xee8(%rsp), %r10
+               	movl	$0x2d, %r10d
                	movq	%r10, 0x130(%rsp)
-               	movq	0xee0(%rsp), %r10
+               	movl	$0x2e, %r10d
                	movq	%r10, 0x138(%rsp)
-               	movq	0xed8(%rsp), %r10
+               	movl	$0x2f, %r10d
                	movq	%r10, 0x140(%rsp)
-               	movq	0xed0(%rsp), %r10
+               	movl	$0x30, %r10d
                	movq	%r10, 0x148(%rsp)
-               	movq	0xec8(%rsp), %r10
+               	movl	$0x31, %r10d
                	movq	%r10, 0x150(%rsp)
-               	movq	0xec0(%rsp), %r10
+               	movl	$0x32, %r10d
                	movq	%r10, 0x158(%rsp)
-               	movq	0xeb8(%rsp), %r10
+               	movl	$0x33, %r10d
                	movq	%r10, 0x160(%rsp)
-               	movq	0xeb0(%rsp), %r10
+               	movl	$0x34, %r10d
                	movq	%r10, 0x168(%rsp)
-               	movq	0xea8(%rsp), %r10
+               	movl	$0x35, %r10d
                	movq	%r10, 0x170(%rsp)
-               	movq	0xea0(%rsp), %r10
+               	movl	$0x36, %r10d
                	movq	%r10, 0x178(%rsp)
-               	movq	0xe98(%rsp), %r10
+               	movl	$0x37, %r10d
                	movq	%r10, 0x180(%rsp)
-               	movq	0xe90(%rsp), %r10
+               	movl	$0x38, %r10d
                	movq	%r10, 0x188(%rsp)
-               	movq	0xe88(%rsp), %r10
+               	movl	$0x39, %r10d
                	movq	%r10, 0x190(%rsp)
-               	movq	0xe80(%rsp), %r10
+               	movl	$0x3a, %r10d
                	movq	%r10, 0x198(%rsp)
-               	movq	0xe78(%rsp), %r10
+               	movl	$0x3b, %r10d
                	movq	%r10, 0x1a0(%rsp)
-               	movq	0xe70(%rsp), %r10
+               	movl	$0x3c, %r10d
                	movq	%r10, 0x1a8(%rsp)
-               	movq	0xe68(%rsp), %r10
+               	movl	$0x3d, %r10d
                	movq	%r10, 0x1b0(%rsp)
-               	movq	0xe60(%rsp), %r10
+               	movl	$0x3e, %r10d
                	movq	%r10, 0x1b8(%rsp)
-               	movq	0xe58(%rsp), %r10
+               	movl	$0x3f, %r10d
                	movq	%r10, 0x1c0(%rsp)
-               	movq	0xe50(%rsp), %r10
+               	movl	$0x40, %r10d
                	movq	%r10, 0x1c8(%rsp)
-               	movq	0xe48(%rsp), %r10
+               	movl	$0x41, %r10d
                	movq	%r10, 0x1d0(%rsp)
-               	movq	0xe40(%rsp), %r10
+               	movl	$0x42, %r10d
                	movq	%r10, 0x1d8(%rsp)
-               	movq	0xe38(%rsp), %r10
+               	movl	$0x43, %r10d
                	movq	%r10, 0x1e0(%rsp)
-               	movq	0xe30(%rsp), %r10
+               	movl	$0x44, %r10d
                	movq	%r10, 0x1e8(%rsp)
-               	movq	0xe28(%rsp), %r10
+               	movl	$0x45, %r10d
                	movq	%r10, 0x1f0(%rsp)
-               	movq	0xe20(%rsp), %r10
+               	movl	$0x46, %r10d
                	movq	%r10, 0x1f8(%rsp)
-               	movq	0xe18(%rsp), %r10
+               	movl	$0x47, %r10d
                	movq	%r10, 0x200(%rsp)
-               	movq	0xe10(%rsp), %r10
+               	movl	$0x48, %r10d
                	movq	%r10, 0x208(%rsp)
-               	movq	0xe08(%rsp), %r10
+               	movl	$0x49, %r10d
                	movq	%r10, 0x210(%rsp)
-               	movq	0xe00(%rsp), %r10
+               	movl	$0x4a, %r10d
                	movq	%r10, 0x218(%rsp)
-               	movq	0xdf8(%rsp), %r10
+               	movl	$0x4b, %r10d
                	movq	%r10, 0x220(%rsp)
-               	movq	0xdf0(%rsp), %r10
+               	movl	$0x4c, %r10d
                	movq	%r10, 0x228(%rsp)
-               	movq	0xde8(%rsp), %r10
+               	movl	$0x4d, %r10d
                	movq	%r10, 0x230(%rsp)
-               	movq	0xde0(%rsp), %r10
+               	movl	$0x4e, %r10d
                	movq	%r10, 0x238(%rsp)
-               	movq	0xdd8(%rsp), %r10
+               	movl	$0x4f, %r10d
                	movq	%r10, 0x240(%rsp)
-               	movq	0xdd0(%rsp), %r10
+               	movl	$0x50, %r10d
                	movq	%r10, 0x248(%rsp)
-               	movq	0xdc8(%rsp), %r10
+               	movl	$0x51, %r10d
                	movq	%r10, 0x250(%rsp)
-               	movq	0xdc0(%rsp), %r10
+               	movl	$0x52, %r10d
                	movq	%r10, 0x258(%rsp)
-               	movq	0xdb8(%rsp), %r10
+               	movl	$0x53, %r10d
                	movq	%r10, 0x260(%rsp)
-               	movq	0xdb0(%rsp), %r10
+               	movl	$0x54, %r10d
                	movq	%r10, 0x268(%rsp)
-               	movq	0xda8(%rsp), %r10
+               	movl	$0x55, %r10d
                	movq	%r10, 0x270(%rsp)
-               	movq	0xda0(%rsp), %r10
+               	movl	$0x56, %r10d
                	movq	%r10, 0x278(%rsp)
-               	movq	0xd98(%rsp), %r10
+               	movl	$0x57, %r10d
                	movq	%r10, 0x280(%rsp)
-               	movq	0xd90(%rsp), %r10
+               	movl	$0x58, %r10d
                	movq	%r10, 0x288(%rsp)
-               	movq	0xd88(%rsp), %r10
+               	movl	$0x59, %r10d
                	movq	%r10, 0x290(%rsp)
-               	movq	0xd80(%rsp), %r10
+               	movl	$0x5a, %r10d
                	movq	%r10, 0x298(%rsp)
-               	movq	0xd78(%rsp), %r10
+               	movl	$0x5b, %r10d
                	movq	%r10, 0x2a0(%rsp)
-               	movq	0xd70(%rsp), %r10
+               	movl	$0x5c, %r10d
                	movq	%r10, 0x2a8(%rsp)
-               	movq	0xd68(%rsp), %r10
+               	movl	$0x5d, %r10d
                	movq	%r10, 0x2b0(%rsp)
-               	movq	0xd60(%rsp), %r10
+               	movl	$0x5e, %r10d
                	movq	%r10, 0x2b8(%rsp)
-               	movq	0xd58(%rsp), %r10
+               	movl	$0x5f, %r10d
                	movq	%r10, 0x2c0(%rsp)
-               	movq	0xd50(%rsp), %r10
+               	movl	$0x60, %r10d
                	movq	%r10, 0x2c8(%rsp)
-               	movq	0xd48(%rsp), %r10
+               	movl	$0x61, %r10d
                	movq	%r10, 0x2d0(%rsp)
-               	movq	0xd40(%rsp), %r10
+               	movl	$0x62, %r10d
                	movq	%r10, 0x2d8(%rsp)
-               	movq	0xd38(%rsp), %r10
+               	movl	$0x63, %r10d
                	movq	%r10, 0x2e0(%rsp)
-               	movq	0xd30(%rsp), %r10
+               	movl	$0x64, %r10d
                	movq	%r10, 0x2e8(%rsp)
-               	movq	0xd28(%rsp), %r10
+               	movl	$0x65, %r10d
                	movq	%r10, 0x2f0(%rsp)
-               	movq	0xd20(%rsp), %r10
+               	movl	$0x66, %r10d
                	movq	%r10, 0x2f8(%rsp)
-               	movq	0xd18(%rsp), %r10
+               	movl	$0x67, %r10d
                	movq	%r10, 0x300(%rsp)
-               	movq	0xd10(%rsp), %r10
+               	movl	$0x68, %r10d
                	movq	%r10, 0x308(%rsp)
-               	movq	0xd08(%rsp), %r10
+               	movl	$0x69, %r10d
                	movq	%r10, 0x310(%rsp)
-               	movq	0xd00(%rsp), %r10
+               	movl	$0x6a, %r10d
                	movq	%r10, 0x318(%rsp)
-               	movq	0xcf8(%rsp), %r10
+               	movl	$0x6b, %r10d
                	movq	%r10, 0x320(%rsp)
-               	movq	0xcf0(%rsp), %r10
+               	movl	$0x6c, %r10d
                	movq	%r10, 0x328(%rsp)
-               	movq	0xce8(%rsp), %r10
+               	movl	$0x6d, %r10d
                	movq	%r10, 0x330(%rsp)
-               	movq	0xce0(%rsp), %r10
+               	movl	$0x6e, %r10d
                	movq	%r10, 0x338(%rsp)
-               	movq	0xcd8(%rsp), %r10
+               	movl	$0x6f, %r10d
                	movq	%r10, 0x340(%rsp)
-               	movq	0xcd0(%rsp), %r10
+               	movl	$0x70, %r10d
                	movq	%r10, 0x348(%rsp)
-               	movq	0xcc8(%rsp), %r10
+               	movl	$0x71, %r10d
                	movq	%r10, 0x350(%rsp)
-               	movq	0xcc0(%rsp), %r10
+               	movl	$0x72, %r10d
                	movq	%r10, 0x358(%rsp)
-               	movq	0xcb8(%rsp), %r10
+               	movl	$0x73, %r10d
                	movq	%r10, 0x360(%rsp)
-               	movq	0xcb0(%rsp), %r10
+               	movl	$0x74, %r10d
                	movq	%r10, 0x368(%rsp)
-               	movq	0xca8(%rsp), %r10
+               	movl	$0x75, %r10d
                	movq	%r10, 0x370(%rsp)
-               	movq	0xca0(%rsp), %r10
+               	movl	$0x76, %r10d
                	movq	%r10, 0x378(%rsp)
-               	movq	0xc98(%rsp), %r10
+               	movl	$0x77, %r10d
                	movq	%r10, 0x380(%rsp)
-               	movq	0xc90(%rsp), %r10
+               	movl	$0x78, %r10d
                	movq	%r10, 0x388(%rsp)
-               	movq	0xc88(%rsp), %r10
+               	movl	$0x79, %r10d
                	movq	%r10, 0x390(%rsp)
-               	movq	0xc80(%rsp), %r10
+               	movl	$0x7a, %r10d
                	movq	%r10, 0x398(%rsp)
-               	movq	0xc78(%rsp), %r10
+               	movl	$0x7b, %r10d
                	movq	%r10, 0x3a0(%rsp)
-               	movq	0xc70(%rsp), %r10
+               	movl	$0x7c, %r10d
                	movq	%r10, 0x3a8(%rsp)
-               	movq	0xc68(%rsp), %r10
+               	movl	$0x7d, %r10d
                	movq	%r10, 0x3b0(%rsp)
-               	movq	0xc60(%rsp), %r10
+               	movl	$0x7e, %r10d
                	movq	%r10, 0x3b8(%rsp)
-               	movq	0xc58(%rsp), %r10
+               	movl	$0x7f, %r10d
                	movq	%r10, 0x3c0(%rsp)
-               	movq	0xc50(%rsp), %r10
+               	movl	$0x80, %r10d
                	movq	%r10, 0x3c8(%rsp)
-               	movq	0xc48(%rsp), %r10
+               	movl	$0x81, %r10d
                	movq	%r10, 0x3d0(%rsp)
-               	movq	0xc40(%rsp), %r10
+               	movl	$0x82, %r10d
                	movq	%r10, 0x3d8(%rsp)
-               	movq	0xc38(%rsp), %r10
+               	movl	$0x83, %r10d
                	movq	%r10, 0x3e0(%rsp)
-               	movq	0xc30(%rsp), %r10
+               	movl	$0x84, %r10d
                	movq	%r10, 0x3e8(%rsp)
-               	movq	0xc28(%rsp), %r10
+               	movl	$0x85, %r10d
                	movq	%r10, 0x3f0(%rsp)
-               	movq	0xc20(%rsp), %r10
+               	movl	$0x86, %r10d
                	movq	%r10, 0x3f8(%rsp)
-               	movq	0xc18(%rsp), %r10
+               	movl	$0x87, %r10d
                	movq	%r10, 0x400(%rsp)
-               	movq	0xc10(%rsp), %r10
+               	movl	$0x88, %r10d
                	movq	%r10, 0x408(%rsp)
-               	movq	0xc08(%rsp), %r10
+               	movl	$0x89, %r10d
                	movq	%r10, 0x410(%rsp)
-               	movq	0xc00(%rsp), %r10
+               	movl	$0x8a, %r10d
                	movq	%r10, 0x418(%rsp)
-               	movq	0xbf8(%rsp), %r10
+               	movl	$0x8b, %r10d
                	movq	%r10, 0x420(%rsp)
-               	movq	0xbf0(%rsp), %r10
+               	movl	$0x8c, %r10d
                	movq	%r10, 0x428(%rsp)
-               	movq	0xbe8(%rsp), %r10
+               	movl	$0x8d, %r10d
                	movq	%r10, 0x430(%rsp)
-               	movq	0xbe0(%rsp), %r10
+               	movl	$0x8e, %r10d
                	movq	%r10, 0x438(%rsp)
-               	movq	0xbd8(%rsp), %r10
+               	movl	$0x8f, %r10d
                	movq	%r10, 0x440(%rsp)
-               	movq	0xbd0(%rsp), %r10
+               	movl	$0x90, %r10d
                	movq	%r10, 0x448(%rsp)
-               	movq	0xbc8(%rsp), %r10
+               	movl	$0x91, %r10d
                	movq	%r10, 0x450(%rsp)
-               	movq	0xbc0(%rsp), %r10
+               	movl	$0x92, %r10d
                	movq	%r10, 0x458(%rsp)
-               	movq	0xbb8(%rsp), %r10
+               	movl	$0x93, %r10d
                	movq	%r10, 0x460(%rsp)
-               	movq	0xbb0(%rsp), %r10
+               	movl	$0x94, %r10d
                	movq	%r10, 0x468(%rsp)
-               	movq	0xba8(%rsp), %r10
+               	movl	$0x95, %r10d
                	movq	%r10, 0x470(%rsp)
-               	movq	0xba0(%rsp), %r10
+               	movl	$0x96, %r10d
                	movq	%r10, 0x478(%rsp)
-               	movq	0xb98(%rsp), %r10
+               	movl	$0x97, %r10d
                	movq	%r10, 0x480(%rsp)
-               	movq	0xb90(%rsp), %r10
+               	movl	$0x98, %r10d
                	movq	%r10, 0x488(%rsp)
-               	movq	0xb88(%rsp), %r10
+               	movl	$0x99, %r10d
                	movq	%r10, 0x490(%rsp)
-               	movq	0xb80(%rsp), %r10
+               	movl	$0x9a, %r10d
                	movq	%r10, 0x498(%rsp)
-               	movq	0xb78(%rsp), %r10
+               	movl	$0x9b, %r10d
                	movq	%r10, 0x4a0(%rsp)
-               	movq	0xb70(%rsp), %r10
+               	movl	$0x9c, %r10d
                	movq	%r10, 0x4a8(%rsp)
-               	movq	0xb68(%rsp), %r10
+               	movl	$0x9d, %r10d
                	movq	%r10, 0x4b0(%rsp)
-               	movq	0xb60(%rsp), %r10
+               	movl	$0x9e, %r10d
                	movq	%r10, 0x4b8(%rsp)
-               	movq	0xb58(%rsp), %r10
+               	movl	$0x9f, %r10d
                	movq	%r10, 0x4c0(%rsp)
-               	movq	0xb50(%rsp), %r10
+               	movl	$0xa0, %r10d
                	movq	%r10, 0x4c8(%rsp)
-               	movq	0xb48(%rsp), %r10
+               	movl	$0xa1, %r10d
                	movq	%r10, 0x4d0(%rsp)
-               	movq	0xb40(%rsp), %r10
+               	movl	$0xa2, %r10d
                	movq	%r10, 0x4d8(%rsp)
-               	movq	0xb38(%rsp), %r10
+               	movl	$0xa3, %r10d
                	movq	%r10, 0x4e0(%rsp)
-               	movq	0xb30(%rsp), %r10
+               	movl	$0xa4, %r10d
                	movq	%r10, 0x4e8(%rsp)
-               	movq	0xb28(%rsp), %r10
+               	movl	$0xa5, %r10d
                	movq	%r10, 0x4f0(%rsp)
-               	movq	0xb20(%rsp), %r10
+               	movl	$0xa6, %r10d
                	movq	%r10, 0x4f8(%rsp)
-               	movq	0xb18(%rsp), %r10
+               	movl	$0xa7, %r10d
                	movq	%r10, 0x500(%rsp)
-               	movq	0xb10(%rsp), %r10
+               	movl	$0xa8, %r10d
                	movq	%r10, 0x508(%rsp)
-               	movq	0xb08(%rsp), %r10
+               	movl	$0xa9, %r10d
                	movq	%r10, 0x510(%rsp)
-               	movq	0xb00(%rsp), %r10
+               	movl	$0xaa, %r10d
                	movq	%r10, 0x518(%rsp)
-               	movq	0xaf8(%rsp), %r10
+               	movl	$0xab, %r10d
                	movq	%r10, 0x520(%rsp)
-               	movq	0xaf0(%rsp), %r10
+               	movl	$0xac, %r10d
                	movq	%r10, 0x528(%rsp)
-               	movq	0xae8(%rsp), %r10
+               	movl	$0xad, %r10d
                	movq	%r10, 0x530(%rsp)
-               	movq	0xae0(%rsp), %r10
+               	movl	$0xae, %r10d
                	movq	%r10, 0x538(%rsp)
-               	movq	0xad8(%rsp), %r10
+               	movl	$0xaf, %r10d
                	movq	%r10, 0x540(%rsp)
-               	movq	0xad0(%rsp), %r10
+               	movl	$0xb0, %r10d
                	movq	%r10, 0x548(%rsp)
-               	movq	0xac8(%rsp), %r10
+               	movl	$0xb1, %r10d
                	movq	%r10, 0x550(%rsp)
-               	movq	0xac0(%rsp), %r10
+               	movl	$0xb2, %r10d
                	movq	%r10, 0x558(%rsp)
-               	movq	0xab8(%rsp), %r10
+               	movl	$0xb3, %r10d
                	movq	%r10, 0x560(%rsp)
-               	movq	0xab0(%rsp), %r10
+               	movl	$0xb4, %r10d
                	movq	%r10, 0x568(%rsp)
-               	movq	0xaa8(%rsp), %r10
+               	movl	$0xb5, %r10d
                	movq	%r10, 0x570(%rsp)
-               	movq	0xaa0(%rsp), %r10
+               	movl	$0xb6, %r10d
                	movq	%r10, 0x578(%rsp)
-               	movq	0xa98(%rsp), %r10
+               	movl	$0xb7, %r10d
                	movq	%r10, 0x580(%rsp)
-               	movq	0xa90(%rsp), %r10
+               	movl	$0xb8, %r10d
                	movq	%r10, 0x588(%rsp)
-               	movq	0xa88(%rsp), %r10
+               	movl	$0xb9, %r10d
                	movq	%r10, 0x590(%rsp)
-               	movq	0xa80(%rsp), %r10
+               	movl	$0xba, %r10d
                	movq	%r10, 0x598(%rsp)
-               	movq	0xa78(%rsp), %r10
+               	movl	$0xbb, %r10d
                	movq	%r10, 0x5a0(%rsp)
-               	movq	0xa70(%rsp), %r10
+               	movl	$0xbc, %r10d
                	movq	%r10, 0x5a8(%rsp)
-               	movq	0xa68(%rsp), %r10
+               	movl	$0xbd, %r10d
                	movq	%r10, 0x5b0(%rsp)
-               	movq	0xa60(%rsp), %r10
+               	movl	$0xbe, %r10d
                	movq	%r10, 0x5b8(%rsp)
-               	movq	0xa58(%rsp), %r10
+               	movl	$0xbf, %r10d
                	movq	%r10, 0x5c0(%rsp)
-               	movq	0xa50(%rsp), %r10
+               	movl	$0xc0, %r10d
                	movq	%r10, 0x5c8(%rsp)
-               	movq	0xa48(%rsp), %r10
+               	movl	$0xc1, %r10d
                	movq	%r10, 0x5d0(%rsp)
-               	movq	0xa40(%rsp), %r10
+               	movl	$0xc2, %r10d
                	movq	%r10, 0x5d8(%rsp)
-               	movq	0xa38(%rsp), %r10
+               	movl	$0xc3, %r10d
                	movq	%r10, 0x5e0(%rsp)
-               	movq	0xa30(%rsp), %r10
+               	movl	$0xc4, %r10d
                	movq	%r10, 0x5e8(%rsp)
-               	movq	0xa28(%rsp), %r10
+               	movl	$0xc5, %r10d
                	movq	%r10, 0x5f0(%rsp)
-               	movq	0xa20(%rsp), %r10
+               	movl	$0xc6, %r10d
                	movq	%r10, 0x5f8(%rsp)
-               	movq	0xa18(%rsp), %r10
+               	movl	$0xc7, %r10d
                	movq	%r10, 0x600(%rsp)
-               	movq	0xa10(%rsp), %r10
+               	movl	$0xc8, %r10d
                	movq	%r10, 0x608(%rsp)
-               	movq	0xa08(%rsp), %r10
+               	movl	$0xc9, %r10d
                	movq	%r10, 0x610(%rsp)
-               	movq	0xa00(%rsp), %r10
+               	movl	$0xca, %r10d
                	movq	%r10, 0x618(%rsp)
-               	movq	0x9f8(%rsp), %r10
+               	movl	$0xcb, %r10d
                	movq	%r10, 0x620(%rsp)
-               	movq	0x9f0(%rsp), %r10
+               	movl	$0xcc, %r10d
                	movq	%r10, 0x628(%rsp)
-               	movq	0x9e8(%rsp), %r10
+               	movl	$0xcd, %r10d
                	movq	%r10, 0x630(%rsp)
-               	movq	0x9e0(%rsp), %r10
+               	movl	$0xce, %r10d
                	movq	%r10, 0x638(%rsp)
-               	movq	0x9d8(%rsp), %r10
+               	movl	$0xcf, %r10d
                	movq	%r10, 0x640(%rsp)
-               	movq	0x9d0(%rsp), %r10
+               	movl	$0xd0, %r10d
                	movq	%r10, 0x648(%rsp)
-               	movq	0x9c8(%rsp), %r10
+               	movl	$0xd1, %r10d
                	movq	%r10, 0x650(%rsp)
-               	movq	0x9c0(%rsp), %r10
+               	movl	$0xd2, %r10d
                	movq	%r10, 0x658(%rsp)
-               	movq	0x9b8(%rsp), %r10
+               	movl	$0xd3, %r10d
                	movq	%r10, 0x660(%rsp)
-               	movq	0x9b0(%rsp), %r10
+               	movl	$0xd4, %r10d
                	movq	%r10, 0x668(%rsp)
-               	movq	0x9a8(%rsp), %r10
+               	movl	$0xd5, %r10d
                	movq	%r10, 0x670(%rsp)
-               	movq	0x9a0(%rsp), %r10
+               	movl	$0xd6, %r10d
                	movq	%r10, 0x678(%rsp)
-               	movq	0x998(%rsp), %r10
+               	movl	$0xd7, %r10d
                	movq	%r10, 0x680(%rsp)
-               	movq	0x990(%rsp), %r10
+               	movl	$0xd8, %r10d
                	movq	%r10, 0x688(%rsp)
-               	movq	0x988(%rsp), %r10
+               	movl	$0xd9, %r10d
                	movq	%r10, 0x690(%rsp)
-               	movq	0x980(%rsp), %r10
+               	movl	$0xda, %r10d
                	movq	%r10, 0x698(%rsp)
-               	movq	0x978(%rsp), %r10
+               	movl	$0xdb, %r10d
                	movq	%r10, 0x6a0(%rsp)
-               	movq	0x970(%rsp), %r10
+               	movl	$0xdc, %r10d
                	movq	%r10, 0x6a8(%rsp)
-               	movq	0x968(%rsp), %r10
+               	movl	$0xdd, %r10d
                	movq	%r10, 0x6b0(%rsp)
-               	movq	0x960(%rsp), %r10
+               	movl	$0xde, %r10d
                	movq	%r10, 0x6b8(%rsp)
-               	movq	0x958(%rsp), %r10
+               	movl	$0xdf, %r10d
                	movq	%r10, 0x6c0(%rsp)
-               	movq	0x950(%rsp), %r10
+               	movl	$0xe0, %r10d
                	movq	%r10, 0x6c8(%rsp)
-               	movq	0x948(%rsp), %r10
+               	movl	$0xe1, %r10d
                	movq	%r10, 0x6d0(%rsp)
-               	movq	0x940(%rsp), %r10
+               	movl	$0xe2, %r10d
                	movq	%r10, 0x6d8(%rsp)
-               	movq	0x938(%rsp), %r10
+               	movl	$0xe3, %r10d
                	movq	%r10, 0x6e0(%rsp)
-               	movq	0x930(%rsp), %r10
+               	movl	$0xe4, %r10d
                	movq	%r10, 0x6e8(%rsp)
-               	movq	0x928(%rsp), %r10
+               	movl	$0xe5, %r10d
                	movq	%r10, 0x6f0(%rsp)
-               	movq	0x920(%rsp), %r10
+               	movl	$0xe6, %r10d
                	movq	%r10, 0x6f8(%rsp)
-               	movq	0x918(%rsp), %r10
+               	movl	$0xe7, %r10d
                	movq	%r10, 0x700(%rsp)
-               	movq	0x910(%rsp), %r10
+               	movl	$0xe8, %r10d
                	movq	%r10, 0x708(%rsp)
-               	movq	0x908(%rsp), %r10
+               	movl	$0xe9, %r10d
                	movq	%r10, 0x710(%rsp)
-               	movq	0x900(%rsp), %r10
+               	movl	$0xea, %r10d
                	movq	%r10, 0x718(%rsp)
-               	movq	0x8f8(%rsp), %r10
+               	movl	$0xeb, %r10d
                	movq	%r10, 0x720(%rsp)
-               	movq	0x8f0(%rsp), %r10
+               	movl	$0xec, %r10d
                	movq	%r10, 0x728(%rsp)
-               	movq	0x8e8(%rsp), %r10
+               	movl	$0xed, %r10d
                	movq	%r10, 0x730(%rsp)
-               	movq	0x8e0(%rsp), %r10
+               	movl	$0xee, %r10d
                	movq	%r10, 0x738(%rsp)
-               	movq	0x8d8(%rsp), %r10
+               	movl	$0xef, %r10d
                	movq	%r10, 0x740(%rsp)
-               	movq	0x8d0(%rsp), %r10
+               	movl	$0xf0, %r10d
                	movq	%r10, 0x748(%rsp)
-               	movq	0x8c8(%rsp), %r10
+               	movl	$0xf1, %r10d
                	movq	%r10, 0x750(%rsp)
-               	movq	0x8c0(%rsp), %r10
+               	movl	$0xf2, %r10d
                	movq	%r10, 0x758(%rsp)
-               	movq	0x8b8(%rsp), %r10
+               	movl	$0xf3, %r10d
                	movq	%r10, 0x760(%rsp)
-               	movq	0x8b0(%rsp), %r10
+               	movl	$0xf4, %r10d
                	movq	%r10, 0x768(%rsp)
-               	movq	0x8a8(%rsp), %r10
+               	movl	$0xf5, %r10d
                	movq	%r10, 0x770(%rsp)
-               	movq	0x8a0(%rsp), %r10
+               	movl	$0xf6, %r10d
                	movq	%r10, 0x778(%rsp)
-               	movq	0x898(%rsp), %r10
+               	movl	$0xf7, %r10d
                	movq	%r10, 0x780(%rsp)
-               	movq	0x890(%rsp), %r10
+               	movl	$0xf8, %r10d
                	movq	%r10, 0x788(%rsp)
-               	movq	0x888(%rsp), %r10
+               	movl	$0xf9, %r10d
                	movq	%r10, 0x790(%rsp)
-               	movq	0x880(%rsp), %r10
+               	movl	$0xfa, %r10d
                	movq	%r10, 0x798(%rsp)
-               	movq	0x878(%rsp), %r10
+               	movl	$0xfb, %r10d
                	movq	%r10, 0x7a0(%rsp)
-               	movq	0x870(%rsp), %r10
+               	movl	$0xfc, %r10d
                	movq	%r10, 0x7a8(%rsp)
-               	movq	0x868(%rsp), %r10
+               	movl	$0xfd, %r10d
                	movq	%r10, 0x7b0(%rsp)
-               	movq	0x860(%rsp), %r10
+               	movl	$0xfe, %r10d
                	movq	%r10, 0x7b8(%rsp)
-               	movq	0x858(%rsp), %r10
+               	movl	$0xff, %r10d
                	movq	%r10, 0x7c0(%rsp)
-               	movq	0x850(%rsp), %r10
+               	movl	$0x100, %r10d           # imm = 0x100
                	movq	%r10, 0x7c8(%rsp)
-               	movq	0x848(%rsp), %r10
+               	movl	$0x101, %r10d           # imm = 0x101
                	movq	%r10, 0x7d0(%rsp)
-               	movq	0x840(%rsp), %r10
+               	movl	$0x102, %r10d           # imm = 0x102
                	movq	%r10, 0x7d8(%rsp)
-               	movq	0x838(%rsp), %r10
+               	movl	$0x103, %r10d           # imm = 0x103
                	movq	%r10, 0x7e0(%rsp)
-               	movq	0x830(%rsp), %r10
+               	movl	$0x104, %r10d           # imm = 0x104
                	movq	%r10, 0x7e8(%rsp)
                	callq	<addr>
                	addq	$0x7f0, %rsp            # imm = 0x7F0

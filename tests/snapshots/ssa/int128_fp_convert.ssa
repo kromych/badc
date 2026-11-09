@@ -868,7 +868,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
-    v2   Imm(1)                                           -> x0
+    v2   Imm(1)                                           -> -
     v3   Call { target_pc=3, args=[v1, v1, v1, v1, v1, v1, v2], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
     v5   Imm(0)                                           -> x1
@@ -882,7 +882,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v9   Imm(1)                                           -> x6
     v10  Imm(4607182418800017408)                         -> x2
     v11  Imm(1065353216)                                  -> x1
-    v12  Imm(5)                                           -> x0
+    v12  Imm(5)                                           -> -
     v13  Call { target_pc=3, args=[v8, v9, v10, v11, v10, v11, v12], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v14  Extend { value=v13, kind=I32 }                   -> x1
     v15  Imm(0)                                           -> x1
@@ -896,7 +896,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v19  Imm(5)                                           -> x6
     v20  Imm(4617315517961601024)                         -> x2
     v21  Imm(1084227584)                                  -> x1
-    v22  Imm(9)                                           -> x0
+    v22  Imm(9)                                           -> -
     v23  Call { target_pc=3, args=[v18, v19, v20, v21, v20, v21, v22], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v24  Extend { value=v23, kind=I32 }                   -> x1
     v25  Imm(0)                                           -> x1
@@ -910,7 +910,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v29  Imm(9007199254740992)                            -> x6
     v30  Imm(4845873199050653696)                         -> x2
     v31  Imm(1509949440)                                  -> x1
-    v32  Imm(13)                                          -> x0
+    v32  Imm(13)                                          -> -
     v33  Call { target_pc=3, args=[v28, v29, v30, v31, v30, v31, v32], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v34  Extend { value=v33, kind=I32 }                   -> x1
     v35  Imm(0)                                           -> x1
@@ -925,7 +925,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v40  Imm(9007199254740993)                            -> x6
     v41  Imm(4845873199050653696)                         -> x2
     v42  Imm(1509949440)                                  -> x1
-    v43  Imm(17)                                          -> x0
+    v43  Imm(17)                                          -> -
     v44  Call { target_pc=3, args=[v38, v40, v41, v42, v41, v42, v43], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  Extend { value=v44, kind=I32 }                   -> x1
     v46  Imm(0)                                           -> x1
@@ -940,7 +940,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v51  Imm(9007199254740995)                            -> x6
     v52  Imm(4845873199050653698)                         -> x2
     v53  Imm(1509949440)                                  -> x1
-    v54  Imm(21)                                          -> x0
+    v54  Imm(21)                                          -> -
     v55  Call { target_pc=3, args=[v49, v51, v52, v53, v52, v53, v54], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v56  Extend { value=v55, kind=I32 }                   -> x1
     v57  Imm(0)                                           -> x1
@@ -954,7 +954,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v61  Imm(-1)                                          -> x6
     v62  Imm(4895412794951729152)                         -> x2
     v63  Imm(1602224128)                                  -> x1
-    v64  Imm(25)                                          -> x0
+    v64  Imm(25)                                          -> -
     v65  Call { target_pc=3, args=[v60, v61, v62, v63, v62, v63, v64], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v66  Extend { value=v65, kind=I32 }                   -> x1
     v67  Imm(0)                                           -> x1
@@ -968,7 +968,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v71  Imm(-9223372036854775808)                        -> x6
     v72  Imm(4890909195324358656)                         -> x2
     v73  Imm(1593835520)                                  -> x1
-    v74  Imm(29)                                          -> x0
+    v74  Imm(29)                                          -> -
     v75  Call { target_pc=3, args=[v70, v71, v72, v73, v72, v73, v74], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v76  Extend { value=v75, kind=I32 }                   -> x1
     v77  Imm(0)                                           -> x1
@@ -982,7 +982,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v81  Imm(0)                                           -> x6
     v82  Imm(4895412794951729152)                         -> x2
     v83  Imm(1602224128)                                  -> x1
-    v84  Imm(33)                                          -> x0
+    v84  Imm(33)                                          -> -
     v85  Call { target_pc=3, args=[v80, v81, v82, v83, v82, v83, v84], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v86  Extend { value=v85, kind=I32 }                   -> x1
     v87  Imm(0)                                           -> x1
@@ -996,7 +996,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v91  Imm(0)                                           -> x6
     v92  Imm(4905545894113312768)                         -> x2
     v93  Imm(1621098496)                                  -> x1
-    v94  Imm(37)                                          -> x0
+    v94  Imm(37)                                          -> -
     v95  Call { target_pc=3, args=[v90, v91, v92, v93, v92, v93, v94], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v96  Extend { value=v95, kind=I32 }                   -> x1
     v97  Imm(0)                                           -> x1
@@ -1010,7 +1010,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v101 Imm(1)                                           -> x6
     v102 Imm(5111585577065512960)                         -> x2
     v103 Imm(2004877312)                                  -> x1
-    v104 Imm(41)                                          -> x0
+    v104 Imm(41)                                          -> -
     v105 Call { target_pc=3, args=[v100, v101, v102, v103, v102, v103, v104], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v106 Extend { value=v105, kind=I32 }                  -> x1
     v107 Imm(0)                                           -> x1
@@ -1025,7 +1025,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v112 Imm(1)                                           -> x6
     v113 Imm(5111585577065512976)                         -> x2
     v114 Imm(2004877312)                                  -> x1
-    v115 Imm(45)                                          -> x0
+    v115 Imm(45)                                          -> -
     v116 Call { target_pc=3, args=[v111, v112, v113, v114, v113, v114, v115], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v117 Extend { value=v116, kind=I32 }                  -> x1
     v118 Imm(0)                                           -> x1
@@ -1040,7 +1040,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v123 Imm(2139095040)                                  -> x1
     v124 Imm(-4616189618054758400)                        -> x8
     v125 Imm(3212836864)                                  -> x9
-    v126 Imm(49)                                          -> x0
+    v126 Imm(49)                                          -> -
     v127 Call { target_pc=3, args=[v121, v121, v122, v123, v124, v125, v126], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v128 Extend { value=v127, kind=I32 }                  -> x1
     v129 Imm(0)                                           -> x1
@@ -1056,7 +1056,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v135 Imm(2130706432)                                  -> x1
     v136 Imm(-4044232465378705408)                        -> x8
     v137 Imm(4278190080)                                  -> x9
-    v138 Imm(53)                                          -> x0
+    v138 Imm(53)                                          -> -
     v139 Call { target_pc=3, args=[v132, v133, v134, v135, v136, v137, v138], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v140 Extend { value=v139, kind=I32 }                  -> x1
     v141 Imm(0)                                           -> x1
@@ -1070,7 +1070,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v145 Imm(-1)                                          -> x6
     v146 Imm(5179139571476070400)                         -> x2
     v147 Imm(2130706432)                                  -> x1
-    v148 Imm(57)                                          -> x0
+    v148 Imm(57)                                          -> -
     v149 Call { target_pc=3, args=[v144, v145, v146, v147, v146, v147, v148], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v150 Extend { value=v149, kind=I32 }                  -> x1
     v151 Imm(0)                                           -> x1
@@ -1084,7 +1084,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v155 Imm(-8603657889541918977)                        -> x6
     v156 Imm(5129919054136829560)                         -> x2
     v157 Imm(2039026074)                                  -> x1
-    v158 Imm(61)                                          -> x0
+    v158 Imm(61)                                          -> -
     v159 Call { target_pc=3, args=[v154, v155, v156, v157, v156, v157, v158], fixed_args=7, fp_return=false, fp_arg_mask=0x0 } -> x0
     v160 Extend { value=v159, kind=I32 }                  -> x1
     v161 Imm(0)                                           -> x1

@@ -17,7 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	fmov	s0, #1.00000000
+               	fmov	s2, #1.00000000
                	sub	x0, x29, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -25,28 +25,27 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldr	w16, [x1, #0x10]
                	str	w16, [x0, #0x10]
-               	fmov	s4, #2.00000000
-               	fmov	s1, #3.00000000
-               	fmov	s6, #4.00000000
-               	fmov	s5, #5.00000000
-               	fadd	s23, s0, s1
-               	movi	d2, #0000000000000000
+               	fmov	s3, #2.00000000
+               	fmov	s4, #3.00000000
+               	fmov	s5, #4.00000000
+               	fmov	s6, #5.00000000
+               	movi	d0, #0000000000000000
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s3, [x0]
-               	fcmp	s3, s0
+               	ldr	s1, [x0]
+               	fcmp	s1, s2
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x4]
-               	fcmp	s3, s4
+               	ldr	s1, [x0, #0x4]
+               	fcmp	s1, s3
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x8]
-               	fcmp	s3, s1
+               	ldr	s1, [x0, #0x8]
+               	fcmp	s1, s4
                	b.ne	<addr>
-               	ldr	s3, [x0, #0xc]
-               	fcmp	s3, s6
+               	ldr	s1, [x0, #0xc]
+               	fcmp	s1, s5
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x10]
-               	fcmp	s3, s5
+               	ldr	s1, [x0, #0x10]
+               	fcmp	s1, s6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -54,20 +53,20 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s3, [x0]
-               	fcmp	s3, s0
+               	ldr	s1, [x0]
+               	fcmp	s1, s2
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x4]
-               	fcmp	s3, s4
+               	ldr	s1, [x0, #0x4]
+               	fcmp	s1, s3
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x8]
-               	fcmp	s3, s1
+               	ldr	s1, [x0, #0x8]
+               	fcmp	s1, s4
                	b.ne	<addr>
-               	ldr	s3, [x0, #0xc]
-               	fcmp	s3, s6
+               	ldr	s1, [x0, #0xc]
+               	fcmp	s1, s5
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x10]
-               	fcmp	s3, s5
+               	ldr	s1, [x0, #0x10]
+               	fcmp	s1, s6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -75,16 +74,16 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fmov	s7, #1.00000000
-               	fmov	s3, #2.00000000
+               	fmov	s1, #1.00000000
+               	fmov	s7, #2.00000000
                	fmov	s19, #3.00000000
                	fmov	s20, #4.00000000
                	fmov	s21, #5.00000000
                	ldr	s22, [x0]
-               	fcmp	s22, s7
+               	fcmp	s22, s1
                	b.ne	<addr>
                	ldr	s22, [x0, #0x4]
-               	fcmp	s22, s3
+               	fcmp	s22, s7
                	b.ne	<addr>
                	ldr	s22, [x0, #0x8]
                	fcmp	s22, s19
@@ -105,17 +104,17 @@ Disassembly of section .text:
                	cmp	w1, #0x7
                	b.ne	<addr>
                	ldr	s20, [x0, #0x4]
-               	fcmp	s20, s7
+               	fcmp	s20, s1
                	b.ne	<addr>
-               	ldr	s20, [x0, #0x8]
-               	fcmp	s20, s3
+               	ldr	s1, [x0, #0x8]
+               	fcmp	s1, s7
                	b.ne	<addr>
-               	ldr	s3, [x0, #0xc]
-               	fcmp	s3, s19
+               	ldr	s1, [x0, #0xc]
+               	fcmp	s1, s19
                	b.ne	<addr>
-               	ldr	s19, [x0, #0x10]
-               	movi	d3, #0000000000000000
-               	fcmp	s19, s3
+               	ldr	s7, [x0, #0x10]
+               	movi	d1, #0000000000000000
+               	fcmp	s7, s1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
@@ -123,103 +122,104 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s19, [x0]
-               	fcmp	s19, s3
+               	ldr	s7, [x0]
+               	fcmp	s7, s1
                	b.ne	<addr>
-               	ldr	s19, [x0, #0x4]
-               	fcmp	s19, s3
+               	ldr	s7, [x0, #0x4]
+               	fcmp	s7, s1
                	b.ne	<addr>
-               	ldr	s19, [x0, #0x8]
-               	fcmp	s19, s3
+               	ldr	s7, [x0, #0x8]
+               	fcmp	s7, s1
                	b.ne	<addr>
-               	ldr	s19, [x0, #0xc]
-               	fcmp	s19, s3
+               	ldr	s7, [x0, #0xc]
+               	fcmp	s7, s1
                	b.ne	<addr>
-               	ldr	s19, [x0, #0x10]
-               	fcmp	s19, s3
+               	ldr	s7, [x0, #0x10]
+               	fcmp	s7, s1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s19, #2.00000000
-               	fmov	s20, #3.00000000
-               	fmov	s21, #4.00000000
-               	fmov	s22, #5.00000000
-               	ldur	s3, [x29, #-0x18]
-               	fcmp	s3, s7
+               	fmov	s1, #1.00000000
+               	fmov	s7, #2.00000000
+               	fmov	s19, #3.00000000
+               	fmov	s20, #4.00000000
+               	fmov	s21, #5.00000000
+               	ldur	s22, [x29, #-0x18]
+               	fcmp	s22, s1
                	b.ne	<addr>
-               	ldur	s3, [x29, #-0x14]
-               	fcmp	s3, s19
+               	ldur	s22, [x29, #-0x14]
+               	fcmp	s22, s7
                	b.ne	<addr>
-               	ldur	s3, [x29, #-0x10]
-               	fcmp	s3, s20
+               	ldur	s22, [x29, #-0x10]
+               	fcmp	s22, s19
                	b.ne	<addr>
-               	ldur	s3, [x29, #-0xc]
-               	fcmp	s3, s21
+               	ldur	s22, [x29, #-0xc]
+               	fcmp	s22, s20
                	b.ne	<addr>
-               	ldur	s3, [x29, #-0x8]
-               	fcmp	s3, s22
+               	ldur	s20, [x29, #-0x8]
+               	fcmp	s20, s21
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s3, #1.00000000
-               	fcmp	s0, s3
+               	fmov	s20, #4.00000000
+               	fmov	s21, #5.00000000
+               	fcmp	s2, s1
+               	b.ne	<addr>
+               	fcmp	s3, s7
                	b.ne	<addr>
                	fcmp	s4, s19
                	b.ne	<addr>
-               	fcmp	s1, s20
+               	fcmp	s5, s20
                	b.ne	<addr>
                	fcmp	s6, s21
-               	b.ne	<addr>
-               	fcmp	s5, s22
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s6, #2.00000000
-               	fmov	s7, #3.00000000
-               	fmov	s19, #4.00000000
-               	fmov	s20, #5.00000000
-               	fcmp	s0, s3
+               	fmov	s1, #1.00000000
+               	fmov	s7, #2.00000000
+               	fmov	s19, #3.00000000
+               	fcmp	s2, s1
                	b.ne	<addr>
-               	fcmp	s4, s6
+               	fcmp	s3, s7
                	b.ne	<addr>
-               	fcmp	s1, s7
-               	b.ne	<addr>
-               	fcmp	s23, s19
+               	fcmp	s4, s19
                	b.ne	<addr>
                	fcmp	s5, s20
+               	b.ne	<addr>
+               	fcmp	s6, s21
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcmp	s0, s3
+               	fcmp	s2, s1
                	b.ne	<addr>
-               	fcmp	s4, s6
+               	fcmp	s3, s7
                	b.ne	<addr>
-               	fcmp	s1, s7
+               	fcmp	s4, s19
                	b.ne	<addr>
-               	movi	d0, #0000000000000000
-               	fcmp	s2, s0
+               	movi	d1, #0000000000000000
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcmp	s2, s0
+               	fcmp	s0, s1
                	b.ne	<addr>
-               	fcmp	s2, s0
+               	fcmp	s0, s1
                	b.ne	<addr>
-               	fcmp	s2, s0
+               	fcmp	s0, s1
                	b.ne	<addr>
-               	fcmp	s2, s0
+               	fcmp	s0, s1
                	b.ne	<addr>
-               	fcmp	s2, s0
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x20

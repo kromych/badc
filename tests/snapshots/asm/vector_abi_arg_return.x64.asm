@@ -1420,16 +1420,14 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	callq	<addr>
                	movups	%xmm0, 0x40(%rsp)
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movzbq	0x20(%rsp), %rcx
-               	movzbq	0x40(%rsp), %rdx
-               	subq	%rdx, %rcx
+               	movzbq	0x20(%rsp), %rax
+               	movzbq	0x40(%rsp), %rcx
+               	subq	%rcx, %rax
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rcx, %xmm0
-               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	movq	%rcx, %xmm14
+               	cvtsi2sd	%rax, %xmm0
+               	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	addsd	%xmm15, %xmm0
                	movabsq	$0x404a000000000000, %rax # imm = 0x404A000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

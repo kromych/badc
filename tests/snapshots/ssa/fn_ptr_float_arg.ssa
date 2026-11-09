@@ -6,59 +6,49 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=0)                                -> x0
     v2   Imm(0)                                           -> x0
-    v3   Imm(1075838976)                                  -> x1 [f32]
+    v3   Imm(1075838976)                                  -> x0 [f32]
     v4   Imm(0)                                           -> x0
     v5   Imm(1073741824)                                  -> x0 [f32]
-    v6   Binop { op=fmul, lhs=v3, rhs=v5 }                -> d0 [f32]
-    v7   FpCast { kind=FpToInt, value=v6 }                -> x1
-    v8   Extend { value=v7, kind=I32 }                    -> x2
-    v9   Extend { value=v7, kind=I32 }                    -> x2
-    v10  BinopI { op=ne, lhs=v7, rhs_imm=5 }              -> x1
-    terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
-  block 1  start_pc=0
-    v11  Imm(1)                                           -> x0
-    terminator Return(v11)   (exit_acc=v11)
-  block 2  start_pc=0
-    v12  ImmCode(ent_pc=1)                                -> x1
-    v13  Imm(0)                                           -> x1
-    v14  Imm(3)                                           -> x1
-    v15  Imm(1083179008)                                  -> x1 [f32]
-    v16  Imm(0)                                           -> x1
-    v17  Imm(3)                                           -> x1
-    v18  Imm(4)                                           -> x1
-    v19  Imm(7)                                           -> x1
-    v20  Imm(7)                                           -> x1
-    v21  Imm(7)                                           -> x1
-    v22  Imm(7)                                           -> x1
-    v23  Imm(0)                                           -> x1
-    v24  Imm(10)                                          -> x1
-    v25  ImmCode(ent_pc=3)                                -> x1
-    v26  Imm(1075838976)                                  -> x1 [f32]
-    v27  Imm(10)                                          -> x1
-    v28  Imm(10)                                          -> x1
-    v29  Imm(2)                                           -> x1
-    v30  Imm(12)                                          -> x1
-    v31  Imm(12)                                          -> x1
-    v32  Imm(12)                                          -> x1
-    v33  Imm(12)                                          -> x1
-    v34  Imm(12)                                          -> x1
-    v35  Imm(12)                                          -> x1
-    v36  Imm(0)                                           -> x1
-    v37  Imm(1080033280)                                  -> x1 [f32]
-    v38  Imm(0)                                           -> x2
-    v39  Imm(1073741824)                                  -> x2 [f32]
-    v40  Binop { op=fmul, lhs=v37, rhs=v5 }               -> d0 [f32]
-    v41  FpCast { kind=FpToInt, value=v40 }               -> x0
-    v42  Extend { value=v41, kind=I32 }                   -> x1
-    v43  Extend { value=v41, kind=I32 }                   -> x1
-    v44  BinopI { op=ne, lhs=v41, rhs_imm=7 }             -> x0
-    terminator Bz { cond=v44, target=b4, fall=b3 }   (exit_acc=v44)
-  block 3  start_pc=0
-    v47  Imm(4)                                           -> x0
-    terminator Return(v47)   (exit_acc=v47)
-  block 4  start_pc=0
-    v48  Imm(0)                                           -> x0
-    terminator Return(v48)   (exit_acc=v48)
+    v6   Imm(1084227584)                                  -> x0 [f32]
+    v7   Imm(5)                                           -> x0
+    v8   Imm(5)                                           -> x0
+    v9   Imm(5)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  ImmCode(ent_pc=1)                                -> x0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(3)                                           -> x0
+    v14  Imm(1083179008)                                  -> x0 [f32]
+    v15  Imm(0)                                           -> x0
+    v16  Imm(3)                                           -> x0
+    v17  Imm(4)                                           -> x0
+    v18  Imm(7)                                           -> x0
+    v19  Imm(7)                                           -> x0
+    v20  Imm(7)                                           -> x0
+    v21  Imm(7)                                           -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(10)                                          -> x0
+    v24  ImmCode(ent_pc=3)                                -> x0
+    v25  Imm(1075838976)                                  -> x0 [f32]
+    v26  Imm(10)                                          -> x0
+    v27  Imm(10)                                          -> x0
+    v28  Imm(2)                                           -> x0
+    v29  Imm(12)                                          -> x0
+    v30  Imm(12)                                          -> x0
+    v31  Imm(12)                                          -> x0
+    v32  Imm(12)                                          -> x0
+    v33  Imm(12)                                          -> x0
+    v34  Imm(12)                                          -> x0
+    v35  Imm(0)                                           -> x0
+    v36  Imm(1080033280)                                  -> x0 [f32]
+    v37  Imm(0)                                           -> x0
+    v38  Imm(1073741824)                                  -> x0 [f32]
+    v39  Imm(1088421888)                                  -> x0 [f32]
+    v40  Imm(7)                                           -> x0
+    v41  Imm(7)                                           -> x0
+    v42  Imm(7)                                           -> x0
+    v43  Imm(0)                                           -> x0
+    v44  Imm(0)                                           -> x0
+    terminator Return(v44)   (exit_acc=v44)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

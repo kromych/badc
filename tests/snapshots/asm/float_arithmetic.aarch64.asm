@@ -16,33 +16,31 @@ Disassembly of section .text:
 <main>:
                	fmov	d0, #1.50000000
                	fmov	d1, #2.50000000
-               	fadd	d2, d0, d1
-               	fmov	d3, #4.00000000
-               	fcmp	d2, d3
+               	fmov	d2, #4.00000000
+               	fcmp	d2, d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	fsub	d2, d1, d0
-               	fmov	d3, #1.00000000
-               	fcmp	d2, d3
+               	fmov	d2, #1.00000000
+               	fcmp	d2, d2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmul	d2, d0, d1
-               	fmov	d3, #3.75000000
-               	fcmp	d2, d3
+               	fmov	d2, #3.75000000
+               	fcmp	d2, d2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fdiv	d2, d1, d0
                	adrp	x16, <page>
-               	ldr	d3, [x16]
+               	ldr	d2, [x16]
+               	adrp	x16, <page>
+               	ldr	d3, [x16, #0x8]
                	fcmpe	d2, d3
                	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x16, <page>
-               	ldr	d3, [x16, #0x8]
+               	ldr	d3, [x16, #0x10]
                	fcmpe	d2, d3
                	b.lt	<addr>
                	mov	x0, #0x5                // =5
@@ -92,19 +90,6 @@ Disassembly of section .text:
                	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
-               	ret
-               	fmov	d1, #0.50000000
-               	fadd	d0, d0, d1
-               	fcvtzs	x0, d0
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0xf                // =15
-               	ret
-               	fadd	d0, d0, d1
-               	fcvtzs	x0, d0
-               	cmp	w0, #0x8
-               	b.eq	<addr>
-               	mov	x0, #0x10               // =16
                	ret
                	mov	x0, #0x0                // =0
                	ret

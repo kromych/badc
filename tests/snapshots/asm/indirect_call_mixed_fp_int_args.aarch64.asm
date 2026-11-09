@@ -19,22 +19,13 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	ldr	d0, [x1, #0x20]
                	add	x1, x0, #0x2
-               	fmov	d1, #0.25000000
-               	fmov	s2, #1.50000000
-               	fmov	d3, #10.00000000
-               	fmul	d0, d0, d3
+               	fmov	d1, #10.00000000
+               	fmul	d0, d0, d1
                	fcvtzs	x2, d0
                	add	x0, x0, x2
                	add	x0, x0, x1
-               	mov	x16, #0x4059000000000000 // =4636737291354636288
-               	fmov	d0, x16
-               	fmul	d0, d1, d0
-               	fcvtzs	x1, d0
-               	add	x0, x0, x1
-               	fmov	s0, #2.00000000
-               	fmul	s0, s2, s0
-               	fcvtzs	x1, s0
-               	add	x0, x0, x1
+               	add	x0, x0, #0x19
+               	add	x0, x0, #0x3
                	add	x0, x0, #0x7
                	cmp	w0, #0x40
                	b.eq	<addr>

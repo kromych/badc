@@ -455,7 +455,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=8
-  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x0
@@ -821,7 +821,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v347 LifetimeEnd(-1)                                  -> -
     terminator Return(v346)   (exit_acc=v346)
   block 8  start_pc=0
-    v348 Imm(0)                                           -> x1
+    v348 Imm(0)                                           -> x0
     v349 Imm(0)                                           -> x0
     v350 Imm(1)                                           -> x0
     v351 Imm(0)                                           -> x0
@@ -829,97 +829,97 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v353 Imm(1)                                           -> x0
     v354 Imm(0)                                           -> x0
     v355 Imm(1)                                           -> x0
-    v356 Imm(4607182418800017408)                         -> x2
+    v356 Imm(4607182418800017408)                         -> x0
     v357 Imm(4616189618054758400)                         -> x0
-    v358 Binop { op=fdiv, lhs=v356, rhs=v357 }            -> d0
-    v359 Imm(2)                                           -> x2
-    v360 Imm(2)                                           -> x2
-    v361 Imm(2)                                           -> x2
-    v362 Imm(9)                                           -> x2
-    v363 Imm(9)                                           -> x2
-    v364 Imm(4621256167635550208)                         -> x2
-    v365 Binop { op=fadd, lhs=v358, rhs=v364 }            -> d0
-    v366 Binop { op=fadd, lhs=v348, rhs=v365 }            -> d0
-    v367 Imm(0)                                           -> x1
-    v368 Imm(0)                                           -> x1
-    v369 Imm(1)                                           -> x1
-    v370 Imm(2)                                           -> x1
-    v371 Imm(2)                                           -> x1
-    v372 Imm(2)                                           -> x1
-    v373 Imm(1)                                           -> x1
-    v374 Imm(0)                                           -> x1
-    v375 Imm(2)                                           -> x1
-    v376 Imm(4611686018427387904)                         -> x1
-    v377 Imm(4616189618054758400)                         -> x2
-    v378 Binop { op=fdiv, lhs=v376, rhs=v357 }            -> d1
-    v379 Imm(2)                                           -> x1
-    v380 Imm(4)                                           -> x1
-    v381 Imm(4)                                           -> x1
-    v382 Imm(11)                                          -> x1
-    v383 Imm(11)                                          -> x1
-    v384 Imm(4622382067542392832)                         -> x1
-    v385 Binop { op=fadd, lhs=v378, rhs=v384 }            -> d1
-    v386 Binop { op=fadd, lhs=v366, rhs=v385 }            -> d0
-    v387 Imm(0)                                           -> x1
-    v388 Imm(0)                                           -> x1
-    v389 Imm(2)                                           -> x1
-    v390 Imm(3)                                           -> x1
-    v391 Imm(3)                                           -> x1
-    v392 Imm(3)                                           -> x1
-    v393 Imm(1)                                           -> x1
-    v394 Imm(0)                                           -> x1
-    v395 Imm(3)                                           -> x1
-    v396 Imm(4613937818241073152)                         -> x1
-    v397 Imm(4616189618054758400)                         -> x2
-    v398 Binop { op=fdiv, lhs=v396, rhs=v357 }            -> d1
-    v399 Imm(2)                                           -> x1
-    v400 Imm(6)                                           -> x1
-    v401 Imm(6)                                           -> x1
-    v402 Imm(13)                                          -> x1
-    v403 Imm(13)                                          -> x1
-    v404 Imm(4623507967449235456)                         -> x1
-    v405 Binop { op=fadd, lhs=v398, rhs=v404 }            -> d1
-    v406 Binop { op=fadd, lhs=v386, rhs=v405 }            -> d0
-    v407 Imm(0)                                           -> x1
-    v408 Imm(0)                                           -> x1
-    v409 Imm(3)                                           -> x1
-    v410 Imm(4)                                           -> x1
-    v411 Imm(4)                                           -> x1
-    v412 Imm(4)                                           -> x1
-    v413 Imm(1)                                           -> x1
-    v414 Imm(0)                                           -> x1
-    v415 Imm(4)                                           -> x1
-    v416 Imm(4616189618054758400)                         -> x1
-    v417 Imm(4616189618054758400)                         -> x1
-    v418 Binop { op=fdiv, lhs=v357, rhs=v357 }            -> d1
-    v419 Imm(2)                                           -> x1
-    v420 Imm(8)                                           -> x1
-    v421 Imm(8)                                           -> x1
-    v422 Imm(15)                                          -> x1
-    v423 Imm(15)                                          -> x1
-    v424 Imm(4624633867356078080)                         -> x1
-    v425 Binop { op=fadd, lhs=v418, rhs=v424 }            -> d1
-    v426 Binop { op=fadd, lhs=v406, rhs=v425 }            -> d0
-    v427 Imm(0)                                           -> x1
-    v428 Imm(0)                                           -> x1
-    v429 Imm(4)                                           -> x1
-    v430 Imm(5)                                           -> x1
-    v431 Imm(5)                                           -> x1
-    v432 Imm(5)                                           -> x1
-    v433 Imm(1)                                           -> x1
-    v434 Imm(0)                                           -> x1
-    v435 Imm(5)                                           -> x1
-    v436 Imm(4617315517961601024)                         -> x1
-    v437 Imm(4616189618054758400)                         -> x2
-    v438 Binop { op=fdiv, lhs=v436, rhs=v357 }            -> d1
+    v358 Imm(4598175219545276416)                         -> x0
+    v359 Imm(2)                                           -> x0
+    v360 Imm(2)                                           -> x0
+    v361 Imm(2)                                           -> x0
+    v362 Imm(9)                                           -> x0
+    v363 Imm(9)                                           -> x0
+    v364 Imm(4621256167635550208)                         -> x0
+    v365 Imm(4621396905123905536)                         -> x0
+    v366 Imm(4621396905123905536)                         -> x0
+    v367 Imm(0)                                           -> x0
+    v368 Imm(0)                                           -> x0
+    v369 Imm(1)                                           -> x0
+    v370 Imm(2)                                           -> x0
+    v371 Imm(2)                                           -> x0
+    v372 Imm(2)                                           -> x0
+    v373 Imm(1)                                           -> x0
+    v374 Imm(0)                                           -> x0
+    v375 Imm(2)                                           -> x0
+    v376 Imm(4611686018427387904)                         -> x0
+    v377 Imm(4616189618054758400)                         -> x0
+    v378 Imm(4602678819172646912)                         -> x0
+    v379 Imm(2)                                           -> x0
+    v380 Imm(4)                                           -> x0
+    v381 Imm(4)                                           -> x0
+    v382 Imm(11)                                          -> x0
+    v383 Imm(11)                                          -> x0
+    v384 Imm(4622382067542392832)                         -> x0
+    v385 Imm(4622663542519103488)                         -> x0
+    v386 Imm(4626533823448875008)                         -> x0
+    v387 Imm(0)                                           -> x0
+    v388 Imm(0)                                           -> x0
+    v389 Imm(2)                                           -> x0
+    v390 Imm(3)                                           -> x0
+    v391 Imm(3)                                           -> x0
+    v392 Imm(3)                                           -> x0
+    v393 Imm(1)                                           -> x0
+    v394 Imm(0)                                           -> x0
+    v395 Imm(3)                                           -> x0
+    v396 Imm(4613937818241073152)                         -> x0
+    v397 Imm(4616189618054758400)                         -> x0
+    v398 Imm(4604930618986332160)                         -> x0
+    v399 Imm(2)                                           -> x0
+    v400 Imm(6)                                           -> x0
+    v401 Imm(6)                                           -> x0
+    v402 Imm(13)                                          -> x0
+    v403 Imm(13)                                          -> x0
+    v404 Imm(4623507967449235456)                         -> x0
+    v405 Imm(4623930179914301440)                         -> x0
+    v406 Imm(4630052260657758208)                         -> x0
+    v407 Imm(0)                                           -> x0
+    v408 Imm(0)                                           -> x0
+    v409 Imm(3)                                           -> x0
+    v410 Imm(4)                                           -> x0
+    v411 Imm(4)                                           -> x0
+    v412 Imm(4)                                           -> x0
+    v413 Imm(1)                                           -> x0
+    v414 Imm(0)                                           -> x0
+    v415 Imm(4)                                           -> x0
+    v416 Imm(4616189618054758400)                         -> x0
+    v417 Imm(4616189618054758400)                         -> x0
+    v418 Imm(4607182418800017408)                         -> x0
+    v419 Imm(2)                                           -> x0
+    v420 Imm(8)                                           -> x0
+    v421 Imm(8)                                           -> x0
+    v422 Imm(15)                                          -> x0
+    v423 Imm(15)                                          -> x0
+    v424 Imm(4624633867356078080)                         -> x0
+    v425 Imm(4625196817309499392)                         -> x0
+    v426 Imm(4632304060471443456)                         -> x0
+    v427 Imm(0)                                           -> x0
+    v428 Imm(0)                                           -> x0
+    v429 Imm(4)                                           -> x0
+    v430 Imm(5)                                           -> x0
+    v431 Imm(5)                                           -> x0
+    v432 Imm(5)                                           -> x0
+    v433 Imm(1)                                           -> x0
+    v434 Imm(0)                                           -> x0
+    v435 Imm(5)                                           -> x0
+    v436 Imm(4617315517961601024)                         -> x0
+    v437 Imm(4616189618054758400)                         -> x0
+    v438 Imm(4608308318706860032)                         -> x0
     v439 Imm(2)                                           -> x0
     v440 Imm(10)                                          -> x0
     v441 Imm(10)                                          -> x0
     v442 Imm(17)                                          -> x0
     v443 Imm(17)                                          -> x0
     v444 Imm(4625478292286210048)                         -> x0
-    v445 Binop { op=fadd, lhs=v438, rhs=v444 }            -> d1
-    v446 Binop { op=fadd, lhs=v426, rhs=v445 }            -> d0
+    v445 Imm(4625830136007098368)                         -> x0
+    v446 Imm(4634538268099084288)                         -> x0
     v447 Imm(0)                                           -> x0
     v448 Imm(0)                                           -> x0
     v449 Imm(5)                                           -> x0
@@ -930,16 +930,16 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v454 Imm(0)                                           -> x0
     v455 Imm(6)                                           -> x0
     v456 Imm(4618441417868443648)                         -> x0
-    v457 Imm(4616189618054758400)                         -> x1
-    v458 Binop { op=fdiv, lhs=v456, rhs=v457 }            -> d1
+    v457 Imm(4616189618054758400)                         -> x0
+    v458 Imm(4609434218613702656)                         -> x0
     v459 Imm(2)                                           -> x0
     v460 Imm(12)                                          -> x0
     v461 Imm(12)                                          -> x0
     v462 Imm(19)                                          -> x0
     v463 Imm(19)                                          -> x0
     v464 Imm(4626041242239631360)                         -> x0
-    v465 Binop { op=fadd, lhs=v458, rhs=v464 }            -> d1
-    v466 Binop { op=fadd, lhs=v446, rhs=v465 }            -> [spill 0]
+    v465 Imm(4626463454704697344)                         -> x0
+    v466 Imm(4635980827354726400)                         -> x0
     v467 Imm(0)                                           -> x0
     v468 Imm(0)                                           -> x0
     v469 Imm(6)                                           -> x0
@@ -978,28 +978,28 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v502 Imm(4)                                           -> x1
     v503 StoreLocal { off=-1, disp=3, value=v502, kind=I8 } -> -
     v504 LocalAddr(-1)                                    -> x1
-    v505 BinopI { op=add, lhs=v478, rhs_imm=4 }           -> x1
+    v505 BinopI { op=add, lhs=v504, rhs_imm=4 }           -> x1
     v506 Imm(1)                                           -> x1
     v507 Imm(5)                                           -> x1
     v508 Imm(5)                                           -> x1
     v509 Imm(5)                                           -> x1
     v510 StoreLocal { off=-1, disp=4, value=v509, kind=I8 } -> -
     v511 LocalAddr(-1)                                    -> x1
-    v512 BinopI { op=add, lhs=v511, rhs_imm=5 }           -> x1
+    v512 BinopI { op=add, lhs=v504, rhs_imm=5 }           -> x1
     v513 Imm(1)                                           -> x1
     v514 Imm(6)                                           -> x1
     v515 Imm(6)                                           -> x1
     v516 Imm(6)                                           -> x1
     v517 StoreLocal { off=-1, disp=5, value=v516, kind=I8 } -> -
     v518 LocalAddr(-1)                                    -> x1
-    v519 BinopI { op=add, lhs=v511, rhs_imm=6 }           -> x1
+    v519 BinopI { op=add, lhs=v504, rhs_imm=6 }           -> x1
     v520 Imm(1)                                           -> x1
     v521 Imm(7)                                           -> x1
     v522 Imm(7)                                           -> x1
     v523 Imm(7)                                           -> x1
     v524 StoreLocal { off=-1, disp=6, value=v523, kind=I8 } -> -
     v525 LocalAddr(-1)                                    -> x1
-    v526 BinopI { op=add, lhs=v511, rhs_imm=7 }           -> x1
+    v526 BinopI { op=add, lhs=v504, rhs_imm=7 }           -> x1
     v527 Imm(1)                                           -> x1
     v528 Imm(8)                                           -> x1
     v529 Imm(8)                                           -> x1
@@ -1021,21 +1021,21 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v545 Imm(2)                                           -> x2
     v546 StoreLocal { off=-1, value=v545, kind=I8 }       -> -
     v547 LocalAddr(-1)                                    -> x2
-    v548 BinopI { op=add, lhs=v547, rhs_imm=1 }           -> x2
+    v548 BinopI { op=add, lhs=v533, rhs_imm=1 }           -> x2
     v549 Imm(2)                                           -> x2
     v550 Imm(3)                                           -> x2
     v551 Imm(3)                                           -> x2
     v552 Imm(3)                                           -> x2
     v553 StoreLocal { off=-1, disp=1, value=v552, kind=I8 } -> -
     v554 LocalAddr(-1)                                    -> x2
-    v555 BinopI { op=add, lhs=v547, rhs_imm=2 }           -> x2
+    v555 BinopI { op=add, lhs=v554, rhs_imm=2 }           -> x2
     v556 Imm(2)                                           -> x2
     v557 Imm(4)                                           -> x2
     v558 Imm(4)                                           -> x2
     v559 Imm(4)                                           -> x2
     v560 StoreLocal { off=-1, disp=2, value=v559, kind=I8 } -> -
     v561 LocalAddr(-1)                                    -> x2
-    v562 BinopI { op=add, lhs=v547, rhs_imm=3 }           -> x2
+    v562 BinopI { op=add, lhs=v554, rhs_imm=3 }           -> x2
     v563 Imm(2)                                           -> x2
     v564 Imm(5)                                           -> x2
     v565 Imm(5)                                           -> x2
@@ -1056,14 +1056,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v580 Imm(7)                                           -> x2
     v581 StoreLocal { off=-1, disp=5, value=v580, kind=I8 } -> -
     v582 LocalAddr(-1)                                    -> x2
-    v583 BinopI { op=add, lhs=v568, rhs_imm=6 }           -> x2
+    v583 BinopI { op=add, lhs=v582, rhs_imm=6 }           -> x2
     v584 Imm(2)                                           -> x2
     v585 Imm(8)                                           -> x2
     v586 Imm(8)                                           -> x2
     v587 Imm(8)                                           -> x2
     v588 StoreLocal { off=-1, disp=6, value=v587, kind=I8 } -> -
     v589 LocalAddr(-1)                                    -> x2
-    v590 BinopI { op=add, lhs=v589, rhs_imm=7 }           -> x2
+    v590 BinopI { op=add, lhs=v582, rhs_imm=7 }           -> x2
     v591 Imm(2)                                           -> x2
     v592 Imm(9)                                           -> x2
     v593 Imm(9)                                           -> x2
@@ -1269,81 +1269,82 @@ fn ent_pc=6 n_params=0 variadic=false locals=8
     v793 LifetimeEnd(-1)                                  -> -
     v794 LocalAddr(-4)                                    -> x14
     v795 Imm(4609434218613702656)                         -> x15
-    v796 Imm(6)                                           -> [spill 1]
-    v797 Imm(0)                                           -> [spill 1]
-    v798 LocalAddr(-1)                                    -> [spill 1]
-    v799 Imm(6)                                           -> [spill 1]
-    v800 Imm(6)                                           -> [spill 1]
-    v801 Imm(6)                                           -> [spill 1]
+    v796 Imm(6)                                           -> [spill 0]
+    v797 Imm(0)                                           -> [spill 0]
+    v798 LocalAddr(-1)                                    -> [spill 0]
+    v799 Imm(6)                                           -> [spill 0]
+    v800 Imm(6)                                           -> [spill 0]
+    v801 Imm(6)                                           -> [spill 0]
     v802 StoreLocal { off=-1, value=v801, kind=I8 }       -> -
-    v803 LocalAddr(-1)                                    -> [spill 1]
-    v804 BinopI { op=add, lhs=v803, rhs_imm=1 }           -> [spill 1]
-    v805 Imm(6)                                           -> [spill 1]
-    v806 Imm(7)                                           -> [spill 1]
-    v807 Imm(7)                                           -> [spill 1]
-    v808 Imm(7)                                           -> [spill 1]
+    v803 LocalAddr(-1)                                    -> [spill 0]
+    v804 BinopI { op=add, lhs=v803, rhs_imm=1 }           -> [spill 0]
+    v805 Imm(6)                                           -> [spill 0]
+    v806 Imm(7)                                           -> [spill 0]
+    v807 Imm(7)                                           -> [spill 0]
+    v808 Imm(7)                                           -> [spill 0]
     v809 StoreLocal { off=-1, disp=1, value=v808, kind=I8 } -> -
-    v810 LocalAddr(-1)                                    -> [spill 1]
-    v811 BinopI { op=add, lhs=v810, rhs_imm=2 }           -> [spill 1]
-    v812 Imm(6)                                           -> [spill 1]
-    v813 Imm(8)                                           -> [spill 1]
-    v814 Imm(8)                                           -> [spill 1]
-    v815 Imm(8)                                           -> [spill 1]
+    v810 LocalAddr(-1)                                    -> [spill 0]
+    v811 BinopI { op=add, lhs=v810, rhs_imm=2 }           -> [spill 0]
+    v812 Imm(6)                                           -> [spill 0]
+    v813 Imm(8)                                           -> [spill 0]
+    v814 Imm(8)                                           -> [spill 0]
+    v815 Imm(8)                                           -> [spill 0]
     v816 StoreLocal { off=-1, disp=2, value=v815, kind=I8 } -> -
-    v817 LocalAddr(-1)                                    -> [spill 1]
-    v818 BinopI { op=add, lhs=v817, rhs_imm=3 }           -> [spill 1]
-    v819 Imm(6)                                           -> [spill 1]
-    v820 Imm(9)                                           -> [spill 1]
-    v821 Imm(9)                                           -> [spill 1]
-    v822 Imm(9)                                           -> [spill 1]
+    v817 LocalAddr(-1)                                    -> [spill 0]
+    v818 BinopI { op=add, lhs=v817, rhs_imm=3 }           -> [spill 0]
+    v819 Imm(6)                                           -> [spill 0]
+    v820 Imm(9)                                           -> [spill 0]
+    v821 Imm(9)                                           -> [spill 0]
+    v822 Imm(9)                                           -> [spill 0]
     v823 StoreLocal { off=-1, disp=3, value=v822, kind=I8 } -> -
-    v824 LocalAddr(-1)                                    -> [spill 1]
-    v825 BinopI { op=add, lhs=v824, rhs_imm=4 }           -> [spill 1]
-    v826 Imm(6)                                           -> [spill 1]
-    v827 Imm(10)                                          -> [spill 1]
-    v828 Imm(10)                                          -> [spill 1]
-    v829 Imm(10)                                          -> [spill 1]
+    v824 LocalAddr(-1)                                    -> [spill 0]
+    v825 BinopI { op=add, lhs=v824, rhs_imm=4 }           -> [spill 0]
+    v826 Imm(6)                                           -> [spill 0]
+    v827 Imm(10)                                          -> [spill 0]
+    v828 Imm(10)                                          -> [spill 0]
+    v829 Imm(10)                                          -> [spill 0]
     v830 StoreLocal { off=-1, disp=4, value=v829, kind=I8 } -> -
-    v831 LocalAddr(-1)                                    -> [spill 1]
-    v832 BinopI { op=add, lhs=v831, rhs_imm=5 }           -> [spill 1]
-    v833 Imm(6)                                           -> [spill 1]
-    v834 Imm(11)                                          -> [spill 1]
-    v835 Imm(11)                                          -> [spill 1]
-    v836 Imm(11)                                          -> [spill 1]
+    v831 LocalAddr(-1)                                    -> [spill 0]
+    v832 BinopI { op=add, lhs=v831, rhs_imm=5 }           -> [spill 0]
+    v833 Imm(6)                                           -> [spill 0]
+    v834 Imm(11)                                          -> [spill 0]
+    v835 Imm(11)                                          -> [spill 0]
+    v836 Imm(11)                                          -> [spill 0]
     v837 StoreLocal { off=-1, disp=5, value=v836, kind=I8 } -> -
-    v838 LocalAddr(-1)                                    -> [spill 1]
-    v839 BinopI { op=add, lhs=v838, rhs_imm=6 }           -> [spill 1]
-    v840 Imm(6)                                           -> [spill 1]
-    v841 Imm(12)                                          -> [spill 1]
-    v842 Imm(12)                                          -> [spill 1]
-    v843 Imm(12)                                          -> [spill 1]
+    v838 LocalAddr(-1)                                    -> [spill 0]
+    v839 BinopI { op=add, lhs=v838, rhs_imm=6 }           -> [spill 0]
+    v840 Imm(6)                                           -> [spill 0]
+    v841 Imm(12)                                          -> [spill 0]
+    v842 Imm(12)                                          -> [spill 0]
+    v843 Imm(12)                                          -> [spill 0]
     v844 StoreLocal { off=-1, disp=6, value=v843, kind=I8 } -> -
-    v845 LocalAddr(-1)                                    -> [spill 1]
-    v846 BinopI { op=add, lhs=v845, rhs_imm=7 }           -> [spill 1]
-    v847 Imm(6)                                           -> [spill 1]
-    v848 Imm(13)                                          -> [spill 1]
-    v849 Imm(13)                                          -> [spill 1]
-    v850 Imm(13)                                          -> [spill 1]
+    v845 LocalAddr(-1)                                    -> [spill 0]
+    v846 BinopI { op=add, lhs=v845, rhs_imm=7 }           -> [spill 0]
+    v847 Imm(6)                                           -> [spill 0]
+    v848 Imm(13)                                          -> [spill 0]
+    v849 Imm(13)                                          -> [spill 0]
+    v850 Imm(13)                                          -> [spill 0]
     v851 StoreLocal { off=-1, disp=7, value=v850, kind=I8 } -> -
-    v852 Imm(0)                                           -> [spill 1]
-    v853 LocalAddr(-1)                                    -> [spill 1]
-    v854 LocalAddr(-3)                                    -> [spill 1]
-    v855 LoadLocal { off=-1, kind=I64 }                   -> [spill 1]
+    v852 Imm(0)                                           -> [spill 0]
+    v853 LocalAddr(-1)                                    -> [spill 0]
+    v854 LocalAddr(-3)                                    -> [spill 0]
+    v855 LoadLocal { off=-1, kind=I64 }                   -> [spill 0]
     v856 StoreLocal { off=-3, value=v855, kind=I64 }      -> -
     v857 LifetimeEnd(-1)                                  -> -
-    v858 LocalAddr(-3)                                    -> [spill 1]
+    v858 LocalAddr(-3)                                    -> [spill 0]
     v859 Call { target_pc=3, args=[v474, v475, v534, v539, v598, v603, v666, v667, v730, v731, v794, v795, v858], fixed_args=1, fp_return=true, fp_arg_mask=0xaaa } -> d0
     v860 Imm(0)                                           -> x0
-    v861 Binop { op=fne, lhs=v859, rhs=v466 }             -> x0
-    terminator Bz { cond=v861, target=b10, fall=b9 }   (exit_acc=v861)
+    v861 Imm(4635980827354726400)                         -> x0
+    v862 Binop { op=fne, lhs=v859, rhs=v861 }             -> x0
+    terminator Bz { cond=v862, target=b10, fall=b9 }   (exit_acc=v862)
   block 9  start_pc=0
-    v862 Imm(5)                                           -> x0
-    v863 LifetimeEnd(-1)                                  -> -
-    terminator Return(v862)   (exit_acc=v862)
+    v863 Imm(5)                                           -> x0
+    v864 LifetimeEnd(-1)                                  -> -
+    terminator Return(v863)   (exit_acc=v863)
   block 10  start_pc=0
-    v864 Imm(0)                                           -> x0
-    v865 LifetimeEnd(-1)                                  -> -
-    terminator Return(v864)   (exit_acc=v864)
+    v865 Imm(0)                                           -> x0
+    v866 LifetimeEnd(-1)                                  -> -
+    terminator Return(v865)   (exit_acc=v865)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

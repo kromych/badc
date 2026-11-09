@@ -598,36 +598,9 @@ Disassembly of section .text:
                	movb	$0x4, %al
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
-               	movabsq	$0x4197d78400000000, %rcx # imm = 0x4197D78400000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm1
-               	movabsq	$0x417312d000000000, %rax # imm = 0x417312D000000000
+               	movabsq	$0x419d6f3474000000, %rax # imm = 0x419D6F3474000000
                	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x4146e36000000000, %rax # imm = 0x4146E36000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x41186a0000000000, %rax # imm = 0x41186A0000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x40e86a0000000000, %rax # imm = 0x40E86A0000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x40b7700000000000, %rax # imm = 0x40B7700000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x4085e00000000000, %rax # imm = 0x4085E00000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x4055400000000000, %rax # imm = 0x4055400000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

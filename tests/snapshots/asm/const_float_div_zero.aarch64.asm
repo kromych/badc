@@ -36,12 +36,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fmov	d1, #2.00000000
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fdiv	d1, d1, d17
+               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
+               	fmov	d1, x16
                	fcmpe	d1, d0
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret
+               	mov	x0, #0x0                // =0
                	ret

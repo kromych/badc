@@ -250,14 +250,10 @@ Disassembly of section .text:
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movabsq	$0x4008000000000000, %r8 # imm = 0x4008000000000000
-               	movq	%rcx, %xmm14
-               	movq	%r8, %xmm15
-               	vdivsd	%xmm15, %xmm14, %xmm0
-               	movapd	%xmm0, %xmm2
+               	movabsq	$0x3fd5555555555555, %rcx # imm = 0x3FD5555555555555
                	movq	%rax, %xmm0
                	movq	%rax, %xmm1
+               	movq	%rcx, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
                	movq	%rax, %rbx
@@ -279,14 +275,10 @@ Disassembly of section .text:
                	movl	$0xa0, %esi
                	leaq	<rip>, %rdx
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movabsq	$0x4008000000000000, %r8 # imm = 0x4008000000000000
-               	movq	%rcx, %xmm14
-               	movq	%r8, %xmm15
-               	vdivsd	%xmm15, %xmm14, %xmm0
-               	movapd	%xmm0, %xmm2
+               	movabsq	$0x3fd5555555555555, %rcx # imm = 0x3FD5555555555555
                	movq	%rax, %xmm0
                	movq	%rax, %xmm1
+               	movq	%rcx, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
                	cmpl	%ebx, %eax

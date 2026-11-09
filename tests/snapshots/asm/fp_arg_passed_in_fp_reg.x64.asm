@@ -26,43 +26,26 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	movq	%rax, %xmm0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
-               	movabsq	$0x4004000000000000, %rsi # imm = 0x4004000000000000
-               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movq	%rsi, %xmm14
+               	movabsq	$0x402d000000000000, %rax # imm = 0x402D000000000000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm0
-               	movq	%rdx, %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
-               	movabsq	$0x402d000000000000, %rcx # imm = 0x402D000000000000
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movabsq	$0x4019000000000000, %rcx # imm = 0x4019000000000000
-               	movq	%rcx, %xmm0
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
                	movabsq	$0x403f400000000000, %rax # imm = 0x403F400000000000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

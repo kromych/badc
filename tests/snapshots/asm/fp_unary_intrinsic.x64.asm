@@ -145,22 +145,20 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	movl	$0xc1800000, %ecx       # imm = 0xC1800000
-               	movq	%rcx, %xmm0
+               	movl	$0xc1800000, %eax       # imm = 0xC1800000
+               	movq	%rax, %xmm0
                	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0
                	sqrtss	%xmm0, %xmm0
-               	movl	$0x40800000, %ecx       # imm = 0x40800000
-               	movq	%rcx, %xmm15
+               	movl	$0x40800000, %eax       # imm = 0x40800000
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	vmulss	%xmm15, %xmm14, %xmm0
+               	movq	%rax, %xmm0
                	sqrtss	%xmm0, %xmm0
                	movl	$0x3f666666, %eax       # imm = 0x3F666666
                	movq	%rax, %xmm15

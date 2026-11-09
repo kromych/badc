@@ -65,7 +65,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v59  Imm(4)                                           -> x0
     v60  Imm(10)                                          -> x0
     v61  Imm(10)                                          -> x0
-    v62  Imm(1092616192)                                  -> x1 [f32]
+    v62  Imm(1092616192)                                  -> x0 [f32]
     v63  Binop { op=fadd, lhs=v48, rhs=v62 }              -> d0 [f32]
     v64  Imm(1113456640)                                  -> x0 [f32]
     v65  Binop { op=fne, lhs=v63, rhs=v64 }               -> x0
@@ -82,35 +82,35 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0 [f32]
-    v75  Imm(0)                                           -> x2
-    v76  Imm(0)                                           -> x2 [f32]
-    v77  Imm(0)                                           -> x2
-    v78  Imm(0)                                           -> x2
-    v79  Imm(0)                                           -> x2
-    v80  Imm(0)                                           -> x2
-    v81  Imm(0)                                           -> x2
-    v82  Imm(1048576000)                                  -> x2 [f32]
-    v83  Imm(0)                                           -> x6
-    v84  Imm(0)                                           -> x6 [f32]
-    v85  Imm(0)                                           -> x6
-    v86  Imm(0)                                           -> x6 [f32]
-    v87  Binop { op=fadd, lhs=v74, rhs=v74 }              -> d0 [f32]
-    v88  Imm(0)                                           -> x6 [f32]
-    v89  Binop { op=fadd, lhs=v87, rhs=v74 }              -> d0 [f32]
-    v90  Imm(0)                                           -> x6
-    v91  Imm(0)                                           -> x6 [f32]
-    v92  Binop { op=fadd, lhs=v89, rhs=v74 }              -> d0 [f32]
-    v93  Imm(0)                                           -> x6 [f32]
-    v94  Binop { op=fadd, lhs=v92, rhs=v74 }              -> d0 [f32]
-    v95  Imm(0)                                           -> x6
-    v96  Imm(0)                                           -> x6 [f32]
-    v97  Binop { op=fadd, lhs=v94, rhs=v74 }              -> d0 [f32]
-    v98  Imm(0)                                           -> x6 [f32]
-    v99  Binop { op=fadd, lhs=v97, rhs=v74 }              -> d0 [f32]
-    v100 Imm(0)                                           -> x6
-    v101 Imm(0)                                           -> x6 [f32]
-    v102 Binop { op=fadd, lhs=v99, rhs=v74 }              -> d0 [f32]
-    v103 Binop { op=fadd, lhs=v102, rhs=v82 }             -> d0 [f32]
+    v75  Imm(0)                                           -> x0
+    v76  Imm(0)                                           -> x0 [f32]
+    v77  Imm(0)                                           -> x0
+    v78  Imm(0)                                           -> x0
+    v79  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(0)                                           -> x0
+    v82  Imm(1048576000)                                  -> x0 [f32]
+    v83  Imm(0)                                           -> x0
+    v84  Imm(0)                                           -> x0 [f32]
+    v85  Imm(0)                                           -> x0
+    v86  Imm(0)                                           -> x0 [f32]
+    v87  Imm(0)                                           -> x0 [f32]
+    v88  Imm(0)                                           -> x0 [f32]
+    v89  Imm(0)                                           -> x0 [f32]
+    v90  Imm(0)                                           -> x0
+    v91  Imm(0)                                           -> x0 [f32]
+    v92  Imm(0)                                           -> x0 [f32]
+    v93  Imm(0)                                           -> x0 [f32]
+    v94  Imm(0)                                           -> x0 [f32]
+    v95  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x0 [f32]
+    v97  Imm(0)                                           -> x0 [f32]
+    v98  Imm(0)                                           -> x0 [f32]
+    v99  Imm(0)                                           -> x0 [f32]
+    v100 Imm(0)                                           -> x0
+    v101 Imm(0)                                           -> x0 [f32]
+    v102 Imm(0)                                           -> x0 [f32]
+    v103 Imm(1048576000)                                  -> x0 [f32]
     v104 Imm(1)                                           -> x0
     v105 Imm(0)                                           -> x0
     v106 Imm(2)                                           -> x0
@@ -125,9 +125,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v115 Imm(10)                                          -> x0
     v116 Imm(10)                                          -> x0
     v117 Imm(1092616192)                                  -> x0 [f32]
-    v118 Binop { op=fadd, lhs=v103, rhs=v62 }             -> d0 [f32]
-    v119 Imm(1092878336)                                  -> x0 [f32]
-    v120 Binop { op=fne, lhs=v118, rhs=v119 }             -> x0
+    v118 Imm(1092878336)                                  -> x0 [f32]
+    v119 Imm(1092878336)                                  -> x1 [f32]
+    v120 Binop { op=fne, lhs=v118, rhs=v118 }             -> x0
     terminator Bz { cond=v120, target=b4, fall=b3 }   (exit_acc=v120)
   block 3  start_pc=0
     v121 Imm(2)                                           -> x0

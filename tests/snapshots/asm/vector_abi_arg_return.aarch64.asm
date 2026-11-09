@@ -1160,13 +1160,12 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	stur	q0, [x29, #-0x70]
-               	fmov	d0, #4.00000000
                	ldurb	w0, [x29, #-0x90]
                	ldurb	w1, [x29, #-0x70]
                	sub	x0, x0, x1
-               	scvtf	d1, x0
-               	fmov	d2, #3.00000000
-               	fmadd	d0, d2, d0, d1
+               	scvtf	d0, x0
+               	fmov	d1, #12.00000000
+               	fadd	d0, d0, d1
                	mov	x16, #0x404a000000000000 // =4632515166703976448
                	fmov	d1, x16
                	fcmp	d0, d1

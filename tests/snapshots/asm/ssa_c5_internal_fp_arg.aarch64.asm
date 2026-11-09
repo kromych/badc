@@ -20,9 +20,7 @@ Disassembly of section .text:
                	sub	x0, x1, x0
                	sxtw	x0, w0
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x8]
-               	movi	d1, #0000000000000000
-               	fadd	d1, d0, d1
+               	ldr	d1, [x16, #0x8]
                	scvtf	d0, x0
                	fcmpe	d1, d0
                	cset	x0, mi

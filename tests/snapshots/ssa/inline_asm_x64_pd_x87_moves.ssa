@@ -52,14 +52,14 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
   block 5  start_pc=0
     v66  LoadLocal { off=-13, kind=F64 }                  -> d0
     v67  Imm(0)                                           -> x0
-    v68  Binop { op=fne, lhs=v66, rhs=v67 }               -> x0
-    v69  Imm(0)                                           -> x1
+    v68  Binop { op=fne, lhs=v66, rhs=v67 }               -> x1
+    v69  Imm(0)                                           -> x2
     terminator Bz { cond=v68, target=b22, fall=b6 }   (exit_acc=v68)
   block 6  start_pc=0
     v70  Imm(3)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v70)
   block 7  start_pc=0
-    v152 Phi { incoming=[b6:v70, b32:v106, b33:v107], kind=I64 } -> x0
+    v152 Phi { incoming=[b6:v70, b32:v106, b33:v67], kind=I64 } -> x0
     v153 Extend { value=v152, kind=I32 }                  -> x1
     v154 Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v152)
@@ -197,15 +197,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v71  LoadLocal { off=-5, kind=F64 }                   -> d0
     v72  Imm(4614256656552045848)                         -> x1
     v73  Binop { op=fsub, lhs=v71, rhs=v72 }              -> d0
-    v74  Imm(4376604602390841788)                         -> x0
-    v75  Binop { op=fmul, lhs=v72, rhs=v74 }              -> d1
-    v76  Binop { op=fle, lhs=v73, rhs=v75 }               -> x1
-    v77  Imm(0)                                           -> x2
+    v74  Imm(4376604602390841788)                         -> x1
+    v75  Imm(4383870744704915227)                         -> x1
+    v76  Binop { op=fle, lhs=v73, rhs=v75 }               -> x2
+    v77  Imm(0)                                           -> x6
     terminator Bz { cond=v76, target=b32, fall=b23 }   (exit_acc=v76)
   block 23  start_pc=0
     v108 Fneg(v73)                                        -> d0
-    v109 Imm(4376604602390841788)                         -> x1
-    v110 Binop { op=fmul, lhs=v72, rhs=v74 }              -> d2
+    v109 Imm(4376604602390841788)                         -> x2
+    v110 Imm(4383870744704915227)                         -> x2
     v111 Binop { op=fle, lhs=v108, rhs=v75 }              -> x1
     v112 Imm(0)                                           -> x2
     v113 Extend { value=v111, kind=I32 }                  -> x2
@@ -216,15 +216,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v78  LoadLocal { off=-4, kind=F64 }                   -> d0
     v79  Imm(4614662735865160561)                         -> x1
     v80  Binop { op=fsub, lhs=v78, rhs=v79 }              -> d0
-    v81  Imm(4376604602390841788)                         -> x2
-    v82  Binop { op=fmul, lhs=v79, rhs=v74 }              -> d1
-    v83  Binop { op=fle, lhs=v80, rhs=v82 }               -> x1
-    v84  Imm(0)                                           -> x2
+    v81  Imm(4376604602390841788)                         -> x1
+    v82  Imm(4384236508433560485)                         -> x1
+    v83  Binop { op=fle, lhs=v80, rhs=v82 }               -> x2
+    v84  Imm(0)                                           -> x6
     terminator Bz { cond=v83, target=b32, fall=b25 }   (exit_acc=v83)
   block 25  start_pc=0
     v116 Fneg(v80)                                        -> d0
-    v117 Imm(4376604602390841788)                         -> x1
-    v118 Binop { op=fmul, lhs=v79, rhs=v74 }              -> d2
+    v117 Imm(4376604602390841788)                         -> x2
+    v118 Imm(4384236508433560485)                         -> x2
     v119 Binop { op=fle, lhs=v116, rhs=v82 }              -> x1
     v120 Imm(0)                                           -> x2
     v121 Extend { value=v119, kind=I32 }                  -> x2
@@ -236,15 +236,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v85  LoadLocal { off=-3, kind=F64 }                   -> d0
     v86  Imm(4609176140021203710)                         -> x1
     v87  Binop { op=fsub, lhs=v85, rhs=v86 }              -> d0
-    v88  Imm(4376604602390841788)                         -> x2
-    v89  Binop { op=fmul, lhs=v86, rhs=v74 }              -> d1
-    v90  Binop { op=fle, lhs=v87, rhs=v89 }               -> x1
-    v91  Imm(0)                                           -> x2
+    v88  Imm(4376604602390841788)                         -> x1
+    v89  Imm(4378847504527245006)                         -> x1
+    v90  Binop { op=fle, lhs=v87, rhs=v89 }               -> x2
+    v91  Imm(0)                                           -> x6
     terminator Bz { cond=v90, target=b32, fall=b27 }   (exit_acc=v90)
   block 27  start_pc=0
     v125 Fneg(v87)                                        -> d0
-    v126 Imm(4376604602390841788)                         -> x1
-    v127 Binop { op=fmul, lhs=v86, rhs=v74 }              -> d2
+    v126 Imm(4376604602390841788)                         -> x2
+    v127 Imm(4378847504527245006)                         -> x2
     v128 Binop { op=fle, lhs=v125, rhs=v89 }              -> x1
     v129 Imm(0)                                           -> x2
     v130 Extend { value=v128, kind=I32 }                  -> x2
@@ -256,48 +256,48 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
     v92  LoadLocal { off=-2, kind=F64 }                   -> d0
     v93  Imm(4599094494223104511)                         -> x1
     v94  Binop { op=fsub, lhs=v92, rhs=v93 }              -> d0
-    v95  Imm(4376604602390841788)                         -> x2
-    v96  Binop { op=fmul, lhs=v93, rhs=v74 }              -> d1
-    v97  Binop { op=fle, lhs=v94, rhs=v96 }               -> x0
-    v98  Imm(0)                                           -> x2
+    v95  Imm(4376604602390841788)                         -> x1
+    v96  Imm(4368872529862044506)                         -> x1
+    v97  Binop { op=fle, lhs=v94, rhs=v96 }               -> x2
+    v98  Imm(0)                                           -> x6
     terminator Bz { cond=v97, target=b32, fall=b29 }   (exit_acc=v97)
   block 29  start_pc=0
     v134 Fneg(v94)                                        -> d0
-    v135 Imm(4376604602390841788)                         -> x0
-    v136 Binop { op=fmul, lhs=v93, rhs=v135 }             -> d1
-    v137 Binop { op=fle, lhs=v134, rhs=v136 }             -> x0
-    v138 Imm(0)                                           -> x1
-    v139 Extend { value=v137, kind=I32 }                  -> x1
-    v140 Extend { value=v137, kind=I32 }                  -> x1
-    v141 BinopI { op=eq, lhs=v137, rhs_imm=0 }            -> x1
-    v142 Imm(0)                                           -> x1
+    v135 Imm(4376604602390841788)                         -> x2
+    v136 Imm(4368872529862044506)                         -> x2
+    v137 Binop { op=fle, lhs=v134, rhs=v96 }              -> x1
+    v138 Imm(0)                                           -> x2
+    v139 Extend { value=v137, kind=I32 }                  -> x2
+    v140 Extend { value=v137, kind=I32 }                  -> x2
+    v141 BinopI { op=eq, lhs=v137, rhs_imm=0 }            -> x2
+    v142 Imm(0)                                           -> x2
     terminator Bz { cond=v137, target=b32, fall=b30 }   (low word)   (exit_acc=v141)
   block 30  start_pc=0
     v99  LoadLocal { off=-10, kind=F64 }                  -> d0
-    v100 Imm(4604418534313441775)                         -> x0
+    v100 Imm(4604418534313441775)                         -> x1
     v101 Binop { op=fsub, lhs=v99, rhs=v100 }             -> d0
     v102 Imm(4376604602390841788)                         -> x1
-    v103 Binop { op=fmul, lhs=v100, rhs=v102 }            -> d1
-    v104 Binop { op=fle, lhs=v101, rhs=v103 }             -> x0
-    v105 Imm(0)                                           -> x1
+    v103 Imm(4374115116562074365)                         -> x1
+    v104 Binop { op=fle, lhs=v101, rhs=v103 }             -> x2
+    v105 Imm(0)                                           -> x6
     terminator Bz { cond=v104, target=b32, fall=b31 }   (exit_acc=v104)
   block 31  start_pc=0
     v143 Fneg(v101)                                       -> d0
-    v144 Imm(4376604602390841788)                         -> x0
-    v145 Binop { op=fmul, lhs=v100, rhs=v102 }            -> d2
-    v146 Binop { op=fle, lhs=v143, rhs=v103 }             -> x0
-    v147 Imm(0)                                           -> x1
-    v148 Extend { value=v146, kind=I32 }                  -> x1
-    v149 Extend { value=v146, kind=I32 }                  -> x1
-    v150 BinopI { op=eq, lhs=v146, rhs_imm=0 }            -> x1
-    v151 Imm(0)                                           -> x1
+    v144 Imm(4376604602390841788)                         -> x2
+    v145 Imm(4374115116562074365)                         -> x2
+    v146 Binop { op=fle, lhs=v143, rhs=v103 }             -> x1
+    v147 Imm(0)                                           -> x2
+    v148 Extend { value=v146, kind=I32 }                  -> x2
+    v149 Extend { value=v146, kind=I32 }                  -> x2
+    v150 BinopI { op=eq, lhs=v146, rhs_imm=0 }            -> x2
+    v151 Imm(0)                                           -> x2
     terminator Bnz { cond=v146, target=b33, fall=b32 }   (low word)   (exit_acc=v150)
   block 32  start_pc=0
     v106 Imm(4)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v106)
   block 33  start_pc=0
-    v107 Imm(0)                                           -> x0
-    terminator Jmp(b7)   (exit_acc=v107)
+    v107 Imm(0)                                           -> x1
+    terminator Jmp(b7)   (exit_acc=v67)
   block 34  start_pc=0
     terminator Jmp(b8)
   block 35  start_pc=0

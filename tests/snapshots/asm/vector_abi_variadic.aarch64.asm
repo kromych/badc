@@ -427,8 +427,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x110
-               	str	d8, [sp, #0x20]
+               	sub	sp, sp, #0x100
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	stur	q0, [x29, #-0xe0]
@@ -444,8 +443,7 @@ Disassembly of section .text:
                	cmp	w0, #0x26
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
@@ -511,8 +509,7 @@ Disassembly of section .text:
                	cmp	w0, #0x104
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x8
@@ -538,8 +535,7 @@ Disassembly of section .text:
                	cmp	w0, #0x11
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xa                // =10
@@ -564,41 +560,9 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	movi	d1, #0000000000000000
-               	fmov	d2, #1.00000000
-               	fmov	d0, #4.00000000
-               	fdiv	d2, d2, d0
-               	fmov	d3, #9.00000000
-               	fadd	d2, d2, d3
-               	fadd	d1, d1, d2
-               	fmov	d2, #2.00000000
-               	fdiv	d2, d2, d0
-               	fmov	d3, #11.00000000
-               	fadd	d2, d2, d3
-               	fadd	d1, d1, d2
-               	fmov	d2, #3.00000000
-               	fdiv	d2, d2, d0
-               	fmov	d3, #13.00000000
-               	fadd	d2, d2, d3
-               	fadd	d1, d1, d2
-               	fdiv	d2, d0, d0
-               	fmov	d3, #15.00000000
-               	fadd	d2, d2, d3
-               	fadd	d1, d1, d2
-               	fmov	d2, #5.00000000
-               	fdiv	d2, d2, d0
-               	fmov	d3, #17.00000000
-               	fadd	d2, d2, d3
-               	fadd	d1, d1, d2
-               	fmov	d2, #6.00000000
-               	fdiv	d0, d2, d0
-               	fmov	d2, #19.00000000
-               	fadd	d0, d0, d2
-               	fadd	d8, d1, d0
                	mov	x0, #0x6                // =6
                	fmov	d0, #0.25000000
                	mov	x1, #0x1                // =1
@@ -647,53 +611,53 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	sturb	w1, [x29, #-0x1]
                	sub	x9, x29, #0x30
-               	ldur	x2, [x29, #-0x8]
-               	stur	x2, [x29, #-0x30]
+               	ldur	x1, [x29, #-0x8]
+               	stur	x1, [x29, #-0x30]
                	fmov	d3, #1.00000000
                	sturb	w4, [x29, #-0x8]
                	sturb	w5, [x29, #-0x7]
                	sturb	w6, [x29, #-0x6]
-               	mov	x2, #0x7                // =7
-               	sturb	w2, [x29, #-0x5]
-               	mov	x3, #0x8                // =8
-               	sturb	w3, [x29, #-0x4]
-               	mov	x4, #0x9                // =9
-               	sturb	w4, [x29, #-0x3]
-               	sturb	w1, [x29, #-0x2]
-               	mov	x1, #0xb                // =11
-               	sturb	w1, [x29, #-0x1]
+               	mov	x1, #0x7                // =7
+               	sturb	w1, [x29, #-0x5]
+               	mov	x2, #0x8                // =8
+               	sturb	w2, [x29, #-0x4]
+               	sturb	w3, [x29, #-0x3]
+               	mov	x3, #0xa                // =10
+               	sturb	w3, [x29, #-0x2]
+               	mov	x4, #0xb                // =11
+               	sturb	w4, [x29, #-0x1]
                	sub	x5, x29, #0x28
-               	ldur	x6, [x29, #-0x8]
-               	stur	x6, [x29, #-0x28]
-               	fmov	d4, #1.25000000
-               	mov	x6, #0x5                // =5
-               	sturb	w6, [x29, #-0x8]
-               	mov	x6, #0x6                // =6
-               	sturb	w6, [x29, #-0x7]
-               	sturb	w2, [x29, #-0x6]
-               	sturb	w3, [x29, #-0x5]
-               	sturb	w4, [x29, #-0x4]
-               	mov	x2, #0xa                // =10
-               	sturb	w2, [x29, #-0x3]
-               	sturb	w1, [x29, #-0x2]
-               	mov	x1, #0xc                // =12
-               	sturb	w1, [x29, #-0x1]
-               	sub	x3, x29, #0x20
                	ldur	x4, [x29, #-0x8]
-               	stur	x4, [x29, #-0x20]
-               	fmov	d5, #1.50000000
+               	stur	x4, [x29, #-0x28]
+               	fmov	d4, #1.25000000
+               	mov	x4, #0x5                // =5
+               	sturb	w4, [x29, #-0x8]
                	mov	x4, #0x6                // =6
+               	sturb	w4, [x29, #-0x7]
+               	sturb	w1, [x29, #-0x6]
+               	sturb	w2, [x29, #-0x5]
+               	mov	x1, #0x9                // =9
+               	sturb	w1, [x29, #-0x4]
+               	sturb	w3, [x29, #-0x3]
+               	mov	x2, #0xb                // =11
+               	sturb	w2, [x29, #-0x2]
+               	mov	x2, #0xc                // =12
+               	sturb	w2, [x29, #-0x1]
+               	sub	x3, x29, #0x20
+               	ldur	x6, [x29, #-0x8]
+               	stur	x6, [x29, #-0x20]
+               	fmov	d5, #1.50000000
                	sturb	w4, [x29, #-0x8]
                	mov	x4, #0x7                // =7
                	sturb	w4, [x29, #-0x7]
                	mov	x4, #0x8                // =8
                	sturb	w4, [x29, #-0x6]
-               	mov	x4, #0x9                // =9
-               	sturb	w4, [x29, #-0x5]
-               	sturb	w2, [x29, #-0x4]
-               	mov	x2, #0xb                // =11
-               	sturb	w2, [x29, #-0x3]
-               	sturb	w1, [x29, #-0x2]
+               	sturb	w1, [x29, #-0x5]
+               	mov	x1, #0xa                // =10
+               	sturb	w1, [x29, #-0x4]
+               	mov	x1, #0xb                // =11
+               	sturb	w1, [x29, #-0x3]
+               	sturb	w2, [x29, #-0x2]
                	mov	x1, #0xd                // =13
                	sturb	w1, [x29, #-0x1]
                	sub	x1, x29, #0x18
@@ -715,15 +679,15 @@ Disassembly of section .text:
                	ldr	d5, [x9]
                	ldr	d7, [x5]
                	bl	<addr>
-               	fcmp	d0, d8
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x8]
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldr	d8, [sp, #0x20]
-               	add	sp, sp, #0x110
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret

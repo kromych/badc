@@ -56,20 +56,16 @@ Disassembly of section .text:
                	ret
 
 <at_function_end>:
-               	str	x20, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x0, #0x64               // =100
                	stur	w0, [x29, #-0x8]
-               	fmov	d0, #0.50000000
-               	fmov	d1, #4.00000000
-               	fmul	d0, d0, d1
-               	fcvtzs	x20, d0
                	sub	x0, x29, #0x8
                	bl	<addr>
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

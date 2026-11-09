@@ -479,10 +479,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v387 Imm(12)                                          -> x0
     v388 Imm(-9223372036854775808)                        -> x0
     v389 Imm(4622945017495814144)                         -> x0
-    v390 Imm(4611686018427387904)                         -> x1
-    v391 Binop { op=fdiv, lhs=v389, rhs=v390 }            -> d0
-    v392 Imm(4618441417868443648)                         -> x0
-    v393 Binop { op=fne, lhs=v391, rhs=v392 }             -> x0
+    v390 Imm(4611686018427387904)                         -> x0
+    v391 Imm(4618441417868443648)                         -> x0
+    v392 Imm(4618441417868443648)                         -> x1
+    v393 Binop { op=fne, lhs=v391, rhs=v391 }             -> x0
     terminator Bz { cond=v393, target=b21, fall=b19 }   (exit_acc=v393)
   block 19  start_pc=0
     v523 Imm(1)                                           -> x0
@@ -495,10 +495,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     terminator Return(v394)   (exit_acc=v394)
   block 21  start_pc=0
     v524 Imm(1094713344)                                  -> x0 [f32]
-    v525 Imm(1082130432)                                  -> x1 [f32]
-    v526 Binop { op=fdiv, lhs=v524, rhs=v525 }            -> d0 [f32]
-    v527 Imm(1077936128)                                  -> x0 [f32]
-    v528 Binop { op=fne, lhs=v526, rhs=v527 }             -> x0
+    v525 Imm(1082130432)                                  -> x0 [f32]
+    v526 Imm(1077936128)                                  -> x0 [f32]
+    v527 Imm(1077936128)                                  -> x1 [f32]
+    v528 Binop { op=fne, lhs=v526, rhs=v526 }             -> x0
     terminator Bz { cond=v528, target=b23, fall=b22 }   (exit_acc=v528)
   block 22  start_pc=0
     v529 Imm(2)                                           -> x0

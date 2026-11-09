@@ -27,15 +27,15 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
-               	movq	%rcx, %xmm15
+               	movabsq	$0x7fe1ccf385ebc8a0, %rax # imm = 0x7FE1CCF385EBC8A0
+               	movq	%rax, %xmm15
                	comisd	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0x1, %eax
                	retq
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$-0x1e330c7a143760, %rax # imm = 0xFFE1CCF385EBC8A0
-               	movq	%rax, %xmm15
+               	movabsq	$-0x1e330c7a143760, %rcx # imm = 0xFFE1CCF385EBC8A0
+               	movq	%rcx, %xmm15
                	comisd	%xmm0, %xmm15
                	ja	<addr>
                	movl	$0x2, %eax
@@ -46,14 +46,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
-               	xorl	%eax, %eax
-               	movq	%rdx, %xmm14
+               	movabsq	$0x7ff0000000000000, %rcx # imm = 0x7FF0000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	vdivsd	%xmm15, %xmm14, %xmm0
-               	movq	%rcx, %xmm15
-               	comisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm14
                	ja	<addr>
                	movl	$0x4, %eax
                	retq
+               	xorl	%eax, %eax
                	retq

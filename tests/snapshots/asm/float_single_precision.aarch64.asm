@@ -14,61 +14,37 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	fmov	s2, #1.00000000
-               	fmov	s0, #3.00000000
-               	fdiv	s0, s2, s0
-               	adrp	x16, <page>
-               	ldr	s1, [x16]
-               	fsub	s0, s0, s1
-               	movi	d1, #0000000000000000
-               	fcmpe	s0, s1
+               	movi	d0, #0000000000000000
+               	fcmpe	s0, s0
                	b.pl	<addr>
-               	fneg	s0, s0
+               	mov	x17, #0x80000000        // =2147483648
+               	fmov	s1, w17
                	adrp	x16, <page>
-               	ldr	s3, [x16, #0x4]
-               	fcmpe	s0, s3
+               	ldr	s2, [x16]
+               	fcmpe	s1, s2
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	ret
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x8]
-               	fadd	s3, s1, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	fadd	s3, s3, s0
-               	adrp	x16, <page>
-               	ldr	s0, [x16, #0xc]
-               	fsub	s0, s3, s0
-               	fcmpe	s0, s1
+               	ldr	s1, [x16, #0x4]
+               	fcmpe	s0, s0
                	b.pl	<addr>
-               	fneg	s0, s0
+               	mov	x17, #0x80000000        // =2147483648
+               	fmov	s2, w17
                	adrp	x16, <page>
-               	ldr	s4, [x16, #0x10]
-               	fcmpe	s0, s4
+               	ldr	s3, [x16, #0x8]
+               	fcmpe	s2, s3
                	b.le	<addr>
                	mov	x0, #0x2                // =2
                	cbz	w0, <addr>
                	ret
-               	adrp	x16, <page>
-               	ldr	s0, [x16, #0x14]
-               	fmul	s2, s0, s0
-               	fmul	s2, s2, s0
-               	fmul	s0, s2, s0
-               	adrp	x16, <page>
-               	ldr	s2, [x16, #0x18]
-               	fsub	s0, s0, s2
-               	fcmpe	s0, s1
+               	fcmpe	s0, s0
                	b.pl	<addr>
-               	fneg	s0, s0
+               	mov	x17, #0x80000000        // =2147483648
+               	fmov	s0, w17
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x1c]
+               	ldr	s1, [x16, #0xc]
                	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0x4                // =4
@@ -78,11 +54,18 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	fcmp	s3, s2
+               	movi	d0, #0000000000000000
+               	b	<addr>
+               	fmov	s2, #1.00000000
+               	fcmp	s1, s2
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
+               	movi	d2, #0000000000000000
+               	b	<addr>
                	mov	x0, #0x0                // =0
+               	b	<addr>
+               	movi	d1, #0000000000000000
                	b	<addr>

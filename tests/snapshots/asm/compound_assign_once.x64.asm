@@ -192,54 +192,9 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x4b800000, %esi       # imm = 0x4B800000
-               	xorl	%edi, %edi
-               	movq	%rsi, %xmm14
-               	movq	%rdi, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm0
-               	cvttss2si	%xmm0, %rsi
-               	cmpl	$0x1000000, %esi        # imm = 0x1000000
-               	je	<addr>
-               	movl	$0xa, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
-               	leave
-               	retq
-               	movabsq	$0x43e8000000000000, %rsi # imm = 0x43E8000000000000
-               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
-               	movq	%rsi, %xmm14
-               	movq	%rdi, %xmm15
-               	vdivsd	%xmm15, %xmm14, %xmm0
-               	movapd	%xmm0, %xmm14
-               	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
-               	movq	%r11, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jae	<addr>
-               	cvttsd2si	%xmm14, %rsi
-               	jmp	<addr>
-               	subsd	%xmm15, %xmm14
-               	cvttsd2si	%xmm14, %rsi
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	orq	%r11, %rsi
-               	movabsq	$0x6000000000000000, %r11 # imm = 0x6000000000000000
-               	cmpq	%r11, %rsi
-               	je	<addr>
-               	movl	$0xb, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
-               	leave
-               	retq
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm0
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b

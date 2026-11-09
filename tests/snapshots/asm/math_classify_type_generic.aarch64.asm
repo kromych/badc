@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0xd0
                	mov	x16, #0x800000          // =8388608
                	fmov	s0, w16
-               	fmov	s1, #2.00000000
-               	fdiv	s1, s0, s1
+               	mov	x16, #0x400000          // =4194304
+               	fmov	s1, w16
                	stur	s1, [x29, #-0x30]
                	stur	s0, [x29, #-0x28]
                	mov	x16, #0x7fc00000        // =2143289344
@@ -29,10 +29,8 @@ Disassembly of section .text:
                	mov	x16, #0x80000000        // =2147483648
                	fmov	s1, w16
                	stur	s1, [x29, #-0x18]
-               	mov	x16, #0x10000000000000  // =4503599627370496
+               	mov	x16, #0x8000000000000   // =2251799813685248
                	fmov	d1, x16
-               	fmov	d2, #2.00000000
-               	fdiv	d1, d1, d2
                	stur	d1, [x29, #-0x10]
                	fmov	d1, #1.00000000
                	stur	d1, [x29, #-0x8]

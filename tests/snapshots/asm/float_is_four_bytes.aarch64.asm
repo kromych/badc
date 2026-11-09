@@ -104,29 +104,20 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0xd                // =13
-               	fmov	s0, #1.00000000
-               	fmov	s1, #2.00000000
-               	fmov	s2, #3.50000000
-               	fadd	s0, s0, s1
-               	fadd	s0, s0, s2
-               	fmov	s1, #6.50000000
-               	fcmp	s0, s1
+               	fmov	s0, #6.50000000
+               	fcmp	s0, s0
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
+               	fmov	d0, #6.50000000
                	bl	<addr>
                	mov	x0, #0xe                // =14
-               	fmov	s0, #1.50000000
-               	fmov	s1, #2.00000000
-               	fmov	s2, #0.25000000
-               	fmadd	s0, s0, s1, s2
-               	fmov	s1, #3.25000000
-               	fcmp	s0, s1
+               	fmov	s0, #3.25000000
+               	fcmp	s0, s0
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	fcvt	d0, s0
+               	fmov	d0, #3.25000000
                	bl	<addr>
                	mov	x0, #0xf                // =15
                	fmov	s0, #1.00000000

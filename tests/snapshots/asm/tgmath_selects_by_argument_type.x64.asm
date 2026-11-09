@@ -129,11 +129,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	cmpq	$0x3, %rax
                	jne	<addr>
-               	movl	$0xc0000000, %eax       # imm = 0xC0000000
-               	movl	$0x40400000, %ecx       # imm = 0x40400000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vdivss	%xmm15, %xmm14, %xmm0
+               	movl	$0xbf2aaaab, %eax       # imm = 0xBF2AAAAB
+               	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0xbf800000, %eax       # imm = 0xBF800000

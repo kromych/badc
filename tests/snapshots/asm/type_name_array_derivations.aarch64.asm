@@ -110,16 +110,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d1, #9.00000000
-               	fmov	d0, #2.00000000
-               	fdiv	d1, d1, d0
-               	fmov	d2, #4.50000000
-               	fcmp	d1, d2
+               	fmov	d0, #4.50000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	fmov	d0, #2.00000000
                	bl	<addr>
                	fmov	d1, #4.00000000
                	fcmp	d0, d1

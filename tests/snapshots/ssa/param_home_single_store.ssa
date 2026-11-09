@@ -65,20 +65,20 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v20  Imm(0)                                           -> x0
     v21  Imm(1)                                           -> x0
     v22  Imm(4612811918334230528)                         -> x0
-    v23  Imm(1056964608)                                  -> x1 [f32]
-    v24  Imm(3)                                           -> x1
-    v25  Imm(4616471093031469056)                         -> x1
-    v26  Imm(1)                                           -> x2
-    v27  Imm(3)                                           -> x2
-    v28  Imm(4607182418800017408)                         -> x2
-    v29  Binop { op=fadd, lhs=v28, rhs=v22 }              -> d0
+    v23  Imm(1056964608)                                  -> x0 [f32]
+    v24  Imm(3)                                           -> x0
+    v25  Imm(4616471093031469056)                         -> x0
+    v26  Imm(1)                                           -> x0
+    v27  Imm(3)                                           -> x0
+    v28  Imm(4607182418800017408)                         -> x0
+    v29  Imm(4615063718147915776)                         -> x0
     v30  Imm(4602678819172646912)                         -> x0
-    v31  Binop { op=fadd, lhs=v29, rhs=v30 }              -> d0
+    v31  Imm(4616189618054758400)                         -> x0
     v32  Imm(4613937818241073152)                         -> x0
-    v33  Binop { op=fadd, lhs=v31, rhs=v32 }              -> d0
-    v34  Binop { op=fadd, lhs=v33, rhs=v25 }              -> d0
-    v35  Imm(4622522805030748160)                         -> x0
-    v36  Binop { op=fne, lhs=v34, rhs=v35 }               -> x0
+    v33  Imm(4619567317775286272)                         -> x0
+    v34  Imm(4622522805030748160)                         -> x0
+    v35  Imm(4622522805030748160)                         -> x1
+    v36  Binop { op=fne, lhs=v34, rhs=v34 }               -> x0
     terminator Bz { cond=v36, target=b2, fall=b1 }   (exit_acc=v36)
   block 1  start_pc=0
     v38  Imm(2)                                           -> x0

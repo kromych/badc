@@ -202,146 +202,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d3, #1.00000000
-               	fmov	d0, #16.00000000
-               	fdiv	d0, d3, d0
-               	fmov	d1, #0.50000000
-               	fmul	d1, d0, d1
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmov	d2, #6.00000000
-               	fdiv	d4, d0, d2
-               	fmov	d2, #2.00000000
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d5, d2, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d3, d4, d5, d3
-               	fmadd	d5, d1, d3, d3
-               	fmadd	d6, d1, d5, d3
-               	fmadd	d7, d0, d6, d3
-               	fmadd	d5, d2, d5, d3
-               	fmadd	d2, d2, d6, d5
-               	fadd	d2, d2, d7
-               	fmadd	d2, d4, d2, d3
-               	fmadd	d4, d1, d2, d2
-               	fmadd	d5, d1, d4, d2
-               	fmadd	d6, d0, d5, d2
-               	fmov	d1, #6.00000000
-               	fdiv	d3, d0, d1
-               	fmov	d1, #2.00000000
-               	fmadd	d4, d1, d4, d2
-               	fmadd	d4, d1, d5, d4
-               	fadd	d4, d4, d6
-               	fmadd	d4, d3, d4, d2
-               	fmov	d2, #0.50000000
-               	fmul	d2, d0, d2
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d6, d2, d5, d4
-               	fmadd	d7, d0, d6, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d5, d1, d6, d5
-               	fadd	d5, d5, d7
-               	fmadd	d4, d3, d5, d4
-               	fmadd	d5, d2, d4, d4
-               	fmadd	d2, d2, d5, d4
-               	fmadd	d6, d0, d2, d4
-               	fmadd	d5, d1, d5, d4
-               	fmadd	d1, d1, d2, d5
-               	fadd	d1, d1, d6
-               	fmadd	d1, d3, d1, d4
-               	fmov	d2, #0.50000000
-               	fmul	d2, d0, d2
-               	fmadd	d3, d2, d1, d1
-               	fmadd	d2, d2, d3, d1
-               	fmadd	d4, d0, d2, d1
-               	fmov	d5, #6.00000000
-               	fdiv	d5, d0, d5
-               	fmov	d0, #2.00000000
-               	fmadd	d3, d0, d3, d1
-               	fmadd	d0, d0, d2, d3
-               	fadd	d0, d0, d4
-               	fmadd	d0, d5, d0, d1
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
-               	fsub	d0, d0, d1
+               	ldr	d0, [x16, #0x10]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmpe	d0, d17
                	b.pl	<addr>
-               	fneg	d0, d0
+               	adrp	x17, <page>
+               	ldr	d0, [x17, #0x18]
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x18]
+               	ldr	d1, [x16, #0x20]
                	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
@@ -351,6 +221,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x17, <page>
+               	ldr	d0, [x17, #0x10]
+               	b	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10

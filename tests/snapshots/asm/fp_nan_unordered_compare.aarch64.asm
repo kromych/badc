@@ -19,9 +19,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fdiv	d0, d16, d17
                	fmov	d1, #5.00000000
-               	fmov	d2, #1.00000000
-               	fmov	d17, x0
-               	fdiv	d2, d2, d17
+               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
+               	fmov	d2, x16
                	fcmp	d0, d0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1

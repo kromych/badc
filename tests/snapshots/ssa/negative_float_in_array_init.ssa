@@ -7,7 +7,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v1   ImmData(8)                                       -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d0
-    v4   Imm(4609434218613702656)                         -> x1
+    v4   Imm(4609434218613702656)                         -> x0
     v5   Binop { op=fne, lhs=v3, rhs=v4 }                 -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
@@ -32,38 +32,38 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v18  Load { addr=v1, disp=16, kind=F64 pc_rel }       -> d0
     v19  Imm(4764320886503243776)                         -> x0
     v20  Imm(-4459051150351532032)                        -> x0
-    v21  Binop { op=fne, lhs=v18, rhs=v20 }               -> x2
+    v21  Binop { op=fne, lhs=v18, rhs=v20 }               -> x0
     terminator Bz { cond=v21, target=b6, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0
     v22  Imm(3)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 6  start_pc=0
-    v23  ImmData(8)                                       -> x2
-    v24  Imm(0)                                           -> x2
+    v23  ImmData(8)                                       -> x0
+    v24  Imm(0)                                           -> x0
     v25  Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d0
-    v26  Imm(8)                                           -> x2
-    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
+    v26  Imm(8)                                           -> x0
+    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
     v28  Load { addr=v1, disp=8, kind=F64 pc_rel }        -> d1
     v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d0
-    v30  Imm(16)                                          -> x2
-    v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
+    v30  Imm(16)                                          -> x0
+    v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v32  Load { addr=v1, disp=16, kind=F64 pc_rel }       -> d1
     v33  Binop { op=fadd, lhs=v29, rhs=v32 }              -> d0
-    v34  Imm(0)                                           -> x2
-    v35  Imm(0)                                           -> x2
-    v36  Imm(4764320886503243776)                         -> x2
-    v37  Imm(-4459051150351532032)                        -> x2
-    v38  Imm(4602678819172646912)                         -> x2
-    v39  Binop { op=fadd, lhs=v20, rhs=v38 }              -> d1
-    v40  Binop { op=fgt, lhs=v33, rhs=v39 }               -> x2
-    v41  Imm(0)                                           -> x6
+    v34  Imm(0)                                           -> x0
+    v35  Imm(0)                                           -> x0
+    v36  Imm(4764320886503243776)                         -> x0
+    v37  Imm(-4459051150351532032)                        -> x0
+    v38  Imm(4602678819172646912)                         -> x0
+    v39  Imm(-4459051150351663104)                        -> x0
+    v40  Binop { op=fgt, lhs=v33, rhs=v39 }               -> x0
+    v41  Imm(0)                                           -> x1
     terminator Bnz { cond=v40, target=b8, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
-    v42  Imm(0)                                           -> x2
-    v43  Imm(4764320886503243776)                         -> x2
-    v44  Imm(-4459051150351532032)                        -> x2
-    v45  Imm(4609434218613702656)                         -> x2
-    v46  Binop { op=fsub, lhs=v20, rhs=v4 }               -> d1
+    v42  Imm(0)                                           -> x0
+    v43  Imm(4764320886503243776)                         -> x0
+    v44  Imm(-4459051150351532032)                        -> x0
+    v45  Imm(4609434218613702656)                         -> x0
+    v46  Imm(-4459051150351138816)                        -> x0
     v47  Binop { op=flt, lhs=v33, rhs=v46 }               -> x0
     v48  Imm(0)                                           -> x1
     v49  Imm(0)                                           -> x1

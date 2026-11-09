@@ -704,33 +704,8 @@ Disassembly of section .text:
                	ldr	x6, [x5, #0x8]
                	ldr	x5, [x5]
                	bl	<addr>
-               	fmov	d1, #9.00000000
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0xd0]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x110]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x118]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x120]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x128]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x130]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x138]
-               	fadd	d1, d1, d2
-               	adrp	x16, <page>
-               	ldr	d2, [x16, #0x140]
-               	fadd	d1, d1, d2
-               	fmov	d2, #3.00000000
-               	fadd	d1, d1, d2
+               	ldr	d1, [x16, #0x110]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -752,7 +727,7 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x148]
+               	ldr	d1, [x16, #0x118]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

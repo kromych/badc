@@ -138,19 +138,16 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movabsq	$0x400f333333333333, %rax # imm = 0x400F333333333333
-               	xorl	%ecx, %ecx
+               	movl	$0x4079999a, %eax       # imm = 0x4079999A
+               	movl	$0x4078f5c3, %ecx       # imm = 0x4078F5C3
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm0
-               	cvtsd2ss	%xmm0, %xmm0
-               	movl	$0x4078f5c3, %eax       # imm = 0x4078F5C3
-               	movq	%rax, %xmm15
-               	comiss	%xmm0, %xmm15
+               	comiss	%xmm14, %xmm15
                	ja	<addr>
-               	movl	$0x407a3d71, %eax       # imm = 0x407A3D71
-               	movq	%rax, %xmm15
-               	comiss	%xmm15, %xmm0
+               	movl	$0x407a3d71, %ecx       # imm = 0x407A3D71
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
+               	comiss	%xmm15, %xmm14
                	jbe	<addr>
                	movl	$0x5, %eax
                	leave

@@ -23,29 +23,30 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldr	d0, [x0, #0x8]
-               	fmov	d2, #-2.50000000
-               	fcmp	d0, d2
+               	fmov	d1, #-2.50000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	d2, [x0, #0x10]
+               	ldr	d0, [x0, #0x10]
                	adrp	x16, <addr>
-               	ldr	d0, [x16, #0x18]
-               	fcmp	d2, d0
+               	ldr	d1, [x16, #0x18]
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d2, [x0]
-               	ldr	d3, [x0, #0x8]
-               	fadd	d2, d2, d3
-               	ldr	d3, [x0, #0x10]
-               	fadd	d2, d2, d3
-               	fmov	d3, #0.50000000
-               	fadd	d3, d0, d3
-               	fcmpe	d2, d3
+               	ldr	d0, [x0]
+               	ldr	d1, [x0, #0x8]
+               	fadd	d0, d0, d1
+               	ldr	d1, [x0, #0x10]
+               	fadd	d0, d0, d1
+               	adrp	x16, <addr>
+               	ldr	d1, [x16, #0x20]
+               	fcmpe	d0, d1
                	b.gt	<addr>
-               	fsub	d0, d0, d1
-               	fcmpe	d2, d0
+               	adrp	x16, <addr>
+               	ldr	d1, [x16, #0x28]
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	ret

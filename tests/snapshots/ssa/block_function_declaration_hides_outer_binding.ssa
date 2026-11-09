@@ -125,18 +125,18 @@ fn ent_pc=13 n_params=0 variadic=false locals=0
     v1   Imm(1)                                           -> x0
     v2   Imm(2)                                           -> x0
     v3   Imm(4611686018427387904)                         -> x0
-    v4   Imm(1)                                           -> x1
-    v5   Imm(100)                                         -> x1
-    v6   Imm(100)                                         -> x1
-    v7   Imm(4621819117588971520)                         -> x1
-    v8   Binop { op=fmul, lhs=v3, rhs=v7 }                -> d0
-    v9   FpCast { kind=FpToInt, value=v8 }                -> x0
-    v10  BinopI { op=add, lhs=v9, rhs_imm=100 }           -> x0
-    v11  Extend { value=v10, kind=I32, nsw }              -> x1
-    v12  Extend { value=v10, kind=I32 }                   -> x1
-    v13  Extend { value=v10, kind=I32 }                   -> x1
-    v14  Extend { value=v10, kind=I32 }                   -> x1
-    terminator Return(v10)   (exit_acc=v10)
+    v4   Imm(1)                                           -> x0
+    v5   Imm(100)                                         -> x0
+    v6   Imm(100)                                         -> x0
+    v7   Imm(4621819117588971520)                         -> x0
+    v8   Imm(4626322717216342016)                         -> x0
+    v9   Imm(20)                                          -> x0
+    v10  Imm(120)                                         -> x0
+    v11  Imm(120)                                         -> x0
+    v12  Imm(120)                                         -> x0
+    v13  Imm(120)                                         -> x0
+    v14  Imm(120)                                         -> x0
+    terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=hides_with_variadic
 fn ent_pc=14 n_params=0 variadic=false locals=0

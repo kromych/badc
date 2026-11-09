@@ -469,31 +469,31 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v416 Imm(6)                                           -> x0
     v417 Imm(0)                                           -> x0
     v418 Imm(4618441417868443648)                         -> x0
-    v419 Imm(4611686018427387904)                         -> x1
-    v420 Binop { op=fdiv, lhs=v418, rhs=v419 }            -> d0
-    v421 Imm(0)                                           -> x1
-    v422 Imm(0)                                           -> x1
-    v423 Imm(0)                                           -> x1
-    v424 Imm(0)                                           -> x1
-    v425 Imm(0)                                           -> x1
-    v426 Imm(0)                                           -> x1
-    v427 Imm(0)                                           -> x1
-    v428 Imm(0)                                           -> x1
-    v429 Imm(0)                                           -> x1
-    v430 Imm(0)                                           -> x1
-    v431 Imm(0)                                           -> x1
-    v432 Imm(0)                                           -> x1
-    v433 Imm(0)                                           -> x1
-    v434 Imm(0)                                           -> x1
-    v435 Imm(0)                                           -> x1
-    v436 Imm(0)                                           -> x1
-    v437 Imm(4618441417868443648)                         -> x1
-    v438 Binop { op=fadd, lhs=v420, rhs=v418 }            -> d0
+    v419 Imm(4611686018427387904)                         -> x0
+    v420 Imm(4613937818241073152)                         -> x0
+    v421 Imm(0)                                           -> x0
+    v422 Imm(0)                                           -> x0
+    v423 Imm(0)                                           -> x0
+    v424 Imm(0)                                           -> x0
+    v425 Imm(0)                                           -> x0
+    v426 Imm(0)                                           -> x0
+    v427 Imm(0)                                           -> x0
+    v428 Imm(0)                                           -> x0
+    v429 Imm(0)                                           -> x0
+    v430 Imm(0)                                           -> x0
+    v431 Imm(0)                                           -> x0
+    v432 Imm(0)                                           -> x0
+    v433 Imm(0)                                           -> x0
+    v434 Imm(0)                                           -> x0
+    v435 Imm(0)                                           -> x0
+    v436 Imm(0)                                           -> x0
+    v437 Imm(4618441417868443648)                         -> x0
+    v438 Imm(4621256167635550208)                         -> x0
     v439 LifetimeEnd(0)                                   -> -
     v440 Imm(4613937818241073152)                         -> x1
-    v441 Imm(4618441417868443648)                         -> x2
-    v442 Binop { op=fadd, lhs=v440, rhs=v418 }            -> d1
-    v443 Binop { op=fne, lhs=v438, rhs=v442 }             -> x0
+    v441 Imm(4618441417868443648)                         -> x1
+    v442 Imm(4621256167635550208)                         -> x1
+    v443 Binop { op=fne, lhs=v438, rhs=v438 }             -> x0
     terminator Bz { cond=v443, target=b16, fall=b11 }   (exit_acc=v443)
   block 11  start_pc=0
     v444 Extend { value=v414, kind=I32 }                  -> x0

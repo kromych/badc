@@ -85,11 +85,7 @@ Disassembly of section .text:
                	fmadd	d3, d2, d0, d3
                	fmov	d2, #1.00000000
                	fadd	d4, d3, d2
-               	fmov	d3, #1.50000000
-               	fmov	d5, #2.25000000
-               	fmul	d5, d5, d1
-               	fmadd	d3, d3, d0, d5
-               	fadd	d3, d3, d2
+               	fmov	d3, #11.50000000
                	fcmp	d4, d3
                	b.eq	<addr>
                	mov	x0, x2

@@ -338,13 +338,13 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v65  ImmCode(ent_pc=5)                                -> x0
     v66  Imm(0)                                           -> x0
     v67  Imm(4612811918334230528)                         -> x0
-    v68  Imm(4615063718147915776)                         -> x1
-    v69  Imm(0)                                           -> x2
-    v70  Imm(4621819117588971520)                         -> x2
-    v71  Binop { op=fmul.c, lhs=v67, rhs=v70 }            -> d0
-    v72  Fma { a=v67, b=v70, c=v68, neg_product=false, neg_addend=false } -> d0
-    v73  Imm(4628715254518382592)                         -> x0
-    v74  Binop { op=fne, lhs=v72, rhs=v73 }               -> x1
+    v68  Imm(4615063718147915776)                         -> x0
+    v69  Imm(0)                                           -> x0
+    v70  Imm(4621819117588971520)                         -> x0
+    v71  Imm(4627730092099895296)                         -> x0
+    v72  Imm(4628715254518382592)                         -> x0
+    v73  Imm(4628715254518382592)                         -> x1
+    v74  Binop { op=fne, lhs=v72, rhs=v72 }               -> x1
     terminator Bz { cond=v74, target=b14, fall=b13 }   (exit_acc=v74)
   block 13  start_pc=0
     v75  Imm(6)                                           -> x0
@@ -356,10 +356,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v79  Imm(4615063718147915776)                         -> x1
     v80  Imm(0)                                           -> x1
     v81  Imm(4621819117588971520)                         -> x1
-    v82  Binop { op=fmul.c, lhs=v67, rhs=v70 }            -> d1
-    v83  Fma { a=v67, b=v70, c=v68, neg_product=false, neg_addend=false } -> d1
+    v82  Imm(4627730092099895296)                         -> x1
+    v83  Imm(4628715254518382592)                         -> x1
     v84  Imm(4628715254518382592)                         -> x1
-    v85  Binop { op=fne, lhs=v72, rhs=v73 }               -> x0
+    v85  Binop { op=fne, lhs=v72, rhs=v72 }               -> x0
     terminator Bz { cond=v85, target=b16, fall=b15 }   (exit_acc=v85)
   block 15  start_pc=0
     v86  Imm(7)                                           -> x0

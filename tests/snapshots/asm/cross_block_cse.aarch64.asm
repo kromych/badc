@@ -104,21 +104,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #12.00000000
-               	fmov	d1, #2.00000000
-               	fdiv	d0, d0, d1
-               	fmov	d1, #6.00000000
-               	fcmp	d0, d1
+               	fmov	d0, #6.00000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #12.00000000
-               	fmov	s1, #4.00000000
-               	fdiv	s0, s0, s1
-               	fmov	s1, #3.00000000
-               	fcmp	s0, s1
+               	fmov	s0, #3.00000000
+               	fcmp	s0, s0
                	b.ne	<addr>
                	mov	x16, #0x43e0000000000000 // =4890909195324358656
                	fmov	d0, x16

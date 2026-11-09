@@ -140,29 +140,29 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	fmov	d2, #2.00000000
-               	fmov	d0, #-1.00000000
-               	stur	d2, [x29, #-0x30]
-               	stur	d0, [x29, #-0x28]
+               	fmov	d0, #2.00000000
+               	fmov	d2, #-1.00000000
+               	stur	d0, [x29, #-0x30]
+               	stur	d2, [x29, #-0x28]
                	ldur	x0, [x29, #-0x30]
                	and	x0, x0, #0x7fffffffffffffff
                	ldur	x1, [x29, #-0x28]
                	and	x1, x1, #0x8000000000000000
                	orr	x0, x0, x1
                	stur	x0, [x29, #-0x30]
-               	ldur	d0, [x29, #-0x30]
+               	ldur	d2, [x29, #-0x30]
                	fmov	d3, #-2.00000000
-               	fcmp	d0, d3
+               	fcmp	d2, d3
                	b.ne	<addr>
-               	fmov	d0, #5.00000000
-               	fcmpe	d0, d1
+               	fmov	d2, #5.00000000
+               	fcmpe	d2, d1
                	b.gt	<addr>
-               	fcmp	d0, d0
+               	fcmp	d2, d2
                	b.ne	<addr>
                	fcmp	d1, d1
                	b.eq	<addr>
-               	fsub	d0, d0, d1
-               	fcmp	d0, d2
+               	fmov	d1, #2.00000000
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x40]
@@ -244,5 +244,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	movi	d0, #0000000000000000
+               	movi	d1, #0000000000000000
                	b	<addr>

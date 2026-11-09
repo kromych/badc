@@ -86,18 +86,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	fmov	d0, #2.50000000
-               	fmov	d1, #4.25000000
-               	fmov	d2, #1.00000000
-               	fadd	d0, d2, d0
-               	fmov	d2, #0.50000000
-               	fadd	d0, d0, d2
-               	fmov	d2, #3.00000000
-               	fadd	d0, d0, d2
-               	fadd	d0, d0, d1
                	adrp	x16, <page>
-               	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	ldr	d0, [x16]
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

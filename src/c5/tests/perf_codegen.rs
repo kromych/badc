@@ -3846,6 +3846,44 @@ fn a64_counts_are_the_same_over_a_nonzero_operand() {
     m.finish();
 }
 
+/// Arithmetic on floating-point constants is evaluated at translation
+/// time, as an integer argument or result computed from it is: a function
+/// that computes no floating-point value at run time compiles under
+/// `-mno-sse` / `-mgeneral-regs-only`, at -O0 and -O.
+#[test]
+fn constant_floating_point_arithmetic_needs_no_fp_registers() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "static inline __attribute__((always_inline)) unsigned long \
+                       ms(const unsigned int m) { return m; }\n\
+                       unsigned long delay(void) { return ms(1.5 * 3000); }\n\
+                       unsigned int half(void) { return 9.0 / 2 - 0.25f * 2; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for optimize in [false, true] {
+            let program = Compiler::with_options(
+                SRC.to_string(),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_optimize(optimize),
+            )
+            .compile()
+            .expect("compile");
+            let base = if optimize {
+                NativeOptions::new().with_optimize()
+            } else {
+                NativeOptions::new()
+            };
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                no_fp_regs: true,
+                ..base
+            };
+            let r = emit_native_with_options(&program, target, opts);
+            assert!(r.is_ok(), "{target:?} -O={optimize}: {:?}", r.err());
+        }
+    }
+}
+
 /// `-mgeneral-regs-only` keeps the AArch64 population count off the SIMD
 /// registers: the general-register reduction, at both widths. `-mno-sse`
 /// leaves x86-64 its `popcnt`, a general-register instruction.

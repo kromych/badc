@@ -851,6 +851,38 @@ fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Optio
     })
 }
 
+/// The bits an arithmetic operation on the constants `l` and `r` gives
+/// (C99 6.5.5, 6.5.6), rounded once to nearest as the default floating
+/// environment does; `f32` says the operands and the result are `float`s.
+/// A NaN operand or result keeps its runtime operation, whose NaN the
+/// target's unit chooses.
+fn eval_fp_binop(op: BinOp, l: i64, r: i64, f32: bool) -> Option<i64> {
+    fn arith<T>(op: BinOp, a: T, b: T) -> Option<T>
+    where
+        T: core::ops::Add<Output = T>
+            + core::ops::Sub<Output = T>
+            + core::ops::Mul<Output = T>
+            + core::ops::Div<Output = T>,
+    {
+        Some(match op {
+            BinOp::Fadd => a + b,
+            BinOp::Fsub => a - b,
+            BinOp::Fmul | BinOp::FmulContractible => a * b,
+            BinOp::Fdiv => a / b,
+            _ => return None,
+        })
+    }
+    if f32 {
+        let (a, b) = (f32::from_bits(l as u32), f32::from_bits(r as u32));
+        let x = arith(op, a, b)?;
+        (!a.is_nan() && !b.is_nan() && !x.is_nan()).then(|| i64::from(x.to_bits()))
+    } else {
+        let (a, b) = (f64::from_bits(l as u64), f64::from_bits(r as u64));
+        let x = arith(op, a, b)?;
+        (!a.is_nan() && !b.is_nan() && !x.is_nan()).then(|| x.to_bits() as i64)
+    }
+}
+
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
@@ -876,6 +908,17 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
         if let Inst::FpCast { kind, value } = func.insts[idx]
             && let Some(&Inst::Imm(k)) = func.insts.get(value as usize)
             && let Some(folded) = eval_fp_cast(kind, k, f32(value as usize), f32(idx))
+        {
+            func.insts[idx] = Inst::Imm(folded);
+            changed = true;
+            continue;
+        }
+        if let Inst::Binop { op, lhs, rhs } = func.insts[idx]
+            && let Some(&Inst::Imm(l)) = func.insts.get(lhs as usize)
+            && let Some(&Inst::Imm(r)) = func.insts.get(rhs as usize)
+            && f32(lhs as usize) == f32(idx)
+            && f32(rhs as usize) == f32(idx)
+            && let Some(folded) = eval_fp_binop(op, l, r, f32(idx))
         {
             func.insts[idx] = Inst::Imm(folded);
             changed = true;

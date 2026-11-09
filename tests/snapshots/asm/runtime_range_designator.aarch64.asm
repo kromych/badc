@@ -92,9 +92,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x1, #0x30]
                	add	x2, x2, #0x1
                	str	w2, [x1, #0x30]
-               	fmov	d0, #12.00000000
-               	fmov	d1, #2.00000000
-               	fdiv	d0, d0, d1
+               	fmov	d0, #6.00000000
                	stur	d0, [x29, #-0x48]
                	ldur	x2, [x29, #-0x48]
                	stur	x2, [x29, #-0x40]
@@ -104,9 +102,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x1, #0x30]
                	add	x2, x2, #0x1
                	str	w2, [x1, #0x30]
-               	fmov	s1, #12.00000000
-               	fmov	s2, #4.00000000
-               	fdiv	s1, s1, s2
+               	fmov	s1, #3.00000000
                	stur	s1, [x29, #-0x68]
                	ldur	w2, [x29, #-0x68]
                	stur	w2, [x29, #-0x60]

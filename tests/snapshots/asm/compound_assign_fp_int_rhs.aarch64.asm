@@ -14,36 +14,27 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	fmov	d1, #1.50000000
+               	fmov	d0, #-1.50000000
+               	fcmp	d0, d0
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ret
+               	fmov	d0, #-3.00000000
+               	fcmp	d0, d0
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ret
+               	fmov	d1, #-2.00000000
+               	fcmp	d1, d1
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ret
+               	fcmp	d0, d0
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ret
                	fmov	d0, #-1.00000000
-               	fmul	d1, d1, d0
-               	fmov	d2, #-1.50000000
-               	fcmp	d1, d2
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fmov	d2, #2.00000000
-               	fmul	d1, d1, d2
-               	fmov	d2, #-3.00000000
-               	fcmp	d1, d2
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fmov	d3, #1.00000000
-               	fadd	d1, d1, d3
-               	fmov	d4, #-2.00000000
-               	fcmp	d1, d4
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fsub	d1, d1, d3
-               	fcmp	d1, d2
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fmov	d2, #3.00000000
-               	fdiv	d1, d1, d2
-               	fcmp	d1, d0
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret

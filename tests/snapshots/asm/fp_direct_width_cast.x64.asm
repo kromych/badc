@@ -42,17 +42,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0x40e00000, %eax       # imm = 0x40E00000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vmulss	%xmm15, %xmm14, %xmm0
-               	cvttss2si	%xmm0, %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rax, %xmm0
                	movl	$0x41600000, %eax       # imm = 0x41600000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax

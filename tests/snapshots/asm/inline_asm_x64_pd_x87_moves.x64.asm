@@ -189,81 +189,73 @@ Disassembly of section .text:
                	movabsq	$0x400921fb54442d18, %rcx # imm = 0x400921FB54442D18
                	movq	%rcx, %xmm15
                	subsd	%xmm15, %xmm0
-               	movabsq	$0x3cbcd2b297d889bc, %rax # imm = 0x3CBCD2B297D889BC
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movabsq	$0x3cd6a3372f5d171b, %rcx # imm = 0x3CD6A3372F5D171B
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	comisd	%xmm0, %xmm1
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movsd	-0x20(%rbp), %xmm0
                	movabsq	$0x400a934f0979a371, %rcx # imm = 0x400A934F0979A371
                	movq	%rcx, %xmm15
                	subsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movabsq	$0x3cd7efe0307b33a5, %rcx # imm = 0x3CD7EFE0307B33A5
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	comisd	%xmm0, %xmm1
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movsd	-0x18(%rbp), %xmm0
                	movabsq	$0x3ff71547652b82fe, %rcx # imm = 0x3FF71547652B82FE
                	movq	%rcx, %xmm15
                	subsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movabsq	$0x3cc4ca9af0f3bece, %rcx # imm = 0x3CC4CA9AF0F3BECE
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	comisd	%xmm0, %xmm1
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movsd	-0x10(%rbp), %xmm0
                	movabsq	$0x3fd34413509f79ff, %rcx # imm = 0x3FD34413509F79FF
                	movq	%rcx, %xmm15
                	subsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movabsq	$0x3ca15a6b2b63ab5a, %rcx # imm = 0x3CA15A6B2B63AB5A
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	movabsq	$0x3cbcd2b297d889bc, %rax # imm = 0x3CBCD2B297D889BC
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movsd	-0x50(%rbp), %xmm0
-               	movabsq	$0x3fe62e42fefa39ef, %rax # imm = 0x3FE62E42FEFA39EF
-               	movq	%rax, %xmm15
-               	subsd	%xmm15, %xmm0
-               	movabsq	$0x3cbcd2b297d889bc, %rcx # imm = 0x3CBCD2B297D889BC
-               	movq	%rax, %xmm14
+               	movabsq	$0x3fe62e42fefa39ef, %rcx # imm = 0x3FE62E42FEFA39EF
                	movq	%rcx, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	subsd	%xmm15, %xmm0
+               	movabsq	$0x3cb3fa8601594afd, %rcx # imm = 0x3CB3FA8601594AFD
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
-               	comisd	%xmm0, %xmm1
+               	movq	%rcx, %xmm15
+               	comisd	%xmm0, %xmm15
                	jae	<addr>
                	movl	$0x4, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	leaq	0x8(%rax), %rcx

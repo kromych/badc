@@ -21,10 +21,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v11  Imm(0)                                           -> x1
     v12  Imm(10)                                          -> x1
     v13  Imm(1092616192)                                  -> x1 [f32]
-    v14  Imm(1056964608)                                  -> x2 [f32]
-    v15  Binop { op=fmul, lhs=v13, rhs=v14 }              -> d0 [f32]
-    v16  Imm(1084227584)                                  -> x1 [f32]
-    v17  Binop { op=fne, lhs=v15, rhs=v16 }               -> x1
+    v14  Imm(1056964608)                                  -> x1 [f32]
+    v15  Imm(1084227584)                                  -> x1 [f32]
+    v16  Imm(1084227584)                                  -> x2 [f32]
+    v17  Binop { op=fne, lhs=v15, rhs=v15 }               -> x1
     terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0
     v18  Imm(2)                                           -> x0
@@ -33,20 +33,20 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v19  ImmCode(ent_pc=2)                                -> x1
     v20  Imm(0)                                           -> x1
     v21  Imm(4611686018427387904)                         -> x1
-    v22  Imm(0)                                           -> x2
-    v23  Imm(4607182418800017408)                         -> x2
-    v24  Binop { op=fadd, lhs=v21, rhs=v23 }              -> d0
-    v25  FpCast { kind=F64ToF32, value=v24 }              -> d0 [f32]
+    v22  Imm(0)                                           -> x1
+    v23  Imm(4607182418800017408)                         -> x1
+    v24  Imm(4613937818241073152)                         -> x1
+    v25  Imm(1077936128)                                  -> x1 [f32]
     v26  Imm(1077936128)                                  -> x2 [f32]
-    v27  Binop { op=fne, lhs=v25, rhs=v26 }               -> x2
+    v27  Binop { op=fne, lhs=v25, rhs=v25 }               -> x1
     terminator Bz { cond=v27, target=b6, fall=b5 }   (exit_acc=v27)
   block 5  start_pc=0
     v28  Imm(3)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 6  start_pc=0
-    v29  Imm(0)                                           -> x2
-    v30  Imm(1075838976)                                  -> x2 [f32]
-    v31  Imm(1075838976)                                  -> x2 [f32]
+    v29  Imm(0)                                           -> x1
+    v30  Imm(1075838976)                                  -> x1 [f32]
+    v31  Imm(1075838976)                                  -> x1 [f32]
     v32  Binop { op=fne, lhs=v4, rhs=v4 }                 -> x0
     terminator Bz { cond=v32, target=b8, fall=b7 }   (exit_acc=v32)
   block 7  start_pc=0
@@ -59,10 +59,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v37  Imm(0)                                           -> x0
     v38  Imm(8)                                           -> x0
     v39  Imm(4620693217682128896)                         -> x0
-    v40  Imm(4598175219545276416)                         -> x2
-    v41  Binop { op=fmul, lhs=v39, rhs=v40 }              -> d0
-    v42  Imm(4611686018427387904)                         -> x0
-    v43  Binop { op=fne, lhs=v41, rhs=v21 }               -> x0
+    v40  Imm(4598175219545276416)                         -> x0
+    v41  Imm(4611686018427387904)                         -> x0
+    v42  Imm(4611686018427387904)                         -> x1
+    v43  Binop { op=fne, lhs=v41, rhs=v41 }               -> x0
     terminator Bz { cond=v43, target=b10, fall=b9 }   (exit_acc=v43)
   block 9  start_pc=0
     v44  Imm(5)                                           -> x0

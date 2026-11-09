@@ -46,11 +46,7 @@ Disassembly of section .text:
                	ret
 
 <composite_prototype>:
-               	fmov	d0, #2.00000000
-               	fmov	d1, #10.00000000
-               	fmul	d0, d0, d1
-               	fcvtzs	x0, d0
-               	add	x0, x0, #0x64
+               	mov	x0, #0x78               // =120
                	ret
 
 <hides_with_variadic>:

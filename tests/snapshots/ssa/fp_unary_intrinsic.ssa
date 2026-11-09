@@ -115,22 +115,22 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v71  Imm(1077516698)                                  -> x0 [f32]
     v72  Intrinsic { kind=Truncf, args=[v71] }            -> d0 [f32]
     v73  Imm(1073741824)                                  -> x0 [f32]
-    v74  Binop { op=fne, lhs=v72, rhs=v73 }               -> x1
-    v75  Imm(0)                                           -> x2
-    v76  Imm(0)                                           -> x2
-    v77  Imm(0)                                           -> x2
+    v74  Binop { op=fne, lhs=v72, rhs=v73 }               -> x0
+    v75  Imm(0)                                           -> x1
+    v76  Imm(0)                                           -> x1
+    v77  Imm(0)                                           -> x1
     terminator Bz { cond=v74, target=b21, fall=b20 }   (exit_acc=v74)
   block 20  start_pc=0
     v78  Imm(9)                                           -> x0
     terminator Return(v78)   (exit_acc=v78)
   block 21  start_pc=0
-    v79  Imm(1073741824)                                  -> x1 [f32]
-    v80  Imm(0)                                           -> x1
-    v81  Imm(1098907648)                                  -> x1 [f32]
-    v82  Imm(3246391296)                                  -> x1 [f32]
+    v79  Imm(1073741824)                                  -> x0 [f32]
+    v80  Imm(0)                                           -> x0
+    v81  Imm(1098907648)                                  -> x0 [f32]
+    v82  Imm(3246391296)                                  -> x0 [f32]
     v83  Intrinsic { kind=Fabsf, args=[v82] }             -> d0 [f32]
     v84  Intrinsic { kind=Sqrtf, args=[v83] }             -> d0 [f32]
-    v85  Imm(1082130432)                                  -> x1 [f32]
+    v85  Imm(1082130432)                                  -> x0 [f32]
     v86  Binop { op=fne, lhs=v84, rhs=v85 }               -> x1
     terminator Bz { cond=v86, target=b23, fall=b22 }   (exit_acc=v86)
   block 22  start_pc=0
@@ -138,8 +138,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     terminator Return(v87)   (exit_acc=v87)
   block 23  start_pc=0
     v88  Imm(0)                                           -> x1 [f32]
-    v89  Binop { op=fmul, lhs=v73, rhs=v73 }              -> d0 [f32]
-    v90  Intrinsic { kind=Sqrtf, args=[v89] }             -> d0 [f32]
+    v89  Imm(1082130432)                                  -> x1 [f32]
+    v90  Intrinsic { kind=Sqrtf, args=[v85] }             -> d0 [f32]
     v91  Imm(1063675494)                                  -> x0 [f32]
     v92  Binop { op=fadd, lhs=v90, rhs=v91 }              -> d0 [f32]
     v93  Intrinsic { kind=Floorf, args=[v92] }            -> d0 [f32]

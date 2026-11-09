@@ -93,27 +93,19 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vdivsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
                	leave
                	retq
-               	movl	$0x41400000, %eax       # imm = 0x41400000
-               	movl	$0x40800000, %ecx       # imm = 0x40800000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vdivss	%xmm15, %xmm14, %xmm0
                	movl	$0x40400000, %eax       # imm = 0x40400000
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
                	movabsq	$0x43e0000000000000, %rax # imm = 0x43E0000000000000

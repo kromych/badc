@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
-               	movq	%rcx, %xmm15
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -55,16 +55,13 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
-               	movabsq	$0x3fe0000000000000, %rdx # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rdx, %xmm15
-               	vaddsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm1, %xmm0
+               	movabsq	$-0x3de1bb656c020000, %rax # imm = 0xC21E449A93FE0000
+               	movq	%rax, %xmm15
+               	comisd	%xmm15, %xmm0
                	ja	<addr>
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vsubsd	%xmm15, %xmm14, %xmm1
-               	comisd	%xmm0, %xmm1
+               	movabsq	$-0x3de1bb656bfa0000, %rax # imm = 0xC21E449A94060000
+               	movq	%rax, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x4, %eax
                	retq

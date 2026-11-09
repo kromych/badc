@@ -374,27 +374,27 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     v118 Call { target_pc=1, args=[v110, v111, v112, v113, v114, v115, v116, v117], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v119 Imm(9)                                           -> x0
     v120 Imm(4621256167635550208)                         -> x0
-    v121 Imm(4726483295884279808)                         -> x1
-    v122 Binop { op=fadd, lhs=v120, rhs=v121 }            -> d1
+    v121 Imm(4726483295884279808)                         -> x0
+    v122 Imm(4726483296488259584)                         -> x0
     v123 Imm(4716133919349538816)                         -> x0
-    v124 Binop { op=fadd, lhs=v122, rhs=v123 }            -> d1
+    v124 Imm(4727825473768259584)                         -> x0
     v125 Imm(4703696862291427328)                         -> x0
-    v126 Binop { op=fadd, lhs=v124, rhs=v125 }            -> d1
+    v126 Imm(4728026800360259584)                         -> x0
     v127 Imm(4690615560138915840)                         -> x0
-    v128 Binop { op=fadd, lhs=v126, rhs=v127 }            -> d1
+    v128 Imm(4728053643905859584)                         -> x0
     v129 Imm(4677104761256804352)                         -> x0
-    v130 Binop { op=fadd, lhs=v128, rhs=v129 }            -> d1
+    v130 Imm(4728056999349059584)                         -> x0
     v131 Imm(4663319084467748864)                         -> x0
-    v132 Binop { op=fadd, lhs=v130, rhs=v131 }            -> d1
+    v132 Imm(4728057402002243584)                         -> x0
     v133 Imm(700)                                         -> x0
     v134 Imm(4649368480934526976)                         -> x0
-    v135 Binop { op=fadd, lhs=v132, rhs=v134 }            -> d1
+    v135 Imm(4728057448978448384)                         -> x0
     v136 Imm(85)                                          -> x0
     v137 Imm(4635681760191971328)                         -> x0
-    v138 Binop { op=fadd, lhs=v135, rhs=v137 }            -> d1
+    v138 Imm(4728057454682701824)                         -> x0
     v139 Imm(3)                                           -> x0
     v140 Imm(4613937818241073152)                         -> x0
-    v141 Binop { op=fadd, lhs=v138, rhs=v140 }            -> d1
+    v141 Imm(4728057454884028416)                         -> x0
     v142 Binop { op=fne, lhs=v118, rhs=v141 }             -> x0
     terminator Bz { cond=v142, target=b8, fall=b7 }   (exit_acc=v142)
   block 7  start_pc=0

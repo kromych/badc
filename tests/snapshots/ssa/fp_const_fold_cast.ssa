@@ -76,23 +76,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Return(v39)   (exit_acc=v39)
   block 16  start_pc=0
     v40  Imm(1073741824)                                  -> x0 [f32]
-    v41  Imm(0)                                           -> x1
-    v42  Imm(3)                                           -> x1
-    v43  Imm(1077936128)                                  -> x1 [f32]
-    v44  Imm(0)                                           -> x2 [f32]
-    v45  Binop { op=fmul, lhs=v43, rhs=v40 }              -> d0 [f32]
-    v46  Binop { op=fmul.c, lhs=v45, rhs=v40 }            -> d1 [f32]
-    v47  Imm(5)                                           -> x1
-    v48  Imm(1084227584)                                  -> x1 [f32]
-    v49  Binop { op=fmul.c, lhs=v48, rhs=v40 }            -> d1 [f32]
-    v50  Fma { a=v45, b=v40, c=v49, neg_product=false, neg_addend=false } -> d0 [f32]
+    v41  Imm(0)                                           -> x0
+    v42  Imm(3)                                           -> x0
+    v43  Imm(1077936128)                                  -> x0 [f32]
+    v44  Imm(0)                                           -> x0 [f32]
+    v45  Imm(1086324736)                                  -> x0 [f32]
+    v46  Imm(1094713344)                                  -> x0 [f32]
+    v47  Imm(5)                                           -> x0
+    v48  Imm(1084227584)                                  -> x0 [f32]
+    v49  Imm(1092616192)                                  -> x0 [f32]
+    v50  Imm(1102053376)                                  -> x0 [f32]
     v51  Imm(7)                                           -> x0
     v52  Imm(1088421888)                                  -> x0 [f32]
-    v53  Binop { op=fadd, lhs=v50, rhs=v52 }              -> d0 [f32]
-    v54  Imm(0)                                           -> x0
-    v55  Imm(0)                                           -> x0 [f32]
-    v56  Imm(1105723392)                                  -> x0 [f32]
-    v57  Binop { op=fne, lhs=v53, rhs=v56 }               -> x0
+    v53  Imm(1105723392)                                  -> x0 [f32]
+    v54  Imm(0)                                           -> x1
+    v55  Imm(0)                                           -> x1 [f32]
+    v56  Imm(1105723392)                                  -> x1 [f32]
+    v57  Binop { op=fne, lhs=v53, rhs=v53 }               -> x0
     terminator Bz { cond=v57, target=b18, fall=b17 }   (exit_acc=v57)
   block 17  start_pc=0
     v58  Imm(9)                                           -> x0

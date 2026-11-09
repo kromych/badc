@@ -116,25 +116,15 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldur	d2, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x30]
                	mov	x16, #0x4059000000000000 // =4636737291354636288
-               	fmov	d1, x16
-               	fmul	d2, d2, d1
-               	fcvtzs	x0, d2
-               	add	x0, x0, #0x2a
-               	cmp	x0, #0x156
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fmov	d2, #3.00000000
-               	fmul	d1, d2, d1
+               	fmov	d2, x16
+               	fmul	d1, d1, d2
                	fcvtzs	x0, d1
                	add	x0, x0, #0x2a
                	cmp	x0, #0x156
                	b.eq	<addr>
-               	mov	x0, #0x8                // =8
+               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

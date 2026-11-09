@@ -65,8 +65,6 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	fmov	d1, #0.50000000
-               	fadd	d0, d0, d1
                	bl	<addr>
                	mov	x17, #0x1001            // =4097
                	movk	x17, #0xd4a5, lsl #16

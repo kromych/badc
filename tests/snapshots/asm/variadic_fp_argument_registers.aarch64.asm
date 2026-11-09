@@ -543,19 +543,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #2.50000000
-               	fmov	d1, #3.50000000
-               	fmov	d2, #10.00000000
-               	fmadd	d0, d0, d2, d1
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x30]
-               	fcmp	d0, d1
+               	ldr	d0, [x16, #0x30]
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcmp	d0, d1
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10

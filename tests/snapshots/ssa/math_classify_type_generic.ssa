@@ -7,7 +7,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v1   Imm(8388608)                                     -> x0 [f32]
     v2   Imm(2)                                           -> x1
     v3   Imm(1073741824)                                  -> x1 [f32]
-    v4   Binop { op=fdiv, lhs=v1, rhs=v3 }                -> d0 [f32]
+    v4   Imm(4194304)                                     -> x1 [f32]
     v5   StoreLocal { off=-6, value=v4, kind=F32, volatile } -> -
     v6   StoreLocal { off=-5, value=v1, kind=F32, volatile } -> -
     v7   Imm(2143289344)                                  -> x1 [f32]
@@ -16,8 +16,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v10  Imm(2147483648)                                  -> x0 [f32]
     v11  StoreLocal { off=-3, value=v10, kind=F32, volatile } -> -
     v12  Imm(4503599627370496)                            -> x0
-    v13  Imm(4611686018427387904)                         -> x2
-    v14  Binop { op=fdiv, lhs=v12, rhs=v13 }              -> d0
+    v13  Imm(4611686018427387904)                         -> x0
+    v14  Imm(2251799813685248)                            -> x0
     v15  StoreLocal { off=-2, value=v14, kind=F64, volatile } -> -
     v16  Imm(4607182418800017408)                         -> x0
     v17  StoreLocal { off=-1, value=v16, kind=F64, volatile } -> -

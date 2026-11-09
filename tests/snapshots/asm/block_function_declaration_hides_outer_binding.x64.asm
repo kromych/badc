@@ -59,13 +59,7 @@ Disassembly of section .text:
                	retq
 
 <composite_prototype>:
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm0
-               	cvttsd2si	%xmm0, %rax
-               	addq	$0x64, %rax
+               	movl	$0x78, %eax
                	retq
 
 <hides_with_variadic>:

@@ -46,34 +46,22 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	fmov	s2, #1.50000000
-               	fmov	s0, #1.00000000
-               	fmov	s1, #2.00000000
-               	fmadd	s2, s2, s1, s0
-               	mov	x16, #0x42300000        // =1110441984
-               	fmov	s3, w16
-               	fadd	s2, s2, s3
-               	fcvt	d2, s2
                	mov	x16, #0x4048000000000000 // =4631952216750555136
-               	fmov	d3, x16
-               	fcmp	d2, d3
+               	fmov	d0, x16
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	fcmp	d2, d3
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	fmov	s2, #5.00000000
-               	fdiv	s1, s2, s1
-               	fadd	s0, s1, s0
-               	fcvt	d0, s0
-               	fmov	d1, #3.50000000
-               	fcmp	d0, d1
+               	fmov	d0, #3.50000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
-               	fcmp	d0, d1
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret

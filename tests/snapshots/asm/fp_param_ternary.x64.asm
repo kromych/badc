@@ -85,47 +85,38 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movl	$0x3fc00000, %r11d      # imm = 0x3FC00000
                	movq	%r11, %xmm0
-               	movl	$0xc0200000, %ecx       # imm = 0xC0200000
                	movl	$0xc0200000, %r11d      # imm = 0xC0200000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movl	$0xbf800000, %eax       # imm = 0xBF800000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movl	$0x3e000000, %eax       # imm = 0x3E000000
-               	movl	$0xc0e80000, %ecx       # imm = 0xC0E80000
                	movl	$0xc0e80000, %r11d      # imm = 0xC0E80000
                	movq	%r11, %xmm0
                	movl	$0x3e000000, %r11d      # imm = 0x3E000000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movq	%rcx, %xmm14
+               	movl	$0xc0e40000, %eax       # imm = 0xC0E40000
                	movq	%rax, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movl	$0x40800000, %ecx       # imm = 0x40800000
                	movl	$0x40400000, %r11d      # imm = 0x40400000
                	movq	%r11, %xmm0
                	movl	$0x40800000, %r11d      # imm = 0x40800000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movl	$0x40e00000, %eax       # imm = 0x40E00000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax

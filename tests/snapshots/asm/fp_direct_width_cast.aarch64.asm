@@ -25,13 +25,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmov	s0, #7.00000000
-               	fmov	s1, #2.00000000
-               	fmul	s0, s0, s1
-               	fcvtzs	x0, s0
-               	scvtf	s0, x0
-               	fmov	s1, #14.00000000
-               	fcmp	s0, s1
+               	fmov	s0, #14.00000000
+               	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret

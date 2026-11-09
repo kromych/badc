@@ -78,13 +78,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v45  Imm(6)                                           -> x0
     v46  Imm(0)                                           -> x0
     v47  Imm(4)                                           -> x0
-    v48  Imm(4616189618054758400)                         -> x1
+    v48  Imm(4616189618054758400)                         -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(4611686018427387904)                         -> x0
-    v51  Binop { op=fdiv, lhs=v48, rhs=v50 }              -> d0
+    v51  Imm(4611686018427387904)                         -> x0
     v52  Imm(2)                                           -> x1
     v53  Imm(4611686018427387904)                         -> x1
-    v54  Binop { op=fne, lhs=v51, rhs=v50 }               -> x0
+    v54  Binop { op=fne, lhs=v51, rhs=v51 }               -> x0
     terminator Bz { cond=v54, target=b2, fall=b1 }   (exit_acc=v54)
   block 1  start_pc=0
     v59  Imm(2)                                           -> x0
@@ -122,13 +122,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v85)   (exit_acc=v85)
   block 5  start_pc=0
     v89  Imm(4)                                           -> x0
-    v90  Imm(4616189618054758400)                         -> x1
+    v90  Imm(4616189618054758400)                         -> x0
     v91  Imm(0)                                           -> x0
     v92  Imm(4611686018427387904)                         -> x0
-    v93  Binop { op=fdiv, lhs=v90, rhs=v92 }              -> d0
+    v93  Imm(4611686018427387904)                         -> x0
     v94  Imm(2)                                           -> x1
     v95  Imm(4611686018427387904)                         -> x1
-    v96  Binop { op=fne, lhs=v93, rhs=v92 }               -> x0
+    v96  Binop { op=fne, lhs=v93, rhs=v93 }               -> x0
     terminator Bz { cond=v96, target=b7, fall=b6 }   (exit_acc=v96)
   block 6  start_pc=0
     v97  Imm(5)                                           -> x0

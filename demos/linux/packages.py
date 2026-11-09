@@ -982,10 +982,33 @@ def assert_module_producer(tree: Path, failures: list[str]) -> dict:
     return {"sampled": checked, "not_badc": bad}
 
 
-def assert_manifest(args, failures: list[str]) -> dict:
+# Units the kernel compiles to see the compiler diagnose them: test_fortify.sh
+# expects each unsafe call to fail the compile with its fortify error (or, for
+# a compiler that defers it to the link, to leave the checking symbol
+# undefined) and writes its verdict as the first line of the unit's .log.
+DIAG_TEST_DIR = "lib/test_fortify/"
+
+
+def diag_test_verdicts(tree: Path) -> dict[str, bool]:
+    """Each diagnostic test unit, by source, and whether its log says the
+    expected diagnostic was seen."""
+    out = {}
+    for log_file in sorted((tree / DIAG_TEST_DIR).glob("*-*.log")):
+        first = log_file.read_text(errors="replace").partition("\n")[0]
+        out[f"{DIAG_TEST_DIR}{log_file.stem}.c"] = first.startswith("ok:")
+    return out
+
+
+def assert_manifest(args, failures: list[str], tree: Path) -> dict:
     units = read_manifest(args.manifest)
+    verdicts = diag_test_verdicts(tree)
+    units["fail"] = [u for u in units["fail"] if u.split("\t")[0] not in verdicts]
+    missed = [unit for unit, ok in verdicts.items() if not ok]
     log(f"units: badc={len(units['badc'])} fallback={len(units['fallback'])} "
-        f"fail={len(units['fail'])}")
+        f"fail={len(units['fail'])} diagnostic-tests={len(verdicts)}")
+    if missed:
+        failures.append(f"diagnostic tests the compile did not diagnose: "
+                        f"{len(missed)} ({', '.join(missed[:5])})")
     if units["fail"]:
         named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
         failures.append(
@@ -996,7 +1019,7 @@ def assert_manifest(args, failures: list[str]) -> dict:
     if len(units["badc"]) < args.expect_units:
         failures.append(f"units compiled: {len(units['badc'])}, expected at "
                         f"least {args.expect_units}")
-    return {k: len(v) for k, v in units.items()}
+    return {**{k: len(v) for k, v in units.items()}, "diag_tests": len(verdicts)}
 
 
 def assert_link_manifest(args, failures: list[str]) -> dict:
@@ -3528,9 +3551,23 @@ def _self_test() -> int:
     assert exercise.severe_lines(boot.splitlines(), pat) == []
     assert exercise.severe_lines(boot.splitlines()) == boot.splitlines()[1:]
 
+    import tempfile
+
+    # A fortify test passes on the "ok:" verdict test_fortify.sh writes.
+    with tempfile.TemporaryDirectory() as d:
+        logs = Path(d) / DIAG_TEST_DIR
+        logs.mkdir(parents=True)
+        (logs / "write_overflow-memcpy.log").write_text(
+            "ok: unsafe memcpy() usage correctly detected\nerror: ...\n")
+        (logs / "read_overflow-memchr.log").write_text(
+            "warning: unsafe memchr() usage lacked '__read_overflow' warning\n")
+        assert diag_test_verdicts(Path(d)) == {
+            "lib/test_fortify/read_overflow-memchr.c": False,
+            "lib/test_fortify/write_overflow-memcpy.c": True,
+        }
+
     # The tree directory comes from the archive, not from the asset name:
     # a mirrored tarball's name carries a digest prefix the directory lacks.
-    import tempfile
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
         (d / "linux-7.1.10").mkdir()
@@ -4146,7 +4183,7 @@ def main() -> int:
         report["packages"] = [{"name": p.name, "bytes": p.stat().st_size,
                                "sha256": sha256_of(p)} for p in packages]
     if {"build", "package"} & phases:
-        report["units"] = assert_manifest(args, failures)
+        report["units"] = assert_manifest(args, failures, tree)
         if args.linker == "badc":
             report["links"] = assert_link_manifest(args, failures)
         counts, lines = diags.summary(args.warn_log)

@@ -1165,8 +1165,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
         }
         // The events that start a scoped group's instance: its first after
-        // its end marker, or in a block it enters dead. Before one, the
-        // group holds nothing a later read can see.
+        // its end marker, or in a block it enters dead, when that event
+        // writes or takes the address. Before one, the group holds nothing
+        // a later read can see. A read or escape there is of the instance
+        // that ended: a `Return` reads the returned object past its marker.
         let mut fresh: BTreeSet<(u32, usize)> = BTreeSet::new();
         let mut ended: BTreeMap<usize, bool> = BTreeMap::new();
         for &(pc, sg, kind) in evs {
@@ -1177,7 +1179,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             let after_end = *ended
                 .entry(sg)
                 .or_insert(dead_in[b * gwords + sg / 64] & bit != 0);
-            if after_end && kind & END == 0 {
+            if after_end && kind & (END | READ | ESCAPE) == 0 {
                 fresh.insert((pc, sg));
             }
             ended.insert(sg, kind & END != 0);

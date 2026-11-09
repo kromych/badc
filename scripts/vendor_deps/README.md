@@ -2,7 +2,7 @@
 
 Demos that pull a third-party library (`miniz`, `kissfft`,
 `bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
-`monocypher`, `bearssl`, `lua`, `curl`, `raylib`, `picocom`, `screen`,
+`monocypher`, `bearssl`, `lua`, `curl`, `raylib`, `nasm`, `picocom`, `screen`,
 `vim`, `simplevisor`, `nuklear`, `openssl`)
 fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
@@ -38,6 +38,7 @@ project's identifier for the release:
 | tcl        | SourceForge tcl release tarball         | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
 | raylib     | github raysan5/raylib tag tarball       | tarball-sha256  |
+| nasm       | www.nasm.us release tarball             | tarball-sha256  |
 | python     | www.python.org release tarball          | tarball-sha256  |
 | python-frozen | `Python/frozen_modules/` of a host build | file-sha256  |
 | qemu       | git v11.1.2 tag; bundle assembled off   | git (assembled) |

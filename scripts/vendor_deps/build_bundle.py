@@ -224,6 +224,17 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # NASM 3.02 -- the www.nasm.us release tarball, which ships the
+        # generated instruction tables and the golden suite. No VCS
+        # identifier in the download, so pinned by the tarball sha256.
+        name="nasm",
+        version="3.02",
+        url="https://www.nasm.us/pub/nasm/releasebuilds/3.02/nasm-3.02.tar.xz",
+        ext=".tar.xz",
+        upstream_sha="87336eba53b4acfe917424ab5d500d2b0054d9f5148d35c2273ccf2cfb712f0d",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # Lua 5.5.0 official test suite -- published as a separate
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.

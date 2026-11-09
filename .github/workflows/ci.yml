@@ -1570,7 +1570,7 @@ jobs:
 
   nasm:
     needs: build
-    # Build NASM 2.16.03 with badc (no make) and run NASM's own golden test
+    # Build NASM 3.02 with badc (no make) and run NASM's own golden test
     # suite against it -- a self-validating oracle (each case compares the
     # assembled output to a committed golden), so no reference build is needed.
     # setup.py fetches the release (which ships the generated instruction

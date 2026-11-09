@@ -259,7 +259,7 @@ server, so it needs no external network. See
 
 ## nasm/
 
-Builds the NASM 2.16.03 assembler (84 translation units) with badc and
+Builds the NASM 3.02 assembler (92 translation units) with badc and
 runs NASM's own `travis/nasm-t.py` golden suite against it: each fixture
 is assembled with the produced `nasm` and its object bytes, listings, and
 diagnostics are compared to committed goldens, so a codegen defect surfaces

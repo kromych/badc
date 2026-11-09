@@ -98,6 +98,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
                 forward(func, &to);
                 return true;
             }
+            let placed = func.insts.len();
             if let Some(phis) = &escaping
                 && rethread(
                     func,
@@ -113,7 +114,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
                 if rethreads == 0 {
                     return true;
                 }
-                block_of = block_index(func);
+                // Only a repair that places phis moves values.
+                if func.insts.len() != placed {
+                    block_of = block_index(func);
+                }
                 changed = true;
                 continue 'blocks;
             }
@@ -370,11 +374,10 @@ fn escaping_phis(
     block_of: &[BlockId],
     site: &Site,
 ) -> Option<BTreeSet<ValueId>> {
-    let defined: BTreeSet<ValueId> = site
-        .chain
-        .iter()
-        .flat_map(|&c| func.blocks[c as usize].inst_range.clone())
+    let ranges: Vec<core::ops::Range<ValueId>> = (site.chain.iter())
+        .map(|&c| func.blocks[c as usize].inst_range.clone())
         .collect();
+    let defined = |v: ValueId| ranges.iter().any(|r| r.contains(&v));
     let in_chain = |b: BlockId| site.chain.contains(&b);
     let head_phi = |v: ValueId| {
         block_of.get(v as usize) == Some(&site.head)
@@ -382,7 +385,7 @@ fn escaping_phis(
     };
     let mut phis = BTreeSet::new();
     let mut read = |v: ValueId| {
-        if !defined.contains(&v) {
+        if !defined(v) {
             true
         } else if head_phi(v) {
             phis.insert(v);
@@ -403,7 +406,7 @@ fn escaping_phis(
             let patched = b == site.zero || b == site.nonzero;
             for &(pred, v) in incoming {
                 if pred == site.branch && patched {
-                    stays &= !defined.contains(&v) || head_phi(v);
+                    stays &= !defined(v) || head_phi(v);
                 } else if !in_chain(pred) {
                     stays &= read(v);
                 }
@@ -766,6 +769,33 @@ mod tests {
         assert!(run_one(&mut f));
         assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
         assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
+        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 3, .. }));
+    }
+
+    /// A rethread whose repair only renames reads places no phi, so every
+    /// instruction keeps its id and every block its range.
+    #[test]
+    fn a_rename_only_repair_moves_no_instruction() {
+        let mut f = inlined_check(Inst::BinopI {
+            op: BinOp::Ne,
+            lhs: 2,
+            rhs_imm: 0,
+        });
+        f.insts[6] = Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs_imm: 1,
+        };
+        let ranges: Vec<_> = f.blocks.iter().map(|b| b.inst_range.clone()).collect();
+        let len = f.insts.len();
+        assert!(run_one(&mut f));
+        assert_eq!(f.insts.len(), len);
+        assert!(
+            f.blocks
+                .iter()
+                .zip(&ranges)
+                .all(|(b, r)| b.inst_range == *r)
+        );
         assert!(matches!(f.insts[6], Inst::BinopI { lhs: 3, .. }));
     }
 

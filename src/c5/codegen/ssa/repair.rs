@@ -234,20 +234,24 @@ pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan])
         .map(|(j, &(k, b, _))| ((k, b), j))
         .collect();
     let insertions: Vec<Insertion> = placed.into_iter().map(|(_, _, i)| i).collect();
-    let rw = tape::insert(func, &insertions);
+    // A repair that only renames leaves every value where it is.
+    let rw = (!insertions.is_empty()).then(|| tape::insert(func, &insertions));
+    let remap = |v: ValueId| rw.as_ref().map_or(v, |rw| rw.remap[v as usize]);
+    let placed_id =
+        |k: usize, b: BlockId| rw.as_ref().expect("a phi was placed").ids[slot[&(k, b)]];
     let id_of = |k: usize, s: Src| match s {
-        Src::Val(v) => rw.remap[v as usize],
-        Src::Entry(b) => rw.ids[slot[&(k, b)]],
+        Src::Val(v) => remap(v),
+        Src::Entry(b) => placed_id(k, b),
     };
     for (k, (r, p)) in items.iter().zip(plans).enumerate() {
         for (&b, incoming) in &p.phis {
             let merged: Vec<(BlockId, ValueId)> =
                 incoming.iter().map(|&(q, s)| (q, id_of(k, s))).collect();
-            if let Inst::Phi { incoming, .. } = &mut func.insts[rw.ids[slot[&(k, b)]] as usize] {
+            if let Inst::Phi { incoming, .. } = &mut func.insts[placed_id(k, b) as usize] {
                 *incoming = merged;
             }
         }
-        let old = rw.remap[r.value as usize];
+        let old = remap(r.value);
         let rename = |v: &mut ValueId, new: ValueId| {
             if *v == old {
                 *v = new;
@@ -257,14 +261,11 @@ pub(crate) fn apply(func: &mut FunctionSsa, items: &[Redefined], plans: &[Plan])
             match *read {
                 Read::Operand(i, s) => {
                     let new = id_of(k, s);
-                    func.insts[rw.remap[i as usize] as usize]
-                        .for_each_operand_mut(|v| rename(v, new));
+                    func.insts[remap(i) as usize].for_each_operand_mut(|v| rename(v, new));
                 }
                 Read::Incoming(i, q, s) => {
                     let new = id_of(k, s);
-                    if let Inst::Phi { incoming, .. } =
-                        &mut func.insts[rw.remap[i as usize] as usize]
-                    {
+                    if let Inst::Phi { incoming, .. } = &mut func.insts[remap(i) as usize] {
                         for (pred, v) in incoming.iter_mut() {
                             if *pred == q {
                                 rename(v, new);

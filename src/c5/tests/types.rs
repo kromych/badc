@@ -485,11 +485,12 @@ fn pragma_operators_scope_the_construct_a_diagnostic_reports() {
 
 /// The fall-through check walks the AST once the switch is parsed. A
 /// statement's report resolves the pragmas at its first token, so pragma
-/// lines and a `_Pragma` macro around the statement govern it, as in gcc.
+/// lines and a `_Pragma` macro around the statement govern it, as in gcc,
+/// and ignoring gcc's option by its own name ignores badc's level 5 row.
 #[test]
 fn pragmas_around_a_statement_govern_its_fall_through() {
     let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
-               _Pragma(\"GCC diagnostic ignored \\\"-Wimplicit-fallthrough=5\\\"\") s \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wimplicit-fallthrough\\\"\") s \
                _Pragma(\"GCC diagnostic pop\")\n\
                int f(int c, int x) {\n\
                    switch (c) {\n\
@@ -497,7 +498,7 @@ fn pragmas_around_a_statement_govern_its_fall_through() {
                        x++;\n\
                    case 2:\n\
                #pragma GCC diagnostic push\n\
-               #pragma GCC diagnostic ignored \"-Wimplicit-fallthrough=5\"\n\
+               #pragma GCC diagnostic ignored \"-Wimplicit-fallthrough\"\n\
                        x += 2;\n\
                #pragma GCC diagnostic pop\n\
                    case 3:\n\

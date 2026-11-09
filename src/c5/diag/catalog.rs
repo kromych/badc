@@ -481,6 +481,17 @@ impl Code {
             .map(|r| r.code)
     }
 
+    /// The row a leveled gcc option implements, named by the option's own
+    /// name `base` or any of its levels `base=N`, for a row spelled
+    /// `base=M`. gcc's levels are one option, so ignoring any of them
+    /// ignores the row.
+    pub fn leveled_row(name: &str) -> Option<Code> {
+        let base = name.split_once('=').map_or(name, |(b, _)| b);
+        ROWS.iter()
+            .find(|r| r.name.split_once('=').is_some_and(|(b, _)| b == base))
+            .map(|r| r.code)
+    }
+
     /// Resolve a bare MSVC warning number, which is how
     /// `#pragma warning(...)` spells one. The row lists it with the
     /// `C` prefix badc's own selector grammar takes.

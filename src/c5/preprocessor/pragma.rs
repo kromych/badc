@@ -390,6 +390,11 @@ impl Preprocessor {
         if selector.is_some() {
             return selector;
         }
+        if action == "ignored"
+            && let Some(code) = Code::leveled_row(name)
+        {
+            return Some(Selector::Diagnostic(code));
+        }
         // A warning another compiler defines and badc does not implement is
         // never reported, so ignoring it already holds.
         if crate::c5::diag::defined_elsewhere(name) {

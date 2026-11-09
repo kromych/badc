@@ -68,6 +68,10 @@ needed but also takes time to get through without any benefit to the reader. Sav
 your time and the reader's time - be concise and precise. Make sure the same style
 applies throughout.
 
+Write US English in code, comments, docs, commit messages, and issues: US
+spelling (`-ize`, `-or`, `catalog`, `behavior`), the serial comma, and a
+closed em dash written `--`, as sources and docs are ASCII-only.
+
 Maintain the ratio of comment lines to line of code under 1:10. Requiring more means
 that the architecture has to be audited. For one-line changes use no more than
 3 lines of comments iff the change cannot be expressed in the self-explanatory way.

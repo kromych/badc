@@ -87,6 +87,8 @@ demos/curl/*
 !demos/curl/README.md
 !demos/curl/curl_client.c
 !demos/curl/curl_config.h
+!demos/curl/curl_config_win32.h
+!demos/curl/afunix.h
 !demos/curl/curl_syslink.h
 !demos/curl/_mingw.h
 # stb -- a collection of single-file public-domain headers.

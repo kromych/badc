@@ -202,14 +202,24 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
-        # curl 8.11.1 -- HTTP client library. Standalone release
+        # curl 8.23.0 -- HTTP client library. Standalone release
         # tarball from curl.se with no VCS identifier in the download
         # name, so pinned by the tarball sha256.
         name="curl",
-        version="8.11.1",
-        url="https://curl.se/download/curl-8.11.1.tar.gz",
+        version="8.23.0",
+        url="https://curl.se/download/curl-8.23.0.tar.gz",
         ext=".tar.gz",
-        upstream_sha="a889ac9dbba3644271bd9d1302b5c22a088893719b72be3487bc3d401e5c4e80",
+        upstream_sha="e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # Mbed TLS 3.6.7 (LTS) -- the curl demo's TLS backend. The release
+        # archive published with the tag, pinned by its sha256.
+        name="mbedtls",
+        version="3.6.7",
+        url="https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
+        ext=".tar.bz2",
+        upstream_sha="a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6",
         sha_kind="tarball-sha256",
     ),
     Source(

@@ -247,12 +247,12 @@ at both -O and noO, runs it, and pins each scenario's stdout: `sprintf`,
 
 ## curl/
 
-badc compiles the curl 8.11.1 library (HTTP + `file://` + WebSocket,
+badc compiles the curl 8.23.0 library (HTTP + `file://` + WebSocket,
 threaded resolver, IPv6, no external dependencies) and builds it as a
 static archive, a shared library, and an executable linked against
 each, plus a flavour that binds a badc-compiled client to the
 platform's installed libcurl to check the frontend matches the OS ABI.
-HTTPS is provided by badc-compiled BearSSL (`USE_BEARSSL`); the smoke
+HTTPS is provided by badc-compiled Mbed TLS (`USE_MBEDTLS`); the smoke
 drives HTTP / HTTPS / `file://` transfers against a hermetic loopback
 server, so it needs no external network. See
 [`curl/README.md`](./curl/README.md).

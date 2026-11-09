@@ -142,6 +142,9 @@ constructors) and `.CRT$XP*` and `.CRT$XT*` (pre-terminators and terminators),
 run in section-name order across units, as link.exe orders a grouped section,
 each table forward: ahead of the `.init_array` constructors at startup and
 after the destructors at exit, as the image's and `--jit`'s startup call them.
+A table's bytes also join the read-only data, so a name an entry defines (the
+pointer a unit keeps with `/INCLUDE:`) reads the function the entry holds. An
+entry here or in `.init_array` may name a function another unit defines.
 `.CRT$XL*` entries are TLS callbacks: the image's TLS directory lists them, and
 it is emitted for them, for thread-local data, or for a unit naming
 `_tls_used`, which the link defines at it. The link supplies `_tls_index` and

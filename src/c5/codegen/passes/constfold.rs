@@ -33,7 +33,7 @@
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
-use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
+use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result};
 use crate::c5::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId, is_comparison_op,
 };
@@ -97,11 +97,23 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
 /// The operand an instruction reproduces bit for bit, if any: `x != 0`
 /// over a provably 0/1 `x` (`is_bool_value`) -- the short-circuit lowering
 /// re-normalizes an `&&` / `||` operand a comparison or `!` already
-/// normalized -- an integer operation by its identity constant, and
-/// `x & x` / `x | x`.
+/// normalized -- an integer operation by its identity constant, `x & x` /
+/// `x | x`, and a copy between general registers.
 fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     if matches!(func.f32_values.get(idx), Some(true)) {
         return None;
+    }
+    if let Inst::Copy {
+        value,
+        is_fp: false,
+    } = func.insts[idx]
+        && !matches!(func.f32_values.get(value as usize), Some(true))
+        && func
+            .insts
+            .get(value as usize)
+            .is_some_and(|i| !produces_fp_result(i))
+    {
+        return Some(value);
     }
     if let Inst::Binop {
         op: BinOp::And | BinOp::Or,

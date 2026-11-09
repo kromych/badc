@@ -74,6 +74,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "ipa_const_param_guard.c",
     "ipa_const_param_after_fold.c",
     "addr_null_compare_inline_param.c",
+    "addr_null_compare_past_a_subobject_size_query.c",
     "addr_compare_same_function_inline.c",
     "addr_fold_pruned_arm_dce.c",
     "const_struct_array_inline_accessor.c",

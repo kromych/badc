@@ -5439,7 +5439,7 @@ pub(crate) fn reloc_callee_ctx(
 /// `relocs` without the slots naming a C-library function the loader
 /// binds, and those slots' import bindings, so every slot naming one holds
 /// the import's own address (C99 6.5.9p6).
-fn split_import_slots(
+pub(crate) fn split_import_slots(
     program: &Program,
     imports: &ResolvedImports,
     relocs: &[crate::c5::program::CodeReloc],

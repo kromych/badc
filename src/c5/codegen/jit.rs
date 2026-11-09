@@ -678,7 +678,11 @@ mod jit_impl {
         // functions this build never emits. `segregate` is false --
         // the data region is one flat mapping with no zero-fill tail.
         let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
-        let program = compacted.program;
+        let mut program = compacted.program;
+        // The JIT fills each import's slot with the library's address, so
+        // `&puts` and a data slot naming it take that slot's value, as in an
+        // image whose loader binds the slots (C99 6.5.9p6).
+        program.bind_trampoline_slots = true;
         let mut build = lower_for_jit(&program, target, options.clone())?;
         for d in &build.diagnostics {
             report(d);
@@ -1234,6 +1238,24 @@ mod jit_impl {
                 bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
             }
         }
+        // A slot naming a C-library function holds the import's own
+        // address, which its GOT slot carries, as `&f` in code takes it.
+        if !build.data_import_binds.is_empty()
+            && let Some(region) = &mut at.data
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for b in &build.data_import_binds {
+                let value = unit.got.slot_value(b.import).wrapping_add_signed(b.addend);
+                let off = b.data_offset as usize;
+                let Some(slot) = bytes.get_mut(off..off + 8) else {
+                    return Err(C5Error::internal(format!(
+                        "JIT: import slot {off:#x} past end of data region ({})",
+                        bytes.len()
+                    )));
+                };
+                slot.copy_from_slice(&value.to_le_bytes());
+            }
+        }
         // Now that the code region's runtime address is known,
         // patch every CodeReloc slot in the data region to point
         // at the function's actual code byte offset. Mirrors the
@@ -1699,7 +1721,8 @@ mod jit_impl {
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
-        build.code_relocs = program.code_relocs.clone();
+        (build.code_relocs, build.data_import_binds) =
+            crate::c5::codegen::split_import_slots(program, &build.imports, &program.code_relocs)?;
         crate::c5::codegen::bind_code_reloc_aliases(program, &mut build.code_relocs);
         build.extern_data_relocs = program.extern_data_relocs.clone();
         crate::c5::codegen::emit_ssa_dump(&mut build);

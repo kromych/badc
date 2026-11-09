@@ -106,6 +106,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("over_aligned_local_in_an_inlined_function.c", 0),
     ("function_slots_name_weak_and_asm_functions.c", 0),
     ("self_declared_library_names_resolve.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     ("aarch64_branch_word_in_a_data_section.c", 0),
     ("x86_f16c_conversions_match_the_instructions.c", 0),
     ("avx2_permutes_shifts_and_products_follow_the_sdm.c", 0),
@@ -1592,6 +1593,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("over_aligned_local_in_an_inlined_function.c", 0),
     ("function_slots_name_weak_and_asm_functions.c", 0),
     ("self_declared_library_names_resolve.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     ("aarch64_branch_word_in_a_data_section.c", 0),
     ("x86_f16c_conversions_match_the_instructions.c", 0),
     ("avx2_permutes_shifts_and_products_follow_the_sdm.c", 0),
@@ -2773,6 +2775,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("over_aligned_local_in_an_inlined_function.c", 0),
     ("function_slots_name_weak_and_asm_functions.c", 0),
     ("self_declared_library_names_resolve.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     ("aarch64_branch_word_in_a_data_section.c", 0),
     ("x86_f16c_conversions_match_the_instructions.c", 0),
     ("avx2_permutes_shifts_and_products_follow_the_sdm.c", 0),
@@ -3952,6 +3955,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("over_aligned_local_in_an_inlined_function.c", 0),
     ("function_slots_name_weak_and_asm_functions.c", 0),
     ("self_declared_library_names_resolve.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     ("aarch64_branch_word_in_a_data_section.c", 0),
     ("x86_f16c_conversions_match_the_instructions.c", 0),
     ("avx2_permutes_shifts_and_products_follow_the_sdm.c", 0),
@@ -4893,6 +4897,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("over_aligned_local_in_an_inlined_function.c", 0),
     ("function_slots_name_weak_and_asm_functions.c", 0),
     ("self_declared_library_names_resolve.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     ("aarch64_branch_word_in_a_data_section.c", 0),
     ("x86_f16c_conversions_match_the_instructions.c", 0),
     ("avx2_permutes_shifts_and_products_follow_the_sdm.c", 0),
@@ -6190,6 +6195,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // On macOS the run joins `string_ext.c` and `unistd_ext.c` on demand.
     ("string_gnu_ext.c", 0),
     ("copy_file_range_posix.c", 0),
+    ("library_function_address_is_the_librarys.c", 0),
     // memmem / getline / getdelim / dprintf, bound on every host this
     // module runs on.
     ("stdio_line_input.c", 0),

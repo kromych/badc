@@ -2886,6 +2886,19 @@ fn socket_headers_abi() {
     assert_eq!(run_fixture("socket_headers_abi.c"), 0);
 }
 
+/// <netinet/in.h>, and on Windows <ws2tcpip.h> as mingw-w64's and the SDK's,
+/// define the IN6_IS_ADDR_* predicates and IN6_ARE_ADDR_EQUAL. The native
+/// fixture tables run the fixture on each target's host.
+#[test]
+fn in6_address_predicates_are_defined_on_every_target() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("in6_address_predicates.c");
+    for target in Target::ALL {
+        let result = Compiler::with_options(src.clone(), target, Default::default()).compile();
+        assert!(result.is_ok(), "{target:?}: {:?}", result.err());
+    }
+}
+
 #[test]
 fn posix_utime_errno_headers() {
     // badc bundles POSIX <utime.h> (struct utimbuf) and the ENOTCONN errno.

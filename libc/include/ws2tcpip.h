@@ -10,6 +10,8 @@
 // getservbyname, gethostbyname and the AI_PASSIVE / NI_MAXHOST /
 // NI_NUMERICHOST / NI_NUMERICSERV constants come from <netdb.h>.
 #include <netdb.h>
+// The IPv6 address predicates (ws2tcpip.h, ws2ipdef.h).
+#include <__badc_in6.h>
 
 // Presentation-form buffer lengths including the terminating NUL
 // (ws2ipdef.h).

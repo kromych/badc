@@ -228,6 +228,7 @@ __badc_wprocess.h	-	-	-	-	-
 __badc_wtime.h	-	-	-	-	-
 __badc_wconio.h	-	-	-	-	-
 __badc_wctype.h	-	-	-	-	-
+__badc_in6.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p

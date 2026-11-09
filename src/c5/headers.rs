@@ -440,6 +440,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("__badc_wtime.h", INTERNAL),
     header!("__badc_wconio.h", INTERNAL),
     header!("__badc_wctype.h", INTERNAL),
+    header!("__badc_in6.h", INTERNAL),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),

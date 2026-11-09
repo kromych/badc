@@ -1619,10 +1619,11 @@ mod jit_impl {
     }
 
     /// Route `#pragma binding(data ...)` references, asm operands included,
-    /// through flat-lookup imports in the fake GOT. A leftover reference has
-    /// no binding and no definition anywhere: it is the null address if the
-    /// name is weak, and refused like the linker would otherwise. `remote`
-    /// takes the ones another unit defines.
+    /// through flat-lookup imports in the fake GOT. A reference with no
+    /// binding that no other unit (`remote`) defines takes the loaded C
+    /// library's export of its name, as a call does, unless the name is
+    /// weak, which is the null address; a name the library lacks is refused
+    /// once the imports bind.
     fn route_jit_data_imports(
         build: &mut Build,
         weak: &BTreeSet<String>,
@@ -1636,7 +1637,10 @@ mod jit_impl {
                 slots.route_ref(build, &r)?;
             } else if remote(&r) {
             } else if !weak.contains(r.symbol_name.as_str()) {
-                return Err(undefined_reference(&r.symbol_name));
+                if !slots.admit_flat(&r.symbol_name) {
+                    return Err(undefined_reference(&r.symbol_name));
+                }
+                slots.route_ref(build, &r)?;
             } else if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
                 return Err(C5Error::hard(
                     Code::RELOCATION,
@@ -2326,8 +2330,13 @@ mod jit_impl {
                         Ok(cs) => cs,
                         Err(_) => continue, // unreachable: symbol names are static ASCII
                     };
-                    let h = handles[imp.dylib_index];
-                    addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                    if let Some(&h) = handles.get(imp.dylib_index) {
+                        addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                    }
+                    // A flat lookup takes the name from any loaded module.
+                    if addr == 0 && imp.flat_lookup {
+                        addr = self.resolve_symbol(imp.real_symbol.as_str());
+                    }
                 }
                 let slot_off = i * 8;
                 unsafe {

@@ -3906,6 +3906,16 @@ impl DataImportSlots {
         self.hosts.contains_key(name)
     }
 
+    /// Take `name`, which nothing binds, as the loaded libraries' export of
+    /// that name, as a dynamic linker's flat lookup finds it; false where
+    /// the lookup is not flat.
+    pub(crate) fn admit_flat(&mut self, name: &str) -> bool {
+        if self.flat {
+            self.hosts.insert(name.into(), (name.into(), 0));
+        }
+        self.flat
+    }
+
     /// Route `r` through its object's slot, which stands in for the address
     /// alone: an x86-64 asm `sym(%rip)` qualifies only as a `lea` operand.
     pub(crate) fn route_ref(

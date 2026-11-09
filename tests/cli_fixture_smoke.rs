@@ -5650,7 +5650,8 @@ fn interp_draws_rand_and_reports_errors_as_the_target_library_does() {
 /// The interpreter runs the C-library functions these fixtures reach,
 /// through its own definitions and the on-demand sources, for every target:
 /// `tmpfile`, `pread`/`pwrite`, `lseek` and its Windows spellings, Linux's
-/// `copy_file_range`, and the GNU string extensions.
+/// `copy_file_range`, the GNU string extensions, and the BSD string and XSI
+/// character functions.
 #[test]
 fn interp_runs_the_file_and_string_extension_fixtures() {
     let targets = [
@@ -5661,7 +5662,11 @@ fn interp_runs_the_file_and_string_extension_fixtures() {
         "macos-aarch64",
     ];
     for target in targets {
-        for fixture in ["copy_file_range_posix.c", "string_gnu_ext.c"] {
+        for fixture in [
+            "copy_file_range_posix.c",
+            "string_gnu_ext.c",
+            "self_declared_string_and_ctype_extensions.c",
+        ] {
             let out = Command::new(env!("CARGO_BIN_EXE_badc"))
                 .arg(format!("--target={target}"))
                 .arg("--interp")

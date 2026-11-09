@@ -1442,17 +1442,53 @@ pub fn link_executable_with_runtime(
 }
 
 /// Link `objs` as the driver links an executable for `target`: under the
-/// target's container format.
+/// target's container format, a `hosted` link importing what the objects
+/// leave undefined from the target's C library.
 #[cfg(feature = "full")]
 fn link_for_target(
     objs: &[crate::NativeObject],
     target: crate::Target,
+    hosted: bool,
 ) -> Result<crate::MergedNative, crate::C5Error> {
     let opts = crate::LinkOptions {
         format: target.binary_format(),
         ..Default::default()
     };
-    crate::link_native_objects_with(objs, &[], &opts)
+    let mut libc = crate::TargetCLibrary::new(target);
+    if hosted {
+        for name in unresolved(objs, true) {
+            libc.admit(name.strip_prefix("__imp_").unwrap_or(&name));
+        }
+    }
+    let shared: Vec<_> = (libc.libraries())
+        .filter(|l| !l.exports.is_empty())
+        .cloned()
+        .collect();
+    crate::link_native_objects_with(objs, &shared, &opts)
+}
+
+/// The names `objs` reference and none defines; with `weak`, weak
+/// references too.
+#[cfg(feature = "full")]
+fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::BTreeSet<String> {
+    let mut defined = alloc::collections::BTreeSet::new();
+    let mut undefined = alloc::collections::BTreeSet::new();
+    for o in objs {
+        for s in &o.symbols {
+            if s.binding == 0 {
+                continue;
+            }
+            if s.section == crate::NativeSymSection::Undef {
+                if (weak || s.binding == 1) && !defined.contains(&s.name) {
+                    undefined.insert(s.name.clone());
+                }
+            } else {
+                defined.insert(s.name.clone());
+                undefined.remove(&s.name);
+            }
+        }
+    }
+    undefined
 }
 
 /// [`link_executable_with_runtime`] for an executable of `form`.
@@ -1523,7 +1559,7 @@ pub fn link_executable_with_runtime_as(
 
     append_on_demand_objects(&mut objs, target, reloc)?;
 
-    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, true).map_err(|e| format!("link: {e}"))?;
     let plt =
         crate::emit_plt_for(&mut merged, target, form.placed()).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.as_deref().unwrap_or("main");
@@ -1554,26 +1590,7 @@ fn append_on_demand_objects(
     reloc: crate::NativeOptions,
 ) -> Result<(), String> {
     use crate::{NativeSymSection, embedded_compiler_rt, embedded_libc};
-    let unresolved = |objs: &[crate::NativeObject]| {
-        let mut defined = alloc::collections::BTreeSet::new();
-        let mut undefined = alloc::collections::BTreeSet::new();
-        for o in objs {
-            for s in &o.symbols {
-                if s.binding == 0 {
-                    continue;
-                }
-                if s.section == NativeSymSection::Undef {
-                    if s.binding == 1 && !defined.contains(&s.name) {
-                        undefined.insert(s.name.clone());
-                    }
-                } else {
-                    defined.insert(s.name.clone());
-                    undefined.remove(&s.name);
-                }
-            }
-        }
-        undefined
-    };
+    let unresolved = |objs: &[crate::NativeObject]| unresolved(objs, false);
     if unresolved(objs).is_empty() {
         return Ok(());
     }
@@ -1773,7 +1790,7 @@ pub fn link_executable_with_runtime_multi(
         objs.push(parse_native_elf(&bytes).map_err(|e| format!("parse user object {i}: {e}"))?);
     }
 
-    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, true).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
@@ -1806,7 +1823,7 @@ pub fn link_freestanding(
     let prog_bytes = emit_native_with_options(program, target, reloc)
         .map_err(|e| format!("emit program object: {e}"))?;
     let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
-    let mut merged = link_for_target(&objs, target).map_err(|e| format!("link: {e}"))?;
+    let mut merged = link_for_target(&objs, target, false).map_err(|e| format!("link: {e}"))?;
     let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,

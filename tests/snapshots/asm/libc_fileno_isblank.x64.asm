@@ -50,6 +50,42 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
+               	movl	$0x20, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x9, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	$0x4, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x41, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x5, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	popq	%rbp
+               	retq
                	xorl	%eax, %eax
                	popq	%rbp
                	retq

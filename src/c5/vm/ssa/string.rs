@@ -43,6 +43,10 @@ pub(super) const NAMES: &[&str] = &[
     "strndup",
     "strtok",
     "strtok_r",
+    "strsep",
+    "strlcpy",
+    "strlcat",
+    "mempcpy",
     "bzero",
     "explicit_bzero",
     "bcopy",
@@ -58,6 +62,9 @@ pub(super) const NAMES: &[&str] = &[
     "isspace",
     "isupper",
     "isxdigit",
+    "isblank",
+    "isascii",
+    "toascii",
     "tolower",
     "toupper",
 ];
@@ -447,6 +454,51 @@ fn run(name: &str, args: &[i64], mem: &mut Memory) -> Result<i64, C5Error> {
             }
             tok
         }
+        "strsep" => {
+            let slot = p(0)?;
+            mem.check_data_access(slot, 8, AccessKind::Read)?;
+            let start = super::load_from_memory(mem, slot, super::LoadKind::I64)? as usize;
+            if start == 0 {
+                return Ok(0);
+            }
+            let (s, delim) = (mem.c_string(start)?, mem.c_string(p(1)?)?);
+            let next = match s.iter().position(|c| delim.contains(c)) {
+                Some(len) => {
+                    mem.write_checked(start + len, &[0])?;
+                    start + len + 1
+                }
+                None => 0,
+            };
+            mem.write_checked(slot, &(next as u64).to_le_bytes())?;
+            start as i64
+        }
+        "strlcpy" | "strlcat" => {
+            let size = n(2)?;
+            let d = if size > 0 { p(0)? } else { 0 };
+            let used = if name == "strlcat" && size > 0 {
+                mem.c_strnlen(d, size)?
+            } else {
+                0
+            };
+            let s = mem.c_string(p(1)?)?;
+            if used < size {
+                let mut bytes = s[..s.len().min(size - used - 1)].to_vec();
+                bytes.push(0);
+                mem.write_checked(d + used, &bytes)?;
+            }
+            (used + s.len()) as i64
+        }
+        "mempcpy" => {
+            let (d, len) = (arg(name, args, 0)?, n(2)?);
+            if len > 0 {
+                let bytes = mem.read_checked(p(1)?, len)?;
+                mem.write_checked(p(0)?, &bytes)?;
+            }
+            d + len as i64
+        }
+        "isblank" => i64::from(matches!(arg(name, args, 0)? as i32, 0x20 | 0x09)),
+        "isascii" => i64::from((arg(name, args, 0)? as i32 as u32) < 0x80),
+        "toascii" => arg(name, args, 0)? & 0x7f,
         "strxfrm" => {
             let s = mem.c_string(p(1)?)?;
             let len = n(2)?;

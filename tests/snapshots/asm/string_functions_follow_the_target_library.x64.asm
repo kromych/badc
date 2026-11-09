@@ -70,23 +70,20 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
-               	setl	%sil
-               	movzbq	%sil, %rsi
-               	leaq	-0x40(%rbp), %rcx
+               	setl	%r13b
+               	movzbq	%r13b, %r13
+               	leaq	-0x40(%rbp), %rdi
+               	movl	$0x4, %esi
                	xorl	%eax, %eax
-               	cmpb	$0x0, (%rcx,%rax)
-               	je	<addr>
-               	incq	%rax
-               	cmpl	$0x4, %eax
-               	jb	<addr>
+               	callq	<addr>
                	leaq	<rip>, %rdi
                	leaq	-0x40(%rbp), %rdx
                	xorl	%r8d, %r8d
                	subq	$0x10, %rsp
                	movq	%rax, (%rsp)
-               	movq	%r12, %rcx
-               	movq	%rsi, %r9
                	movq	%rbx, %rsi
+               	movq	%r13, %r9
+               	movq	%r12, %rcx
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp

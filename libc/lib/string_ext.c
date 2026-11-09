@@ -1,7 +1,9 @@
 // String routines <string.h> declares for every target but only some C
 // libraries export: GNU `strchrnul` / `memrchr` / `explicit_bzero`,
-// which neither libSystem nor msvcrt has, and POSIX `strndup`, GNU
-// `memmem` and C99's three-argument `wcstok`, which msvcrt has not. Each
+// which neither libSystem nor msvcrt has, BSD `strlcpy` / `strlcat`,
+// which glibc has only above the version floor, and POSIX `strndup`,
+// BSD `strsep`, GNU `memmem` and C99's three-argument `wcstok`, which
+// msvcrt has not. Each
 // block is gated to the targets
 // with no definition
 // to bind, so elsewhere this file compiles to nothing. The native-link
@@ -50,8 +52,46 @@ void explicit_bzero(void *s, size_t n) {
 
 #endif
 
+#ifndef __APPLE__
+
+// BSD: copy into a `size`-byte buffer, truncating and NUL-terminating;
+// the result is the length of `src`.
+size_t strlcpy(char *restrict dst, const char *restrict src, size_t size) {
+    size_t len = strlen(src);
+    if (size != 0) {
+        size_t n = len < size - 1 ? len : size - 1;
+        memcpy(dst, src, n);
+        dst[n] = 0;
+    }
+    return len;
+}
+
+// BSD: append to the string in a `size`-byte buffer; the result is the
+// length of the string it tried to create.
+size_t strlcat(char *restrict dst, const char *restrict src, size_t size) {
+    size_t used = strnlen(dst, size);
+    if (used == size) {
+        return size + strlen(src);
+    }
+    return used + strlcpy(dst + used, src, size - used);
+}
+
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
+
+// BSD: split `*stringp` at the first byte of `delim`, which is
+// overwritten with NUL; `*stringp` moves past it, or to null at the end.
+char *strsep(char **stringp, const char *delim) {
+    char *start = *stringp;
+    if (start != 0) {
+        char *end = start + strcspn(start, delim);
+        *stringp = *end ? end + 1 : 0;
+        *end = 0;
+    }
+    return start;
+}
 
 // POSIX.1-2008 7.24.1.4: copy at most `n` bytes and NUL-terminate.
 char *strndup(const char *s, size_t n) {

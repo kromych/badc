@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=533 ---
+; --- SSA dump (ok=true) ent_pc=529 ---
 ; name=check_products_packs
-fn ent_pc=533 n_params=2 variadic=false locals=10
+fn ent_pc=529 n_params=2 variadic=false locals=10
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -944,9 +944,9 @@ fn ent_pc=533 n_params=2 variadic=false locals=10
     v267 Imm(2)                                           -> x0
     v268 Imm(0)                                           -> x1
     terminator Jmp(b92)   (exit_acc=v267)
-; --- SSA dump (ok=true) ent_pc=535 ---
+; --- SSA dump (ok=true) ent_pc=531 ---
 ; name=check_blends
-fn ent_pc=535 n_params=3 variadic=false locals=4
+fn ent_pc=531 n_params=3 variadic=false locals=4
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1735,9 +1735,9 @@ fn ent_pc=535 n_params=3 variadic=false locals=4
   block 89  start_pc=0
     v676 Imm(0)                                           -> x13
     terminator Jmp(b14)
-; --- SSA dump (ok=true) ent_pc=537 ---
+; --- SSA dump (ok=true) ent_pc=533 ---
 ; name=check_ptest
-fn ent_pc=537 n_params=2 variadic=false locals=5
+fn ent_pc=533 n_params=2 variadic=false locals=5
   spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -3042,9 +3042,9 @@ fn ent_pc=537 n_params=2 variadic=false locals=5
     terminator Return(v1118)   (exit_acc=v1118)
   block 31  start_pc=0
     terminator Jmp(b30)
-; --- SSA dump (ok=true) ent_pc=539 ---
+; --- SSA dump (ok=true) ent_pc=535 ---
 ; name=check_mpsadbw
-fn ent_pc=539 n_params=2 variadic=false locals=4
+fn ent_pc=535 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -4942,9 +4942,9 @@ fn ent_pc=539 n_params=2 variadic=false locals=4
   block 195  start_pc=0
     v1503 Imm(0)                                           -> x13
     terminator Jmp(b23)
-; --- SSA dump (ok=true) ent_pc=540 ---
+; --- SSA dump (ok=true) ent_pc=536 ---
 ; name=main
-fn ent_pc=540 n_params=0 variadic=false locals=18
+fn ent_pc=536 n_params=0 variadic=false locals=18
   spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -5471,7 +5471,7 @@ fn ent_pc=540 n_params=0 variadic=false locals=18
     v404 Extend { value=v402, kind=I32 }                  -> x0
     v405 LocalAddr(-18)                                   -> x7
     v406 LocalAddr(-16)                                   -> x6
-    v407 Call { target_pc=533, args=[v405, v406], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v407 Call { target_pc=529, args=[v405, v406], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v408 Extend { value=v407, kind=I32 }                  -> x1
     v409 Binop { op=or, lhs=v402, rhs=v407 }              -> x15
     v410 Imm(0)                                           -> x0
@@ -5733,7 +5733,7 @@ fn ent_pc=540 n_params=0 variadic=false locals=18
     v628 LocalAddr(-18)                                   -> x7
     v629 LocalAddr(-16)                                   -> x6
     v630 LocalAddr(-14)                                   -> x2
-    v631 Call { target_pc=535, args=[v628, v629, v630], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v631 Call { target_pc=531, args=[v628, v629, v630], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v632 Extend { value=v631, kind=I32 }                  -> x1
     v633 Binop { op=or, lhs=v625, rhs=v631 }              -> x15
     v634 Imm(0)                                           -> x0
@@ -6175,7 +6175,7 @@ fn ent_pc=540 n_params=0 variadic=false locals=18
     v813 Extend { value=v811, kind=I32 }                  -> x0
     v814 LocalAddr(-18)                                   -> x7
     v815 LocalAddr(-16)                                   -> x6
-    v816 Call { target_pc=537, args=[v814, v815], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v816 Call { target_pc=533, args=[v814, v815], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v817 Extend { value=v816, kind=I32 }                  -> x1
     v818 Binop { op=or, lhs=v811, rhs=v816 }              -> x14
     v819 Imm(0)                                           -> x0
@@ -6503,7 +6503,7 @@ fn ent_pc=540 n_params=0 variadic=false locals=18
     v1094 Extend { value=v1092, kind=I32 }                 -> x0
     v1095 LocalAddr(-18)                                   -> x7
     v1096 LocalAddr(-16)                                   -> x6
-    v1097 Call { target_pc=539, args=[v1095, v1096], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1097 Call { target_pc=535, args=[v1095, v1096], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1098 Extend { value=v1097, kind=I32 }                 -> x1
     v1099 Binop { op=or, lhs=v1092, rhs=v1097 }            -> [spill 1]
     v1100 Imm(0)                                           -> x0

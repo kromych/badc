@@ -288,80 +288,36 @@ errno_t _strset_s(char *_Dst, size_t _DstSize, int _Value);
 #include <__badc_wstring.h>
 #endif
 
-// POSIX.1-2008 / BSD `<string.h>` helpers that not every target libc
-// exports: msvcrt has none of them, and glibc gained `strlcpy`/`strlcat`
-// only in 2.38. Provided as small `static inline` definitions so portable
-// source that reaches for them (and configures HAVE_* accordingly) builds
-// on every target with no per-platform binding; an unused one costs
-// nothing. `strnlen` is POSIX; `strlcpy`/`strlcat`/`strsep` are BSD;
-// `mempcpy` is the glibc `memcpy`-returning-the-end variant.
-static inline size_t strnlen(const char *s, size_t maxlen) {
-    size_t n = 0;
-    while (n < maxlen && s[n]) {
-        n++;
-    }
-    return n;
-}
-static inline size_t strlcpy(char *dst, const char *src, size_t size) {
-    size_t srclen = 0;
-    while (src[srclen]) {
-        srclen++;
-    }
-    if (size != 0) {
-        size_t n = srclen < size - 1 ? srclen : size - 1;
-        for (size_t i = 0; i < n; i++) {
-            dst[i] = src[i];
-        }
-        dst[n] = 0;
-    }
-    return srclen;
-}
-static inline size_t strlcat(char *dst, const char *src, size_t size) {
-    size_t dstlen = 0;
-    while (dstlen < size && dst[dstlen]) {
-        dstlen++;
-    }
-    size_t srclen = 0;
-    while (src[srclen]) {
-        srclen++;
-    }
-    if (dstlen < size) {
-        size_t n = srclen < size - dstlen - 1 ? srclen : size - dstlen - 1;
-        for (size_t i = 0; i < n; i++) {
-            dst[dstlen + i] = src[i];
-        }
-        dst[dstlen + n] = 0;
-    }
-    return dstlen + srclen;
-}
-static inline char *strsep(char **stringp, const char *delim) {
-    char *start = *stringp;
-    if (start == 0) {
-        return 0;
-    }
-    for (char *p = start; *p; p++) {
-        for (const char *d = delim; *d; d++) {
-            if (*p == *d) {
-                *p = 0;
-                *stringp = p + 1;
-                return start;
-            }
-        }
-    }
-    *stringp = 0;
-    return start;
-}
-// glibc declares `mempcpy` under `_GNU_SOURCE`; libSystem and msvcrt do not,
-// so a program that supplies its own there keeps the name.
+// POSIX `strnlen` and BSD `strsep`, `strlcpy` and `strlcat`. Each is bound
+// where the C library exports it. `string_ext.c` supplies the rest: all
+// four but `strnlen` on Windows, and `strlcpy` and `strlcat` on Linux,
+// whose C library has them only from glibc 2.38, above the version floor.
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strnlen, "_strnlen")
+#pragma binding(libc::strsep,  "_strsep")
+#pragma binding(libc::strlcpy, "_strlcpy")
+#pragma binding(libc::strlcat, "_strlcat")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strnlen, "strnlen")
+#pragma binding(libc::strsep,  "strsep")
+#endif
+#ifdef _WIN32
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::strnlen, "strnlen")
+#endif
+size_t strnlen(const char *s, size_t maxlen);
+char *strsep(char **stringp, const char *delim);
+size_t strlcpy(char *restrict dst, const char *restrict src, size_t size);
+size_t strlcat(char *restrict dst, const char *restrict src, size_t size);
+// glibc's `memcpy` returning the end of the copy, declared under
+// `_GNU_SOURCE`. libSystem and msvcrt have none.
 #if defined(__linux__) && defined(_GNU_SOURCE)
-static inline void *mempcpy(void *dst, const void *src, size_t n) {
-    char *d = (char *)dst;
-    const char *s = (const char *)src;
-    for (size_t i = 0; i < n; i++) {
-        d[i] = s[i];
-    }
-    return d + n;
-}
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::mempcpy, "mempcpy")
+void *mempcpy(void *restrict dst, const void *restrict src, size_t n);
 #endif
 
 #if defined(__APPLE__) || defined(__linux__)

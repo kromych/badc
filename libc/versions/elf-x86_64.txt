@@ -352,7 +352,9 @@ isalnum                                  GLIBC_2.2.5
 isalnum_l                                GLIBC_2.3
 isalpha                                  GLIBC_2.2.5
 isalpha_l                                GLIBC_2.3
+isascii                                  GLIBC_2.2.5
 isatty                                   GLIBC_2.2.5
+isblank                                  GLIBC_2.2.5
 isblank_l                                GLIBC_2.3
 iscntrl                                  GLIBC_2.2.5
 iscntrl_l                                GLIBC_2.3
@@ -449,6 +451,7 @@ memcpy                                   GLIBC_2.14
 memfd_create                             GLIBC_2.27
 memmem                                   GLIBC_2.2.5
 memmove                                  GLIBC_2.2.5
+mempcpy                                  GLIBC_2.2.5
 memrchr                                  GLIBC_2.2.5
 memset                                   GLIBC_2.2.5
 mincore                                  GLIBC_2.2.5
@@ -836,9 +839,11 @@ strncat                                  GLIBC_2.2.5
 strncmp                                  GLIBC_2.2.5
 strncpy                                  GLIBC_2.2.5
 strndup                                  GLIBC_2.2.5
+strnlen                                  GLIBC_2.2.5
 strpbrk                                  GLIBC_2.2.5
 strptime                                 GLIBC_2.2.5
 strrchr                                  GLIBC_2.2.5
+strsep                                   GLIBC_2.2.5
 strsignal                                GLIBC_2.2.5
 strspn                                   GLIBC_2.2.5
 strstr                                   GLIBC_2.2.5
@@ -894,6 +899,7 @@ timespec_get                             GLIBC_2.16
 timezone                                 GLIBC_2.2.5
 tmpfile                                  GLIBC_2.2.5
 tmpnam                                   GLIBC_2.2.5
+toascii                                  GLIBC_2.2.5
 tolower                                  GLIBC_2.2.5
 tolower_l                                GLIBC_2.3
 toupper                                  GLIBC_2.2.5

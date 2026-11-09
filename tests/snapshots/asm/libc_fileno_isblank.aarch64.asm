@@ -40,6 +40,34 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x20               // =32
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x9                // =9
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x41               // =65
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xa                // =10
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x6                // =6
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret

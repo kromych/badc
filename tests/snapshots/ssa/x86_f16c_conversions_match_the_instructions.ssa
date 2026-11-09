@@ -520,9 +520,9 @@ fn ent_pc=954 n_params=4 variadic=false locals=0
     v60  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> x2
     v61  Imm(0)                                           -> x2
     terminator Jmp(b13)   (exit_acc=v16)
-; --- SSA dump (ok=true) ent_pc=1040 ---
+; --- SSA dump (ok=true) ent_pc=1036 ---
 ; name=main
-fn ent_pc=1040 n_params=0 variadic=false locals=11
+fn ent_pc=1036 n_params=0 variadic=false locals=11
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

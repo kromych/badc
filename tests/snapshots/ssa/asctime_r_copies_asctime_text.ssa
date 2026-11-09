@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=4 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=11
+fn ent_pc=0 n_params=0 variadic=false locals=11
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -32,7 +32,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
     v26  LocalAddr(-7)                                    -> x0
     v27  Imm(5)                                           -> x0
     v28  StoreLocal { off=-7, value=v27, kind=I32 }       -> -
-    v29  ImmExtCode(binding=67)                           -> x0
+    v29  ImmExtCode(binding=69)                           -> x0
     v30  Imm(0)                                           -> x1
     v31  LocalAddr(-7)                                    -> x7
     v32  Imm(0)                                           -> x1
@@ -118,7 +118,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
     v106 StoreLocal { off=-11, disp=25, value=v49, kind=I8 } -> -
     v107 LocalAddr(-7)                                    -> x7
     v108 LocalAddr(-11)                                   -> x0
-    v109 CallExt { binding_idx=68, args=[v107, v48], fp_arg_mask=0x0 } -> x0
+    v109 CallExt { binding_idx=70, args=[v107, v48], fp_arg_mask=0x0 } -> x0
     v110 LocalAddr(-11)                                   -> x7
     v111 Binop { op=ne, lhs=v109, rhs=v110 }              -> x0
     v112 Imm(0)                                           -> x1
@@ -148,7 +148,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
     v130 StoreLocal { off=-7, disp=12, value=v129, kind=I32 } -> -
     v131 LocalAddr(-7)                                    -> x0
     v132 LocalAddr(-11)                                   -> x6
-    v133 CallExt { binding_idx=68, args=[v123, v132], fp_arg_mask=0x0 } -> x7
+    v133 CallExt { binding_idx=70, args=[v123, v132], fp_arg_mask=0x0 } -> x7
     v134 ImmData(88)                                      -> x6
     v135 CallExt { binding_idx=18, args=[v133, v134], fp_arg_mask=0x0 } -> x0
     v136 BinopI { op=ne, lhs=v135, rhs_imm=0 }            -> x1

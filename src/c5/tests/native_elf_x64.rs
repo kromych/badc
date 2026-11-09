@@ -481,6 +481,34 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     build_and_run_outcome_with_options(&src, &format!("fixture-{stem}{suffix}"), opts)
 }
 
+/// glibc exports `strlcpy` and `strlcat` only above the version floor, so a
+/// Linux image takes them from `libc/lib/string_ext.c`, which joins the link
+/// because the fixture leaves them undefined. `fixture_parity` emits one
+/// object and never links; this builds the fixture through the
+/// object-then-link writer.
+#[test]
+fn string_extensions_join_the_linux_link() {
+    let src = super::load_fixture("self_declared_string_and_ctype_extensions.c");
+    let program = super::compile_str_bare_for(&src, Target::LinuxX64);
+    for opts in [
+        NativeOptions::default(),
+        NativeOptions::new().with_optimize(),
+    ] {
+        let bytes = super::link_executable_with_runtime(&program, Target::LinuxX64, opts)
+            .expect("link the fixture");
+        let path = super::unique_temp_path("badc-elf64-test", "string-ext-link", ".bin");
+        {
+            let mut f = std::fs::File::create(&path).expect("create temp file");
+            f.write_all(&bytes).expect("write temp file");
+            f.sync_all().expect("sync temp file");
+        }
+        set_executable(&path);
+        let output = exec_with_retry(&path).expect("run the fixture");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+    }
+}
+
 #[test]
 fn fixture_parity() {
     let failures = super::parity_failures(NATIVE_ELF_X64_FIXTURES, |name, expected| {

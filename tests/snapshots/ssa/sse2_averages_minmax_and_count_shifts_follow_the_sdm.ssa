@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=419 ---
+; --- SSA dump (ok=true) ent_pc=415 ---
 ; name=check_products_and_averages
-fn ent_pc=419 n_params=2 variadic=false locals=8
+fn ent_pc=415 n_params=2 variadic=false locals=8
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1593,9 +1593,9 @@ fn ent_pc=419 n_params=2 variadic=false locals=8
   block 103  start_pc=0
     v1606 Imm(0)                                           -> x13
     terminator Jmp(b98)
-; --- SSA dump (ok=true) ent_pc=422 ---
+; --- SSA dump (ok=true) ent_pc=418 ---
 ; name=check_count_shifts
-fn ent_pc=422 n_params=2 variadic=false locals=5
+fn ent_pc=418 n_params=2 variadic=false locals=5
   spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2198,9 +2198,9 @@ fn ent_pc=422 n_params=2 variadic=false locals=5
     v54  Extend { value=v9, kind=I32 }                    -> x0
     v55  Extend { value=v9, kind=I32 }                    -> x0
     terminator Return(v9)   (exit_acc=v9)
-; --- SSA dump (ok=true) ent_pc=423 ---
+; --- SSA dump (ok=true) ent_pc=419 ---
 ; name=check_byte_shifts
-fn ent_pc=423 n_params=1 variadic=false locals=4
+fn ent_pc=419 n_params=1 variadic=false locals=4
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2863,9 +2863,9 @@ fn ent_pc=423 n_params=1 variadic=false locals=4
   block 78  start_pc=0
     v520 Imm(0)                                           -> x12
     terminator Jmp(b5)
-; --- SSA dump (ok=true) ent_pc=426 ---
+; --- SSA dump (ok=true) ent_pc=422 ---
 ; name=main
-fn ent_pc=426 n_params=0 variadic=false locals=28
+fn ent_pc=422 n_params=0 variadic=false locals=28
   spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -2985,7 +2985,7 @@ fn ent_pc=426 n_params=0 variadic=false locals=28
     v16  Extend { value=v5, kind=I32 }                    -> x0
     v17  LocalAddr(-27)                                   -> x7
     v18  LocalAddr(-25)                                   -> x6
-    v19  Call { target_pc=419, args=[v17, v18], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v19  Call { target_pc=415, args=[v17, v18], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Extend { value=v19, kind=I32 }                   -> x1
     v21  Binop { op=or, lhs=v5, rhs=v19 }                 -> x15
     v22  Imm(0)                                           -> x0
@@ -3357,13 +3357,13 @@ fn ent_pc=426 n_params=0 variadic=false locals=28
     v276 Extend { value=v274, kind=I32 }                  -> x0
     v277 LocalAddr(-27)                                   -> x7
     v278 LocalAddr(-25)                                   -> x6
-    v279 Call { target_pc=422, args=[v277, v278], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v279 Call { target_pc=418, args=[v277, v278], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v280 Extend { value=v279, kind=I32 }                  -> x1
     v281 Binop { op=or, lhs=v274, rhs=v279 }              -> x3
     v282 Imm(0)                                           -> x0
     v283 Extend { value=v281, kind=I32 }                  -> x0
     v284 LocalAddr(-27)                                   -> x7
-    v285 Call { target_pc=423, args=[v284], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v285 Call { target_pc=419, args=[v284], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v286 Extend { value=v285, kind=I32 }                  -> x1
     v287 Binop { op=or, lhs=v281, rhs=v285 }              -> x15
     v288 Imm(0)                                           -> x0

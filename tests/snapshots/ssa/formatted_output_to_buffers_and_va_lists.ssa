@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=format
-fn ent_pc=5 n_params=3 variadic=true locals=3
+fn ent_pc=1 n_params=3 variadic=true locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -19,9 +19,9 @@ fn ent_pc=5 n_params=3 variadic=true locals=3
     v13  Extend { value=v8, kind=I32 }                    -> x1
     v14  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
-; --- SSA dump (ok=true) ent_pc=6 ---
+; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=say
-fn ent_pc=6 n_params=1 variadic=true locals=6
+fn ent_pc=2 n_params=1 variadic=true locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -77,7 +77,7 @@ fn ent_pc=6 n_params=1 variadic=true locals=6
     v34  Imm(8)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
-    v37  CallExt { binding_idx=118, args=[v22, v27], fp_arg_mask=0x0 } -> x0
+    v37  CallExt { binding_idx=120, args=[v22, v27], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v37, target=b5, fall=b4 }   (exit_acc=v37)
   block 4  start_pc=0
     v38  ImmData(144)                                     -> x1
@@ -93,9 +93,9 @@ fn ent_pc=6 n_params=1 variadic=true locals=6
     v46  Load { addr=v43, disp=8, kind=I64 pc_rel }       -> x7
     v47  LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v46)
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=8
+fn ent_pc=3 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -147,7 +147,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=8
     v46  Imm(300)                                         -> x13
     v47  LocalAddr(-22)                                   -> x14
     v48  StoreLocal { off=-22, value=v42, kind=F80 }      -> -
-    v49  Call { target_pc=5, args=[v37, v38, v39, v40, v41, v47, v43, v44, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x40 } -> x6
+    v49  Call { target_pc=1, args=[v37, v38, v39, v40, v41, v47, v43, v44, v45, v46], fixed_args=3, fp_return=false, fp_arg_mask=0x40 } -> x6
     v50  Extend { value=v49, kind=I32 }                   -> x0
     v51  Imm(0)                                           -> x0
     v52  ImmData(112)                                     -> x7
@@ -157,7 +157,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=8
     v56  ImmData(121)                                     -> x7
     v57  ImmData(129)                                     -> x6
     v58  Imm(7)                                           -> x2
-    v59  Call { target_pc=6, args=[v56, v57, v58], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v59  Call { target_pc=2, args=[v56, v57, v58], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v60  ImmData(131)                                     -> x7
     v61  Imm(0)                                           -> x6
     v62  CallExt { binding_idx=0, args=[v60, v61], fp_arg_mask=0x0 } -> x0

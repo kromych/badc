@@ -352,7 +352,9 @@ isalnum                                  GLIBC_2.17
 isalnum_l                                GLIBC_2.17
 isalpha                                  GLIBC_2.17
 isalpha_l                                GLIBC_2.17
+isascii                                  GLIBC_2.17
 isatty                                   GLIBC_2.17
+isblank                                  GLIBC_2.17
 isblank_l                                GLIBC_2.17
 iscntrl                                  GLIBC_2.17
 iscntrl_l                                GLIBC_2.17
@@ -449,6 +451,7 @@ memcpy                                   GLIBC_2.17
 memfd_create                             GLIBC_2.27
 memmem                                   GLIBC_2.17
 memmove                                  GLIBC_2.17
+mempcpy                                  GLIBC_2.17
 memrchr                                  GLIBC_2.17
 memset                                   GLIBC_2.17
 mincore                                  GLIBC_2.17
@@ -836,9 +839,11 @@ strncat                                  GLIBC_2.17
 strncmp                                  GLIBC_2.17
 strncpy                                  GLIBC_2.17
 strndup                                  GLIBC_2.17
+strnlen                                  GLIBC_2.17
 strpbrk                                  GLIBC_2.17
 strptime                                 GLIBC_2.17
 strrchr                                  GLIBC_2.17
+strsep                                   GLIBC_2.17
 strsignal                                GLIBC_2.17
 strspn                                   GLIBC_2.17
 strstr                                   GLIBC_2.17
@@ -894,6 +899,7 @@ timespec_get                             GLIBC_2.17
 timezone                                 GLIBC_2.17
 tmpfile                                  GLIBC_2.17
 tmpnam                                   GLIBC_2.17
+toascii                                  GLIBC_2.17
 tolower                                  GLIBC_2.17
 tolower_l                                GLIBC_2.17
 toupper                                  GLIBC_2.17

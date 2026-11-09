@@ -1,9 +1,9 @@
 info: auto-including <stdio.h> for undeclared `vsnprintf`
 info: auto-including <string.h> for undeclared `memset`
 info: auto-including <stdlib.h> for undeclared `malloc`
-; --- SSA dump (ok=true) ent_pc=11 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=format
-fn ent_pc=11 n_params=3 variadic=true locals=3
+fn ent_pc=7 n_params=3 variadic=true locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -22,9 +22,9 @@ fn ent_pc=11 n_params=3 variadic=true locals=3
     v13  Extend { value=v8, kind=I32 }                    -> x1
     v14  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
-; --- SSA dump (ok=true) ent_pc=12 ---
+; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
-fn ent_pc=12 n_params=0 variadic=false locals=11
+fn ent_pc=8 n_params=0 variadic=false locals=11
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -268,7 +268,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     v190 Imm(42)                                          -> x1
     v191 ImmData(58)                                      -> x8
     v192 Imm(4602678819172646912)                         -> x0
-    v193 Call { target_pc=11, args=[v187, v188, v189, v190, v191, v192], fixed_args=3, fp_return=false, fp_arg_mask=0x20 } -> x0
+    v193 Call { target_pc=7, args=[v187, v188, v189, v190, v191, v192], fixed_args=3, fp_return=false, fp_arg_mask=0x20 } -> x0
     v194 Extend { value=v193, kind=I32 }                  -> x1
     v195 BinopI { op=ne, lhs=v193, rhs_imm=9 }            -> x0
     terminator Bz { cond=v195, target=b26, fall=b25 }   (exit_acc=v195)
@@ -288,7 +288,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     terminator Return(v202)   (exit_acc=v202)
   block 28  start_pc=0
     v204 LoadLocal { off=-2, kind=I64, volatile }         -> x7
-    v205 CallExt { binding_idx=118, args=[v204], fp_arg_mask=0x0 } -> x3
+    v205 CallExt { binding_idx=120, args=[v204], fp_arg_mask=0x0 } -> x3
     v206 Imm(0)                                           -> x0
     v207 Imm(0)                                           -> x0
     v208 BinopI { op=eq, lhs=v205, rhs_imm=0 }            -> x0
@@ -309,7 +309,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     v219 BinopI { op=eq, lhs=v218, rhs_imm=0 }            -> x0
     v220 Imm(0)                                           -> x0
     v221 Imm(0)                                           -> x0
-    v222 CallExt { binding_idx=121, args=[v205], fp_arg_mask=0x0 } -> x0
+    v222 CallExt { binding_idx=123, args=[v205], fp_arg_mask=0x0 } -> x0
     v223 Extend { value=v219, kind=I32 }                  -> x0
     terminator Bnz { cond=v218, target=b33, fall=b31 }   (exit_acc=v219)
   block 31  start_pc=0

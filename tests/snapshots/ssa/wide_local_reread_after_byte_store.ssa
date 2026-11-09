@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=4 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=keep
-fn ent_pc=4 n_params=1 variadic=false locals=0
+fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -10,9 +10,9 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Store { addr=v3, disp=0, value=v1, kind=I64, volatile pc_rel } -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=5 ---
+; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=long_double_reread
-fn ent_pc=5 n_params=0 variadic=false locals=0
+fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -20,7 +20,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v2   Load { addr=v1, disp=0, kind=F80, volatile }     -> d0
     v3   StoreLocal { off=-13, value=v2, kind=F80 }       -> -
     v4   LocalAddr(-13)                                   -> x7
-    v5   Call { target_pc=4, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v5   Call { target_pc=0, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v6   LocalAddr(-13)                                   -> x0
     v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=-13, kind=F80 }                  -> d0
@@ -72,13 +72,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v41  Imm(1)                                           -> x0
     v42  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v41)
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=0
+fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Call { target_pc=5, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v1   Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2   Extend { value=v1, kind=I32 }                    -> x0
     v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1

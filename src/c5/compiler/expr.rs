@@ -3284,7 +3284,11 @@ impl Compiler {
         self.next()?;
         self.expr(Token::Inc as i64)?;
         let operand_ref = self.pending.object_ref.take();
+        // Whether `*e` is an array row, whose value is its address; any
+        // other pointer result is a value loaded out of the object.
+        let mut row = false;
         if let Some(id) = self.ptr_array_id_depth1(self.ty) {
+            row = true;
             // A pointer-to-array tag is never a function pointer, and a cast
             // leaves the decay depth at 0, so this is tested first: `*p` reaches
             // the array, which decays to a pointer to its first element (C99
@@ -3341,10 +3345,9 @@ impl Compiler {
         }
         // `*e` is element 0 of what `e` points at: of the object the
         // operand designates when its value is that address, and of an
-        // object reached through a pointer otherwise. A pointer result
-        // is a row, whose address is the value.
+        // object reached through a pointer otherwise.
         if self.pending.object_size_operands > 0 {
-            let decays = is_pointer_ty(self.ty);
+            let decays = row;
             self.pending.object_ref = Some(match operand_ref {
                 Some(r) if r.addr => {
                     let stride = if decays {
@@ -3475,9 +3478,15 @@ impl Compiler {
             self.pending.fn_ptr_chain_depth += 1;
         }
         // The value is now the address of the object the operand
-        // designates, which is what `__builtin_object_size` answers for.
+        // designates, which is what `__builtin_object_size` answers for;
+        // an array element's address answers for the array holding it.
         if let Some(r) = self.pending.object_ref {
-            self.pending.object_ref = Some(super::ObjectRef { addr: true, ..r });
+            self.pending.object_ref = Some(super::ObjectRef {
+                addr: true,
+                sub: r.element_of.or(r.sub),
+                element_of: None,
+                ..r
+            });
         }
         Ok(())
     }

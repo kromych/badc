@@ -340,6 +340,10 @@ pub struct ObjectRef {
     pub records: u32,
     /// Every struct container crossed selected its last member.
     pub at_end: bool,
+    /// For an array element that is itself an array, the extent of the
+    /// array holding it from the element on: the closest subobject of the
+    /// element's address, where the element read as a value is its own.
+    pub element_of: Option<Extent>,
 }
 
 impl ObjectRef {
@@ -352,6 +356,7 @@ impl ObjectRef {
         via_pointer: true,
         records: 0,
         at_end: true,
+        element_of: None,
     };
 
     /// A chain starting at a declared object of `size` bytes, `array`
@@ -366,6 +371,7 @@ impl ObjectRef {
             via_pointer: false,
             records: 0,
             at_end: true,
+            element_of: None,
         }
     }
 
@@ -387,6 +393,7 @@ impl ObjectRef {
             whole: None,
             sub: None,
             array: None,
+            element_of: None,
             ..self
         }
     }

@@ -342,6 +342,7 @@ impl Compiler {
             via_pointer: base.via_pointer,
             records,
             at_end,
+            element_of: None,
         };
         if field.bit_width > 0 {
             // A bitfield has no address, and `offset` names its storage
@@ -429,10 +430,23 @@ impl Compiler {
         let Some(k) = index else {
             return base.offset_unknown();
         };
+        // An element that is itself an array, a row, is its own closest
+        // subobject; a scalar element's is the array holding it.
         match base.array {
             Some(bytes) => ObjectRef {
                 whole: base.whole.map(|e| e.advanced(k * stride)),
-                sub: Some(Extent {
+                sub: Some(if decays {
+                    Extent {
+                        size: stride,
+                        offset: 0,
+                    }
+                } else {
+                    Extent {
+                        size: bytes,
+                        offset: k * stride,
+                    }
+                }),
+                element_of: decays.then_some(Extent {
                     size: bytes,
                     offset: k * stride,
                 }),
@@ -442,6 +456,7 @@ impl Compiler {
             },
             None => ObjectRef {
                 addr: decays,
+                element_of: None,
                 ..base.advanced(k * stride)
             },
         }

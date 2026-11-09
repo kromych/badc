@@ -1111,6 +1111,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     ("self_declared_string_and_ctype_extensions.c", 0),
     ("semaphore_counts_and_waits.c", 0),
     ("temp_files_truncate_sleep.c", 0),
@@ -2051,6 +2052,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     // `self_declared_string_and_ctype_extensions.c` takes `strlcpy` and
     // `strlcat` from the on-demand join, which one object and no link step
     // cannot reach; `string_extensions_join_the_linux_link` covers it.
@@ -3321,6 +3323,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     // `self_declared_string_and_ctype_extensions.c` takes `strlcpy` and
     // `strlcat` from the on-demand join, which one object and no link step
     // cannot reach; `string_extensions_join_the_linux_link` covers it.
@@ -4328,6 +4331,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     ("self_declared_string_and_ctype_extensions.c", 0),
     ("windows_unwind_api_walks_to_the_caller.c", 0),
     ("semaphore_counts_and_waits.c", 0),
@@ -5266,6 +5270,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     ("self_declared_string_and_ctype_extensions.c", 0),
     ("windows_unwind_api_walks_to_the_caller.c", 0),
     ("semaphore_counts_and_waits.c", 0),
@@ -6180,6 +6185,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
     ("creat_creates_and_truncates.c", 0),
+    ("object_size_of_a_dereferenced_pointer_variable.c", 0),
     ("self_declared_string_and_ctype_extensions.c", 0),
     ("semaphore_counts_and_waits.c", 0),
     ("temp_files_truncate_sleep.c", 0),

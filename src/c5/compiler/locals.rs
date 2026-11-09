@@ -738,7 +738,7 @@ impl Compiler {
             }
             // `weak` / `visibility("hidden")` are not part of the shadow
             // snapshot, so they reach the symbol table past the scope.
-            self.apply_symbol_attributes(d.loc_idx);
+            self.apply_symbol_attributes(d.loc_idx)?;
             self.apply_dllimport(d.loc_idx, Default::default())?;
         } else if d.is_static {
             let internal = super::dllimport::DllImportDecl {
@@ -786,7 +786,7 @@ impl Compiler {
             let r = self.allocate_static_local(d.loc_idx, d.ty, d.array_size);
             self.static_duration_init -= 1;
             r?;
-            self.push_block_static_record(d.loc_idx, d.ty);
+            self.push_block_static_record(d.loc_idx, d.ty)?;
             if let Some(record) = self.symbols[d.loc_idx].entity_record
                 && !self.symbols[d.loc_idx].is_thread_local
             {
@@ -1043,7 +1043,7 @@ impl Compiler {
             }
             sym.is_noreturn |= self.pending.attrs.noreturn;
         }
-        self.apply_symbol_attributes(ent);
+        self.apply_symbol_attributes(ent)?;
         self.apply_dllimport(ent, Default::default())?;
         if let Some(label) = label {
             self.set_asm_label(ent, label)?;
@@ -1283,7 +1283,15 @@ impl Compiler {
     /// Function close stamps `owner_ent_pc`; static DCE then treats the
     /// object as a per-instance part of its function. A thread-local's
     /// record carries a TLS offset, which the `.data` passes pass over.
-    pub(super) fn push_block_static_record(&mut self, loc_idx: usize, ty: i64) {
+    pub(super) fn push_block_static_record(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+    ) -> Result<(), C5Error> {
+        // A block-scope `static` has no linkage, so it cannot be weak.
+        if self.pending.attrs.weak {
+            return Err(self.weak_not_public(&self.symbols[loc_idx].name.clone()));
+        }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
         let zero_len = self.symbols[loc_idx].is_zero_len_array;
@@ -1351,8 +1359,9 @@ impl Compiler {
         });
         self.symbols[loc_idx].entity_record = Some(record_idx as u32);
         self.symbol_index.record(hash);
-        self.apply_symbol_attributes(record_idx);
+        self.apply_symbol_attributes(record_idx)?;
         self.pending_block_static_syms.push(record_idx);
+        Ok(())
     }
 
     /// Record a deferred-size block-scope static's parsed element count,

@@ -1110,7 +1110,7 @@ impl Compiler {
         // `weak` / `used` / `section("name")` collected for
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
-        self.apply_symbol_attributes(id_idx);
+        self.apply_symbol_attributes(id_idx)?;
         let dll = super::dllimport::DllImportDecl {
             definition: is_defining_declarator,
             inline: self.pending.attrs.saw_inline_specifier,
@@ -2365,7 +2365,7 @@ impl Compiler {
             thread_local,
             claim,
         )?;
-        self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
+        self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo)?;
         let dll = super::dllimport::DllImportDecl {
             definition: self.lex.tk == Token::Assign,
             inline: false,
@@ -2491,7 +2491,7 @@ impl Compiler {
         static_seen: bool,
         thread_local: bool,
         was_tentative_glo: bool,
-    ) {
+    ) -> Result<(), C5Error> {
         self.symbols[id_idx].class = Token::Glo as i64;
         // First declaration wins the source position, as it does
         // for functions; it feeds DW_AT_decl_file / decl_line.
@@ -2516,7 +2516,8 @@ impl Compiler {
         } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
         }
-        self.apply_symbol_attributes(id_idx);
+        self.apply_symbol_attributes(id_idx)?;
+        Ok(())
     }
 
     /// `alias("target")` on an object declarator: the name is a second
@@ -3512,8 +3513,24 @@ impl Compiler {
     /// file-scope-object paths; the object writers and the body-open
     /// `InitFunc` registration read the fields off the symbol, so an
     /// attribute written on a prototype reaches the later definition.
-    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
+    pub(super) fn weak_not_public(&self, name: &str) -> C5Error {
+        let text = format!("weak declaration of `{name}` must be public");
+        self.compile_err(Code::INVALID_DECLARATION, text)
+    }
+
+    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) -> Result<(), C5Error> {
         if self.pending.attrs.weak {
+            // A weak name is one the link may bind elsewhere, so it has
+            // external linkage, as gcc and clang require: not a function
+            // declared `static`, nor an object with internal linkage.
+            let s = &self.symbols[id_idx];
+            let internal = match s.class == Token::Fun as i64 {
+                true => s.saw_static_decl,
+                false => s.linkage == crate::c5::symbol::Linkage::Internal,
+            };
+            if internal {
+                return Err(self.weak_not_public(&s.name.clone()));
+            }
             self.symbols[id_idx].is_weak = true;
         }
         // Settled once the unit ends: only an object this unit defines is.
@@ -3573,6 +3590,7 @@ impl Compiler {
         if self.pending.attrs.is_noinline {
             self.symbols[id_idx].is_noinline = true;
         }
+        Ok(())
     }
 }
 

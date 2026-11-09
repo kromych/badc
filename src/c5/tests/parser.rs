@@ -7207,3 +7207,33 @@ fn atomic_names_no_array_function_atomic_or_qualified_type() {
                     _Atomic(int *) r;\nint s(void) { return q == p; }\n";
     assert!(compile(accepted).is_ok(), "{:?}", compile(accepted).err());
 }
+
+/// A weak name has external linkage, as gcc and clang require: a `static`
+/// function or object and a block-scope `static` are refused, while an
+/// `extern`, a plain and an `inline` declaration take the attribute.
+#[test]
+fn a_weak_declaration_must_be_public() {
+    let refused = [
+        ("static int w __attribute__((weak));\n", "`w`"),
+        ("static void f(void) __attribute__((weak));\n", "`f`"),
+        ("__attribute__((weak)) static void g(void) {}\n", "`g`"),
+        (
+            "void k(void) { static int s __attribute__((weak)); (void)s; }\n",
+            "`s`",
+        ),
+    ];
+    for (decl, name) in refused {
+        let src = format!("{decl}int main(void) {{ return 0; }}\n");
+        expect_compile_error(&src, &format!("weak declaration of {name} must be public"));
+    }
+    let accepted = "void f(void) __attribute__((weak));\n\
+                    extern int e __attribute__((weak));\n\
+                    inline int h(void) __attribute__((weak));\n\
+                    inline int h(void) { return 1; }\n\
+                    int w __attribute__((weak)) = 3;\n\
+                    void k(void) { extern int b __attribute__((weak)); }\n\
+                    int main(void) { return 0; }\n";
+    Compiler::new(accepted.into())
+        .compile()
+        .expect("public weak declarations");
+}

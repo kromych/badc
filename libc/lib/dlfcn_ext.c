@@ -15,13 +15,44 @@
 #include <windows.h>
 
 // The most recent failure dlerror has not yet reported, per thread, and the
-// text it reports it with.
-static _Thread_local DWORD dl_failure;
-static _Thread_local char dl_text[256];
+// text it reports it with, in a TlsAlloc slot, which a program the JIT runs
+// can use too. A thread's state is allocated on its first failure and lives
+// as long as the process; without the memory, threads share a static one.
+struct dl_state {
+    DWORD failure;
+    char text[256];
+};
+
+static volatile LONG dl_slot = (LONG)TLS_OUT_OF_INDEXES;
+static struct dl_state dl_shared;
+
+static struct dl_state *dl_state(BOOL create) {
+    DWORD slot = (DWORD)dl_slot;
+    struct dl_state *state;
+    if (slot == TLS_OUT_OF_INDEXES) {
+        DWORD fresh = TlsAlloc();
+        LONG had = InterlockedCompareExchange(&dl_slot, (LONG)fresh, (LONG)slot);
+        if (had != (LONG)slot) {
+            TlsFree(fresh);
+            fresh = (DWORD)had;
+        }
+        slot = fresh;
+    }
+    state = (struct dl_state *)TlsGetValue(slot);
+    if (!state && create) {
+        state = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof *state);
+        state = state && TlsSetValue(slot, state) ? state : &dl_shared;
+    }
+    return state;
+}
+
+static void dl_fail(DWORD code) {
+    dl_state(TRUE)->failure = code;
+}
 
 static void *dl_kept(void *result) {
     if (!result) {
-        dl_failure = GetLastError();
+        dl_fail(GetLastError());
     }
     return result;
 }
@@ -34,7 +65,7 @@ void *dlopen(const char *path, int flags) {
     }
     // Counted, so dlclose's FreeLibrary balances it.
     if (!GetModuleHandleExW(0, NULL, &self)) {
-        dl_failure = GetLastError();
+        dl_fail(GetLastError());
     }
     return self;
 }
@@ -56,19 +87,19 @@ static void *dl_global(const char *name) {
         have = need;
         modules = HeapAlloc(heap, 0, have);
         if (!modules) {
-            dl_failure = ERROR_NOT_ENOUGH_MEMORY;
+            dl_fail(ERROR_NOT_ENOUGH_MEMORY);
             return NULL;
         }
     }
     if (!listed) {
-        dl_failure = GetLastError();
+        dl_fail(GetLastError());
         need = 0;
     }
     for (DWORD i = 0; i < need / sizeof *modules && !found; i++) {
         found = (void *)GetProcAddress(modules[i], name);
     }
     if (!found && listed) {
-        dl_failure = ERROR_PROC_NOT_FOUND;
+        dl_fail(ERROR_PROC_NOT_FOUND);
     }
     if (modules != inline_list) {
         HeapFree(heap, 0, modules);
@@ -87,19 +118,22 @@ int dlclose(void *handle) {
     if (FreeLibrary(handle)) {
         return 0;
     }
-    dl_failure = GetLastError();
+    dl_fail(GetLastError());
     return -1;
 }
 
 char *dlerror(void) {
-    DWORD code = dl_failure;
-    DWORD n;
-    if (!code) {
+    struct dl_state *state = dl_state(FALSE);
+    char *dl_text;
+    DWORD code, n;
+    if (!state || !state->failure) {
         return NULL;
     }
-    dl_failure = 0;
+    code = state->failure;
+    state->failure = 0;
+    dl_text = state->text;
     n = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, code, 0,
-                       dl_text, sizeof dl_text, NULL);
+                       dl_text, sizeof state->text, NULL);
     // POSIX text ends without a newline; the system's ends with CR LF.
     while (n > 0 && (dl_text[n - 1] == '\r' || dl_text[n - 1] == '\n' || dl_text[n - 1] == ' ')) {
         n--;

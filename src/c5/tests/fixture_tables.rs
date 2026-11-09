@@ -1154,10 +1154,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
     // libSystem exports memmem / getline / getdelim / dprintf, so this
-    // lane binds them. `copy_file_range_posix.c` has no libSystem
-    // export to bind and needs the on-demand join, which one object
-    // and no link step cannot reach; `unistd_extensions_join_the_macos_link`
-    // covers it.
+    // lane binds them. It has no `copy_file_range` and no GNU string
+    // extensions, which `unistd_ext.c` and `string_ext.c` supply.
+    ("copy_file_range_posix.c", 0),
+    ("string_gnu_ext.c", 0),
     ("stdio_line_input.c", 0),
     ("string_memmem.c", 0),
     ("stat_timespec.c", 0),

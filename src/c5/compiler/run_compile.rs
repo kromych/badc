@@ -820,6 +820,7 @@ impl Compiler {
             bare_function_type,
             declarator_transparent,
             declarator_is_bare_void,
+            prior_array_size,
             ..
         } = b;
 
@@ -870,7 +871,11 @@ impl Compiler {
                 ),
             ));
         }
-        if prior_class == Token::Typedef as i64 && prior_type != typedef_ty {
+        // C17 6.7p3: a redefinition names the same type, an array's length
+        // included.
+        if prior_class == Token::Typedef as i64
+            && (prior_type != typedef_ty || prior_array_size != self.symbols[id_idx].array_size)
+        {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(

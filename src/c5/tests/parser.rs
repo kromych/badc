@@ -3471,6 +3471,23 @@ fn block_typedef_redeclaration_rules() {
     );
 }
 
+/// C17 6.7p3: a file-scope typedef may be redefined only to the type it
+/// already names, an array's length part of that type.
+#[test]
+fn a_typedef_redefined_with_another_array_length_is_rejected() {
+    let ok = "typedef int A[4];\ntypedef int A[4];\ntypedef int B[];\ntypedef int B[];\n\
+              typedef A C;\ntypedef int C[4];\nint main(void) { return sizeof(C) == 16 ? 0 : 1; }";
+    let prog = Compiler::new(ok.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    for src in [
+        "typedef int A[48];\ntypedef int B[49];\ntypedef A B;\nint main(void) { return 0; }",
+        "typedef int A[4];\ntypedef int A[5];\nint main(void) { return 0; }",
+        "typedef int A[4];\ntypedef int A;\nint main(void) { return 0; }",
+    ] {
+        expect_compile_error(src, "typedef `");
+    }
+}
+
 /// A library function another input defines loses the header's `#pragma
 /// binding` and keeps the header's declaration: an ordinary external
 /// function returning `double`.

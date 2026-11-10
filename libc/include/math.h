@@ -672,8 +672,12 @@ static inline int isnan(double x) {
 static inline int isinf(double x) {
     return fpclassify(x) == FP_INFINITE;
 }
+// The category codes are unordered: msvcrt's are bit masks.
+static inline int __badc_finite_class(int c) {
+    return c != FP_NAN && c != FP_INFINITE;
+}
 static inline int isfinite(double x) {
-    return fpclassify(x) >= FP_ZERO;
+    return __badc_finite_class(fpclassify(x));
 }
 static inline int isnormal(double x) {
     return fpclassify(x) == FP_NORMAL;
@@ -683,7 +687,7 @@ static inline int isnormal(double x) {
      : sizeof(x) == sizeof(double) ? fpclassify(x) : __badc_fpclassifyl(x))
 #define isnan(x) (fpclassify(x) == FP_NAN)
 #define isinf(x) (fpclassify(x) == FP_INFINITE)
-#define isfinite(x) (fpclassify(x) >= FP_ZERO)
+#define isfinite(x) __badc_finite_class(fpclassify(x))
 #define isnormal(x) (fpclassify(x) == FP_NORMAL)
 #define signbit(x) \
     (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \

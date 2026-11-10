@@ -212,8 +212,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x1, %eax
+               	jne	<addr>
                	movss	-0x30(%rbp), %xmm0
                	movss	%xmm0, -0x38(%rbp)
                	movl	-0x38(%rbp), %eax
@@ -226,8 +228,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
-               	cmpl	$0x2, %eax
-               	jge	<addr>
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x1, %eax
+               	jne	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
@@ -429,6 +433,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
+               	movl	$0x4, %eax
+               	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
                	cmpl	$0xff, %ecx
@@ -438,6 +444,8 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jmp	<addr>
                	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	$0x4, %eax
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>

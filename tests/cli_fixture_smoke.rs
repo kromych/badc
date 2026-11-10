@@ -1831,6 +1831,30 @@ fn interp_binds_the_standard_streams_as_objects() {
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
 }
 
+// The floating-point category codes are each C library's: glibc's and
+// Apple's are ordered, msvcrt's are bit masks. The classification macros
+// hold for every target's codes.
+#[test]
+fn interp_classifies_with_each_targets_category_codes() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("math_classify.c");
+    for target in [
+        "macos-aarch64",
+        "linux-aarch64",
+        "linux-x64",
+        "windows-x64",
+        "windows-arm64",
+    ] {
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(format!("--target={target}"))
+            .arg(&src)
+            .output()
+            .expect("run badc --interp");
+        assert_eq!(out.status.code(), Some(0), "{target}");
+    }
+}
+
 // `--interp` exits with the program's status, as `--jit` and the native
 // image do, and appends nothing to what the program wrote, a last line it
 // left unterminated included.

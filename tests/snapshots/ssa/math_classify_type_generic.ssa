@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=18 ---
+; --- SSA dump (ok=true) ent_pc=19 ---
 ; name=main
-fn ent_pc=18 n_params=0 variadic=false locals=8
+fn ent_pc=19 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -21,12 +21,12 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v15  StoreLocal { off=-2, value=v14, kind=F64, volatile } -> -
     v16  Imm(4607182418800017408)                         -> x0
     v17  StoreLocal { off=-1, value=v16, kind=F64, volatile } -> -
-    v18  StoreLocal { off=-54, value=v16, kind=F80, volatile } -> -
+    v18  StoreLocal { off=-55, value=v16, kind=F80, volatile } -> -
     v19  Imm(0)                                           -> x0
-    v20  StoreLocal { off=-55, value=v19, kind=F80, volatile } -> -
+    v20  StoreLocal { off=-56, value=v19, kind=F80, volatile } -> -
     v21  Imm(2139095040)                                  -> x2 [f32]
     v22  Imm(9218868437227405312)                         -> x2
-    v23  StoreLocal { off=-56, value=v22, kind=F80, volatile } -> -
+    v23  StoreLocal { off=-57, value=v22, kind=F80, volatile } -> -
     v24  Imm(0)                                           -> x2
     v25  LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v26  Imm(0)                                           -> x2
@@ -107,7 +107,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v307 LoadLocal { off=-8, kind=I64 }                   -> x6
     v308 BinopI { op=and, lhs=v303, rhs_imm=4503599627370495 } -> x6
     v309 BinopI { op=eq, lhs=v305, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v305, target=b179, fall=b7 }   (low word)   (exit_acc=v309)
+    terminator Bnz { cond=v305, target=b181, fall=b7 }   (low word)   (exit_acc=v309)
   block 7  start_pc=0
     v327 BinopI { op=eq, lhs=v308, rhs_imm=0 }            -> x2
     v328 Imm(2)                                           -> x2
@@ -116,7 +116,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v331 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b8)   (exit_acc=v330)
   block 8  start_pc=0
-    v342 Phi { incoming=[b7:v330, b180:v337], kind=I64 }  -> -
+    v342 Phi { incoming=[b7:v330, b182:v337], kind=I64 }  -> -
     v343 Extend { value=v342, kind=I32 }                  -> x2
     v344 Imm(0)                                           -> x2
     v345 Imm(0)                                           -> x2
@@ -137,7 +137,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v360 BinopI { op=and, lhs=v355, rhs_imm=8388607 }     -> x6
     v361 BinopI { op=and, lhs=v357, rhs_imm=4294967295 }  -> x6
     v362 BinopI { op=eq, lhs=v357, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v357, target=b176, fall=b9 }   (low word)   (exit_acc=v362)
+    terminator Bnz { cond=v357, target=b178, fall=b9 }   (low word)   (exit_acc=v362)
   block 9  start_pc=0
     v363 BinopI { op=and, lhs=v360, rhs_imm=4294967295 }  -> x2
     v364 BinopI { op=eq, lhs=v360, rhs_imm=0 }            -> x2
@@ -147,7 +147,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v368 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b10)   (exit_acc=v367)
   block 10  start_pc=0
-    v383 Phi { incoming=[b9:v367, b177:v378], kind=I64 }  -> -
+    v383 Phi { incoming=[b9:v367, b179:v378], kind=I64 }  -> -
     v384 Extend { value=v383, kind=I32 }                  -> x2
     v385 Imm(0)                                           -> x2
     v386 Imm(0)                                           -> x2
@@ -167,7 +167,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v400 BinopI { op=and, lhs=v395, rhs_imm=8388607 }     -> x2
     v401 BinopI { op=and, lhs=v397, rhs_imm=4294967295 }  -> x2
     v402 BinopI { op=eq, lhs=v397, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v397, target=b173, fall=b11 }   (low word)   (exit_acc=v402)
+    terminator Bnz { cond=v397, target=b175, fall=b11 }   (low word)   (exit_acc=v402)
   block 11  start_pc=0
     v403 BinopI { op=and, lhs=v400, rhs_imm=4294967295 }  -> x1
     v404 BinopI { op=eq, lhs=v400, rhs_imm=0 }            -> x1
@@ -177,7 +177,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v408 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b12)   (exit_acc=v407)
   block 12  start_pc=0
-    v423 Phi { incoming=[b11:v407, b174:v418], kind=I64 } -> -
+    v423 Phi { incoming=[b11:v407, b176:v418], kind=I64 } -> -
     v424 Extend { value=v423, kind=I32 }                  -> x1
     v425 Imm(0)                                           -> x1
     v426 Imm(0)                                           -> x1
@@ -293,7 +293,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v507 BinopI { op=and, lhs=v502, rhs_imm=8388607 }     -> x2
     v508 BinopI { op=and, lhs=v504, rhs_imm=4294967295 }  -> x2
     v509 BinopI { op=eq, lhs=v504, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v504, target=b170, fall=b24 }   (low word)   (exit_acc=v509)
+    terminator Bnz { cond=v504, target=b172, fall=b24 }   (low word)   (exit_acc=v509)
   block 24  start_pc=0
     v520 BinopI { op=and, lhs=v507, rhs_imm=4294967295 }  -> x1
     v521 BinopI { op=eq, lhs=v507, rhs_imm=0 }            -> x1
@@ -303,7 +303,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v525 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b25)   (exit_acc=v524)
   block 25  start_pc=0
-    v540 Phi { incoming=[b24:v524, b171:v535], kind=I64 } -> -
+    v540 Phi { incoming=[b24:v524, b173:v535], kind=I64 } -> -
     v541 Extend { value=v540, kind=I32 }                  -> x1
     v542 Imm(0)                                           -> x1
     v543 Imm(0)                                           -> x1
@@ -321,21 +321,21 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v555 BinopI { op=and, lhs=v550, rhs_imm=8388607 }     -> x1
     v556 BinopI { op=and, lhs=v552, rhs_imm=4294967295 }  -> x6
     v557 BinopI { op=eq, lhs=v552, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v552, target=b164, fall=b26 }   (low word)   (exit_acc=v557)
+    terminator Bnz { cond=v552, target=b166, fall=b26 }   (low word)   (exit_acc=v557)
   block 26  start_pc=0
     v558 BinopI { op=and, lhs=v555, rhs_imm=4294967295 }  -> x0
     v559 BinopI { op=eq, lhs=v555, rhs_imm=0 }            -> x0
-    terminator Bnz { cond=v555, target=b163, fall=b27 }   (low word)   (exit_acc=v559)
+    terminator Bnz { cond=v555, target=b165, fall=b27 }   (low word)   (exit_acc=v559)
   block 27  start_pc=0
     v564 Imm(2)                                           -> x0
     terminator Jmp(b28)   (exit_acc=v564)
   block 28  start_pc=0
-    v566 Phi { incoming=[b27:v564, b163:v565], kind=I64 } -> x0
+    v566 Phi { incoming=[b27:v564, b165:v565], kind=I64 } -> x0
     v567 Extend { value=v566, kind=I32 }                  -> x1
     v568 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b29)   (exit_acc=v566)
   block 29  start_pc=0
-    v578 Phi { incoming=[b28:v566, b167:v575], kind=I64 } -> x0
+    v578 Phi { incoming=[b28:v566, b169:v575], kind=I64 } -> x0
     v579 Extend { value=v578, kind=I32 }                  -> x1
     v580 BinopI { op=ne, lhs=v578, rhs_imm=3 }            -> x0
     v581 Imm(0)                                           -> x1
@@ -396,20 +396,20 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v604 LoadLocal { off=-8, kind=I64 }                   -> x2
     v605 BinopI { op=and, lhs=v600, rhs_imm=4503599627370495 } -> x0
     v606 BinopI { op=eq, lhs=v602, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v602, target=b157, fall=b37 }   (low word)   (exit_acc=v606)
+    terminator Bnz { cond=v602, target=b159, fall=b37 }   (low word)   (exit_acc=v606)
   block 37  start_pc=0
     v614 BinopI { op=eq, lhs=v605, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v605, target=b156, fall=b38 }   (exit_acc=v614)
+    terminator Bnz { cond=v605, target=b158, fall=b38 }   (exit_acc=v614)
   block 38  start_pc=0
     v616 Imm(2)                                           -> x0
     terminator Jmp(b39)   (exit_acc=v616)
   block 39  start_pc=0
-    v618 Phi { incoming=[b38:v616, b156:v617], kind=I64 } -> x0
+    v618 Phi { incoming=[b38:v616, b158:v617], kind=I64 } -> x0
     v619 Extend { value=v618, kind=I32 }                  -> x1
     v620 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b40)   (exit_acc=v618)
   block 40  start_pc=0
-    v629 Phi { incoming=[b39:v618, b160:v626], kind=I64 } -> x0
+    v629 Phi { incoming=[b39:v618, b162:v626], kind=I64 } -> x0
     v630 Extend { value=v629, kind=I32 }                  -> x1
     v631 BinopI { op=ne, lhs=v629, rhs_imm=3 }            -> x0
     v632 Imm(0)                                           -> x1
@@ -427,21 +427,21 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v60  BinopI { op=and, lhs=v55, rhs_imm=8388607 }      -> x0
     v61  BinopI { op=and, lhs=v57, rhs_imm=4294967295 }   -> x2
     v62  BinopI { op=eq, lhs=v57, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v57, target=b150, fall=b42 }   (low word)   (exit_acc=v62)
+    terminator Bnz { cond=v57, target=b152, fall=b42 }   (low word)   (exit_acc=v62)
   block 42  start_pc=0
     v633 BinopI { op=and, lhs=v60, rhs_imm=4294967295 }   -> x1
     v634 BinopI { op=eq, lhs=v60, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v60, target=b149, fall=b43 }   (low word)   (exit_acc=v634)
+    terminator Bnz { cond=v60, target=b151, fall=b43 }   (low word)   (exit_acc=v634)
   block 43  start_pc=0
     v639 Imm(2)                                           -> x0
     terminator Jmp(b44)   (exit_acc=v639)
   block 44  start_pc=0
-    v641 Phi { incoming=[b43:v639, b149:v640], kind=I64 } -> x0
+    v641 Phi { incoming=[b43:v639, b151:v640], kind=I64 } -> x0
     v642 Extend { value=v641, kind=I32 }                  -> x1
     v643 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b45)   (exit_acc=v641)
   block 45  start_pc=0
-    v653 Phi { incoming=[b44:v641, b153:v650], kind=I64 } -> x0
+    v653 Phi { incoming=[b44:v641, b155:v650], kind=I64 } -> x0
     v654 Extend { value=v653, kind=I32 }                  -> x1
     v655 BinopI { op=ne, lhs=v653, rhs_imm=2 }            -> x0
     v656 Imm(0)                                           -> x1
@@ -464,27 +464,27 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v73  BinopI { op=and, lhs=v68, rhs_imm=8388607 }      -> x0
     v74  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> x2
     v75  BinopI { op=eq, lhs=v70, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v70, target=b143, fall=b48 }   (low word)   (exit_acc=v75)
+    terminator Bnz { cond=v70, target=b145, fall=b48 }   (low word)   (exit_acc=v75)
   block 48  start_pc=0
     v659 BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x1
     v660 BinopI { op=eq, lhs=v73, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v73, target=b142, fall=b49 }   (low word)   (exit_acc=v660)
+    terminator Bnz { cond=v73, target=b144, fall=b49 }   (low word)   (exit_acc=v660)
   block 49  start_pc=0
     v665 Imm(2)                                           -> x0
     terminator Jmp(b50)   (exit_acc=v665)
   block 50  start_pc=0
-    v667 Phi { incoming=[b49:v665, b142:v666], kind=I64 } -> x0
+    v667 Phi { incoming=[b49:v665, b144:v666], kind=I64 } -> x0
     v668 Extend { value=v667, kind=I32 }                  -> x1
     v669 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b51)   (exit_acc=v667)
   block 51  start_pc=0
-    v679 Phi { incoming=[b50:v667, b146:v676], kind=I64 } -> x0
+    v679 Phi { incoming=[b50:v667, b148:v676], kind=I64 } -> x0
     v680 Extend { value=v679, kind=I32 }                  -> x1
     v681 BinopI { op=eq, lhs=v679, rhs_imm=0 }            -> x1
     v682 BinopI { op=eq, lhs=v681, rhs_imm=0 }            -> x1
     v683 Imm(1)                                           -> x1
     v684 Imm(0)                                           -> x1
-    terminator Bnz { cond=v679, target=b67, fall=b52 }   (low word)   (exit_acc=v682)
+    terminator Bnz { cond=v679, target=b69, fall=b52 }   (low word)   (exit_acc=v682)
   block 52  start_pc=0
     v76  LoadLocal { off=-4, kind=F32, volatile }         -> d0 [f32]
     v77  Imm(0)                                           -> x0
@@ -498,21 +498,21 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v85  BinopI { op=and, lhs=v80, rhs_imm=8388607 }      -> x0
     v86  BinopI { op=and, lhs=v82, rhs_imm=4294967295 }   -> x2
     v87  BinopI { op=eq, lhs=v82, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v82, target=b136, fall=b53 }   (low word)   (exit_acc=v87)
+    terminator Bnz { cond=v82, target=b138, fall=b53 }   (low word)   (exit_acc=v87)
   block 53  start_pc=0
     v685 BinopI { op=and, lhs=v85, rhs_imm=4294967295 }   -> x1
     v686 BinopI { op=eq, lhs=v85, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v85, target=b135, fall=b54 }   (low word)   (exit_acc=v686)
+    terminator Bnz { cond=v85, target=b137, fall=b54 }   (low word)   (exit_acc=v686)
   block 54  start_pc=0
     v691 Imm(2)                                           -> x0
     terminator Jmp(b55)   (exit_acc=v691)
   block 55  start_pc=0
-    v693 Phi { incoming=[b54:v691, b135:v692], kind=I64 } -> x0
+    v693 Phi { incoming=[b54:v691, b137:v692], kind=I64 } -> x0
     v694 Extend { value=v693, kind=I32 }                  -> x1
     v695 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b56)   (exit_acc=v693)
   block 56  start_pc=0
-    v705 Phi { incoming=[b55:v693, b139:v702], kind=I64 } -> x0
+    v705 Phi { incoming=[b55:v693, b141:v702], kind=I64 } -> x0
     v706 Extend { value=v705, kind=I32 }                  -> x1
     v707 BinopI { op=eq, lhs=v705, rhs_imm=1 }            -> x0
     v708 BinopI { op=ne, lhs=v707, rhs_imm=0 }            -> x1
@@ -521,7 +521,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v711 Imm(0)                                           -> x1
     v712 Imm(1)                                           -> x1
     v713 Imm(0)                                           -> x1
-    terminator Bnz { cond=v707, target=b67, fall=b57 }   (exit_acc=v707)
+    terminator Bnz { cond=v707, target=b69, fall=b57 }   (exit_acc=v707)
   block 57  start_pc=0
     v88  LoadLocal { off=-4, kind=F32, volatile }         -> d0 [f32]
     v89  Imm(0)                                           -> x0
@@ -535,30 +535,38 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v97  BinopI { op=and, lhs=v92, rhs_imm=8388607 }      -> x0
     v98  BinopI { op=and, lhs=v94, rhs_imm=4294967295 }   -> x2
     v99  BinopI { op=eq, lhs=v94, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v94, target=b129, fall=b58 }   (low word)   (exit_acc=v99)
+    terminator Bnz { cond=v94, target=b131, fall=b58 }   (low word)   (exit_acc=v99)
   block 58  start_pc=0
     v714 BinopI { op=and, lhs=v97, rhs_imm=4294967295 }   -> x1
     v715 BinopI { op=eq, lhs=v97, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v97, target=b128, fall=b59 }   (low word)   (exit_acc=v715)
+    terminator Bnz { cond=v97, target=b130, fall=b59 }   (low word)   (exit_acc=v715)
   block 59  start_pc=0
     v720 Imm(2)                                           -> x0
     terminator Jmp(b60)   (exit_acc=v720)
   block 60  start_pc=0
-    v722 Phi { incoming=[b59:v720, b128:v721], kind=I64 } -> x0
+    v722 Phi { incoming=[b59:v720, b130:v721], kind=I64 } -> x0
     v723 Extend { value=v722, kind=I32 }                  -> x1
     v724 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b61)   (exit_acc=v722)
   block 61  start_pc=0
-    v734 Phi { incoming=[b60:v722, b132:v731], kind=I64 } -> x0
+    v734 Phi { incoming=[b60:v722, b136:v727, b134:v731], kind=I64 } -> x0
     v735 Extend { value=v734, kind=I32 }                  -> x1
-    v736 BinopI { op=ge, lhs=v734, rhs_imm=2 }            -> x0
-    v737 BinopI { op=ne, lhs=v736, rhs_imm=0 }            -> x1
+    v736 Extend { value=v734, kind=I32 }                  -> x1
+    v737 BinopI { op=ne, lhs=v734, rhs_imm=0 }            -> x1
     v738 Imm(0)                                           -> x1
-    v739 Imm(0)                                           -> x1
-    v740 Imm(0)                                           -> x1
-    v741 Imm(0)                                           -> x1
-    terminator Bnz { cond=v736, target=b67, fall=b62 }   (exit_acc=v736)
+    terminator Bz { cond=v734, target=b63, fall=b62 }   (low word)   (exit_acc=v737)
   block 62  start_pc=0
+    v739 BinopI { op=ne, lhs=v734, rhs_imm=1 }            -> x0
+    v740 Imm(0)                                           -> x1
+    v741 Extend { value=v739, kind=I32 }                  -> x1
+    v742 Extend { value=v739, kind=I32 }                  -> x1
+    v743 BinopI { op=ne, lhs=v739, rhs_imm=0 }            -> x1
+    v744 Imm(0)                                           -> x1
+    v745 Imm(0)                                           -> x1
+    v746 Imm(0)                                           -> x1
+    v747 Imm(0)                                           -> x1
+    terminator Bnz { cond=v739, target=b69, fall=b63 }   (exit_acc=v739)
+  block 63  start_pc=0
     v100 LoadLocal { off=-6, kind=F32, volatile }         -> d0 [f32]
     v101 Imm(0)                                           -> x0
     v102 StoreLocal { off=-7, value=v100, kind=F32 }      -> -
@@ -571,32 +579,40 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v109 BinopI { op=and, lhs=v104, rhs_imm=8388607 }     -> x0
     v110 BinopI { op=and, lhs=v106, rhs_imm=4294967295 }  -> x2
     v111 BinopI { op=eq, lhs=v106, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v106, target=b122, fall=b63 }   (low word)   (exit_acc=v111)
-  block 63  start_pc=0
-    v742 BinopI { op=and, lhs=v109, rhs_imm=4294967295 }  -> x1
-    v743 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v109, target=b121, fall=b64 }   (low word)   (exit_acc=v743)
+    terminator Bnz { cond=v106, target=b124, fall=b64 }   (low word)   (exit_acc=v111)
   block 64  start_pc=0
-    v748 Imm(2)                                           -> x0
-    terminator Jmp(b65)   (exit_acc=v748)
+    v748 BinopI { op=and, lhs=v109, rhs_imm=4294967295 }  -> x1
+    v749 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v109, target=b123, fall=b65 }   (low word)   (exit_acc=v749)
   block 65  start_pc=0
-    v750 Phi { incoming=[b64:v748, b121:v749], kind=I64 } -> x0
-    v751 Extend { value=v750, kind=I32 }                  -> x1
-    v752 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b66)   (exit_acc=v750)
+    v754 Imm(2)                                           -> x0
+    terminator Jmp(b66)   (exit_acc=v754)
   block 66  start_pc=0
-    v762 Phi { incoming=[b65:v750, b125:v759], kind=I64 } -> x0
-    v763 Extend { value=v762, kind=I32 }                  -> x1
-    v764 BinopI { op=ge, lhs=v762, rhs_imm=2 }            -> x0
-    v765 BinopI { op=eq, lhs=v764, rhs_imm=0 }            -> x1
-    v766 Imm(0)                                           -> x1
-    v767 Imm(0)                                           -> x1
-    v768 Imm(0)                                           -> x1
-    terminator Bnz { cond=v764, target=b68, fall=b67 }   (low word)   (exit_acc=v765)
+    v756 Phi { incoming=[b65:v754, b123:v755], kind=I64 } -> x0
+    v757 Extend { value=v756, kind=I32 }                  -> x1
+    v758 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b67)   (exit_acc=v756)
   block 67  start_pc=0
+    v768 Phi { incoming=[b66:v756, b129:v761, b127:v765], kind=I64 } -> x0
+    v769 Extend { value=v768, kind=I32 }                  -> x1
+    v770 Extend { value=v768, kind=I32 }                  -> x1
+    v771 BinopI { op=ne, lhs=v768, rhs_imm=0 }            -> x1
+    v772 Imm(0)                                           -> x1
+    terminator Bz { cond=v768, target=b69, fall=b68 }   (low word)   (exit_acc=v771)
+  block 68  start_pc=0
+    v773 BinopI { op=ne, lhs=v768, rhs_imm=1 }            -> x0
+    v774 Imm(0)                                           -> x1
+    v775 Extend { value=v773, kind=I32 }                  -> x1
+    v776 Extend { value=v773, kind=I32 }                  -> x1
+    v777 BinopI { op=eq, lhs=v773, rhs_imm=0 }            -> x1
+    v778 Imm(0)                                           -> x1
+    v779 Imm(0)                                           -> x1
+    v780 Imm(0)                                           -> x1
+    terminator Bnz { cond=v773, target=b70, fall=b69 }   (low word)   (exit_acc=v777)
+  block 69  start_pc=0
     v112 Imm(5)                                           -> x0
     terminator Return(v112)   (exit_acc=v112)
-  block 68  start_pc=0
+  block 70  start_pc=0
     v113 LoadLocal { off=-3, kind=F32, volatile }         -> d0 [f32]
     v114 Imm(0)                                           -> x0
     v115 StoreLocal { off=-7, value=v113, kind=F32 }      -> -
@@ -610,8 +626,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v123 BinopI { op=eq, lhs=v118, rhs_imm=0 }            -> x1
     v124 Imm(1)                                           -> x1
     v125 Imm(0)                                           -> x1
-    terminator Bz { cond=v118, target=b72, fall=b69 }   (low word)   (exit_acc=v123)
-  block 69  start_pc=0
+    terminator Bz { cond=v118, target=b74, fall=b71 }   (low word)   (exit_acc=v123)
+  block 71  start_pc=0
     v126 LoadLocal { off=-5, kind=F32, volatile }         -> d0 [f32]
     v127 Imm(0)                                           -> x0
     v128 StoreLocal { off=-7, value=v126, kind=F32 }      -> -
@@ -628,8 +644,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v139 Imm(0)                                           -> x1
     v140 Imm(1)                                           -> x1
     v141 Imm(0)                                           -> x1
-    terminator Bnz { cond=v131, target=b72, fall=b70 }   (low word)   (exit_acc=v136)
-  block 70  start_pc=0
+    terminator Bnz { cond=v131, target=b74, fall=b72 }   (low word)   (exit_acc=v136)
+  block 72  start_pc=0
     v142 LoadLocal { off=-6, kind=F32, volatile }         -> d0 [f32]
     v143 Fneg(v142)                                       -> d0 [f32]
     v144 Imm(0)                                           -> x0
@@ -647,8 +663,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v156 Imm(0)                                           -> x1
     v157 Imm(0)                                           -> x1
     v158 Imm(0)                                           -> x1
-    terminator Bz { cond=v148, target=b72, fall=b71 }   (low word)   (exit_acc=v153)
-  block 71  start_pc=0
+    terminator Bz { cond=v148, target=b74, fall=b73 }   (low word)   (exit_acc=v153)
+  block 73  start_pc=0
     v159 Imm(4607182418800017408)                         -> x0
     v160 Imm(-4616189618054758400)                        -> x0
     v161 Imm(0)                                           -> x1
@@ -664,17 +680,17 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v171 Imm(0)                                           -> x1
     v172 Imm(0)                                           -> x1
     v173 Imm(0)                                           -> x1
-    terminator Bnz { cond=v165, target=b73, fall=b72 }   (low word)   (exit_acc=v170)
-  block 72  start_pc=0
+    terminator Bnz { cond=v165, target=b75, fall=b74 }   (low word)   (exit_acc=v170)
+  block 74  start_pc=0
     v174 Imm(6)                                           -> x0
     terminator Return(v174)   (exit_acc=v174)
-  block 73  start_pc=0
-    v175 LoadLocal { off=-54, kind=F80, volatile }        -> d0
-    v176 LocalAddr(-57)                                   -> x0
-    v177 StoreLocal { off=-57, value=v175, kind=F80 }     -> -
-    v178 LocalAddr(-61)                                   -> x1
+  block 75  start_pc=0
+    v175 LoadLocal { off=-55, kind=F80, volatile }        -> d0
+    v176 LocalAddr(-58)                                   -> x0
+    v177 StoreLocal { off=-58, value=v175, kind=F80 }     -> -
+    v178 LocalAddr(-62)                                   -> x1
     v179 Mcpy { dst=v178, src=v176, size=16, align=16 }   -> -
-    v180 LoadLocal { off=-61, kind=F80 }                  -> d0
+    v180 LoadLocal { off=-62, kind=F80 }                  -> d0
     v181 Imm(0)                                           -> x0
     v182 StoreLocal { off=-8, value=v180, kind=F64 }      -> -
     v183 Imm(0)                                           -> x0
@@ -685,88 +701,88 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v188 LoadLocal { off=-8, kind=I64 }                   -> x2
     v189 BinopI { op=and, lhs=v184, rhs_imm=4503599627370495 } -> x2
     v190 BinopI { op=eq, lhs=v186, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v186, target=b77, fall=b74 }   (low word)   (exit_acc=v190)
-  block 74  start_pc=0
-    v794 BinopI { op=eq, lhs=v189, rhs_imm=0 }            -> x0
-    v795 Imm(2)                                           -> x0
-    v796 Imm(0)                                           -> x0
-    v797 Imm(2)                                           -> x0
-    v798 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b75)   (exit_acc=v797)
-  block 75  start_pc=0
-    v825 Phi { incoming=[b74:v797, b78:v804], kind=I64 }  -> -
-    v826 Extend { value=v825, kind=I32 }                  -> x0
-    v827 Extend { value=v825, kind=I32 }                  -> x0
-    v828 Extend { value=v825, kind=I32 }                  -> x0
-    v829 Imm(0)                                           -> x0
-    v830 Imm(1)                                           -> x0
-    v831 Imm(1)                                           -> x0
-    v832 Imm(0)                                           -> x0
-    terminator Jmp(b76)   (exit_acc=v830)
+    terminator Bnz { cond=v186, target=b79, fall=b76 }   (low word)   (exit_acc=v190)
   block 76  start_pc=0
+    v806 BinopI { op=eq, lhs=v189, rhs_imm=0 }            -> x0
+    v807 Imm(2)                                           -> x0
+    v808 Imm(0)                                           -> x0
+    v809 Imm(2)                                           -> x0
+    v810 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b77)   (exit_acc=v809)
+  block 77  start_pc=0
+    v837 Phi { incoming=[b76:v809, b80:v816], kind=I64 }  -> -
+    v838 Extend { value=v837, kind=I32 }                  -> x0
+    v839 Extend { value=v837, kind=I32 }                  -> x0
+    v840 Extend { value=v837, kind=I32 }                  -> x0
+    v841 Imm(0)                                           -> x0
+    v842 Imm(1)                                           -> x0
+    v843 Imm(1)                                           -> x0
+    v844 Imm(0)                                           -> x0
+    terminator Jmp(b78)   (exit_acc=v842)
+  block 78  start_pc=0
     v227 Imm(7)                                           -> x0
     terminator Return(v227)   (exit_acc=v227)
-  block 77  start_pc=0
-    v799 BinopI { op=eq, lhs=v186, rhs_imm=2047 }         -> x0
-    terminator Bz { cond=v799, target=b79, fall=b78 }   (exit_acc=v799)
-  block 78  start_pc=0
-    v801 BinopI { op=eq, lhs=v189, rhs_imm=0 }            -> x0
-    v802 Imm(1)                                           -> x0
-    v803 Imm(0)                                           -> x0
-    v804 Imm(1)                                           -> x0
-    v805 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b75)   (exit_acc=v804)
   block 79  start_pc=0
-    v806 Imm(4)                                           -> x0
-    v807 LifetimeEnd(-8)                                  -> -
-    v808 LoadLocal { off=-55, kind=F80, volatile }        -> d0
-    v809 LocalAddr(-58)                                   -> x0
-    v810 StoreLocal { off=-58, value=v808, kind=F80 }     -> -
-    v811 LocalAddr(-61)                                   -> x2
-    v812 Mcpy { dst=v178, src=v809, size=16, align=16 }   -> -
-    v813 LoadLocal { off=-61, kind=F80 }                  -> d0
-    v814 Imm(0)                                           -> x0
-    v815 StoreLocal { off=-8, value=v813, kind=F64 }      -> -
-    v816 Imm(0)                                           -> x0
-    v817 LoadLocal { off=-8, kind=I64 }                   -> x0
-    v818 BinopI { op=shru, lhs=v817, rhs_imm=52 }         -> x2
-    v819 BinopI { op=and, lhs=v818, rhs_imm=2047 }        -> x2
-    v820 Imm(0)                                           -> x6
-    v821 LoadLocal { off=-8, kind=I64 }                   -> x6
-    v822 BinopI { op=and, lhs=v817, rhs_imm=4503599627370495 } -> x0
-    v823 BinopI { op=eq, lhs=v819, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v819, target=b115, fall=b80 }   (low word)   (exit_acc=v823)
+    v811 BinopI { op=eq, lhs=v186, rhs_imm=2047 }         -> x0
+    terminator Bz { cond=v811, target=b81, fall=b80 }   (exit_acc=v811)
   block 80  start_pc=0
-    v833 BinopI { op=eq, lhs=v822, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v822, target=b114, fall=b81 }   (exit_acc=v833)
+    v813 BinopI { op=eq, lhs=v189, rhs_imm=0 }            -> x0
+    v814 Imm(1)                                           -> x0
+    v815 Imm(0)                                           -> x0
+    v816 Imm(1)                                           -> x0
+    v817 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b77)   (exit_acc=v816)
   block 81  start_pc=0
-    v835 Imm(2)                                           -> x0
-    terminator Jmp(b82)   (exit_acc=v835)
+    v818 Imm(4)                                           -> x0
+    v819 LifetimeEnd(-8)                                  -> -
+    v820 LoadLocal { off=-56, kind=F80, volatile }        -> d0
+    v821 LocalAddr(-59)                                   -> x0
+    v822 StoreLocal { off=-59, value=v820, kind=F80 }     -> -
+    v823 LocalAddr(-62)                                   -> x2
+    v824 Mcpy { dst=v178, src=v821, size=16, align=16 }   -> -
+    v825 LoadLocal { off=-62, kind=F80 }                  -> d0
+    v826 Imm(0)                                           -> x0
+    v827 StoreLocal { off=-8, value=v825, kind=F64 }      -> -
+    v828 Imm(0)                                           -> x0
+    v829 LoadLocal { off=-8, kind=I64 }                   -> x0
+    v830 BinopI { op=shru, lhs=v829, rhs_imm=52 }         -> x2
+    v831 BinopI { op=and, lhs=v830, rhs_imm=2047 }        -> x2
+    v832 Imm(0)                                           -> x6
+    v833 LoadLocal { off=-8, kind=I64 }                   -> x6
+    v834 BinopI { op=and, lhs=v829, rhs_imm=4503599627370495 } -> x0
+    v835 BinopI { op=eq, lhs=v831, rhs_imm=0 }            -> x6
+    terminator Bnz { cond=v831, target=b117, fall=b82 }   (low word)   (exit_acc=v835)
   block 82  start_pc=0
-    v837 Phi { incoming=[b81:v835, b114:v836], kind=I64 } -> x0
-    v838 Extend { value=v837, kind=I32 }                  -> x2
-    v839 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b83)   (exit_acc=v837)
+    v845 BinopI { op=eq, lhs=v834, rhs_imm=0 }            -> x2
+    terminator Bnz { cond=v834, target=b116, fall=b83 }   (exit_acc=v845)
   block 83  start_pc=0
-    v848 Phi { incoming=[b82:v837, b118:v845], kind=I64 } -> x0
-    v849 Extend { value=v848, kind=I32 }                  -> x2
-    v850 Extend { value=v848, kind=I32 }                  -> x2
-    v851 Extend { value=v848, kind=I32 }                  -> x2
-    v852 BinopI { op=ne, lhs=v848, rhs_imm=2 }            -> x0
-    v853 BinopI { op=ne, lhs=v852, rhs_imm=0 }            -> x2
-    v854 Imm(0)                                           -> x2
-    v855 Imm(0)                                           -> x2
-    v856 Imm(0)                                           -> x2
-    v857 Imm(1)                                           -> x2
-    v858 Imm(0)                                           -> x2
-    terminator Bnz { cond=v852, target=b76, fall=b84 }   (exit_acc=v852)
+    v847 Imm(2)                                           -> x0
+    terminator Jmp(b84)   (exit_acc=v847)
   block 84  start_pc=0
-    v191 LoadLocal { off=-56, kind=F80, volatile }        -> d0
-    v192 LocalAddr(-59)                                   -> x0
-    v193 StoreLocal { off=-59, value=v191, kind=F80 }     -> -
-    v194 LocalAddr(-61)                                   -> x2
+    v849 Phi { incoming=[b83:v847, b116:v848], kind=I64 } -> x0
+    v850 Extend { value=v849, kind=I32 }                  -> x2
+    v851 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b85)   (exit_acc=v849)
+  block 85  start_pc=0
+    v860 Phi { incoming=[b84:v849, b120:v857], kind=I64 } -> x0
+    v861 Extend { value=v860, kind=I32 }                  -> x2
+    v862 Extend { value=v860, kind=I32 }                  -> x2
+    v863 Extend { value=v860, kind=I32 }                  -> x2
+    v864 BinopI { op=ne, lhs=v860, rhs_imm=2 }            -> x0
+    v865 BinopI { op=ne, lhs=v864, rhs_imm=0 }            -> x2
+    v866 Imm(0)                                           -> x2
+    v867 Imm(0)                                           -> x2
+    v868 Imm(0)                                           -> x2
+    v869 Imm(1)                                           -> x2
+    v870 Imm(0)                                           -> x2
+    terminator Bnz { cond=v864, target=b78, fall=b86 }   (exit_acc=v864)
+  block 86  start_pc=0
+    v191 LoadLocal { off=-57, kind=F80, volatile }        -> d0
+    v192 LocalAddr(-60)                                   -> x0
+    v193 StoreLocal { off=-60, value=v191, kind=F80 }     -> -
+    v194 LocalAddr(-62)                                   -> x2
     v195 Mcpy { dst=v178, src=v192, size=16, align=16 }   -> -
-    v196 LoadLocal { off=-61, kind=F80 }                  -> d0
+    v196 LoadLocal { off=-62, kind=F80 }                  -> d0
     v197 Imm(0)                                           -> x0
     v198 StoreLocal { off=-8, value=v196, kind=F64 }      -> -
     v199 Imm(0)                                           -> x0
@@ -777,38 +793,38 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v204 LoadLocal { off=-8, kind=I64 }                   -> x2
     v205 BinopI { op=and, lhs=v200, rhs_imm=4503599627370495 } -> x0
     v206 BinopI { op=eq, lhs=v202, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v202, target=b108, fall=b85 }   (low word)   (exit_acc=v206)
-  block 85  start_pc=0
-    v859 BinopI { op=eq, lhs=v205, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v205, target=b107, fall=b86 }   (exit_acc=v859)
-  block 86  start_pc=0
-    v861 Imm(2)                                           -> x0
-    terminator Jmp(b87)   (exit_acc=v861)
+    terminator Bnz { cond=v202, target=b110, fall=b87 }   (low word)   (exit_acc=v206)
   block 87  start_pc=0
-    v863 Phi { incoming=[b86:v861, b107:v862], kind=I64 } -> x0
-    v864 Extend { value=v863, kind=I32 }                  -> x1
-    v865 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b88)   (exit_acc=v863)
+    v871 BinopI { op=eq, lhs=v205, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v205, target=b109, fall=b88 }   (exit_acc=v871)
   block 88  start_pc=0
-    v874 Phi { incoming=[b87:v863, b111:v871], kind=I64 } -> x0
-    v875 Extend { value=v874, kind=I32 }                  -> x1
-    v876 Extend { value=v874, kind=I32 }                  -> x1
-    v877 Extend { value=v874, kind=I32 }                  -> x1
-    v878 BinopI { op=eq, lhs=v874, rhs_imm=1 }            -> x0
-    v879 BinopI { op=eq, lhs=v878, rhs_imm=0 }            -> x1
-    v880 BinopI { op=ne, lhs=v879, rhs_imm=0 }            -> x1
-    v881 Imm(0)                                           -> x1
-    v882 Imm(0)                                           -> x1
-    v883 Imm(0)                                           -> x1
-    v884 Imm(0)                                           -> x1
-    terminator Bz { cond=v878, target=b76, fall=b89 }   (low word)   (exit_acc=v879)
+    v873 Imm(2)                                           -> x0
+    terminator Jmp(b89)   (exit_acc=v873)
   block 89  start_pc=0
-    v207 LoadLocal { off=-54, kind=F80, volatile }        -> d0
-    v208 LocalAddr(-60)                                   -> x0
-    v209 StoreLocal { off=-60, value=v207, kind=F80 }     -> -
-    v210 LocalAddr(-62)                                   -> x1
+    v875 Phi { incoming=[b88:v873, b109:v874], kind=I64 } -> x0
+    v876 Extend { value=v875, kind=I32 }                  -> x1
+    v877 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b90)   (exit_acc=v875)
+  block 90  start_pc=0
+    v886 Phi { incoming=[b89:v875, b113:v883], kind=I64 } -> x0
+    v887 Extend { value=v886, kind=I32 }                  -> x1
+    v888 Extend { value=v886, kind=I32 }                  -> x1
+    v889 Extend { value=v886, kind=I32 }                  -> x1
+    v890 BinopI { op=eq, lhs=v886, rhs_imm=1 }            -> x0
+    v891 BinopI { op=eq, lhs=v890, rhs_imm=0 }            -> x1
+    v892 BinopI { op=ne, lhs=v891, rhs_imm=0 }            -> x1
+    v893 Imm(0)                                           -> x1
+    v894 Imm(0)                                           -> x1
+    v895 Imm(0)                                           -> x1
+    v896 Imm(0)                                           -> x1
+    terminator Bz { cond=v890, target=b78, fall=b91 }   (low word)   (exit_acc=v891)
+  block 91  start_pc=0
+    v207 LoadLocal { off=-55, kind=F80, volatile }        -> d0
+    v208 LocalAddr(-61)                                   -> x0
+    v209 StoreLocal { off=-61, value=v207, kind=F80 }     -> -
+    v210 LocalAddr(-63)                                   -> x1
     v211 Mcpy { dst=v210, src=v208, size=16, align=16 }   -> -
-    v212 LoadLocal { off=-62, kind=F80 }                  -> d0
+    v212 LoadLocal { off=-63, kind=F80 }                  -> d0
     v213 Imm(0)                                           -> x0
     v214 StoreLocal { off=-8, value=v212, kind=F64 }      -> -
     v215 Imm(0)                                           -> x0
@@ -823,8 +839,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v224 Imm(0)                                           -> x1
     v225 Imm(0)                                           -> x1
     v226 Imm(0)                                           -> x1
-    terminator Bz { cond=v217, target=b90, fall=b76 }   (exit_acc=v217)
-  block 90  start_pc=0
+    terminator Bz { cond=v217, target=b92, fall=b78 }   (exit_acc=v217)
+  block 92  start_pc=0
     v228 Imm(0)                                           -> x0
     v229 Imm(1)                                           -> x0
     v230 Imm(1)                                           -> x0
@@ -840,27 +856,27 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v240 BinopI { op=and, lhs=v235, rhs_imm=8388607 }     -> x0
     v241 BinopI { op=and, lhs=v237, rhs_imm=4294967295 }  -> x2
     v242 BinopI { op=eq, lhs=v237, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v237, target=b101, fall=b91 }   (low word)   (exit_acc=v242)
-  block 91  start_pc=0
-    v769 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
-    v770 BinopI { op=eq, lhs=v240, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v240, target=b100, fall=b92 }   (low word)   (exit_acc=v770)
-  block 92  start_pc=0
-    v775 Imm(2)                                           -> x0
-    terminator Jmp(b93)   (exit_acc=v775)
+    terminator Bnz { cond=v237, target=b103, fall=b93 }   (low word)   (exit_acc=v242)
   block 93  start_pc=0
-    v777 Phi { incoming=[b92:v775, b100:v776], kind=I64 } -> x0
-    v778 Extend { value=v777, kind=I32 }                  -> x1
-    v779 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b94)   (exit_acc=v777)
+    v781 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
+    v782 BinopI { op=eq, lhs=v240, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v240, target=b102, fall=b94 }   (low word)   (exit_acc=v782)
   block 94  start_pc=0
-    v789 Phi { incoming=[b93:v777, b104:v786], kind=I64 } -> x0
-    v790 Extend { value=v789, kind=I32 }                  -> x1
-    v791 BinopI { op=eq, lhs=v789, rhs_imm=0 }            -> x1
-    v792 BinopI { op=eq, lhs=v791, rhs_imm=0 }            -> x1
-    v793 Imm(0)                                           -> x1
-    terminator Bnz { cond=v789, target=b99, fall=b95 }   (low word)   (exit_acc=v792)
+    v787 Imm(2)                                           -> x0
+    terminator Jmp(b95)   (exit_acc=v787)
   block 95  start_pc=0
+    v789 Phi { incoming=[b94:v787, b102:v788], kind=I64 } -> x0
+    v790 Extend { value=v789, kind=I32 }                  -> x1
+    v791 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b96)   (exit_acc=v789)
+  block 96  start_pc=0
+    v801 Phi { incoming=[b95:v789, b106:v798], kind=I64 } -> x0
+    v802 Extend { value=v801, kind=I32 }                  -> x1
+    v803 BinopI { op=eq, lhs=v801, rhs_imm=0 }            -> x1
+    v804 BinopI { op=eq, lhs=v803, rhs_imm=0 }            -> x1
+    v805 Imm(0)                                           -> x1
+    terminator Bnz { cond=v801, target=b101, fall=b97 }   (low word)   (exit_acc=v804)
+  block 97  start_pc=0
     v243 Imm(1)                                           -> x0
     v244 Imm(0)                                           -> x0
     v245 Imm(0)                                           -> x0
@@ -869,299 +885,299 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v248 Binop { op=funo, lhs=v246, rhs=v247 }            -> x0
     v249 BinopI { op=eq, lhs=v248, rhs_imm=0 }            -> x1
     v250 Imm(0)                                           -> x1
-    terminator Bz { cond=v248, target=b97, fall=b96 }   (exit_acc=v249)
-  block 96  start_pc=0
+    terminator Bz { cond=v248, target=b99, fall=b98 }   (exit_acc=v249)
+  block 98  start_pc=0
     v252 LoadLocal { off=-1, kind=F64, volatile }         -> d0
     v253 Imm(4611686018427387904)                         -> x0
     v254 Binop { op=funo, lhs=v252, rhs=v253 }            -> x0
     v255 Imm(0)                                           -> x1
     v256 Imm(0)                                           -> x1
     v257 Imm(0)                                           -> x1
-    terminator Bz { cond=v254, target=b98, fall=b97 }   (exit_acc=v254)
-  block 97  start_pc=0
+    terminator Bz { cond=v254, target=b100, fall=b99 }   (exit_acc=v254)
+  block 99  start_pc=0
     v258 Imm(9)                                           -> x0
     terminator Return(v258)   (exit_acc=v258)
-  block 98  start_pc=0
+  block 100  start_pc=0
     v259 Imm(0)                                           -> x0
     terminator Return(v259)   (exit_acc=v259)
-  block 99  start_pc=0
+  block 101  start_pc=0
     v251 Imm(8)                                           -> x0
     terminator Return(v251)   (exit_acc=v251)
-  block 100  start_pc=0
-    v776 Imm(3)                                           -> x0
-    terminator Jmp(b93)   (exit_acc=v776)
-  block 101  start_pc=0
-    v771 BinopI { op=and, lhs=v237, rhs_imm=4294967295 }  -> x2
-    v772 BinopI { op=ne, lhs=v237, rhs_imm=255 }          -> x1
-    v773 BinopI { op=and, lhs=v772, rhs_imm=4294967295 }  -> x2
-    v774 BinopI { op=eq, lhs=v237, rhs_imm=255 }          -> x2
-    terminator Bnz { cond=v772, target=b106, fall=b102 }   (exit_acc=v774)
   block 102  start_pc=0
-    v780 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
-    v781 BinopI { op=eq, lhs=v240, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v240, target=b105, fall=b103 }   (low word)   (exit_acc=v781)
+    v788 Imm(3)                                           -> x0
+    terminator Jmp(b95)   (exit_acc=v788)
   block 103  start_pc=0
-    v784 Imm(1)                                           -> x0
-    terminator Jmp(b104)   (exit_acc=v784)
+    v783 BinopI { op=and, lhs=v237, rhs_imm=4294967295 }  -> x2
+    v784 BinopI { op=ne, lhs=v237, rhs_imm=255 }          -> x1
+    v785 BinopI { op=and, lhs=v784, rhs_imm=4294967295 }  -> x2
+    v786 BinopI { op=eq, lhs=v237, rhs_imm=255 }          -> x2
+    terminator Bnz { cond=v784, target=b108, fall=b104 }   (exit_acc=v786)
   block 104  start_pc=0
-    v786 Phi { incoming=[b103:v784, b105:v785], kind=I64 } -> x0
-    v787 Extend { value=v786, kind=I32 }                  -> x1
-    v788 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b94)   (exit_acc=v786)
+    v792 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
+    v793 BinopI { op=eq, lhs=v240, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v240, target=b107, fall=b105 }   (low word)   (exit_acc=v793)
   block 105  start_pc=0
-    v785 Imm(0)                                           -> x0
-    terminator Jmp(b104)   (exit_acc=v785)
+    v796 Imm(1)                                           -> x0
+    terminator Jmp(b106)   (exit_acc=v796)
   block 106  start_pc=0
-    v782 Imm(4)                                           -> x0
-    v783 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b99)   (exit_acc=v782)
+    v798 Phi { incoming=[b105:v796, b107:v797], kind=I64 } -> x0
+    v799 Extend { value=v798, kind=I32 }                  -> x1
+    v800 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b96)   (exit_acc=v798)
   block 107  start_pc=0
-    v862 Imm(3)                                           -> x0
-    terminator Jmp(b87)   (exit_acc=v862)
+    v797 Imm(0)                                           -> x0
+    terminator Jmp(b106)   (exit_acc=v797)
   block 108  start_pc=0
-    v860 BinopI { op=eq, lhs=v202, rhs_imm=2047 }         -> x1
-    terminator Bz { cond=v860, target=b113, fall=b109 }   (exit_acc=v860)
+    v794 Imm(4)                                           -> x0
+    v795 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b101)   (exit_acc=v794)
   block 109  start_pc=0
-    v866 BinopI { op=eq, lhs=v205, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v205, target=b112, fall=b110 }   (exit_acc=v866)
+    v874 Imm(3)                                           -> x0
+    terminator Jmp(b89)   (exit_acc=v874)
   block 110  start_pc=0
-    v869 Imm(1)                                           -> x0
-    terminator Jmp(b111)   (exit_acc=v869)
+    v872 BinopI { op=eq, lhs=v202, rhs_imm=2047 }         -> x1
+    terminator Bz { cond=v872, target=b115, fall=b111 }   (exit_acc=v872)
   block 111  start_pc=0
-    v871 Phi { incoming=[b110:v869, b112:v870], kind=I64 } -> x0
-    v872 Extend { value=v871, kind=I32 }                  -> x1
-    v873 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b88)   (exit_acc=v871)
+    v878 BinopI { op=eq, lhs=v205, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v205, target=b114, fall=b112 }   (exit_acc=v878)
   block 112  start_pc=0
-    v870 Imm(0)                                           -> x0
-    terminator Jmp(b111)   (exit_acc=v870)
+    v881 Imm(1)                                           -> x0
+    terminator Jmp(b113)   (exit_acc=v881)
   block 113  start_pc=0
-    v867 Imm(4)                                           -> x0
-    v868 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b76)   (exit_acc=v867)
+    v883 Phi { incoming=[b112:v881, b114:v882], kind=I64 } -> x0
+    v884 Extend { value=v883, kind=I32 }                  -> x1
+    v885 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b90)   (exit_acc=v883)
   block 114  start_pc=0
-    v836 Imm(3)                                           -> x0
-    terminator Jmp(b82)   (exit_acc=v836)
+    v882 Imm(0)                                           -> x0
+    terminator Jmp(b113)   (exit_acc=v882)
   block 115  start_pc=0
-    v834 BinopI { op=eq, lhs=v819, rhs_imm=2047 }         -> x2
-    terminator Bz { cond=v834, target=b120, fall=b116 }   (exit_acc=v834)
+    v879 Imm(4)                                           -> x0
+    v880 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b78)   (exit_acc=v879)
   block 116  start_pc=0
-    v840 BinopI { op=eq, lhs=v822, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v822, target=b119, fall=b117 }   (exit_acc=v840)
+    v848 Imm(3)                                           -> x0
+    terminator Jmp(b84)   (exit_acc=v848)
   block 117  start_pc=0
-    v843 Imm(1)                                           -> x0
-    terminator Jmp(b118)   (exit_acc=v843)
+    v846 BinopI { op=eq, lhs=v831, rhs_imm=2047 }         -> x2
+    terminator Bz { cond=v846, target=b122, fall=b118 }   (exit_acc=v846)
   block 118  start_pc=0
-    v845 Phi { incoming=[b117:v843, b119:v844], kind=I64 } -> x0
-    v846 Extend { value=v845, kind=I32 }                  -> x2
-    v847 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b83)   (exit_acc=v845)
+    v852 BinopI { op=eq, lhs=v834, rhs_imm=0 }            -> x2
+    terminator Bnz { cond=v834, target=b121, fall=b119 }   (exit_acc=v852)
   block 119  start_pc=0
-    v844 Imm(0)                                           -> x0
-    terminator Jmp(b118)   (exit_acc=v844)
+    v855 Imm(1)                                           -> x0
+    terminator Jmp(b120)   (exit_acc=v855)
   block 120  start_pc=0
-    v841 Imm(4)                                           -> x0
-    v842 LifetimeEnd(-8)                                  -> -
-    terminator Jmp(b76)   (exit_acc=v841)
+    v857 Phi { incoming=[b119:v855, b121:v856], kind=I64 } -> x0
+    v858 Extend { value=v857, kind=I32 }                  -> x2
+    v859 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b85)   (exit_acc=v857)
   block 121  start_pc=0
-    v749 Imm(3)                                           -> x0
-    terminator Jmp(b65)   (exit_acc=v749)
+    v856 Imm(0)                                           -> x0
+    terminator Jmp(b120)   (exit_acc=v856)
   block 122  start_pc=0
-    v744 BinopI { op=and, lhs=v106, rhs_imm=4294967295 }  -> x2
-    v745 BinopI { op=ne, lhs=v106, rhs_imm=255 }          -> x1
-    v746 BinopI { op=and, lhs=v745, rhs_imm=4294967295 }  -> x2
-    v747 BinopI { op=eq, lhs=v106, rhs_imm=255 }          -> x2
-    terminator Bnz { cond=v745, target=b127, fall=b123 }   (exit_acc=v747)
+    v853 Imm(4)                                           -> x0
+    v854 LifetimeEnd(-8)                                  -> -
+    terminator Jmp(b78)   (exit_acc=v853)
   block 123  start_pc=0
-    v753 BinopI { op=and, lhs=v109, rhs_imm=4294967295 }  -> x1
-    v754 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v109, target=b126, fall=b124 }   (low word)   (exit_acc=v754)
+    v755 Imm(3)                                           -> x0
+    terminator Jmp(b66)   (exit_acc=v755)
   block 124  start_pc=0
-    v757 Imm(1)                                           -> x0
-    terminator Jmp(b125)   (exit_acc=v757)
+    v750 BinopI { op=and, lhs=v106, rhs_imm=4294967295 }  -> x2
+    v751 BinopI { op=ne, lhs=v106, rhs_imm=255 }          -> x1
+    v752 BinopI { op=and, lhs=v751, rhs_imm=4294967295 }  -> x2
+    v753 BinopI { op=eq, lhs=v106, rhs_imm=255 }          -> x2
+    terminator Bnz { cond=v751, target=b129, fall=b125 }   (exit_acc=v753)
   block 125  start_pc=0
-    v759 Phi { incoming=[b124:v757, b126:v758], kind=I64 } -> x0
-    v760 Extend { value=v759, kind=I32 }                  -> x1
-    v761 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b66)   (exit_acc=v759)
+    v759 BinopI { op=and, lhs=v109, rhs_imm=4294967295 }  -> x1
+    v760 BinopI { op=eq, lhs=v109, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v109, target=b128, fall=b126 }   (low word)   (exit_acc=v760)
   block 126  start_pc=0
-    v758 Imm(0)                                           -> x0
-    terminator Jmp(b125)   (exit_acc=v758)
+    v763 Imm(1)                                           -> x0
+    terminator Jmp(b127)   (exit_acc=v763)
   block 127  start_pc=0
-    v755 Imm(4)                                           -> x0
-    v756 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b68)   (exit_acc=v755)
+    v765 Phi { incoming=[b126:v763, b128:v764], kind=I64 } -> x0
+    v766 Extend { value=v765, kind=I32 }                  -> x1
+    v767 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b67)   (exit_acc=v765)
   block 128  start_pc=0
+    v764 Imm(0)                                           -> x0
+    terminator Jmp(b127)   (exit_acc=v764)
+  block 129  start_pc=0
+    v761 Imm(4)                                           -> x0
+    v762 LifetimeEnd(-7)                                  -> -
+    terminator Jmp(b67)   (exit_acc=v761)
+  block 130  start_pc=0
     v721 Imm(3)                                           -> x0
     terminator Jmp(b60)   (exit_acc=v721)
-  block 129  start_pc=0
+  block 131  start_pc=0
     v716 BinopI { op=and, lhs=v94, rhs_imm=4294967295 }   -> x2
     v717 BinopI { op=ne, lhs=v94, rhs_imm=255 }           -> x1
     v718 BinopI { op=and, lhs=v717, rhs_imm=4294967295 }  -> x2
     v719 BinopI { op=eq, lhs=v94, rhs_imm=255 }           -> x2
-    terminator Bnz { cond=v717, target=b134, fall=b130 }   (exit_acc=v719)
-  block 130  start_pc=0
+    terminator Bnz { cond=v717, target=b136, fall=b132 }   (exit_acc=v719)
+  block 132  start_pc=0
     v725 BinopI { op=and, lhs=v97, rhs_imm=4294967295 }   -> x1
     v726 BinopI { op=eq, lhs=v97, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v97, target=b133, fall=b131 }   (low word)   (exit_acc=v726)
-  block 131  start_pc=0
+    terminator Bnz { cond=v97, target=b135, fall=b133 }   (low word)   (exit_acc=v726)
+  block 133  start_pc=0
     v729 Imm(1)                                           -> x0
-    terminator Jmp(b132)   (exit_acc=v729)
-  block 132  start_pc=0
-    v731 Phi { incoming=[b131:v729, b133:v730], kind=I64 } -> x0
+    terminator Jmp(b134)   (exit_acc=v729)
+  block 134  start_pc=0
+    v731 Phi { incoming=[b133:v729, b135:v730], kind=I64 } -> x0
     v732 Extend { value=v731, kind=I32 }                  -> x1
     v733 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b61)   (exit_acc=v731)
-  block 133  start_pc=0
+  block 135  start_pc=0
     v730 Imm(0)                                           -> x0
-    terminator Jmp(b132)   (exit_acc=v730)
-  block 134  start_pc=0
+    terminator Jmp(b134)   (exit_acc=v730)
+  block 136  start_pc=0
     v727 Imm(4)                                           -> x0
     v728 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b67)   (exit_acc=v727)
-  block 135  start_pc=0
+    terminator Jmp(b61)   (exit_acc=v727)
+  block 137  start_pc=0
     v692 Imm(3)                                           -> x0
     terminator Jmp(b55)   (exit_acc=v692)
-  block 136  start_pc=0
+  block 138  start_pc=0
     v687 BinopI { op=and, lhs=v82, rhs_imm=4294967295 }   -> x2
     v688 BinopI { op=ne, lhs=v82, rhs_imm=255 }           -> x1
     v689 BinopI { op=and, lhs=v688, rhs_imm=4294967295 }  -> x2
     v690 BinopI { op=eq, lhs=v82, rhs_imm=255 }           -> x2
-    terminator Bnz { cond=v688, target=b141, fall=b137 }   (exit_acc=v690)
-  block 137  start_pc=0
+    terminator Bnz { cond=v688, target=b143, fall=b139 }   (exit_acc=v690)
+  block 139  start_pc=0
     v696 BinopI { op=and, lhs=v85, rhs_imm=4294967295 }   -> x1
     v697 BinopI { op=eq, lhs=v85, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v85, target=b140, fall=b138 }   (low word)   (exit_acc=v697)
-  block 138  start_pc=0
+    terminator Bnz { cond=v85, target=b142, fall=b140 }   (low word)   (exit_acc=v697)
+  block 140  start_pc=0
     v700 Imm(1)                                           -> x0
-    terminator Jmp(b139)   (exit_acc=v700)
-  block 139  start_pc=0
-    v702 Phi { incoming=[b138:v700, b140:v701], kind=I64 } -> x0
+    terminator Jmp(b141)   (exit_acc=v700)
+  block 141  start_pc=0
+    v702 Phi { incoming=[b140:v700, b142:v701], kind=I64 } -> x0
     v703 Extend { value=v702, kind=I32 }                  -> x1
     v704 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b56)   (exit_acc=v702)
-  block 140  start_pc=0
+  block 142  start_pc=0
     v701 Imm(0)                                           -> x0
-    terminator Jmp(b139)   (exit_acc=v701)
-  block 141  start_pc=0
+    terminator Jmp(b141)   (exit_acc=v701)
+  block 143  start_pc=0
     v698 Imm(4)                                           -> x0
     v699 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b57)   (exit_acc=v698)
-  block 142  start_pc=0
+  block 144  start_pc=0
     v666 Imm(3)                                           -> x0
     terminator Jmp(b50)   (exit_acc=v666)
-  block 143  start_pc=0
+  block 145  start_pc=0
     v661 BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> x2
     v662 BinopI { op=ne, lhs=v70, rhs_imm=255 }           -> x1
     v663 BinopI { op=and, lhs=v662, rhs_imm=4294967295 }  -> x2
     v664 BinopI { op=eq, lhs=v70, rhs_imm=255 }           -> x2
-    terminator Bnz { cond=v662, target=b148, fall=b144 }   (exit_acc=v664)
-  block 144  start_pc=0
+    terminator Bnz { cond=v662, target=b150, fall=b146 }   (exit_acc=v664)
+  block 146  start_pc=0
     v670 BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x1
     v671 BinopI { op=eq, lhs=v73, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v73, target=b147, fall=b145 }   (low word)   (exit_acc=v671)
-  block 145  start_pc=0
+    terminator Bnz { cond=v73, target=b149, fall=b147 }   (low word)   (exit_acc=v671)
+  block 147  start_pc=0
     v674 Imm(1)                                           -> x0
-    terminator Jmp(b146)   (exit_acc=v674)
-  block 146  start_pc=0
-    v676 Phi { incoming=[b145:v674, b147:v675], kind=I64 } -> x0
+    terminator Jmp(b148)   (exit_acc=v674)
+  block 148  start_pc=0
+    v676 Phi { incoming=[b147:v674, b149:v675], kind=I64 } -> x0
     v677 Extend { value=v676, kind=I32 }                  -> x1
     v678 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b51)   (exit_acc=v676)
-  block 147  start_pc=0
+  block 149  start_pc=0
     v675 Imm(0)                                           -> x0
-    terminator Jmp(b146)   (exit_acc=v675)
-  block 148  start_pc=0
+    terminator Jmp(b148)   (exit_acc=v675)
+  block 150  start_pc=0
     v672 Imm(4)                                           -> x0
     v673 LifetimeEnd(-7)                                  -> -
-    terminator Jmp(b67)   (exit_acc=v672)
-  block 149  start_pc=0
+    terminator Jmp(b69)   (exit_acc=v672)
+  block 151  start_pc=0
     v640 Imm(3)                                           -> x0
     terminator Jmp(b44)   (exit_acc=v640)
-  block 150  start_pc=0
+  block 152  start_pc=0
     v635 BinopI { op=and, lhs=v57, rhs_imm=4294967295 }   -> x2
     v636 BinopI { op=ne, lhs=v57, rhs_imm=255 }           -> x1
     v637 BinopI { op=and, lhs=v636, rhs_imm=4294967295 }  -> x2
     v638 BinopI { op=eq, lhs=v57, rhs_imm=255 }           -> x2
-    terminator Bnz { cond=v636, target=b155, fall=b151 }   (exit_acc=v638)
-  block 151  start_pc=0
+    terminator Bnz { cond=v636, target=b157, fall=b153 }   (exit_acc=v638)
+  block 153  start_pc=0
     v644 BinopI { op=and, lhs=v60, rhs_imm=4294967295 }   -> x1
     v645 BinopI { op=eq, lhs=v60, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v60, target=b154, fall=b152 }   (low word)   (exit_acc=v645)
-  block 152  start_pc=0
+    terminator Bnz { cond=v60, target=b156, fall=b154 }   (low word)   (exit_acc=v645)
+  block 154  start_pc=0
     v648 Imm(1)                                           -> x0
-    terminator Jmp(b153)   (exit_acc=v648)
-  block 153  start_pc=0
-    v650 Phi { incoming=[b152:v648, b154:v649], kind=I64 } -> x0
+    terminator Jmp(b155)   (exit_acc=v648)
+  block 155  start_pc=0
+    v650 Phi { incoming=[b154:v648, b156:v649], kind=I64 } -> x0
     v651 Extend { value=v650, kind=I32 }                  -> x1
     v652 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b45)   (exit_acc=v650)
-  block 154  start_pc=0
+  block 156  start_pc=0
     v649 Imm(0)                                           -> x0
-    terminator Jmp(b153)   (exit_acc=v649)
-  block 155  start_pc=0
+    terminator Jmp(b155)   (exit_acc=v649)
+  block 157  start_pc=0
     v646 Imm(4)                                           -> x0
     v647 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b46)   (exit_acc=v646)
-  block 156  start_pc=0
+  block 158  start_pc=0
     v617 Imm(3)                                           -> x0
     terminator Jmp(b39)   (exit_acc=v617)
-  block 157  start_pc=0
-    v615 BinopI { op=eq, lhs=v602, rhs_imm=2047 }         -> x1
-    terminator Bz { cond=v615, target=b162, fall=b158 }   (exit_acc=v615)
-  block 158  start_pc=0
-    v621 BinopI { op=eq, lhs=v605, rhs_imm=0 }            -> x1
-    terminator Bnz { cond=v605, target=b161, fall=b159 }   (exit_acc=v621)
   block 159  start_pc=0
-    v624 Imm(1)                                           -> x0
-    terminator Jmp(b160)   (exit_acc=v624)
+    v615 BinopI { op=eq, lhs=v602, rhs_imm=2047 }         -> x1
+    terminator Bz { cond=v615, target=b164, fall=b160 }   (exit_acc=v615)
   block 160  start_pc=0
-    v626 Phi { incoming=[b159:v624, b161:v625], kind=I64 } -> x0
+    v621 BinopI { op=eq, lhs=v605, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v605, target=b163, fall=b161 }   (exit_acc=v621)
+  block 161  start_pc=0
+    v624 Imm(1)                                           -> x0
+    terminator Jmp(b162)   (exit_acc=v624)
+  block 162  start_pc=0
+    v626 Phi { incoming=[b161:v624, b163:v625], kind=I64 } -> x0
     v627 Extend { value=v626, kind=I32 }                  -> x1
     v628 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b40)   (exit_acc=v626)
-  block 161  start_pc=0
+  block 163  start_pc=0
     v625 Imm(0)                                           -> x0
-    terminator Jmp(b160)   (exit_acc=v625)
-  block 162  start_pc=0
+    terminator Jmp(b162)   (exit_acc=v625)
+  block 164  start_pc=0
     v622 Imm(4)                                           -> x0
     v623 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b46)   (exit_acc=v622)
-  block 163  start_pc=0
+  block 165  start_pc=0
     v565 Imm(3)                                           -> x0
     terminator Jmp(b28)   (exit_acc=v565)
-  block 164  start_pc=0
+  block 166  start_pc=0
     v560 BinopI { op=and, lhs=v552, rhs_imm=4294967295 }  -> x6
     v561 BinopI { op=ne, lhs=v552, rhs_imm=255 }          -> x2
     v562 BinopI { op=and, lhs=v561, rhs_imm=4294967295 }  -> x6
     v563 BinopI { op=eq, lhs=v552, rhs_imm=255 }          -> x6
-    terminator Bnz { cond=v561, target=b169, fall=b165 }   (exit_acc=v563)
-  block 165  start_pc=0
+    terminator Bnz { cond=v561, target=b171, fall=b167 }   (exit_acc=v563)
+  block 167  start_pc=0
     v569 BinopI { op=and, lhs=v555, rhs_imm=4294967295 }  -> x2
     v570 BinopI { op=eq, lhs=v555, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v555, target=b168, fall=b166 }   (low word)   (exit_acc=v570)
-  block 166  start_pc=0
+    terminator Bnz { cond=v555, target=b170, fall=b168 }   (low word)   (exit_acc=v570)
+  block 168  start_pc=0
     v573 Imm(1)                                           -> x0
-    terminator Jmp(b167)   (exit_acc=v573)
-  block 167  start_pc=0
-    v575 Phi { incoming=[b166:v573, b168:v19], kind=I64 } -> x0
+    terminator Jmp(b169)   (exit_acc=v573)
+  block 169  start_pc=0
+    v575 Phi { incoming=[b168:v573, b170:v19], kind=I64 } -> x0
     v576 Extend { value=v575, kind=I32 }                  -> x1
     v577 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b29)   (exit_acc=v575)
-  block 168  start_pc=0
+  block 170  start_pc=0
     v574 Imm(0)                                           -> x1
-    terminator Jmp(b167)   (exit_acc=v19)
-  block 169  start_pc=0
+    terminator Jmp(b169)   (exit_acc=v19)
+  block 171  start_pc=0
     v571 Imm(4)                                           -> x0
     v572 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b33)   (exit_acc=v571)
-  block 170  start_pc=0
+  block 172  start_pc=0
     v526 BinopI { op=and, lhs=v504, rhs_imm=4294967295 }  -> x2
     v527 BinopI { op=ne, lhs=v504, rhs_imm=255 }          -> x1
     v528 BinopI { op=and, lhs=v527, rhs_imm=4294967295 }  -> x2
     v529 BinopI { op=eq, lhs=v504, rhs_imm=255 }          -> x2
-    terminator Bnz { cond=v527, target=b172, fall=b171 }   (exit_acc=v529)
-  block 171  start_pc=0
+    terminator Bnz { cond=v527, target=b174, fall=b173 }   (exit_acc=v529)
+  block 173  start_pc=0
     v531 BinopI { op=and, lhs=v507, rhs_imm=4294967295 }  -> x1
     v532 BinopI { op=eq, lhs=v507, rhs_imm=0 }            -> x1
     v533 Imm(1)                                           -> x1
@@ -1169,17 +1185,17 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v535 Imm(1)                                           -> x1
     v536 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b25)   (exit_acc=v535)
-  block 172  start_pc=0
+  block 174  start_pc=0
     v537 Imm(4)                                           -> x0
     v538 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b15)   (exit_acc=v537)
-  block 173  start_pc=0
+  block 175  start_pc=0
     v409 BinopI { op=and, lhs=v397, rhs_imm=4294967295 }  -> x2
     v410 BinopI { op=ne, lhs=v397, rhs_imm=255 }          -> x1
     v411 BinopI { op=and, lhs=v410, rhs_imm=4294967295 }  -> x2
     v412 BinopI { op=eq, lhs=v397, rhs_imm=255 }          -> x2
-    terminator Bnz { cond=v410, target=b175, fall=b174 }   (exit_acc=v412)
-  block 174  start_pc=0
+    terminator Bnz { cond=v410, target=b177, fall=b176 }   (exit_acc=v412)
+  block 176  start_pc=0
     v414 BinopI { op=and, lhs=v400, rhs_imm=4294967295 }  -> x1
     v415 BinopI { op=eq, lhs=v400, rhs_imm=0 }            -> x1
     v416 Imm(1)                                           -> x1
@@ -1187,17 +1203,17 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v418 Imm(1)                                           -> x1
     v419 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b12)   (exit_acc=v418)
-  block 175  start_pc=0
+  block 177  start_pc=0
     v420 Imm(4)                                           -> x0
     v421 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b3)   (exit_acc=v420)
-  block 176  start_pc=0
+  block 178  start_pc=0
     v369 BinopI { op=and, lhs=v357, rhs_imm=4294967295 }  -> x6
     v370 BinopI { op=ne, lhs=v357, rhs_imm=255 }          -> x2
     v371 BinopI { op=and, lhs=v370, rhs_imm=4294967295 }  -> x6
     v372 BinopI { op=eq, lhs=v357, rhs_imm=255 }          -> x6
-    terminator Bnz { cond=v370, target=b178, fall=b177 }   (exit_acc=v372)
-  block 177  start_pc=0
+    terminator Bnz { cond=v370, target=b180, fall=b179 }   (exit_acc=v372)
+  block 179  start_pc=0
     v374 BinopI { op=and, lhs=v360, rhs_imm=4294967295 }  -> x2
     v375 BinopI { op=eq, lhs=v360, rhs_imm=0 }            -> x2
     v376 Imm(1)                                           -> x2
@@ -1205,21 +1221,21 @@ fn ent_pc=18 n_params=0 variadic=false locals=8
     v378 Imm(1)                                           -> x2
     v379 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b10)   (exit_acc=v378)
-  block 178  start_pc=0
+  block 180  start_pc=0
     v380 Imm(4)                                           -> x0
     v381 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b3)   (exit_acc=v380)
-  block 179  start_pc=0
+  block 181  start_pc=0
     v332 BinopI { op=eq, lhs=v305, rhs_imm=2047 }         -> x2
-    terminator Bz { cond=v332, target=b181, fall=b180 }   (exit_acc=v332)
-  block 180  start_pc=0
+    terminator Bz { cond=v332, target=b183, fall=b182 }   (exit_acc=v332)
+  block 182  start_pc=0
     v334 BinopI { op=eq, lhs=v308, rhs_imm=0 }            -> x2
     v335 Imm(1)                                           -> x2
     v336 Imm(0)                                           -> x2
     v337 Imm(1)                                           -> x2
     v338 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b8)   (exit_acc=v337)
-  block 181  start_pc=0
+  block 183  start_pc=0
     v339 Imm(4)                                           -> x0
     v340 LifetimeEnd(-8)                                  -> -
     terminator Jmp(b3)   (exit_acc=v339)

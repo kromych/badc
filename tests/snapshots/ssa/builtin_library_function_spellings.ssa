@@ -3,9 +3,9 @@ info: auto-including <string.h> for undeclared `strcmp`
 info: auto-including <math.h> for undeclared `pow`
 info: auto-including <stdlib.h> for undeclared `free`
 info: auto-including <ctype.h> for undeclared `toupper`
-; --- SSA dump (ok=true) ent_pc=24 ---
+; --- SSA dump (ok=true) ent_pc=25 ---
 ; name=format
-fn ent_pc=24 n_params=3 variadic=true locals=3
+fn ent_pc=25 n_params=3 variadic=true locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -24,9 +24,9 @@ fn ent_pc=24 n_params=3 variadic=true locals=3
     v13  Extend { value=v8, kind=I32 }                    -> x1
     v14  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
-; --- SSA dump (ok=true) ent_pc=25 ---
+; --- SSA dump (ok=true) ent_pc=26 ---
 ; name=main
-fn ent_pc=25 n_params=0 variadic=false locals=6
+fn ent_pc=26 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -218,7 +218,7 @@ fn ent_pc=25 n_params=0 variadic=false locals=6
     v125 ImmData(38)                                      -> x2
     v126 ImmData(43)                                      -> x1
     v127 Imm(7)                                           -> x8
-    v128 Call { target_pc=24, args=[v123, v124, v125, v126, v127], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v128 Call { target_pc=25, args=[v123, v124, v125, v126, v127], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v129 Extend { value=v128, kind=I32 }                  -> x1
     v130 BinopI { op=ne, lhs=v128, rhs_imm=2 }            -> x0
     v131 Imm(0)                                           -> x1

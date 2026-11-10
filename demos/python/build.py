@@ -25,6 +25,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -336,7 +337,7 @@ def ensure_inputs(target: str, log) -> None:
         pc = SRC / "pyconfig.h"
         text = pc.read_text()
         for m in undefs:
-            text = text.replace(f"#define {m} 1\n", f"/* badc: {m} unsupported, undefined */\n")
+            text = text.replace(f"#define {m} 1\n", f"/* #undef {m} */\n")
         pc.write_text(text)
     shutil.copy2(tdir / "config.c", SRC / "Modules" / "config.c")
     # Drop the inittab entry and extern for each excluded module so the static
@@ -353,10 +354,17 @@ def ensure_inputs(target: str, log) -> None:
             )
         ]
         cc.write_text("".join(keep))
-    # Place any committed generated stdlib modules (e.g. _sysconfigdata, which a
-    # host build generates and the tarball omits) onto the path.
+    # Place the committed _sysconfigdata (a host build generates it; the tarball
+    # omits it) onto the path, completed with the effective pyconfig.h as a
+    # configure build records it through sysconfig.parse_config_h.
+    with open(SRC / "pyconfig.h") as fp:
+        config_h = sysconfig.parse_config_h(fp)
     for f in tdir.glob("_sysconfigdata*.py"):
-        shutil.copy2(f, SRC / "Lib" / f.name)
+        (SRC / "Lib" / f.name).write_text(
+            f.read_text()
+            + f"\nfor _k, _v in {config_h!r}.items():\n"
+            + "    build_time_vars.setdefault(_k, _v)\ndel _k, _v\n"
+        )
     log(f"inputs ready for {target}")
 
 

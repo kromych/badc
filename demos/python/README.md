@@ -20,10 +20,14 @@ evaluator, the object and memory model, Unicode, and the parser.
   badc with `--msvc` where MSBuild runs cl, link and lib, against the MSVC
   headers and the Windows SDK (not badc's bundled C library), linking the SDK
   and UCRT import libraries. It builds `python315.dll`, `python3.dll`,
-  `python.exe`, `pythonw.exe`, the launchers and every C extension module,
-  with the external libraries from source; `--test` runs the whole regrtest
-  suite. `BADC_WINDOWS_KITS` / `BADC_MSVC_TOOLS` point it at a copied kit for
-  a cross build from macOS or Linux.
+  `python.exe`, `pythonw.exe`, the launchers and the C extension modules,
+  with the external libraries from source; OpenSSL and Tcl/Tk are not built
+  yet, so `_ssl`, `_hashlib` and `_tkinter` are left out, as are the C++
+  `_wmi` and `pyshellext`. `--test` runs the whole regrtest suite: on
+  Windows x64 and arm64 every test module passes or is skipped except
+  `test_wmi`, which requires `_wmi` on Windows and fails at its import.
+  `BADC_WINDOWS_KITS` / `BADC_MSVC_TOOLS` point it at a copied kit for a
+  cross build from macOS or Linux.
 - `smoke.py` -- the reference build: `./configure --without-mimalloc` + `make`
   with the host compiler, producing a reference `python` for `bench.py`.
 - `bench.py` + `benchmarks/` -- runs the dependency-free pure-Python benchmarks

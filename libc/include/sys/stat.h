@@ -437,21 +437,6 @@ struct statfs {
 };
 #endif
 
-struct statvfs {
-    int f_bsize;
-    int f_frsize;
-    int f_blocks;
-    int f_bfree;
-    int f_bavail;
-    int f_files;
-    int f_ffree;
-    int f_favail;
-    int f_fsid;
-    int f_flag;
-    int f_namemax;
-    char f_pad[64];
-};
-
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::statfs,  "_statfs")

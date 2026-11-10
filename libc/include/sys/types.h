@@ -121,12 +121,17 @@ typedef int suseconds_t;
 typedef int clockid_t;
 #endif
 typedef int timer_id_t;
+// statvfs block and inode counts: the SDK's are 32-bit, glibc LP64's are
+// unsigned long.
 #ifdef __BADC_WINDOWS__
 typedef long long fsblkcnt_t;
 typedef long long fsfilcnt_t;
+#elif defined(__APPLE__)
+typedef unsigned int fsblkcnt_t;
+typedef unsigned int fsfilcnt_t;
 #else
-typedef long fsblkcnt_t;
-typedef long fsfilcnt_t;
+typedef unsigned long fsblkcnt_t;
+typedef unsigned long fsfilcnt_t;
 #endif
 #ifdef __BADC_WINDOWS__
 typedef int socklen_t;

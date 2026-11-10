@@ -495,6 +495,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("linux/fd.h", LINUX),
     header!("linux/can.h", LINUX),
     header!("linux/can/raw.h", LINUX),
+    header!("linux/can/j1939.h", LINUX),
     // The MinGW identity and the decorator no-ops a unit opts into with
     // `-include msvc_compat.h`; it is empty off Windows.
     header!("msvc_compat.h", ALL),

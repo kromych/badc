@@ -3,6 +3,7 @@
 #pragma once
 
 #include <limits.h>
+#include <sys/types.h>
 
 // Filesystem and identity limits. The values match the supported hosts
 // (macOS / Linux agree on these); programs use them to size stack
@@ -24,6 +25,11 @@
 #endif
 #ifndef NOFILE
 #define NOFILE 256
+#endif
+
+// The device number no device has (stat's st_rdev of a non-device file).
+#ifndef NODEV
+#define NODEV ((dev_t)-1)
 #endif
 
 #ifndef MIN

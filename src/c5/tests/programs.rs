@@ -4569,6 +4569,39 @@ fn linux_can_socket_and_block_headers() {
 }
 
 #[test]
+fn lockf_commands_nodev_and_j1939_header() {
+    use crate::{CompileOptions, Compiler, Target};
+    // POSIX defines F_ULOCK..F_TEST with lockf() in <unistd.h>; <sys/param.h>
+    // gives NODEV as (dev_t)-1 on Linux and macOS; <linux/can/j1939.h> is the
+    // uapi header with SOL_CAN_J1939 and struct j1939_filter.
+    let compiles = |src: &str, target: Target| -> bool {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    let posix = "#include <unistd.h>\n#include <sys/param.h>\n\
+                 int ck[(F_ULOCK==0 && F_LOCK==1 && F_TLOCK==2 && F_TEST==3 \
+                 && NODEV==(dev_t)-1)?1:-1];\n\
+                 int lk(int fd){ return lockf(fd, F_TLOCK, 0); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert!(
+            compiles(posix, target),
+            "lockf commands and NODEV on {target:?}"
+        );
+    }
+    let j1939 = "#include <sys/socket.h>\n#include <linux/can.h>\n\
+                 #include <linux/can/j1939.h>\n\
+                 int ck[(SOL_CAN_J1939==107 && J1939_NO_NAME==0 && J1939_NO_ADDR==0xff \
+                 && J1939_NO_PGN==0x40000 && SO_J1939_ERRQUEUE==4 && SCM_J1939_PRIO==3 \
+                 && J1939_NLA_DEST_ADDR==7 && J1939_EE_INFO_RX_ABORT==4 \
+                 && sizeof(struct j1939_filter)==32 && sizeof(name_t)==8)?1:-1];\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert!(compiles(j1939, target), "linux/can/j1939.h on {target:?}");
+    }
+}
+
+#[test]
 fn linux_block_device_and_file_headers() {
     use crate::{CompileOptions, Compiler, Target};
     // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /

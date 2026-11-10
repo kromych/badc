@@ -283,5 +283,6 @@ linux/hdreg.h	-	y	y	-	-
 linux/fd.h	-	y	y	-	-
 linux/can.h	-	y	y	-	-
 linux/can/raw.h	-	y	y	-	-
+linux/can/j1939.h	-	y	y	-	-
 msvc_compat.h	-	-	-	-	-
 memory.h	y	y	y	y	y

@@ -685,6 +685,10 @@ int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
 int lockf(int fd, int cmd, long len);
+#define F_ULOCK 0
+#define F_LOCK 1
+#define F_TLOCK 2
+#define F_TEST 3
 #endif
 int execv(const char *path, char *const argv[]);
 #ifdef __linux__

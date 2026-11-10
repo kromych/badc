@@ -472,6 +472,9 @@ pub(super) fn emit_inst(
         }
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame, scratch),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
+        Inst::VecBinop { op, lane, lhs, rhs } => {
+            emit_vec_binop(code, (*op, *lane), (*lhs, *rhs), dst, alloc, frame, scratch)
+        }
         Inst::Fma {
             a,
             b,
@@ -675,6 +678,48 @@ fn emit_incoming(
         }
         _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }
+    Ok(())
+}
+
+/// `Inst::VecBinop`: the AdvSIMD instruction on the operands' v registers,
+/// a spilled one reloaded into an FP scratch, the result spilled from one.
+fn emit_vec_binop(
+    code: &mut Vec<u8>,
+    (op, lane): (super::super::ir::BinOp, super::super::ir::VecLane),
+    (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some(qd) = fp_or_spill_dst(dst, frame) else {
+        return fail("VecBinop: dst not fp reg / spill");
+    };
+    let Some(qn) = materialize_v128(
+        code,
+        place_of(alloc, lhs),
+        frame.fp_scratch[0],
+        frame,
+        scratch.primary,
+    ) else {
+        return fail("VecBinop: lhs not fp reg / spill");
+    };
+    let Some(qm) = materialize_v128(
+        code,
+        place_of(alloc, rhs),
+        frame.fp_scratch[1],
+        frame,
+        scratch.primary,
+    ) else {
+        return fail("VecBinop: rhs not fp reg / spill");
+    };
+    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm)) else {
+        return fail(alloc::format!(
+            "VecBinop: no instruction for {op:?} on {lane:?}"
+        ));
+    };
+    emit(code, word);
+    propagate_v128(code, frame, dst, qd, scratch.primary);
     Ok(())
 }
 

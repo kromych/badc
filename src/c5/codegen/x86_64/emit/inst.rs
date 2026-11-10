@@ -481,6 +481,9 @@ pub(super) fn emit_inst(
         Inst::X86SimdVal { op, imm, args } => {
             emit_x86_simd_val(code, *op, *imm, args, dst, alloc, frame)
         }
+        Inst::VecBinop { op, lane, lhs, rhs } => {
+            emit_vec_binop(code, (*op, *lane), (*lhs, *rhs), dst, alloc, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),

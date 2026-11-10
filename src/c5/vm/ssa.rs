@@ -606,9 +606,24 @@ struct Frame<'a> {
     /// `func.over_aligned` places its object at `realign_base + region_off`.
     realign_base: usize,
     block_idx: usize,
+    /// The 128-bit values (`LoadKind::V128` loads, `Inst::VecBinop`), by
+    /// `ValueId`; their `regs` entries stay 0.
+    vregs: alloc::collections::BTreeMap<ValueId, [u8; 16]>,
 }
 
 impl Frame<'_> {
+    fn v128(&self, v: ValueId) -> Result<[u8; 16], C5Error> {
+        self.vregs
+            .get(&v)
+            .copied()
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not a 128-bit value")))
+    }
+
+    fn set_v128(&mut self, v: ValueId, bytes: [u8; 16]) {
+        self.regs[v as usize] = 0;
+        self.vregs.insert(v, bytes);
+    }
+
     /// The link a call at instruction `call` of this frame hands `callee`.
     fn link_to(&self, callee: usize, call: ValueId) -> CallLink {
         let block = &self.func.blocks[self.block_idx];
@@ -955,6 +970,7 @@ fn run_func<H: Host>(
         locals,
         realign_base,
         block_idx: 0,
+        vregs: alloc::collections::BTreeMap::new(),
     };
     for (i, &v) in args.iter().enumerate() {
         // Host-ABI register-passed aggregate parameter. The callee body
@@ -1313,6 +1329,11 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, load_width(*kind), AccessKind::Read)?;
+            if *kind == LoadKind::V128 {
+                let bytes = mem.read_bytes(a as usize, 16)?.try_into().unwrap();
+                frame.set_v128(v, bytes);
+                return Ok(());
+            }
             frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
             return Ok(());
         }
@@ -1334,6 +1355,11 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, store_width(*kind), AccessKind::Write)?;
+            if *kind == StoreKind::V128 {
+                let bytes = frame.v128(*value)?;
+                mem.write_bytes(a as usize, &bytes)?;
+                return Ok(());
+            }
             let stored = narrow_store(frame.regs[*value as usize], *kind);
             store_to_memory(mem, a as usize, stored, *kind)?;
             // c5 Store leaves the stored value in the accumulator;
@@ -1715,6 +1741,11 @@ fn run_inst<H: Host>(
         }
         // The -O rewrite producing it never reaches the VM.
         Inst::X86SimdVal { .. } => "X86SimdVal",
+        Inst::VecBinop { op, lane, lhs, rhs } => {
+            let r = vec_binop(*op, *lane, frame.v128(*lhs)?, frame.v128(*rhs)?);
+            frame.set_v128(v, r);
+            return Ok(());
+        }
         Inst::InlineAsm { asm, args } => {
             if prog.aarch64 {
                 asm_a64::run(mem, frame, asm, args, v)?;
@@ -4419,6 +4450,58 @@ fn run_intrinsic(
 /// Sign / zero extension follows C99 6.3.1.3 per the LoadKind's
 /// signedness. Bounds errors trip a runtime error so a stray
 /// pointer doesn't read uninitialised state.
+/// `Inst::VecBinop` over the little-endian lane images of its operands:
+/// integer lanes wrap, floating ones round as the scalar operation does.
+fn vec_binop(
+    op: crate::c5::ir::BinOp,
+    lane: crate::c5::ir::VecLane,
+    a: [u8; 16],
+    b: [u8; 16],
+) -> [u8; 16] {
+    use crate::c5::ir::{BinOp, VecLane};
+    let w = lane.bytes() as usize;
+    let mut out = [0u8; 16];
+    for i in (0..16).step_by(w) {
+        let mut x = [0u8; 8];
+        let mut y = [0u8; 8];
+        x[..w].copy_from_slice(&a[i..i + w]);
+        y[..w].copy_from_slice(&b[i..i + w]);
+        let (x, y) = (u64::from_le_bytes(x), u64::from_le_bytes(y));
+        let r = match (lane, op) {
+            (VecLane::F32, _) => {
+                let (p, q) = (f32::from_bits(x as u32), f32::from_bits(y as u32));
+                u64::from(
+                    match op {
+                        BinOp::Fadd => p + q,
+                        BinOp::Fsub => p - q,
+                        BinOp::Fmul => p * q,
+                        _ => p / q,
+                    }
+                    .to_bits(),
+                )
+            }
+            (VecLane::F64, _) => {
+                let (p, q) = (f64::from_bits(x), f64::from_bits(y));
+                match op {
+                    BinOp::Fadd => p + q,
+                    BinOp::Fsub => p - q,
+                    BinOp::Fmul => p * q,
+                    _ => p / q,
+                }
+                .to_bits()
+            }
+            (_, BinOp::Add) => x.wrapping_add(y),
+            (_, BinOp::Sub) => x.wrapping_sub(y),
+            (_, BinOp::Mul) => x.wrapping_mul(y),
+            (_, BinOp::And) => x & y,
+            (_, BinOp::Or) => x | y,
+            _ => x ^ y,
+        };
+        out[i..i + w].copy_from_slice(&r.to_le_bytes()[..w]);
+    }
+    out
+}
+
 fn load_width(kind: LoadKind) -> usize {
     match kind {
         // The x87 read covers the 10 significant bytes; the binary128

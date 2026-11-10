@@ -61,6 +61,41 @@ impl<'a> Walker<'a> {
         })
     }
 
+    /// The lane of a 16-byte vector operation the target does in one
+    /// instruction on whole vectors (`Inst::VecBinop`): two vector operands,
+    /// no comparison, an element of 1, 2, 4 or 8 bytes or a `float` or
+    /// `double`.
+    fn whole_vector_lane(
+        &self,
+        op: BinOp,
+        lane_op: BinOp,
+        elem_ty: i64,
+        size: i64,
+        both_vectors: bool,
+    ) -> Option<crate::c5::ir::VecLane> {
+        use crate::c5::ir::VecLane;
+        if size != 16 || !both_vectors || is_vector_compare_op(op) {
+            return None;
+        }
+        let lane = if is_floating_scalar(elem_ty) {
+            match load_kind_for(elem_ty, self.target) {
+                LoadKind::F32 => VecLane::F32,
+                LoadKind::F64 => VecLane::F64,
+                _ => return None,
+            }
+        } else {
+            match load_kind_for(elem_ty, self.target) {
+                LoadKind::I8 | LoadKind::U8 => VecLane::I8,
+                LoadKind::I16 | LoadKind::U16 => VecLane::I16,
+                LoadKind::I32 | LoadKind::U32 => VecLane::I32,
+                LoadKind::I64 => VecLane::I64,
+                _ => return None,
+            }
+        };
+        lane.binop_in_one_instruction(lane_op, self.target.is_x86_64())
+            .then_some(lane)
+    }
+
     /// GCC vector extension: element-wise `op` over two vectors, or over a
     /// vector and a scalar broadcast to every lane. The result is a fresh
     /// synthetic aggregate whose address is returned, matching how a struct
@@ -81,6 +116,29 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         let lhs_vec = self.expr_is_vector(lhs);
         let rhs_vec = self.expr_is_vector(rhs);
+        {
+            let (elem_ty, _) = self.vector_lanes(ty);
+            let size = self.struct_size(ty);
+            // A product the scalar code may contract into a fused multiply-add
+            // is an ordinary one on whole vectors.
+            let lane_op = match vector_lane_binop(op, elem_ty) {
+                BinOp::FmulContractible => BinOp::Fmul,
+                o => o,
+            };
+            if let Some(lane) =
+                self.whole_vector_lane(op, lane_op, elem_ty, size, lhs_vec && rhs_vec)
+            {
+                let lv = self.walk_copy_operand(b, lhs)?;
+                let rv = self.walk_copy_operand(b, rhs)?;
+                let a = b.load(lv, LoadKind::V128);
+                let c = b.load(rv, LoadKind::V128);
+                let r = b.vec_binop(lane_op, lane, a, c);
+                let slot = b.alloc_synthetic_struct(size, self.vector_temp_align(ty));
+                let dst = b.local_addr(slot);
+                b.store(dst, r, StoreKind::V128);
+                return Ok(dst);
+            }
+        }
         if lhs_vec && rhs_vec && matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
             return self.walk_vector_chunked(b, op, lhs, rhs, ty);
         }

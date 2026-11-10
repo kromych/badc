@@ -4168,11 +4168,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x60(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x50(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -4180,39 +4180,29 @@ Disassembly of section .text:
                	movl	$0x0, -0x3c(%rbp)
                	movl	$0xffffffff, -0x38(%rbp) # imm = 0xFFFFFFFF
                	movl	$0x0, -0x34(%rbp)
-               	movq	-0x40(%rbp), %rdx
-               	movq	-0x38(%rbp), %rsi
-               	movabsq	$0x500000001, %rdi      # imm = 0x500000001
-               	andq	%rdx, %rdi
-               	movabsq	$0x900000003, %r11      # imm = 0x900000003
-               	andq	%r11, %rsi
-               	leaq	-0x40(%rbp), %rdx
+               	movups	-0x40(%rbp), %xmm0
+               	movups	-0x60(%rbp), %xmm1
+               	pand	%xmm1, %xmm0
                	movl	$0x0, -0x40(%rbp)
                	movl	$0xffffffff, -0x3c(%rbp) # imm = 0xFFFFFFFF
-               	addq	$0x8, %rdx
-               	movl	$0x0, (%rdx)
+               	movl	$0x0, -0x38(%rbp)
                	movl	$0xffffffff, -0x34(%rbp) # imm = 0xFFFFFFFF
-               	movq	-0x40(%rbp), %rax
-               	movabsq	$0x400000002, %r11      # imm = 0x400000002
-               	andq	%r11, %rax
-               	movq	(%rdx), %rcx
-               	movabsq	$0x800000006, %r11      # imm = 0x800000006
-               	andq	%r11, %rcx
-               	orq	%rdi, %rax
-               	movq	%rax, -0x40(%rbp)
-               	orq	%rsi, %rcx
-               	movq	%rcx, -0x38(%rbp)
+               	movups	-0x40(%rbp), %xmm1
+               	movups	-0x50(%rbp), %xmm2
+               	pand	%xmm2, %xmm1
+               	por	%xmm1, %xmm0
+               	movups	%xmm0, -0x40(%rbp)
                	movl	-0x40(%rbp), %eax
-               	movl	-0x3c(%rbp), %ecx
-               	movl	-0x38(%rbp), %edx
-               	movl	-0x34(%rbp), %esi
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	cmpl	$0x4, %ecx
+               	movl	-0x3c(%rbp), %eax
+               	cmpl	$0x4, %eax
                	jne	<addr>
-               	cmpl	$0x3, %edx
+               	movl	-0x38(%rbp), %eax
+               	cmpl	$0x3, %eax
                	jne	<addr>
-               	cmpl	$0x8, %esi
+               	movl	-0x34(%rbp), %eax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x33, %eax
                	leave

@@ -584,6 +584,18 @@ pub(crate) enum Inst {
         imm: Option<u8>,
         args: Vec<ValueId>,
     },
+    /// The GNU vector extension's element-wise `op` over two 16-byte vectors
+    /// held as `V128` values, `lane` naming the element type: the integer
+    /// `Add`, `Sub`, `Mul`, `And`, `Or` and `Xor`, wrapping, and the
+    /// floating `Fadd`, `Fsub`, `Fmul` and `Fdiv`. Defines the `V128`
+    /// result. The walker emits one only where
+    /// [`VecLane::binop_in_one_instruction`] holds for the target.
+    VecBinop {
+        op: BinOp,
+        lane: VecLane,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
     /// [`Inst::X86Simd`] on values, as `passes::x86_simd_values` rewrites
     /// it under `-O`: `args` are the sources, a 128-bit operand as a `V128`
     /// value and an integer one as itself, and the instruction defines its
@@ -743,6 +755,7 @@ impl Inst {
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
                 | Inst::X86SimdVal { .. }
+                | Inst::VecBinop { .. }
         )
     }
 
@@ -815,6 +828,7 @@ impl Inst {
             Inst::Intrinsic { .. } => "Intrinsic",
             Inst::X86Simd { .. } => "X86Simd",
             Inst::X86SimdVal { .. } => "X86SimdVal",
+            Inst::VecBinop { .. } => "VecBinop",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
@@ -876,7 +890,9 @@ impl Inst {
                 f(*index);
                 f(*value);
             }
-            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. }
+            | Inst::ShiftOp { lhs, rhs, .. }
+            | Inst::VecBinop { lhs, rhs, .. } => {
                 f(*lhs);
                 f(*rhs);
             }
@@ -998,7 +1014,9 @@ impl Inst {
                 f(index);
                 f(value);
             }
-            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. }
+            | Inst::ShiftOp { lhs, rhs, .. }
+            | Inst::VecBinop { lhs, rhs, .. } => {
                 f(lhs);
                 f(rhs);
             }
@@ -1069,6 +1087,46 @@ impl Inst {
                     f(v);
                 }
             }
+        }
+    }
+}
+
+/// The element type of a 16-byte vector operation: its width and whether it
+/// is a floating type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum VecLane {
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+}
+
+impl VecLane {
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            VecLane::I8 => 1,
+            VecLane::I16 => 2,
+            VecLane::I32 | VecLane::F32 => 4,
+            VecLane::I64 | VecLane::F64 => 8,
+        }
+    }
+
+    pub(crate) fn is_float(self) -> bool {
+        matches!(self, VecLane::F32 | VecLane::F64)
+    }
+
+    /// Whether the target has one instruction for the element-wise `op`:
+    /// SSE2 has no 8-, 32- or 64-bit integer multiply, AdvSIMD no 64-bit
+    /// one.
+    pub(crate) fn binop_in_one_instruction(self, op: BinOp, x86: bool) -> bool {
+        match op {
+            BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor => !self.is_float(),
+            BinOp::Mul if x86 => self == VecLane::I16,
+            BinOp::Mul => matches!(self, VecLane::I8 | VecLane::I16 | VecLane::I32),
+            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => self.is_float(),
+            _ => false,
         }
     }
 }
@@ -2849,6 +2907,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Intrinsic { .. }
             | Inst::X86Simd { .. }
             | Inst::X86SimdVal { .. }
+            | Inst::VecBinop { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }

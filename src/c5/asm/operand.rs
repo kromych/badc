@@ -642,7 +642,9 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::TailExt(_),
             ) => "a call result",
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
-            Some(Inst::X86Simd { .. } | Inst::X86SimdVal { .. }) => "a vector result",
+            Some(Inst::X86Simd { .. } | Inst::X86SimdVal { .. } | Inst::VecBinop { .. }) => {
+                "a vector result"
+            }
             Some(
                 Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }

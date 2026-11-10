@@ -1924,6 +1924,16 @@ impl SsaBuilder {
     /// block, va_start / va_arg may write through caller buffers.
     /// `Inst::X86Simd` -- one x86 SIMD instruction. Writes through the
     /// destination address in `args[0]`, so the local caches are cleared.
+    pub(crate) fn vec_binop(
+        &mut self,
+        op: BinOp,
+        lane: crate::c5::ir::VecLane,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> ValueId {
+        self.push(Inst::VecBinop { op, lane, lhs, rhs })
+    }
+
     pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::X86Simd { op, imm, args })

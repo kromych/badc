@@ -1228,6 +1228,39 @@ pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `MOV <Vd>.16B, <Vn>.16B` (`ORR Vd.16B, Vn.16B, Vn.16B`).
+/// The AdvSIMD three-same instruction for the element-wise `op` over
+/// 128-bit vectors of `lane` elements: `vd = vn op vm`. `None` for an
+/// operation with no single instruction ([`VecLane::binop_in_one_instruction`]).
+pub(crate) fn enc_vec_binop(
+    op: crate::c5::ir::BinOp,
+    lane: crate::c5::ir::VecLane,
+    vd: u8,
+    vn: u8,
+    vm: u32,
+) -> Option<u32> {
+    use crate::c5::ir::{BinOp, VecLane};
+    let size: u32 = match lane {
+        VecLane::I8 | VecLane::F32 => 0,
+        VecLane::I16 | VecLane::F64 => 1,
+        VecLane::I32 => 2,
+        VecLane::I64 => 3,
+    };
+    let base = match (op, lane.is_float()) {
+        (BinOp::Add, false) => 0x4E20_8400 | size << 22,
+        (BinOp::Sub, false) => 0x6E20_8400 | size << 22,
+        (BinOp::Mul, false) if size < 3 => 0x4E20_9C00 | size << 22,
+        (BinOp::And, false) => 0x4E20_1C00,
+        (BinOp::Or, false) => 0x4EA0_1C00,
+        (BinOp::Xor, false) => 0x6E20_1C00,
+        (BinOp::Fadd, true) => 0x4E20_D400 | size << 22,
+        (BinOp::Fsub, true) => 0x4EA0_D400 | size << 22,
+        (BinOp::Fmul, true) => 0x6E20_DC00 | size << 22,
+        (BinOp::Fdiv, true) => 0x6E20_FC00 | size << 22,
+        _ => return None,
+    };
+    Some(base | (vm & 31) << 16 | u32::from(vn & 31) << 5 | u32::from(vd & 31))
+}
+
 pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> u32 {
     debug_assert!(vd < 32 && vn < 32);
     0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32

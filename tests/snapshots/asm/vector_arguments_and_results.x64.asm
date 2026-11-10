@@ -26,60 +26,12 @@ Disassembly of section .text:
                	int3
 
 <add>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movups	%xmm0, -0x30(%rbp)
-               	movups	%xmm1, -0x20(%rbp)
-               	movl	-0x30(%rbp), %eax
-               	movl	-0x20(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0x10(%rbp)
-               	movl	-0x2c(%rbp), %eax
-               	movl	-0x1c(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0xc(%rbp)
-               	movl	-0x28(%rbp), %eax
-               	movl	-0x18(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x24(%rbp), %eax
-               	movl	-0x14(%rbp), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, -0x4(%rbp)
-               	movups	-0x10(%rbp), %xmm0
-               	leave
+               	paddd	%xmm1, %xmm0
                	retq
 
 <fma4>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movups	%xmm0, -0x30(%rbp)
-               	movups	%xmm1, -0x20(%rbp)
-               	movups	%xmm2, -0x10(%rbp)
-               	movss	-0x30(%rbp), %xmm0
-               	movss	-0x20(%rbp), %xmm1
-               	movss	-0x2c(%rbp), %xmm2
-               	movss	-0x1c(%rbp), %xmm3
-               	movss	-0x28(%rbp), %xmm4
-               	movss	-0x18(%rbp), %xmm5
-               	movss	-0x24(%rbp), %xmm6
-               	movss	-0x14(%rbp), %xmm7
-               	movss	-0x10(%rbp), %xmm8
-               	vfmadd213ss	%xmm8, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm8
-               	movss	%xmm0, -0x20(%rbp)
-               	movss	-0xc(%rbp), %xmm0
-               	vfmadd231ss	%xmm3, %xmm2, %xmm0 # xmm0 = (xmm2 * xmm3) + xmm0
-               	movss	%xmm0, -0x1c(%rbp)
-               	movss	-0x8(%rbp), %xmm0
-               	vfmadd231ss	%xmm5, %xmm4, %xmm0 # xmm0 = (xmm4 * xmm5) + xmm0
-               	movss	%xmm0, -0x18(%rbp)
-               	movss	-0x4(%rbp), %xmm0
-               	vfmadd231ss	%xmm7, %xmm6, %xmm0 # xmm0 = (xmm6 * xmm7) + xmm0
-               	movss	%xmm0, -0x14(%rbp)
-               	movups	-0x20(%rbp), %xmm0
-               	leave
+               	mulps	%xmm1, %xmm0
+               	addps	%xmm2, %xmm0
                	retq
 
 <neg>:

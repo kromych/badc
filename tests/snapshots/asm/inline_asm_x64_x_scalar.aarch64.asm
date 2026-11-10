@@ -16,7 +16,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x40
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -27,40 +27,20 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	sub	x1, x29, #0x40
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	sub	x2, x29, #0x30
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x30
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldur	s0, [x29, #-0x30]
-               	ldur	s1, [x29, #-0x50]
-               	fadd	s0, s0, s1
-               	stur	s0, [x29, #-0x40]
-               	ldur	s0, [x29, #-0x2c]
-               	ldur	s1, [x29, #-0x4c]
-               	fadd	s0, s0, s1
-               	stur	s0, [x29, #-0x3c]
-               	ldur	s0, [x29, #-0x28]
-               	ldur	s1, [x29, #-0x48]
-               	fadd	s0, s0, s1
-               	stur	s0, [x29, #-0x38]
-               	ldur	s0, [x29, #-0x24]
-               	ldur	s1, [x29, #-0x44]
-               	fadd	s0, s0, s1
-               	stur	s0, [x29, #-0x34]
                	ldur	q0, [x29, #-0x40]
-               	stur	q0, [x29, #-0x40]
+               	ldur	q1, [x29, #-0x30]
+               	fadd	v0.4s, v0.4s, v1.4s
+               	stur	q0, [x29, #-0x30]
                	fmov	d0, #3.00000000
                	fcmp	d0, d0
                	cset	x0, ne
@@ -106,18 +86,18 @@ Disassembly of section .text:
                	fcmp	d0, d0
                	cset	x2, ne
                	add	x1, x1, x2
-               	ldur	s0, [x29, #-0x40]
+               	ldur	s0, [x29, #-0x30]
                	fmov	s1, #11.00000000
                	fcmp	s0, s1
                	b.ne	<addr>
-               	ldur	s0, [x29, #-0x34]
+               	ldur	s0, [x29, #-0x24]
                	mov	x16, #0x42300000        // =1110441984
                	fmov	s1, w16
                	fcmp	s0, s1
                	cset	x0, ne
                	add	x0, x1, x0
                	cbz	w0, <addr>
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42

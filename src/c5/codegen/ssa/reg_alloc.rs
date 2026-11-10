@@ -359,6 +359,7 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::Intrinsic { .. }
         | Inst::X86Simd { .. }
         | Inst::X86SimdVal { .. }
+        | Inst::VecBinop { .. }
         | Inst::InlineAsm { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
@@ -1689,7 +1690,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::StoreIndexed { .. }
             | Inst::SegLoad { .. }
             | Inst::SegStore { .. }
-            | Inst::X86SimdVal { .. } => true,
+            | Inst::X86SimdVal { .. }
+            | Inst::VecBinop { .. } => true,
             // AArch64 `madd` / `msub` write only the result; the x86-64
             // lowering may form the product in a multiplicand's register.
             Inst::MulAdd { .. } => !target.is_x86_64(),
@@ -3375,6 +3377,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
                 .find(|o| o.value && o.is_output)
                 .is_some_and(|o| o.width == 16),
             Inst::X86SimdVal { op, .. } => crate::c5::x86_simd::get(*op).form.returns_vector(),
+            Inst::VecBinop { .. } => true,
             _ => false,
         })
         .collect();
@@ -3456,6 +3459,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             ..
         } => ResultKind::Fp,
         X86Simd { .. } => ResultKind::None,
+        VecBinop { .. } => ResultKind::Fp,
         X86SimdVal { op, .. } => {
             if crate::c5::x86_simd::get(*op).form.returns_vector() {
                 ResultKind::Fp

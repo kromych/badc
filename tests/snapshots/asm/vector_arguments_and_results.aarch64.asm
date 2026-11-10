@@ -14,62 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <add>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	q0, [x29, #-0x30]
-               	stur	q1, [x29, #-0x20]
-               	ldursw	x0, [x29, #-0x30]
-               	ldursw	x1, [x29, #-0x20]
-               	add	x0, x0, x1
-               	stur	w0, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x2c]
-               	ldursw	x1, [x29, #-0x1c]
-               	add	x0, x0, x1
-               	stur	w0, [x29, #-0xc]
-               	ldursw	x0, [x29, #-0x28]
-               	ldursw	x1, [x29, #-0x18]
-               	add	x0, x0, x1
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x24]
-               	ldursw	x1, [x29, #-0x14]
-               	add	x0, x0, x1
-               	stur	w0, [x29, #-0x4]
-               	ldur	q0, [x29, #-0x10]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	add	v0.4s, v0.4s, v1.4s
                	ret
 
 <fma4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	q0, [x29, #-0x30]
-               	stur	q1, [x29, #-0x20]
-               	stur	q2, [x29, #-0x10]
-               	ldur	s0, [x29, #-0x30]
-               	ldur	s1, [x29, #-0x20]
-               	ldur	s2, [x29, #-0x2c]
-               	ldur	s3, [x29, #-0x1c]
-               	ldur	s4, [x29, #-0x28]
-               	ldur	s5, [x29, #-0x18]
-               	ldur	s6, [x29, #-0x24]
-               	ldur	s7, [x29, #-0x14]
-               	ldur	s19, [x29, #-0x10]
-               	fmadd	s0, s0, s1, s19
-               	stur	s0, [x29, #-0x20]
-               	ldur	s0, [x29, #-0xc]
-               	fmadd	s0, s2, s3, s0
-               	stur	s0, [x29, #-0x1c]
-               	ldur	s0, [x29, #-0x8]
-               	fmadd	s0, s4, s5, s0
-               	stur	s0, [x29, #-0x18]
-               	ldur	s0, [x29, #-0x4]
-               	fmadd	s0, s6, s7, s0
-               	stur	s0, [x29, #-0x14]
-               	ldur	q0, [x29, #-0x20]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
+               	fmul	v0.4s, v0.4s, v1.4s
+               	fadd	v0.4s, v0.4s, v2.4s
                	ret
 
 <neg>:

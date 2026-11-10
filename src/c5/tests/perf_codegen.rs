@@ -3054,6 +3054,35 @@ uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n)
     );
 }
 
+/// GNU vector arithmetic on 16-byte vectors is one SIMD instruction per
+/// operator (`Inst::VecBinop`), as with gcc 16 and clang: `a * x + y` over
+/// `float` lanes is `fmul`, `fadd` and `ret` on AArch64 and `mulps`,
+/// `addps` and `ret` on x86-64. Lowered per lane, it took 59 instructions.
+#[test]
+fn vector_arithmetic_is_one_instruction_per_operator() {
+    const SRC: &str = "typedef float v4f __attribute__((vector_size(16)));\n\
+typedef int v4i __attribute__((vector_size(16)));\n\
+v4f axpy(v4f a, v4f x, v4f y) { return a * x + y; }\n\
+v4i mix(v4i a, v4i b) { return (a + b) ^ (a - b); }\n";
+    let mut m = Misses::default();
+    let axpy = a64(SRC, "axpy");
+    // `fmul v0.4s, v0.4s, v1.4s; fadd v0.4s, v0.4s, v2.4s; ret`
+    m.expect(axpy == [0x6E21_DC00, 0x4E22_D400, 0xD65F_03C0], || {
+        format!("aarch64 axpy: {axpy:08x?}")
+    });
+    let mix = a64(SRC, "mix");
+    m.expect(mix.len() == 4, || format!("aarch64 mix: {mix:08x?}"));
+    for name in ["axpy", "mix"] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() <= 5, || format!("x86-64 {name}: {insns:x?}"));
+        m.expect(
+            insns.iter().all(|i| i.modrm.is_none() || i.reg_form()),
+            || format!("x86-64 {name}: a memory operand: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// SSE intrinsics keep their vectors in xmm registers (`X86SimdVal`): a
 /// round loop over four `__m128i` parameters makes no memory access, as
 /// with gcc 16. Each intrinsic read its operands from the frame and wrote

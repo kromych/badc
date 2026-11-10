@@ -234,6 +234,124 @@ pub(super) fn emit_x86_simd(
     }
 }
 
+/// `dst = a op b` for the two-operand SSE instruction `mnem`, with its
+/// immediate if any: `a` copied into the register the result is formed in,
+/// the result's own unless that holds `b`, then a scratch it is copied
+/// from. A commutative `op` whose result takes `b`'s register reads `a`
+/// into it instead. A spilled operand loads into an FP scratch.
+pub(super) fn sse_binary(
+    code: &mut Vec<u8>,
+    mnem: &'static str,
+    imm: Option<u8>,
+    commutes: bool,
+    dst: Place,
+    (a, b): (Place, Place),
+    frame: Frame,
+) -> Emit {
+    use super::asm::{Concrete, XMM_BASE};
+    use crate::c5::ir::AsmRegSize;
+    let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let xmm = |n: u8| Concrete::Reg {
+        reg: XMM_BASE + n,
+        size: AsmRegSize::Quad,
+    };
+    let run = |code: &mut Vec<u8>, x: u8, w: u8| -> Emit {
+        let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+        let ops: &[Concrete] = match imm {
+            Some(i) => &[Concrete::Imm(i64::from(i)), xmm(x), xmm(w)],
+            None => &[xmm(x), xmm(w)],
+        };
+        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+            return fail(alloc::format!("x86 simd: {e}"));
+        }
+        Ok(())
+    };
+    let source = |code: &mut Vec<u8>, p: Place| -> Emit<u8> {
+        match materialize_v128(code, p, Reg(src_x), frame) {
+            Some(Reg(r)) => Ok(r),
+            None => fail("x86 simd: a source has no place"),
+        }
+    };
+    if let Place::FpReg(w) = dst
+        && commutes
+        && dst == b
+        && dst != a
+    {
+        let x = source(code, a)?;
+        return run(code, x, w);
+    }
+    let x = source(code, b)?;
+    let w = match dst {
+        Place::FpReg(r) if r != x => r,
+        _ => dst_x,
+    };
+    match a {
+        Place::FpReg(r) if r == w => {}
+        Place::FpReg(r) => emit_movapd_xmm_xmm(code, Reg(w), Reg(r)),
+        p => {
+            if materialize_v128(code, p, Reg(w), frame).is_none_or(|r| r.0 != w) {
+                return fail("x86 simd: a source has no place");
+            }
+        }
+    }
+    run(code, x, w)?;
+    mirror_v128_dst(code, dst, Reg(w), frame);
+    Ok(())
+}
+
+/// `Inst::VecBinop`: the SSE instruction for the element-wise operation.
+pub(super) fn emit_vec_binop(
+    code: &mut Vec<u8>,
+    (op, lane): (super::super::ir::BinOp, super::super::ir::VecLane),
+    (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::super::ir::{BinOp, VecLane};
+    let mnem = match (op, lane) {
+        (BinOp::Add, VecLane::I8) => "paddb",
+        (BinOp::Add, VecLane::I16) => "paddw",
+        (BinOp::Add, VecLane::I32) => "paddd",
+        (BinOp::Add, VecLane::I64) => "paddq",
+        (BinOp::Sub, VecLane::I8) => "psubb",
+        (BinOp::Sub, VecLane::I16) => "psubw",
+        (BinOp::Sub, VecLane::I32) => "psubd",
+        (BinOp::Sub, VecLane::I64) => "psubq",
+        (BinOp::Mul, VecLane::I16) => "pmullw",
+        (BinOp::And, _) => "pand",
+        (BinOp::Or, _) => "por",
+        (BinOp::Xor, _) => "pxor",
+        (BinOp::Fadd, VecLane::F32) => "addps",
+        (BinOp::Fadd, VecLane::F64) => "addpd",
+        (BinOp::Fsub, VecLane::F32) => "subps",
+        (BinOp::Fsub, VecLane::F64) => "subpd",
+        (BinOp::Fmul, VecLane::F32) => "mulps",
+        (BinOp::Fmul, VecLane::F64) => "mulpd",
+        (BinOp::Fdiv, VecLane::F32) => "divps",
+        (BinOp::Fdiv, VecLane::F64) => "divpd",
+        _ => {
+            return fail(alloc::format!(
+                "VecBinop: no instruction for {op:?} on {lane:?}"
+            ));
+        }
+    };
+    let commutes = matches!(
+        op,
+        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
+    );
+    let place = |v: super::super::ir::ValueId| place_of(alloc, v);
+    sse_binary(
+        code,
+        mnem,
+        None,
+        commutes,
+        dst,
+        (place(lhs), place(rhs)),
+        frame,
+    )
+}
+
 /// `Inst::X86SimdVal`: the instruction on the operands' registers, a
 /// spilled operand loaded into an FP scratch. A vector result is formed in
 /// its own register unless that holds the second source, then in a scratch
@@ -316,31 +434,18 @@ pub(super) fn emit_x86_simd_val(
         _ => fail("x86 simd: integer result not int reg / spill"),
     };
     let w = match row.form {
-        // A commutative operation whose result takes the second source's
-        // register reads the first into it instead.
-        Form::Vv
-            if row.sem.commutes()
-                && matches!(dst, Place::FpReg(_))
-                && dst == place(1)
-                && dst != place(0) =>
-        {
-            let Place::FpReg(w) = dst else {
-                unreachable!("the guard names an fp register")
-            };
-            let a = vector(code, 0, src_x)?;
-            insn(code, row.mnem, &[xmm(a), xmm(w)])?;
-            w
-        }
         Form::Vv | Form::VvI => {
-            let b = vector(code, 1, src_x)?;
-            let w = work(Some(b));
-            into(code, 0, w)?;
-            if row.form == Form::Vv {
-                insn(code, row.mnem, &[xmm(b), xmm(w)])?;
-            } else {
-                insn(code, row.mnem, &[imm8, xmm(b), xmm(w)])?;
-            }
-            w
+            let commutes = row.form == Form::Vv && row.sem.commutes();
+            let imm = (row.form == Form::VvI).then(|| imm.unwrap_or(0));
+            return sse_binary(
+                code,
+                row.mnem,
+                imm,
+                commutes,
+                dst,
+                (place(0), place(1)),
+                frame,
+            );
         }
         Form::V | Form::VI => {
             let a = vector(code, 0, src_x)?;

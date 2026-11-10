@@ -400,6 +400,9 @@ pub(crate) struct Cli {
     pub(crate) compile_only: bool,
     /// `-fsyntax-only`: each unit through the front end, nothing written.
     pub(crate) syntax_only: bool,
+    /// `--dump-records`: each unit through the front end, its tagged
+    /// structures' and unions' layouts printed.
+    pub(crate) dump_records: bool,
     /// `--freestanding`: no embedded startup runtime, and the program's
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
@@ -646,6 +649,7 @@ struct Parser {
     output_path: Option<PathBuf>,
     compile_only: bool,
     syntax_only: bool,
+    dump_records: bool,
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
@@ -1209,6 +1213,7 @@ impl Parser {
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
             "-fsyntax-only" => self.syntax_only = true,
+            "--dump-records" => self.dump_records = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             "--verify-ssa" => self.codegen.verify_ssa = true,
@@ -2484,6 +2489,7 @@ impl Parser {
             output_path: self.output_path,
             compile_only: self.compile_only,
             syntax_only: self.syntax_only,
+            dump_records: self.dump_records,
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,

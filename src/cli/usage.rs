@@ -85,6 +85,9 @@ Output mode -- pick at most one (defaults to a native binary):
   -fsyntax-only            Check each unit through the front end (an
                            assembler unit through the assembler) and
                            write nothing; -E takes precedence.
+  --dump-records           Print the size, alignment and member offsets
+                           of each tagged structure and union a unit
+                           defines, as laid out for --target.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of

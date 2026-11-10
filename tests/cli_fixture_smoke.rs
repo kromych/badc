@@ -677,6 +677,42 @@ fn syntax_only_checks_units_and_writes_nothing() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("int main(void)"));
 }
 
+/// `--dump-records` prints each complete tagged record a unit defines, as
+/// laid out for `--target`: `struct|union <tag> <size> <align>`, then each
+/// member's offset, a bit-field's as storage unit, bit offset, and width.
+#[test]
+fn dump_records_prints_the_target_layouts() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-dump-records");
+    let unit = dir.join("records.c");
+    std::fs::write(
+        &unit,
+        "struct s { char c; long l; unsigned a : 3, b : 5; };\n\
+         union u { short h; double d; };\nstruct incomplete;\n\
+         struct { int anonymous; } v;\n",
+    )
+    .expect("write unit");
+    let dump = |target: &str| {
+        let out = Command::new(badc)
+            .args(["--dump-records", &format!("--target={target}")])
+            .arg(&unit)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let lp64 = "struct s 24 8\n  c 0\n  l 8\n  a 16 0 3\n  b 16 3 5\n\
+                union u 8 8\n  h 0\n  d 0";
+    let llp64 = "struct s 12 4\n  c 0\n  l 4\n  a 8 0 3\n  b 8 3 5\n\
+                 union u 8 8\n  h 0\n  d 0";
+    assert_eq!(dump("linux-x64").trim_end(), lp64);
+    assert_eq!(dump("windows-x64").trim_end(), llp64);
+}
+
 #[test]
 fn quoted_include_resolves_relative_to_including_file() {
     let badc = env!("CARGO_BIN_EXE_badc");

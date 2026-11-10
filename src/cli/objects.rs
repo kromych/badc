@@ -124,6 +124,56 @@ pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     });
 }
 
+/// `--dump-records`: each C source through the front end, then one
+/// `struct|union <tag> <size> <align>` line per complete tagged record, in
+/// definition order, followed by `  <member> <offset>` for each named member,
+/// or `  <member> <offset> <bit offset> <width>` for a bit-field, the offset
+/// being its storage unit's.
+pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic("badc: error: --dump-records requires at least one source input");
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    let dumps = compile_units(sources, workers, |_, src| {
+        let mut log = TuLog::default();
+        let res = translate_tu(src, None, &cfg, &mut log).map(|p| record_layouts(&p));
+        (log, res)
+    });
+    for dump in dumps {
+        outln!("{dump}");
+    }
+}
+
+fn record_layouts(program: &badc::Program) -> String {
+    use core::fmt::Write;
+    let mut out = String::new();
+    let records = (program.structs.iter())
+        .filter(|s| s.is_complete && !s.is_anonymous && !s.is_vector && !s.is_array);
+    for s in records {
+        let kind = if s.is_union { "union" } else { "struct" };
+        let _ = writeln!(out, "{kind} {} {} {}", s.name, s.size, s.align);
+        for f in &s.fields {
+            if f.bit_width > 0 {
+                let _ = writeln!(
+                    out,
+                    "  {} {} {} {}",
+                    f.name, f.offset, f.bit_offset, f.bit_width
+                );
+            } else {
+                let _ = writeln!(out, "  {} {}", f.name, f.offset);
+            }
+        }
+    }
+    out
+}
+
 /// `--ar` mode: bundle each `.c` input (compiled to a native
 /// relocatable object) plus any passed-in `.o` into a single
 /// SysV `ar` archive named by `-o`. Member bytes are the

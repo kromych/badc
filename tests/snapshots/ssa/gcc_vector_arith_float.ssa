@@ -2061,44 +2061,56 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v2165 LoadLocal { off=-243, kind=V128 }                -> d0
     v2166 LoadLocal { off=-244, kind=V128 }                -> d1
     v2167 VecBinop { op=Fadd, lane=F32, bytes=16, lhs=v2165, rhs=v2166 } -> d0
-    v2168 LocalAddr(-270)                                  -> x0
-    v2169 StoreLocal { off=-270, value=v2167, kind=V128 }  -> -
+    v2168 Imm(0)                                           -> x0
+    v2169 Imm(0)                                           -> x0
     v2170 Imm(1073741824)                                  -> x0 [f32]
-    v2171 LocalAddr(-271)                                  -> x1
-    v2172 LoadLocal { off=-270, kind=F32 }                 -> d0 [f32]
-    v2173 Binop { op=fmul.c, lhs=v2172, rhs=v2170 }        -> d0 [f32]
-    v2174 StoreLocal { off=-271, value=v2173, kind=F32 }   -> -
-    v2175 BinopI { op=add, lhs=v2168, rhs_imm=4 }          -> x1
-    v2176 LoadLocal { off=-270, disp=4, kind=F32 }         -> d0 [f32]
-    v2177 Binop { op=fmul.c, lhs=v2176, rhs=v2170 }        -> d0 [f32]
-    v2178 BinopI { op=add, lhs=v2171, rhs_imm=4 }          -> x1
-    v2179 StoreLocal { off=-271, disp=4, value=v2177, kind=F32 } -> -
-    v2180 BinopI { op=add, lhs=v2168, rhs_imm=8 }          -> x1
-    v2181 LoadLocal { off=-270, disp=8, kind=F32 }         -> d0 [f32]
-    v2182 Binop { op=fmul.c, lhs=v2181, rhs=v2170 }        -> d0 [f32]
-    v2183 BinopI { op=add, lhs=v2171, rhs_imm=8 }          -> x1
-    v2184 StoreLocal { off=-271, disp=8, value=v2182, kind=F32 } -> -
-    v2185 BinopI { op=add, lhs=v2168, rhs_imm=12 }         -> x1
-    v2186 LoadLocal { off=-270, disp=12, kind=F32 }        -> d0 [f32]
-    v2187 Binop { op=fmul.c, lhs=v2186, rhs=v2170 }        -> d0 [f32]
-    v2188 BinopI { op=add, lhs=v2171, rhs_imm=12 }         -> x0
-    v2189 StoreLocal { off=-271, disp=12, value=v2187, kind=F32 } -> -
-    v2190 LocalAddr(-243)                                  -> x0
-    v2191 LoadLocal { off=-271, kind=V128 }                -> d0
-    v2192 LoadLocal { off=-243, kind=V128 }                -> d1
-    v2193 VecBinop { op=Fsub, lane=F32, bytes=16, lhs=v2191, rhs=v2192 } -> d0
-    v2194 Imm(0)                                           -> x0
-    v2195 Imm(0)                                           -> x0
-    v2196 LocalAddr(-269)                                  -> x0
-    v2197 Imm(0)                                           -> x0
-    v2198 StoreLocal { off=-269, value=v2193, kind=V128 }  -> -
-    v2199 LocalAddr(-243)                                  -> x0
-    v2200 Imm(0)                                           -> x0
-    v2201 LocalAddr(-244)                                  -> x0
-    v2202 Imm(0)                                           -> x0
+    v2171 Imm(0)                                           -> x1
+    v2172 Imm(0)                                           -> x1
+    v2173 VecExtract { vec=v2167, off=0, kind=F32, bytes=16 } -> d1 [f32]
+    v2174 Binop { op=fmul.c, lhs=v2173, rhs=v2170 }        -> d1 [f32]
+    v2175 Imm(0)                                           -> x1
+    v2176 VecInsert { vec=v2175, value=v2174, off=0, kind=F32, bytes=16 } -> d1
+    v2177 Imm(0)                                           -> x1
+    v2178 Imm(4)                                           -> x1
+    v2179 Imm(0)                                           -> x1
+    v2180 VecExtract { vec=v2167, off=4, kind=F32, bytes=16 } -> d2 [f32]
+    v2181 Binop { op=fmul.c, lhs=v2180, rhs=v2170 }        -> d2 [f32]
+    v2182 Imm(4)                                           -> x1
+    v2183 Imm(0)                                           -> x1
+    v2184 VecInsert { vec=v2176, value=v2181, off=4, kind=F32, bytes=16 } -> d1
+    v2185 Imm(0)                                           -> x1
+    v2186 Imm(8)                                           -> x1
+    v2187 Imm(0)                                           -> x1
+    v2188 VecExtract { vec=v2167, off=8, kind=F32, bytes=16 } -> d2 [f32]
+    v2189 Binop { op=fmul.c, lhs=v2188, rhs=v2170 }        -> d2 [f32]
+    v2190 Imm(8)                                           -> x1
+    v2191 Imm(0)                                           -> x1
+    v2192 VecInsert { vec=v2184, value=v2189, off=8, kind=F32, bytes=16 } -> d1
+    v2193 Imm(0)                                           -> x1
+    v2194 Imm(12)                                          -> x1
+    v2195 Imm(0)                                           -> x1
+    v2196 VecExtract { vec=v2167, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v2197 Binop { op=fmul.c, lhs=v2196, rhs=v2170 }        -> d0 [f32]
+    v2198 Imm(12)                                          -> x0
+    v2199 Imm(0)                                           -> x0
+    v2200 VecInsert { vec=v2192, value=v2197, off=12, kind=F32, bytes=16 } -> d0
+    v2201 Imm(0)                                           -> x0
+    v2202 LocalAddr(-243)                                  -> x0
     v2203 Imm(0)                                           -> x0
-    v2204 Imm(0)                                           -> x1
-    terminator Jmp(b84)   (exit_acc=v2203)
+    v2204 LoadLocal { off=-243, kind=V128 }                -> d1
+    v2205 VecBinop { op=Fsub, lane=F32, bytes=16, lhs=v2200, rhs=v2204 } -> d0
+    v2206 Imm(0)                                           -> x0
+    v2207 Imm(0)                                           -> x0
+    v2208 LocalAddr(-269)                                  -> x0
+    v2209 Imm(0)                                           -> x0
+    v2210 StoreLocal { off=-269, value=v2205, kind=V128 }  -> -
+    v2211 LocalAddr(-243)                                  -> x0
+    v2212 Imm(0)                                           -> x0
+    v2213 LocalAddr(-244)                                  -> x0
+    v2214 Imm(0)                                           -> x0
+    v2215 Imm(0)                                           -> x0
+    v2216 Imm(0)                                           -> x1
+    terminator Jmp(b84)   (exit_acc=v2215)
   block 83  start_pc=0
     v178 LocalAddr(-2)                                    -> x1
     v179 Extend { value=v175, kind=I32 }                  -> x1
@@ -2121,7 +2133,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v196 Extend { value=v195, kind=I32, nsw }             -> x1
     terminator Jmp(b84)   (exit_acc=v195)
   block 84  start_pc=0
-    v175 Phi { incoming=[b82:v2203, b83:v195], kind=I64 } -> x0
+    v175 Phi { incoming=[b82:v2215, b83:v195], kind=I64 } -> x0
     v176 Extend { value=v175, kind=I32 }                  -> x1
     v177 BinopI { op=lt, lhs=v175, rhs_imm=4 }            -> x1
     terminator Bz { cond=v177, target=b85, fall=b83 }   (exit_acc=v177)
@@ -2133,59 +2145,59 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v201 Imm(0)                                           -> x0
     terminator Jmp(b88)   (exit_acc=v201)
   block 86  start_pc=0
-    v2224 Extend { value=v2218, kind=I32 }                 -> x6
-    v2225 Binop { op=add, lhs=v197, rhs=v2218 }            -> x6
-    v2226 LoadIndexed { base=v197, index=v2218, scale=1, kind=U8 } -> x6
-    v2227 Binop { op=add, lhs=v198, rhs=v2218 }            -> x7
-    v2228 LoadIndexed { base=v198, index=v2218, scale=1, kind=U8 } -> x7
-    v2229 Binop { op=ne, lhs=v2226, rhs=v2228 }            -> x6
-    terminator Bz { cond=v2229, target=b87, fall=b90 }   (exit_acc=v2229)
+    v2236 Extend { value=v2230, kind=I32 }                 -> x6
+    v2237 Binop { op=add, lhs=v197, rhs=v2230 }            -> x6
+    v2238 LoadIndexed { base=v197, index=v2230, scale=1, kind=U8 } -> x6
+    v2239 Binop { op=add, lhs=v198, rhs=v2230 }            -> x7
+    v2240 LoadIndexed { base=v198, index=v2230, scale=1, kind=U8 } -> x7
+    v2241 Binop { op=ne, lhs=v2238, rhs=v2240 }            -> x6
+    terminator Bz { cond=v2241, target=b87, fall=b90 }   (exit_acc=v2241)
   block 87  start_pc=0
-    v2221 Extend { value=v2218, kind=I32 }                 -> x6
-    v2222 BinopI { op=add, lhs=v2218, rhs_imm=1 }          -> x0
-    v2223 Extend { value=v2222, kind=I32, nsw }            -> x6
-    terminator Jmp(b88)   (exit_acc=v2222)
+    v2233 Extend { value=v2230, kind=I32 }                 -> x6
+    v2234 BinopI { op=add, lhs=v2230, rhs_imm=1 }          -> x0
+    v2235 Extend { value=v2234, kind=I32, nsw }            -> x6
+    terminator Jmp(b88)   (exit_acc=v2234)
   block 88  start_pc=0
-    v2218 Phi { incoming=[b85:v201, b87:v2222], kind=I64 } -> x0
-    v2219 Extend { value=v2218, kind=I32 }                 -> x6
-    v2220 BinopI { op=lt, lhs=v2218, rhs_imm=16 }          -> x6
-    terminator Bz { cond=v2220, target=b89, fall=b86 }   (exit_acc=v2220)
+    v2230 Phi { incoming=[b85:v201, b87:v2234], kind=I64 } -> x0
+    v2231 Extend { value=v2230, kind=I32 }                 -> x6
+    v2232 BinopI { op=lt, lhs=v2230, rhs_imm=16 }          -> x6
+    terminator Bz { cond=v2232, target=b89, fall=b86 }   (exit_acc=v2232)
   block 89  start_pc=0
-    v2230 Imm(1)                                           -> x0
-    v2231 LifetimeEnd(-269)                                -> -
-    v2232 LifetimeEnd(-2)                                  -> -
-    v2233 Imm(0)                                           -> x0
-    v2234 LifetimeEnd(-240)                                -> -
-    v2235 LifetimeEnd(-239)                                -> -
-    v2236 LifetimeEnd(-246)                                -> -
-    v2237 LifetimeEnd(-245)                                -> -
-    v2238 LifetimeEnd(-244)                                -> -
-    v2239 LifetimeEnd(-243)                                -> -
-    terminator Return(v2233)   (exit_acc=v2233)
+    v2242 Imm(1)                                           -> x0
+    v2243 LifetimeEnd(-269)                                -> -
+    v2244 LifetimeEnd(-2)                                  -> -
+    v2245 Imm(0)                                           -> x0
+    v2246 LifetimeEnd(-240)                                -> -
+    v2247 LifetimeEnd(-239)                                -> -
+    v2248 LifetimeEnd(-246)                                -> -
+    v2249 LifetimeEnd(-245)                                -> -
+    v2250 LifetimeEnd(-244)                                -> -
+    v2251 LifetimeEnd(-243)                                -> -
+    terminator Return(v2245)   (exit_acc=v2245)
   block 90  start_pc=0
-    v2240 Imm(0)                                           -> x0
-    v2241 Imm(22)                                          -> x0
-    v2242 LifetimeEnd(-269)                                -> -
-    v2243 LifetimeEnd(-2)                                  -> -
-    v2244 LifetimeEnd(-240)                                -> -
-    v2245 LifetimeEnd(-239)                                -> -
-    v2246 LifetimeEnd(-246)                                -> -
-    v2247 LifetimeEnd(-245)                                -> -
-    v2248 LifetimeEnd(-244)                                -> -
-    v2249 LifetimeEnd(-243)                                -> -
-    terminator Return(v2241)   (exit_acc=v2241)
+    v2252 Imm(0)                                           -> x0
+    v2253 Imm(22)                                          -> x0
+    v2254 LifetimeEnd(-269)                                -> -
+    v2255 LifetimeEnd(-2)                                  -> -
+    v2256 LifetimeEnd(-240)                                -> -
+    v2257 LifetimeEnd(-239)                                -> -
+    v2258 LifetimeEnd(-246)                                -> -
+    v2259 LifetimeEnd(-245)                                -> -
+    v2260 LifetimeEnd(-244)                                -> -
+    v2261 LifetimeEnd(-243)                                -> -
+    terminator Return(v2253)   (exit_acc=v2253)
   block 91  start_pc=0
-    v2205 Imm(0)                                           -> x0
-    v2206 Imm(21)                                          -> x0
-    v2207 LifetimeEnd(-268)                                -> -
-    v2208 LifetimeEnd(-2)                                  -> -
-    v2209 LifetimeEnd(-240)                                -> -
-    v2210 LifetimeEnd(-239)                                -> -
-    v2211 LifetimeEnd(-246)                                -> -
-    v2212 LifetimeEnd(-245)                                -> -
-    v2213 LifetimeEnd(-244)                                -> -
-    v2214 LifetimeEnd(-243)                                -> -
-    terminator Return(v2206)   (exit_acc=v2206)
+    v2217 Imm(0)                                           -> x0
+    v2218 Imm(21)                                          -> x0
+    v2219 LifetimeEnd(-268)                                -> -
+    v2220 LifetimeEnd(-2)                                  -> -
+    v2221 LifetimeEnd(-240)                                -> -
+    v2222 LifetimeEnd(-239)                                -> -
+    v2223 LifetimeEnd(-246)                                -> -
+    v2224 LifetimeEnd(-245)                                -> -
+    v2225 LifetimeEnd(-244)                                -> -
+    v2226 LifetimeEnd(-243)                                -> -
+    terminator Return(v2218)   (exit_acc=v2218)
   block 92  start_pc=0
     v2135 Imm(0)                                           -> x0
     v2136 Imm(19)                                          -> x0

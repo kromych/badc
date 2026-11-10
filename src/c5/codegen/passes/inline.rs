@@ -1227,6 +1227,8 @@ fn is_inline_candidate(
             // Travels with its statement, admitted below on the reloc path.
             | Inst::X86SimdVal { .. }
             | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecExtract { .. }
             | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
@@ -2222,6 +2224,8 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::FpCast { .. }
         | Inst::X86SimdVal { .. }
         | Inst::VecBinop { .. }
+        | Inst::VecInsert { .. }
+        | Inst::VecExtract { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }

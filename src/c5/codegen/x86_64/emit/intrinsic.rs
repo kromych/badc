@@ -2350,3 +2350,194 @@ fn emit_x86_simd_val_wide(
     mirror_wide_dst(code, w, dst, Reg(rd), frame);
     Ok(())
 }
+
+/// The 128-bit part of wide register `v` holding byte `off`, extracted into
+/// xmm `scratch` (`vextracti128` / `vextracti32x4`), or `v` itself for a
+/// 16-byte vector; with the lane's offset within it.
+fn lane_part(code: &mut Vec<u8>, bytes: u8, v: u8, off: u8, scratch: u8) -> Emit<(u8, u8)> {
+    if bytes == 16 {
+        return Ok((v, off));
+    }
+    let mnem = if bytes == 64 {
+        "vextracti32x4"
+    } else {
+        "vextracti128"
+    };
+    let ops = [
+        super::asm::Concrete::Imm(i64::from(off / 16)),
+        wide_reg(bytes, v),
+        wide_reg(16, scratch),
+    ];
+    encode_wide(code, mnem, &ops)?;
+    Ok((scratch, off % 16))
+}
+
+/// `Inst::VecExtract`: the lane at byte `off` of a vector into an integer
+/// register, extended as `kind` reads it, or into an FP one, the lane moved
+/// into the low element.
+pub(super) fn emit_vec_extract(
+    code: &mut Vec<u8>,
+    (vec, off, kind, bytes): (super::super::ir::ValueId, u8, LoadKind, u8),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let w = VecWidth::of_bytes(bytes);
+    let src = match w {
+        VecWidth::V128 => materialize_v128(code, place_of(alloc, vec), Reg(sa), frame),
+        _ => materialize_wide(code, w, place_of(alloc, vec), Reg(sa), frame),
+    };
+    let Some(src) = src else {
+        return fail("VecExtract: vector has no place");
+    };
+    let (x, loff) = lane_part(code, bytes, src.0, off, sb)?;
+    let imm = |k: u8| Concrete::Imm(i64::from(k));
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("VecExtract: dst not fp reg / spill");
+        };
+        let ops = match kind {
+            LoadKind::F64 => [imm(loff / 8), wide_reg(16, x), wide_reg(16, dd.0)],
+            _ => [imm(loff / 4), wide_reg(16, x), wide_reg(16, dd.0)],
+        };
+        encode_wide(
+            code,
+            if kind == LoadKind::F64 {
+                "vpermilpd"
+            } else {
+                "vpermilps"
+            },
+            &ops,
+        )?;
+        mirror_fp_dst(code, dst, dd, frame);
+        return Ok(());
+    }
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("VecExtract: dst not int reg / spill");
+    };
+    let gpr = |size| Concrete::Reg { reg: rd.0, size };
+    let (mnem, k, size) = match kind {
+        LoadKind::I64 => ("vpextrq", loff / 8, AsmRegSize::Quad),
+        LoadKind::I32 | LoadKind::U32 => ("vpextrd", loff / 4, AsmRegSize::Long),
+        LoadKind::I16 | LoadKind::U16 => ("vpextrw", loff / 2, AsmRegSize::Long),
+        _ => ("vpextrb", loff, AsmRegSize::Long),
+    };
+    encode_wide(code, mnem, &[imm(k), wide_reg(16, x), gpr(size)])?;
+    if matches!(kind, LoadKind::I32 | LoadKind::I16 | LoadKind::I8) {
+        emit_sign_extend(code, rd, rd, kind);
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// `Inst::VecInsert`: the vector with the lane at byte `off` replaced by
+/// `vpinsr*` from a general register (a float's bits moved to r11 by
+/// `vmovq` / `vmovd`); a wide vector's 128-bit part is extracted, updated and
+/// inserted back, as a VEX.128 write clears the bits above it.
+pub(super) fn emit_vec_insert(
+    code: &mut Vec<u8>,
+    (vec, value, off, kind, bytes): (
+        super::super::ir::ValueId,
+        super::super::ir::ValueId,
+        u8,
+        StoreKind,
+        u8,
+    ),
+    blank: bool,
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let w = VecWidth::of_bytes(bytes);
+    let q = |r: Reg, size| Concrete::Reg { reg: r.0, size };
+    let mirror = |code: &mut Vec<u8>, rd: u8| {
+        if bytes > 16 {
+            mirror_wide_dst(code, w, dst, Reg(rd), frame);
+        } else {
+            mirror_v128_dst(code, dst, Reg(rd), frame);
+        }
+    };
+    // The value into a general register first, as the result may take a
+    // float value's register.
+    let gpr = match kind {
+        StoreKind::F32 | StoreKind::F64 => {
+            let Some(f) = materialize_fp(code, place_of(alloc, value), Reg(sb), frame) else {
+                return fail("VecInsert: value has no place");
+            };
+            let (mnem, size) = if kind == StoreKind::F64 {
+                ("vmovq", AsmRegSize::Quad)
+            } else {
+                ("vmovd", AsmRegSize::Long)
+            };
+            encode_wide(code, mnem, &[wide_reg(16, f.0), q(SCRATCH_R11, size)])?;
+            SCRATCH_R11
+        }
+        _ => match materialize_int(code, place_of(alloc, value), SCRATCH_R11, frame) {
+            Some(r) => r,
+            None => return fail("VecInsert: value has no place"),
+        },
+    };
+    let rd = match dst {
+        Place::FpReg(r) => r,
+        _ => sa,
+    };
+    let (mnem, esize, size) = match kind {
+        StoreKind::I64 | StoreKind::F64 => ("vpinsrq", 8, AsmRegSize::Quad),
+        StoreKind::I32 | StoreKind::F32 => ("vpinsrd", 4, AsmRegSize::Long),
+        StoreKind::I16 => ("vpinsrw", 2, AsmRegSize::Long),
+        _ => ("vpinsrb", 1, AsmRegSize::Long),
+    };
+    // The low lane over a zero or undefined vector: `vmovq` / `vmovd` clear
+    // the bits above it.
+    if blank && off == 0 && esize >= 4 {
+        let mov = if esize == 8 { "vmovq" } else { "vmovd" };
+        encode_wide(code, mov, &[q(gpr, size), wide_reg(16, rd)])?;
+        mirror(code, rd);
+        return Ok(());
+    }
+    // The base vector into the register the result forms in; an undefined
+    // one leaves it as it is.
+    let base = place_of(alloc, vec);
+    if !matches!(base, Place::None) {
+        let got = match w {
+            VecWidth::V128 => materialize_v128(code, base, Reg(rd), frame),
+            _ => materialize_wide(code, w, base, Reg(rd), frame),
+        };
+        match got {
+            Some(r) if r.0 == rd => {}
+            Some(r) if w == VecWidth::V128 => emit_movapd_xmm_xmm(code, Reg(rd), r),
+            Some(r) => emit_wide_mov(code, w, Reg(rd), r),
+            None => return fail("VecInsert: vector has no place"),
+        }
+    }
+    let (part, loff) = lane_part(code, bytes, rd, off, sb)?;
+    let ops = [
+        Concrete::Imm(i64::from(loff / esize)),
+        q(gpr, size),
+        wide_reg(16, part),
+        wide_reg(16, part),
+    ];
+    encode_wide(code, mnem, &ops)?;
+    if bytes > 16 {
+        let mnem = if bytes == 64 {
+            "vinserti32x4"
+        } else {
+            "vinserti128"
+        };
+        let ops = [
+            Concrete::Imm(i64::from(off / 16)),
+            wide_reg(16, part),
+            wide_reg(bytes, rd),
+            wide_reg(bytes, rd),
+        ];
+        encode_wide(code, mnem, &ops)?;
+    }
+    mirror(code, rd);
+    Ok(())
+}

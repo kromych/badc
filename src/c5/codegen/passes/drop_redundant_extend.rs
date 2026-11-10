@@ -284,10 +284,16 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::VecBinop { lhs, rhs, .. } => {
+            Inst::VecBinop { lhs, rhs, .. }
+            | Inst::VecInsert {
+                vec: lhs,
+                value: rhs,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *lhs);
                 observe(&mut hi, &mut work, *rhs);
             }
+            Inst::VecExtract { vec, .. } => observe(&mut hi, &mut work, *vec),
             Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
             | Inst::X86SimdVal { args, .. }

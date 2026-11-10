@@ -26,79 +26,73 @@ Disassembly of section .text:
                	int3
 
 <same16>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movups	%xmm0, -0x10(%rbp)
-               	movzbq	-0x10(%rbp), %rax
+               	vpextrb	$0x0, %xmm0, %eax
                	movzbq	(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	je	<addr>
                	xorl	%eax, %eax
-               	leave
                	retq
-               	movzbq	-0xf(%rbp), %rax
+               	vpextrb	$0x1, %xmm0, %eax
                	movzbq	0x1(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0xe(%rbp), %rax
+               	vpextrb	$0x2, %xmm0, %eax
                	movzbq	0x2(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0xd(%rbp), %rax
+               	vpextrb	$0x3, %xmm0, %eax
                	movzbq	0x3(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0xc(%rbp), %rax
+               	vpextrb	$0x4, %xmm0, %eax
                	movzbq	0x4(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0xb(%rbp), %rax
+               	vpextrb	$0x5, %xmm0, %eax
                	movzbq	0x5(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0xa(%rbp), %rax
+               	vpextrb	$0x6, %xmm0, %eax
                	movzbq	0x6(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x9(%rbp), %rax
+               	vpextrb	$0x7, %xmm0, %eax
                	movzbq	0x7(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x8(%rbp), %rax
+               	vpextrb	$0x8, %xmm0, %eax
                	movzbq	0x8(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x7(%rbp), %rax
+               	vpextrb	$0x9, %xmm0, %eax
                	movzbq	0x9(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x6(%rbp), %rax
+               	vpextrb	$0xa, %xmm0, %eax
                	movzbq	0xa(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x5(%rbp), %rax
+               	vpextrb	$0xb, %xmm0, %eax
                	movzbq	0xb(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x4(%rbp), %rax
+               	vpextrb	$0xc, %xmm0, %eax
                	movzbq	0xc(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x3(%rbp), %rax
+               	vpextrb	$0xd, %xmm0, %eax
                	movzbq	0xd(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x2(%rbp), %rax
+               	vpextrb	$0xe, %xmm0, %eax
                	movzbq	0xe(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movzbq	-0x1(%rbp), %rax
+               	vpextrb	$0xf, %xmm0, %eax
                	movzbq	0xf(%rdi), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
 
 <main>:

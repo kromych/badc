@@ -702,25 +702,29 @@ Disassembly of section .text:
                	movups	0x60(%rsp), %xmm0
                	movups	0x70(%rsp), %xmm1
                	addps	%xmm1, %xmm0
-               	movups	%xmm0, 0x20(%rsp)
                	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movss	0x20(%rsp), %xmm0
+               	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm1
+               	xorl	%ecx, %ecx
+               	vmovd	%xmm1, %r11d
+               	vmovd	%r11d, %xmm1
+               	vpermilps	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0,0,0]
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm2
+               	vmovd	%xmm2, %r11d
+               	vpinsrd	$0x1, %r11d, %xmm1, %xmm1
+               	vpermilps	$0x2, %xmm0, %xmm2 # xmm2 = xmm0[2,0,0,0]
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm2
+               	vmovd	%xmm2, %r11d
+               	vpinsrd	$0x2, %r11d, %xmm1, %xmm1
+               	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
-               	movss	%xmm0, 0x40(%rsp)
-               	movss	0x24(%rsp), %xmm0
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
-               	movss	%xmm0, 0x44(%rsp)
-               	movss	0x28(%rsp), %xmm0
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
-               	movss	%xmm0, 0x48(%rsp)
-               	movss	0x2c(%rsp), %xmm0
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm0
-               	movss	%xmm0, 0x4c(%rsp)
-               	movups	0x40(%rsp), %xmm0
+               	vmovd	%xmm0, %r11d
+               	movapd	%xmm1, %xmm0
+               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	movups	0x60(%rsp), %xmm1
                	subps	%xmm1, %xmm0
                	movups	%xmm0, 0x40(%rsp)

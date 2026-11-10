@@ -598,6 +598,26 @@ pub(crate) enum Inst {
         lhs: ValueId,
         rhs: ValueId,
     },
+    /// The vector value `vec` of `bytes` bytes with the lane at byte `off`
+    /// replaced by `value` stored as `kind` (an integer or `F32` / `F64`
+    /// kind, `off` a multiple of its width); `vec` an `Undef` leaves the
+    /// other lanes unspecified. `vector_slots` makes a lane store into a
+    /// promoted vector object one.
+    VecInsert {
+        vec: ValueId,
+        value: ValueId,
+        off: u8,
+        kind: StoreKind,
+        bytes: u8,
+    },
+    /// The lane at byte `off` of the vector value `vec` of `bytes` bytes,
+    /// read as `kind` would read it from memory.
+    VecExtract {
+        vec: ValueId,
+        off: u8,
+        kind: LoadKind,
+        bytes: u8,
+    },
     /// [`Inst::X86Simd`] on values, as `passes::x86_simd_values` rewrites
     /// it under `-O`: `args` are the sources, a 128-bit operand as a `V128`
     /// value and an integer one as itself, and the instruction defines its
@@ -758,6 +778,8 @@ impl Inst {
                 | Inst::AsmOut { .. }
                 | Inst::X86SimdVal { .. }
                 | Inst::VecBinop { .. }
+                | Inst::VecInsert { .. }
+                | Inst::VecExtract { .. }
         )
     }
 
@@ -831,6 +853,8 @@ impl Inst {
             Inst::X86Simd { .. } => "X86Simd",
             Inst::X86SimdVal { .. } => "X86SimdVal",
             Inst::VecBinop { .. } => "VecBinop",
+            Inst::VecInsert { .. } => "VecInsert",
+            Inst::VecExtract { .. } => "VecExtract",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
@@ -894,10 +918,16 @@ impl Inst {
             }
             Inst::Binop { lhs, rhs, .. }
             | Inst::ShiftOp { lhs, rhs, .. }
-            | Inst::VecBinop { lhs, rhs, .. } => {
+            | Inst::VecBinop { lhs, rhs, .. }
+            | Inst::VecInsert {
+                vec: lhs,
+                value: rhs,
+                ..
+            } => {
                 f(*lhs);
                 f(*rhs);
             }
+            Inst::VecExtract { vec, .. } => f(*vec),
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
@@ -1018,10 +1048,16 @@ impl Inst {
             }
             Inst::Binop { lhs, rhs, .. }
             | Inst::ShiftOp { lhs, rhs, .. }
-            | Inst::VecBinop { lhs, rhs, .. } => {
+            | Inst::VecBinop { lhs, rhs, .. }
+            | Inst::VecInsert {
+                vec: lhs,
+                value: rhs,
+                ..
+            } => {
                 f(lhs);
                 f(rhs);
             }
+            Inst::VecExtract { vec, .. } => f(vec),
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
@@ -2947,6 +2983,8 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::X86Simd { .. }
             | Inst::X86SimdVal { .. }
             | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecExtract { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }

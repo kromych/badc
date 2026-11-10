@@ -34,14 +34,13 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movups	-0x10(%rbp), %xmm0
-               	movups	%xmm0, -0x10(%rbp)
-               	movzbq	-0x10(%rbp), %rax
+               	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movzbq	-0x9(%rbp), %rax
+               	vpextrb	$0x7, %xmm0, %eax
                	cmpl	$0x8, %eax
                	jne	<addr>
-               	movzbq	-0x1(%rbp), %rax
+               	vpextrb	$0xf, %xmm0, %eax
                	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0x6, %eax

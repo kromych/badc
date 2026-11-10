@@ -97,7 +97,9 @@ fn pure(inst: &Inst) -> bool {
         | Inst::ShiftOp { .. }
         | Inst::BitField { .. }
         | Inst::X86SimdVal { .. }
-        | Inst::VecBinop { .. } => true,
+        | Inst::VecBinop { .. }
+        | Inst::VecInsert { .. }
+        | Inst::VecExtract { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }

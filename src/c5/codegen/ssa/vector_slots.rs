@@ -1,26 +1,41 @@
-//! Whole-object vector slots as values. A two-cell object accessed only
-//! whole -- 16-byte copies and zero fills, `V128` loads and stores, 16-byte
-//! SIMD asm operands -- becomes `V128` slot accesses for mem2reg to promote,
-//! and a four- or eight-cell one met by `V256` or `V512` accesses the same
-//! way at its width,
-//! provided something reads it and it meets a SIMD operand or a vector ABI
-//! piece directly or through whole copies. A one-cell object an 8-byte SIMD
-//! operand meets becomes `F64` accesses the same way ([`cell_slots`]). An
-//! asm output keeps its address for `asm_outputs`, which makes it a value
-//! stored to the slot.
+//! Whole-object vector slots as values. A two-cell object accessed whole --
+//! 16-byte copies and zero fills, `V128` loads and stores, 16-byte SIMD asm
+//! operands -- or by lane at an offset aligned to the lane's width becomes
+//! `V128` slot accesses for mem2reg to promote, each lane access a
+//! `VecExtract` or `VecInsert` of the slot's vector; a four- or eight-cell
+//! one met by `V256` or `V512` accesses becomes one the same way at its
+//! width, provided something reads it and it meets a SIMD operand or a
+//! vector ABI piece directly or through whole copies. A one-cell object an
+//! 8-byte SIMD operand meets becomes `F64` accesses the same way
+//! ([`cell_slots`]). An asm output keeps its address for `asm_outputs`,
+//! which makes it a value stored to the slot.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use super::super::abi_classify::ScalarKind;
 use super::super::ir::{
-    AsmBlock, AsmConstraint, AsmSeg, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
-    ValueId,
+    AsmBlock, AsmConstraint, AsmSeg, BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
+    Terminator, ValueId,
 };
 use super::tape::{At, Insertion, insert};
 
 /// One rewritten access, by its tape index before the rewrite.
 enum Edit {
+    /// A lane read: the slot's vector loaded and the lane extracted.
+    LaneLoad {
+        at: ValueId,
+        base: i64,
+        byte: u8,
+        kind: LoadKind,
+    },
+    /// A lane write: the slot's vector loaded, the lane inserted, the
+    /// vector stored back.
+    LaneStore {
+        at: ValueId,
+        base: i64,
+        byte: u8,
+        kind: StoreKind,
+    },
     Addr {
         at: ValueId,
     },
@@ -89,6 +104,27 @@ const DOUBLE: Whole = Whole {
     cells: 1,
 };
 
+/// The byte width of a scalar lane access of `kind`, `None` for the wide and
+/// long-double kinds.
+fn lane_load_bytes(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::F32 => Some(4),
+        LoadKind::F64 => Some(8),
+        k => k.int_bytes(),
+    }
+}
+
+fn lane_store_bytes(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::I8 => Some(1),
+        StoreKind::I16 => Some(2),
+        StoreKind::I32 | StoreKind::F32 => Some(4),
+        StoreKind::I64 | StoreKind::F64 => Some(8),
+        _ => None,
+    }
+}
+
+/// Rewrite the eligible slots of `func`; returns them.
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {
         return BTreeSet::new();
@@ -144,10 +180,18 @@ fn slot_store(off: i64, value: ValueId, w: Whole) -> Inst {
     }
 }
 
-/// The slots of `w`'s size accessed only whole at its kinds. With
+/// The slots of `w`'s size accessed whole at its kinds or by lane. With
 /// `spliced`, see [`spliced_slots`].
 fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
     let bytes = w.cells * 8;
+    // A lane access of slot `b` at cell `off` and byte `disp`, of `n` bytes.
+    let lane = |b: i64, off: i64, disp: i64, n: Option<u8>, volatile: bool| {
+        let at = (off - b) * 8 + disp;
+        n.is_some_and(|n| {
+            let n = i64::from(n);
+            !volatile && at >= 0 && at % n == 0 && at + n <= bytes
+        })
+    };
     let mut slots: BTreeSet<i64> = func
         .multi_cell_slots
         .iter()
@@ -193,6 +237,8 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
     };
     let mut reject: BTreeSet<i64> = BTreeSet::new();
     let mut addr: BTreeMap<ValueId, i64> = BTreeMap::new();
+    // A slot's address plus a constant byte offset inside it.
+    let mut derived: BTreeMap<ValueId, (i64, i64)> = BTreeMap::new();
     let (mut reads, mut simd) = (BTreeSet::new(), BTreeSet::new());
     let mut copies: Vec<(i64, i64)> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -206,6 +252,15 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                     }
                 }
             }
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } if covered[v] && (0..bytes).contains(&rhs_imm) => {
+                if let Some(&b) = addr.get(&lhs) {
+                    derived.insert(v as ValueId, (b, rhs_imm));
+                }
+            }
             Inst::LoadLocal {
                 off,
                 disp,
@@ -213,10 +268,16 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 volatile,
             } => {
                 let whole = disp == 0 && kind == w.load && !volatile;
-                reject.extend(covering(off).filter(|&b| b != off || !whole));
-                if whole && slots.contains(&off) {
-                    reads.insert(off);
-                    simd.insert(off);
+                let n = lane_load_bytes(kind);
+                for b in covering(off) {
+                    if b == off && whole {
+                        reads.insert(off);
+                        simd.insert(off);
+                    } else if lane(b, off, i64::from(disp), n, volatile) {
+                        reads.insert(b);
+                    } else {
+                        reject.insert(b);
+                    }
                 }
             }
             Inst::StoreLocal {
@@ -227,9 +288,13 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 ..
             } => {
                 let whole = disp == 0 && kind == w.store && !volatile;
-                reject.extend(covering(off).filter(|&b| b != off || !whole));
-                if whole && slots.contains(&off) {
-                    simd.insert(off);
+                let n = lane_store_bytes(kind);
+                for b in covering(off) {
+                    if b == off && whole {
+                        simd.insert(off);
+                    } else if used[v] || !lane(b, off, i64::from(disp), n, volatile) {
+                        reject.insert(b);
+                    }
                 }
             }
             Inst::AllocaInit(off)
@@ -250,11 +315,17 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
     }
     for (v, inst) in func.insts.iter().enumerate() {
         let check = |a: ValueId, ok: bool, reject: &mut BTreeSet<i64>| {
-            if let Some(&b) = addr.get(&a)
+            if let Some(b) = addr.get(&a).or(derived.get(&a).map(|(b, _)| b))
                 && !(ok && covered[v])
             {
-                reject.insert(b);
+                reject.insert(*b);
             }
+        };
+        // The slot and byte offset an address operand names.
+        let at = |a: ValueId| {
+            addr.get(&a)
+                .map(|&b| (b, 0))
+                .or_else(|| derived.get(&a).copied())
         };
         match inst {
             Inst::Mcpy {
@@ -281,11 +352,23 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == w.load && !*volatile;
+                let whole = addr.contains_key(a) && *disp == 0 && *kind == w.load && !*volatile;
+                let ok = whole
+                    || at(*a).is_some_and(|(b, k)| {
+                        lane(
+                            b,
+                            b,
+                            k + i64::from(*disp),
+                            lane_load_bytes(*kind),
+                            *volatile,
+                        )
+                    });
                 check(*a, ok, &mut reject);
-                if let Some(&b) = addr.get(a) {
+                if let Some((b, _)) = at(*a) {
                     reads.insert(b);
-                    simd.insert(b);
+                    if whole {
+                        simd.insert(b);
+                    }
                 }
             }
             Inst::Store {
@@ -296,10 +379,17 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == w.store && !*volatile && a != value;
+                let whole = addr.contains_key(a) && *disp == 0 && *kind == w.store && !*volatile;
+                let ok = a != value
+                    && (whole
+                        || !used[v]
+                            && at(*a).is_some_and(|(b, k)| {
+                                let n = lane_store_bytes(*kind);
+                                lane(b, b, k + i64::from(*disp), n, *volatile)
+                            }));
                 check(*a, ok, &mut reject);
                 check(*value, false, &mut reject);
-                if let Some(&b) = addr.get(a) {
+                if whole && let Some(&b) = addr.get(a) {
                     simd.insert(b);
                 }
             }
@@ -323,16 +413,23 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                     }
                 }
             }
+            _ if derived.contains_key(&(v as ValueId)) => {}
             _ => inst.for_each_operand(|a| check(a, false, &mut reject)),
         }
     }
-    let vector_return = spliced
-        && func.ret_agg.is_some_and(|i| {
-            let d = &func.agg_descs[i as usize];
-            d.size as i64 == bytes
-                && d.fields.len() == 1
-                && matches!(d.fields[0].kind, ScalarKind::Vector)
-        });
+    let is_vector = |i: u32| {
+        let d = &func.agg_descs[i as usize];
+        d.vector && d.size as i64 == bytes
+    };
+    let vector_return = spliced && func.ret_agg.is_some_and(is_vector);
+    // Spliced, a vector parameter's object is filled whole from the argument.
+    if spliced {
+        for (agg, &slot) in func.param_aggs.iter().zip(&func.param_local_slots) {
+            if slot != 0 && agg.is_some_and(is_vector) {
+                simd.insert(slot);
+            }
+        }
+    }
     for b in &func.blocks {
         let read_back = vector_return && matches!(b.terminator, Terminator::Return(_));
         b.terminator.for_each_operand(|a| {
@@ -376,6 +473,26 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
         })
         .collect();
     let slot_of = |a: ValueId| addr.get(&a).copied();
+    // A slot's address plus a constant byte offset inside it.
+    let derived: BTreeMap<ValueId, (i64, i64)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter_map(|(v, inst)| match *inst {
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs,
+                rhs_imm,
+            } => slot_of(lhs).map(|b| (v as ValueId, (b, rhs_imm))),
+            _ => None,
+        })
+        .collect();
+    let lane_of = |a: ValueId, disp: i32| {
+        let (b, k) = slot_of(a)
+            .map(|b| (b, 0))
+            .or_else(|| derived.get(&a).copied())?;
+        Some((b, (k + i64::from(disp)) as u8))
+    };
     let side = |slot: Option<i64>, a: ValueId| slot.map_or(Side::Addr(a), Side::Slot);
     let out_addrs: BTreeSet<ValueId> = func
         .insts
@@ -392,6 +509,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                 .map(|(_, &a)| a)
         })
         .collect();
+    let slot_holding = |off: i64| (0..w.cells).map(|k| off - k).find(|b| slots.contains(b));
     let mut edits: Vec<Edit> = Vec::new();
     for (v, inst) in func.insts.iter().enumerate() {
         let at = v as ValueId;
@@ -399,15 +517,68 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             Inst::LocalAddr(_) if addr.contains_key(&at) && !out_addrs.contains(&at) => {
                 edits.push(Edit::Addr { at })
             }
-            Inst::Load { addr: a, .. } => {
-                if let Some(off) = slot_of(*a) {
+            Inst::Load {
+                addr: a,
+                disp,
+                kind,
+                ..
+            } => {
+                if let Some(off) = slot_of(*a)
+                    && *disp == 0
+                    && *kind == w.load
+                {
                     edits.push(Edit::Load { at, off });
+                } else if let Some((base, byte)) = lane_of(*a, *disp) {
+                    edits.push(Edit::LaneLoad {
+                        at,
+                        base,
+                        byte,
+                        kind: *kind,
+                    });
                 }
             }
-            Inst::Store { addr: a, .. } => {
-                if let Some(off) = slot_of(*a) {
+            Inst::Store {
+                addr: a,
+                disp,
+                kind,
+                ..
+            } => {
+                if let Some(off) = slot_of(*a)
+                    && *disp == 0
+                    && *kind == w.store
+                {
                     edits.push(Edit::Store { at, off });
+                } else if let Some((base, byte)) = lane_of(*a, *disp) {
+                    edits.push(Edit::LaneStore {
+                        at,
+                        base,
+                        byte,
+                        kind: *kind,
+                    });
                 }
+            }
+            // A lane access of a slot by cell and byte offset.
+            &Inst::LoadLocal {
+                off, disp, kind, ..
+            } if slot_holding(off).is_some_and(|b| b != off || disp != 0 || kind != w.load) => {
+                let base = slot_holding(off).unwrap_or(off);
+                edits.push(Edit::LaneLoad {
+                    at,
+                    base,
+                    byte: ((off - base) * 8 + i64::from(disp)) as u8,
+                    kind,
+                });
+            }
+            &Inst::StoreLocal {
+                off, disp, kind, ..
+            } if slot_holding(off).is_some_and(|b| b != off || disp != 0 || kind != w.store) => {
+                let base = slot_holding(off).unwrap_or(off);
+                edits.push(Edit::LaneStore {
+                    at,
+                    base,
+                    byte: ((off - base) * 8 + i64::from(disp)) as u8,
+                    kind,
+                });
             }
             Inst::Mcpy { dst, src, .. } => {
                 let (d, s) = (slot_of(*dst), slot_of(*src));
@@ -448,6 +619,15 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             })
         };
         match e {
+            Edit::LaneLoad { at, base, .. } => put(*at, slot_load(*base, w)),
+            Edit::LaneStore { at, base, .. } => {
+                put(*at, slot_load(*base, w));
+                ins.push(Insertion {
+                    at: At::After(*at),
+                    inst: slot_store(*base, *at, w),
+                    is_f32: false,
+                });
+            }
             Edit::Copy { at, src, .. } => put(
                 *at,
                 match *src {
@@ -479,8 +659,35 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
     };
     // A block accumulator naming a rewritten instruction loses that value.
     let mut gone: BTreeSet<ValueId> = BTreeSet::new();
+    let bytes = (w.cells * 8) as u8;
     for e in &edits {
         match e {
+            Edit::LaneLoad { at, byte, kind, .. } => {
+                let vec = take();
+                func.insts[rw.remap[*at as usize] as usize] = Inst::VecExtract {
+                    vec,
+                    off: *byte,
+                    kind: *kind,
+                    bytes,
+                };
+            }
+            Edit::LaneStore { at, byte, kind, .. } => {
+                let vec = take();
+                take();
+                let n = rw.remap[*at as usize];
+                let value = match func.insts[n as usize] {
+                    Inst::Store { value, .. } | Inst::StoreLocal { value, .. } => value,
+                    _ => continue,
+                };
+                func.insts[n as usize] = Inst::VecInsert {
+                    vec,
+                    value,
+                    off: *byte,
+                    kind: *kind,
+                    bytes,
+                };
+                gone.insert(n);
+            }
             Edit::Addr { at } => {
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = Inst::Imm(0);

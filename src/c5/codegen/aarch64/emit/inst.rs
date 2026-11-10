@@ -487,6 +487,31 @@ pub(super) fn emit_inst(
             frame,
             scratch,
         ),
+        Inst::VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_extract(
+            code,
+            (*vec, *off, *kind, *bytes),
+            dst,
+            alloc,
+            frame,
+            scratch,
+        ),
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_insert(
+            code,
+            (*vec, *value, *off, *kind, *bytes),
+            matches!(func.insts[*vec as usize], Inst::Undef | Inst::Imm(0)),
+            (dst, alloc, frame, scratch),
+        ),
         Inst::Fma {
             a,
             b,
@@ -751,6 +776,134 @@ fn emit_vec_binop(
         ));
     };
     emit(code, word);
+    propagate_v128(code, frame, dst, qd, scratch.primary);
+    Ok(())
+}
+
+/// `Inst::VecExtract`: `umov` / `smov` of the lane into an integer register,
+/// extended as `kind` reads it, or `dup` of it into a scalar FP one.
+fn emit_vec_extract(
+    code: &mut Vec<u8>,
+    (vec, off, kind, bytes): (super::super::ir::ValueId, u8, LoadKind, u8),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{enc_dup_elem_scalar, enc_smov_gen, enc_umov_gen};
+    if bytes != 16 {
+        return fail("VecExtract: only 16-byte vectors");
+    }
+    let place = place_of(alloc, vec);
+    let Some(qn) = materialize_v128(code, place, frame.fp_scratch[0], frame, scratch.primary)
+    else {
+        return fail("VecExtract: vector has no place");
+    };
+    let esize = match kind {
+        LoadKind::F64 | LoadKind::I64 => 8,
+        LoadKind::F32 | LoadKind::I32 | LoadKind::U32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+        _ => return fail("VecExtract: not a lane kind"),
+    };
+    let index = u32::from(off) / esize;
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("VecExtract: dst not fp reg / spill");
+        };
+        emit(code, enc_dup_elem_scalar(dd, qn, esize, index));
+        store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("VecExtract: dst not int reg / spill");
+    };
+    let word = match kind {
+        LoadKind::I32 | LoadKind::I16 | LoadKind::I8 => enc_smov_gen(rd, qn, esize, index),
+        _ => enc_umov_gen(rd, qn, esize, index),
+    };
+    emit(code, word);
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// `Inst::VecInsert`: `ins` of the value into the lane of a copy of the
+/// vector, from a general register or from the low element of an FP one.
+fn emit_vec_insert(
+    code: &mut Vec<u8>,
+    (vec, value, off, kind, bytes): (
+        super::super::ir::ValueId,
+        super::super::ir::ValueId,
+        u8,
+        StoreKind,
+        u8,
+    ),
+    blank: bool,
+    (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
+) -> Emit {
+    use super::encode::{enc_ins_elem, enc_ins_gen};
+    if bytes != 16 {
+        return fail("VecInsert: only 16-byte vectors");
+    }
+    let esize = match kind {
+        StoreKind::F64 | StoreKind::I64 => 8,
+        StoreKind::F32 | StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecInsert: not a lane kind"),
+    };
+    let index = u32::from(off) / esize;
+    let float = matches!(kind, StoreKind::F32 | StoreKind::F64);
+    // The value first, as the result may take its register.
+    let src = if float {
+        let Some(f) = materialize_fp(code, place_of(alloc, value), frame.fp_scratch[1], frame)
+        else {
+            return fail("VecInsert: value has no place");
+        };
+        f
+    } else {
+        let Some(r) = materialize_int(code, place_of(alloc, value), scratch.primary, frame) else {
+            return fail("VecInsert: value has no place");
+        };
+        r.0
+    };
+    let qd = match dst {
+        Place::FpReg(r) if !(float && r == src) => r,
+        _ => frame.fp_scratch[0],
+    };
+    // The low lane over a zero or undefined vector: a scalar `fmov` clears
+    // the bits above it.
+    if blank && off == 0 && esize >= 4 {
+        emit(
+            code,
+            match (float, esize) {
+                (true, 8) => super::encode::enc_fmov_d_d(qd, src),
+                (true, _) => super::encode::enc_fmov_s_s(qd, src),
+                (false, 8) => super::encode::enc_fmov_x_to_d(qd, Reg(src)),
+                (false, _) => super::encode::enc_fmov_w_to_s(qd, Reg(src)),
+            },
+        );
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+        return Ok(());
+    }
+    // An undefined vector leaves the register as it is.
+    let base = place_of(alloc, vec);
+    if !matches!(base, Place::None) {
+        let Some(qn) = materialize_v128(code, base, qd, frame, scratch.secondary) else {
+            return fail("VecInsert: vector has no place");
+        };
+        if qn != qd {
+            emit(code, super::encode::enc_mov_v16b(qd, qn));
+        }
+    }
+    emit(
+        code,
+        if float {
+            enc_ins_elem(qd, esize, index, src)
+        } else {
+            enc_ins_gen(qd, esize, index, Reg(src))
+        },
+    );
     propagate_v128(code, frame, dst, qd, scratch.primary);
     Ok(())
 }

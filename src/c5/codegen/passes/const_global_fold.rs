@@ -552,8 +552,8 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
     changed
 }
 
-/// Fold non-volatile integer loads from const, initialized data into the
-/// initializer's value (C99 6.7.3: a const object's stored value cannot
+/// Fold non-volatile integer loads from const, initialized data, and lanes
+/// of vectors loaded from it, into the initializer's value (C99 6.7.3: a const object's stored value cannot
 /// be modified, so the image is the object's value for the whole
 /// execution). Returns true when any load folded. Runs inside the branch
 /// fold's fixed point so a load whose address becomes constant only
@@ -562,20 +562,30 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     let ext = extern_imm_data(func);
     let mut folds: Vec<(ValueId, Folded)> = Vec::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
-        let Inst::Load {
-            addr,
-            disp,
-            kind,
-            volatile: false,
-            ..
-        } = func.insts[i as usize]
-        else {
-            continue;
+        let (addr, disp, kind) = match func.insts[i as usize] {
+            Inst::Load {
+                addr,
+                disp,
+                kind,
+                volatile: false,
+                ..
+            } => (addr, i64::from(disp), kind),
+            // A lane of a vector loaded whole reads the same bytes.
+            Inst::VecExtract { vec, off, kind, .. } => match func.insts[vec as usize] {
+                Inst::Load {
+                    addr,
+                    disp,
+                    volatile: false,
+                    ..
+                } => (addr, i64::from(disp) + i64::from(off), kind),
+                _ => continue,
+            },
+            _ => continue,
         };
         let Some(width) = int_width(kind) else {
             continue;
         };
-        let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
+        let Some(off) = data_addr(func, &ext, addr, disp) else {
             continue;
         };
         let Some(value) = cd.read(off, width) else {
@@ -858,6 +868,10 @@ fn walk_block(
             | Inst::FpCast { .. }
             | Inst::ParamRef { .. }
             | Inst::LifetimeEnd(_)
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecExtract { .. }
+            | Inst::X86SimdVal { .. }
             | Inst::Phi { .. } => {}
             // Calls, atomics, asm, indexed / segment stores,
             // intrinsics, alloca bookkeeping: may write memory the

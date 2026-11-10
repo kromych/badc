@@ -488,6 +488,23 @@ pub(super) fn emit_inst(
             lhs,
             rhs,
         } => emit_vec_binop(code, (*op, *lane, *bytes), (*lhs, *rhs), dst, alloc, frame),
+        Inst::VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => emit_vec_extract(code, (*vec, *off, *kind, *bytes), dst, alloc, frame),
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => {
+            let blank = matches!(fcx.func.insts[*vec as usize], Inst::Undef | Inst::Imm(0));
+            let lane = (*vec, *value, *off, *kind, *bytes);
+            emit_vec_insert(code, lane, blank, dst, alloc, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),

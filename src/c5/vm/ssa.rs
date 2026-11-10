@@ -1751,8 +1751,10 @@ fn run_inst<H: Host>(
             run_x86_simd(mem, frame, *op, *imm, args)?;
             return Ok(());
         }
-        // The -O rewrite producing it never reaches the VM.
+        // The -O rewrites producing these never reach the VM.
         Inst::X86SimdVal { .. } => "X86SimdVal",
+        Inst::VecInsert { .. } => "VecInsert",
+        Inst::VecExtract { .. } => "VecExtract",
         Inst::VecBinop {
             op,
             lane,

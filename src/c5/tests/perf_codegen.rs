@@ -3134,6 +3134,70 @@ v8i acc(const v8i *p, int n) { v8i s = {0}; for (int i = 0; i < n; i++) s = s + 
     m.finish();
 }
 
+/// A lane write or read of a GNU vector that is a value is an instruction on
+/// its register, as with gcc 16: `(v2l){a, b}` is two `vpinsrq` (`ins` on
+/// AArch64), `v[2] = x` of a float vector one `vpinsrd` (`mov v.s[2]`), and
+/// `v[3]` of a short vector `vpextrw` and the sign extension (`smov`), with
+/// no stack access; a lane of a ymm value is `vextracti128` and `vpextrd`.
+/// Each went through the vector's stack slot, the lane stored and the whole
+/// vector reloaded.
+#[test]
+fn vector_lanes_stay_in_registers() {
+    const SRC: &str = "typedef long long v2l __attribute__((vector_size(16)));\n\
+typedef int v8i __attribute__((vector_size(32)));\n\
+typedef float v4f __attribute__((vector_size(16)));\n\
+typedef short v8s __attribute__((vector_size(16)));\n\
+v2l mk(long long a, long long b) { v2l r = {a, b}; return r; }\n\
+int lane(const v8i *p) { v8i v = *p + *p; return v[5]; }\n\
+v4f put(v4f v, float x) { v[2] = x; return v; }\n\
+long sx(v8s v) { return v[3]; }\n";
+    let mut m = Misses::default();
+    for name in ["mk", "put", "sx"] {
+        let x = x64(SRC, name);
+        m.expect(x.iter().all(|i| i.modrm.is_none() || i.reg_form()), || {
+            format!("x86-64 {name}: {x:x?}")
+        });
+        // Loads and stores: op0 bits 27 and 25 are 1 and 0.
+        let a = a64(SRC, name);
+        m.expect(
+            a.len() <= 4 && a.iter().all(|w| w & 0x0A00_0000 != 0x0800_0000),
+            || format!("AArch64 {name}: {a:08x?}"),
+        );
+    }
+    // `vextracti128` (0F3A 39) and `vpextrd` (0F3A 16), the one load.
+    let lane = x64(SRC, "lane");
+    m.expect(
+        lane.iter().any(|i| i.op == 0x3A39)
+            && lane.iter().any(|i| i.op == 0x3A16)
+            && lane
+                .iter()
+                .filter(|i| i.modrm.is_some() && !i.reg_form())
+                .count()
+                == 1,
+        || format!("x86-64 lane: {lane:x?}"),
+    );
+    m.finish();
+}
+
+/// A branching helper taking a GNU vector by value and reading its lanes
+/// through address arithmetic is spliced at each call site, also once a mandatory
+/// splice has grown the caller's frame: the frame-growth bound counts its
+/// parameter and the vectors it builds as values, as they are once
+/// spliced, not as the frame cells they occupy before.
+#[test]
+fn by_value_vector_helpers_inline_at_every_site() {
+    const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
+typedef long long v2l __attribute__((vector_size(16)));\n\
+static inline v2l lo(v4l a) { return (v2l){a[0], a[1]}; }\n\
+static inline v2l half(v4l a, const int n) { return n & 1 ? (v2l){a[2], a[3]} : lo(a); }\n\
+static inline v2l add(v2l a, v2l b) { return a + b; }\n\
+static inline int low(v2l a) { return (int)a[0]; }\n\
+static inline __attribute__((always_inline)) int hs(v4l v) { return low(add(lo(v), half(v, 1))); }\n\
+int f(const v4l *p) { return hs(p[0]) + hs(p[1]); }\n";
+    let f = x64(SRC, "f");
+    assert!(f.iter().all(|i| i.op != 0xE8), "x86-64 f: {f:x?}");
+}
+
 /// The AVX2 intrinsics are their VEX instructions on ymm registers, as with
 /// gcc 16: `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the
 /// two loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of

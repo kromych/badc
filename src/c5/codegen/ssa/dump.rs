@@ -367,6 +367,25 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "VecBinop {{ op={op:?}, lane={lane:?}, bytes={bytes}, lhs=v{lhs}, rhs=v{rhs} }}"
         ),
+        VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } => format!(
+            "VecInsert {{ vec=v{vec}, value=v{value}, off={off}, kind={}, bytes={bytes} }}",
+            fmt_store_kind(*kind)
+        ),
+        VecExtract {
+            vec,
+            off,
+            kind,
+            bytes,
+        } => format!(
+            "VecExtract {{ vec=v{vec}, off={off}, kind={}, bytes={bytes} }}",
+            fmt_load_kind(*kind)
+        ),
         X86SimdVal { op, imm, args } => format!(
             "X86SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
             crate::c5::x86_simd::get(*op).name,

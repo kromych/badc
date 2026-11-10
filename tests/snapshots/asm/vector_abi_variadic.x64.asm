@@ -303,64 +303,57 @@ Disassembly of section .text:
                	retq
 
 <ramp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	movb	%al, -0x10(%rbp)
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm0
+               	vpinsrb	$0x0, %eax, %xmm0, %xmm0
                	leaq	0x1(%rax), %rcx
                	andq	$0xff, %rcx
-               	movb	%cl, -0xf(%rbp)
+               	vpinsrb	$0x1, %ecx, %xmm0, %xmm0
                	leaq	0x2(%rax), %rcx
                	andq	$0xff, %rcx
-               	movb	%cl, -0xe(%rbp)
+               	vpinsrb	$0x2, %ecx, %xmm0, %xmm0
                	leaq	0x3(%rax), %rcx
                	andq	$0xff, %rcx
-               	movb	%cl, -0xd(%rbp)
-               	addq	$0x4, %rax
-               	andq	$0xff, %rax
-               	movb	%al, -0xc(%rbp)
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
+               	vpinsrb	$0x3, %ecx, %xmm0, %xmm0
+               	leaq	0x4(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x4, %ecx, %xmm0, %xmm0
                	leaq	0x5(%rax), %rcx
                	andq	$0xff, %rcx
-               	movb	%cl, -0xb(%rbp)
+               	vpinsrb	$0x5, %ecx, %xmm0, %xmm0
                	leaq	0x6(%rax), %rcx
                	andq	$0xff, %rcx
-               	movb	%cl, -0xa(%rbp)
-               	leaq	0x7(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x9(%rbp)
-               	leaq	0x8(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x8(%rbp)
-               	addq	$0x9, %rax
+               	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
+               	addq	$0x7, %rax
                	andq	$0xff, %rax
-               	movb	%al, -0x7(%rbp)
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	leaq	0xa(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x6(%rbp)
-               	leaq	0xb(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x5(%rbp)
-               	leaq	0xc(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x4(%rbp)
-               	leaq	0xd(%rax), %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, -0x3(%rbp)
-               	addq	$0xe, %rax
-               	andq	$0xff, %rax
-               	movb	%al, -0x2(%rbp)
+               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
                	andq	$0xff, %rdi
+               	leaq	0x8(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0x8, %eax, %xmm0, %xmm0
+               	leaq	0x9(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0x9, %eax, %xmm0, %xmm0
+               	leaq	0xa(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0xa, %eax, %xmm0, %xmm0
+               	leaq	0xb(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0xb, %eax, %xmm0, %xmm0
+               	leaq	0xc(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0xc, %eax, %xmm0, %xmm0
+               	leaq	0xd(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0xd, %eax, %xmm0, %xmm0
+               	leaq	0xe(%rdi), %rax
+               	andq	$0xff, %rax
+               	vpinsrb	$0xe, %eax, %xmm0, %xmm0
                	leaq	0xf(%rdi), %rax
                	andq	$0xff, %rax
-               	movb	%al, -0x1(%rbp)
-               	movups	-0x10(%rbp), %xmm0
-               	leave
+               	vpinsrb	$0xf, %eax, %xmm0, %xmm0
                	retq
 
 <main>:

@@ -14,261 +14,253 @@ Disassembly of section .text:
                	brk	#0x1
 
 <load16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldrb	w1, [x0]
-               	sturb	w1, [x29, #-0x10]
+               	mov	x2, #0x0                // =0
+               	fmov	d0, x2
+               	mov	v0.b[0], w1
                	ldrb	w1, [x0, #0x1]
-               	sturb	w1, [x29, #-0xf]
+               	mov	v0.b[1], w1
                	ldrb	w1, [x0, #0x2]
-               	sturb	w1, [x29, #-0xe]
+               	mov	v0.b[2], w1
                	ldrb	w1, [x0, #0x3]
-               	sturb	w1, [x29, #-0xd]
+               	mov	v0.b[3], w1
                	ldrb	w1, [x0, #0x4]
-               	sturb	w1, [x29, #-0xc]
+               	mov	v0.b[4], w1
                	ldrb	w1, [x0, #0x5]
-               	sturb	w1, [x29, #-0xb]
+               	mov	v0.b[5], w1
                	ldrb	w1, [x0, #0x6]
-               	sturb	w1, [x29, #-0xa]
+               	mov	v0.b[6], w1
                	ldrb	w1, [x0, #0x7]
-               	sturb	w1, [x29, #-0x9]
+               	mov	v0.b[7], w1
                	ldrb	w1, [x0, #0x8]
-               	sturb	w1, [x29, #-0x8]
+               	mov	v0.b[8], w1
                	ldrb	w1, [x0, #0x9]
-               	sturb	w1, [x29, #-0x7]
+               	mov	v0.b[9], w1
                	ldrb	w1, [x0, #0xa]
-               	sturb	w1, [x29, #-0x6]
+               	mov	v0.b[10], w1
                	ldrb	w1, [x0, #0xb]
-               	sturb	w1, [x29, #-0x5]
+               	mov	v0.b[11], w1
                	ldrb	w1, [x0, #0xc]
-               	sturb	w1, [x29, #-0x4]
+               	mov	v0.b[12], w1
                	ldrb	w1, [x0, #0xd]
-               	sturb	w1, [x29, #-0x3]
+               	mov	v0.b[13], w1
                	ldrb	w1, [x0, #0xe]
-               	sturb	w1, [x29, #-0x2]
+               	mov	v0.b[14], w1
                	ldrb	w0, [x0, #0xf]
-               	sturb	w0, [x29, #-0x1]
-               	ldur	q0, [x29, #-0x10]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	v0.b[15], w0
                	ret
 
 <store16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	q0, [x29, #-0x10]
-               	ldurb	w1, [x29, #-0x10]
+               	umov	w1, v0.b[0]
                	strb	w1, [x0]
-               	ldurb	w1, [x29, #-0xf]
+               	umov	w1, v0.b[1]
                	strb	w1, [x0, #0x1]
-               	ldurb	w1, [x29, #-0xe]
+               	umov	w1, v0.b[2]
                	strb	w1, [x0, #0x2]
-               	ldurb	w1, [x29, #-0xd]
+               	umov	w1, v0.b[3]
                	strb	w1, [x0, #0x3]
-               	ldurb	w1, [x29, #-0xc]
+               	umov	w1, v0.b[4]
                	strb	w1, [x0, #0x4]
-               	ldurb	w1, [x29, #-0xb]
+               	umov	w1, v0.b[5]
                	strb	w1, [x0, #0x5]
-               	ldurb	w1, [x29, #-0xa]
+               	umov	w1, v0.b[6]
                	strb	w1, [x0, #0x6]
-               	ldurb	w1, [x29, #-0x9]
+               	umov	w1, v0.b[7]
                	strb	w1, [x0, #0x7]
-               	ldurb	w1, [x29, #-0x8]
+               	umov	w1, v0.b[8]
                	strb	w1, [x0, #0x8]
-               	ldurb	w1, [x29, #-0x7]
+               	umov	w1, v0.b[9]
                	strb	w1, [x0, #0x9]
-               	ldurb	w1, [x29, #-0x6]
+               	umov	w1, v0.b[10]
                	strb	w1, [x0, #0xa]
-               	ldurb	w1, [x29, #-0x5]
+               	umov	w1, v0.b[11]
                	strb	w1, [x0, #0xb]
-               	ldurb	w1, [x29, #-0x4]
+               	umov	w1, v0.b[12]
                	strb	w1, [x0, #0xc]
-               	ldurb	w1, [x29, #-0x3]
+               	umov	w1, v0.b[13]
                	strb	w1, [x0, #0xd]
-               	ldurb	w1, [x29, #-0x2]
+               	umov	w1, v0.b[14]
                	strb	w1, [x0, #0xe]
-               	ldurb	w1, [x29, #-0x1]
+               	umov	w1, v0.b[15]
                	strb	w1, [x0, #0xf]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <mix>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	stur	q0, [x29, #-0x20]
-               	ldurb	w0, [x29, #-0x20]
+               	stp	x20, x21, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	umov	w0, v0.b[0]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x10]
-               	ldurb	w0, [x29, #-0x1f]
+               	mov	x1, #0x0                // =0
+               	fmov	d1, x1
+               	mov	v1.b[0], w0
+               	umov	w0, v0.b[1]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xf]
-               	ldurb	w0, [x29, #-0x1e]
+               	mov	v1.b[1], w0
+               	umov	w0, v0.b[2]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xe]
-               	ldurb	w0, [x29, #-0x1d]
+               	mov	v1.b[2], w0
+               	umov	w0, v0.b[3]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xd]
-               	ldurb	w0, [x29, #-0x1c]
+               	mov	v1.b[3], w0
+               	umov	w0, v0.b[4]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xc]
-               	ldurb	w0, [x29, #-0x1b]
+               	mov	v1.b[4], w0
+               	umov	w0, v0.b[5]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xb]
-               	ldurb	w0, [x29, #-0x1a]
+               	mov	v1.b[5], w0
+               	umov	w0, v0.b[6]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0xa]
-               	ldurb	w0, [x29, #-0x19]
+               	mov	v1.b[6], w0
+               	umov	w0, v0.b[7]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x9]
-               	ldurb	w0, [x29, #-0x18]
+               	mov	v1.b[7], w0
+               	umov	w0, v0.b[8]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x8]
-               	ldurb	w0, [x29, #-0x17]
+               	mov	v1.b[8], w0
+               	umov	w0, v0.b[9]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x7]
-               	ldurb	w0, [x29, #-0x16]
+               	mov	v1.b[9], w0
+               	umov	w0, v0.b[10]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x6]
-               	ldurb	w0, [x29, #-0x15]
+               	mov	v1.b[10], w0
+               	umov	w0, v0.b[11]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x5]
-               	ldurb	w0, [x29, #-0x14]
+               	mov	v1.b[11], w0
+               	umov	w0, v0.b[12]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x4]
-               	ldurb	w0, [x29, #-0x13]
+               	mov	v1.b[12], w0
+               	umov	w0, v0.b[13]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x3]
-               	ldurb	w0, [x29, #-0x12]
+               	mov	v1.b[13], w0
+               	umov	w0, v0.b[14]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x2]
-               	ldurb	w0, [x29, #-0x11]
+               	mov	v1.b[14], w0
+               	umov	w0, v0.b[15]
                	lsl	x0, x0, #1
-               	sturb	w0, [x29, #-0x1]
-               	ldurb	w0, [x29, #-0x20]
-               	lsr	x1, x0, #7
-               	ldurb	w0, [x29, #-0x1f]
-               	lsr	x2, x0, #7
-               	ldurb	w0, [x29, #-0x1e]
-               	lsr	x3, x0, #7
-               	ldurb	w0, [x29, #-0x1d]
-               	lsr	x4, x0, #7
-               	ldurb	w0, [x29, #-0x1c]
-               	lsr	x5, x0, #7
-               	ldurb	w0, [x29, #-0x1b]
-               	lsr	x6, x0, #7
-               	ldurb	w0, [x29, #-0x1a]
-               	lsr	x7, x0, #7
-               	ldurb	w0, [x29, #-0x19]
-               	lsr	x8, x0, #7
-               	ldurb	w0, [x29, #-0x18]
-               	lsr	x9, x0, #7
-               	ldurb	w0, [x29, #-0x17]
-               	lsr	x10, x0, #7
-               	ldurb	w0, [x29, #-0x16]
-               	lsr	x11, x0, #7
-               	ldurb	w0, [x29, #-0x15]
-               	lsr	x12, x0, #7
-               	ldurb	w0, [x29, #-0x14]
-               	lsr	x13, x0, #7
-               	ldurb	w0, [x29, #-0x13]
-               	lsr	x14, x0, #7
-               	ldurb	w0, [x29, #-0x12]
-               	lsr	x15, x0, #7
-               	ldurb	w0, [x29, #-0x11]
-               	lsr	x20, x0, #7
+               	mov	v1.b[15], w0
+               	umov	w1, v0.b[0]
+               	umov	w2, v0.b[1]
+               	umov	w3, v0.b[2]
+               	umov	w4, v0.b[3]
+               	umov	w5, v0.b[4]
+               	umov	w6, v0.b[5]
+               	umov	w7, v0.b[6]
+               	umov	w8, v0.b[7]
+               	umov	w9, v0.b[8]
+               	umov	w10, v0.b[9]
+               	umov	w11, v0.b[10]
+               	umov	w12, v0.b[11]
+               	umov	w13, v0.b[12]
+               	umov	w14, v0.b[13]
+               	umov	w15, v0.b[14]
+               	umov	w20, v0.b[15]
                	mov	x0, #0x1b               // =27
+               	ubfx	x1, x1, #7, #8
                	mul	x1, x1, x0
-               	sturb	w1, [x29, #-0x20]
-               	mul	x1, x2, x0
-               	sturb	w1, [x29, #-0x1f]
-               	mul	x1, x3, x0
-               	sturb	w1, [x29, #-0x1e]
-               	mul	x1, x4, x0
-               	sturb	w1, [x29, #-0x1d]
-               	mul	x1, x5, x0
-               	sturb	w1, [x29, #-0x1c]
-               	mul	x1, x6, x0
-               	sturb	w1, [x29, #-0x1b]
-               	mul	x1, x7, x0
-               	sturb	w1, [x29, #-0x1a]
-               	mul	x1, x8, x0
-               	sturb	w1, [x29, #-0x19]
-               	mul	x1, x9, x0
-               	sturb	w1, [x29, #-0x18]
-               	mul	x1, x10, x0
-               	sturb	w1, [x29, #-0x17]
-               	mul	x1, x11, x0
-               	sturb	w1, [x29, #-0x16]
-               	mul	x1, x12, x0
-               	sturb	w1, [x29, #-0x15]
-               	mul	x1, x13, x0
-               	sturb	w1, [x29, #-0x14]
-               	mul	x1, x14, x0
-               	sturb	w1, [x29, #-0x13]
-               	mul	x1, x15, x0
-               	sturb	w1, [x29, #-0x12]
-               	mul	x0, x20, x0
-               	sturb	w0, [x29, #-0x11]
-               	ldur	q0, [x29, #-0x10]
-               	ldur	q1, [x29, #-0x20]
-               	eor	v0.16b, v0.16b, v1.16b
-               	stur	q0, [x29, #-0x10]
+               	mov	x21, #0x0               // =0
+               	fmov	d0, x21
+               	mov	v0.b[0], w1
+               	ubfx	x1, x2, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[1], w1
+               	ubfx	x1, x3, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[2], w1
+               	ubfx	x1, x4, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[3], w1
+               	ubfx	x1, x5, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[4], w1
+               	ubfx	x1, x6, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[5], w1
+               	ubfx	x1, x7, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[6], w1
+               	ubfx	x1, x8, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[7], w1
+               	ubfx	x1, x9, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[8], w1
+               	ubfx	x1, x10, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[9], w1
+               	ubfx	x1, x11, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[10], w1
+               	ubfx	x1, x12, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[11], w1
+               	ubfx	x1, x13, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[12], w1
+               	ubfx	x1, x14, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[13], w1
+               	ubfx	x1, x15, #7, #8
+               	mul	x1, x1, x0
+               	mov	v0.b[14], w1
+               	ubfx	x1, x20, #7, #8
+               	mul	x0, x1, x0
+               	mov	v0.b[15], w0
+               	eor	v0.16b, v1.16b, v0.16b
                	mov	x0, #0x63               // =99
-               	ldurb	w1, [x29, #-0x10]
+               	umov	w1, v0.b[0]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x20]
-               	ldurb	w1, [x29, #-0xf]
+               	mov	x2, #0x0                // =0
+               	fmov	d1, x2
+               	mov	v1.b[0], w1
+               	umov	w1, v0.b[1]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1f]
-               	ldurb	w1, [x29, #-0xe]
+               	mov	v1.b[1], w1
+               	umov	w1, v0.b[2]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1e]
-               	ldurb	w1, [x29, #-0xd]
+               	mov	v1.b[2], w1
+               	umov	w1, v0.b[3]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1d]
-               	ldurb	w1, [x29, #-0xc]
+               	mov	v1.b[3], w1
+               	umov	w1, v0.b[4]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1c]
-               	ldurb	w1, [x29, #-0xb]
+               	mov	v1.b[4], w1
+               	umov	w1, v0.b[5]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1b]
-               	ldurb	w1, [x29, #-0xa]
+               	mov	v1.b[5], w1
+               	umov	w1, v0.b[6]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x1a]
-               	ldurb	w1, [x29, #-0x9]
+               	mov	v1.b[6], w1
+               	umov	w1, v0.b[7]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x19]
-               	ldurb	w1, [x29, #-0x8]
+               	mov	v1.b[7], w1
+               	umov	w1, v0.b[8]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x18]
-               	ldurb	w1, [x29, #-0x7]
+               	mov	v1.b[8], w1
+               	umov	w1, v0.b[9]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x17]
-               	ldurb	w1, [x29, #-0x6]
+               	mov	v1.b[9], w1
+               	umov	w1, v0.b[10]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x16]
-               	ldurb	w1, [x29, #-0x5]
+               	mov	v1.b[10], w1
+               	umov	w1, v0.b[11]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x15]
-               	ldurb	w1, [x29, #-0x4]
+               	mov	v1.b[11], w1
+               	umov	w1, v0.b[12]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x14]
-               	ldurb	w1, [x29, #-0x3]
+               	mov	v1.b[12], w1
+               	umov	w1, v0.b[13]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x13]
-               	ldurb	w1, [x29, #-0x2]
+               	mov	v1.b[13], w1
+               	umov	w1, v0.b[14]
                	eor	x1, x1, x0
-               	sturb	w1, [x29, #-0x12]
-               	ldurb	w1, [x29, #-0x1]
+               	mov	v1.b[14], w1
+               	umov	w1, v0.b[15]
                	eor	x0, x1, x0
-               	sturb	w0, [x29, #-0x11]
-               	ldur	q0, [x29, #-0x20]
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	mov	v0.16b, v1.16b
+               	mov	v0.b[15], w0
+               	ldp	x29, x30, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x20
                	ret
 
 <update>:

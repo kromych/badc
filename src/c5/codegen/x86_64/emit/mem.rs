@@ -282,7 +282,7 @@ fn emit_store_kind_mem(
 
 /// Mirror a just-stored FP value into `dst` (movapd into a distinct
 /// FP register, or a spill store).
-fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Frame) {
+pub(super) fn mirror_fp_dst(code: &mut Vec<u8>, dst: Place, dn: Reg, frame: Frame) {
     match dst {
         Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
         Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),

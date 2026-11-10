@@ -366,210 +366,210 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v375 BinopI { op=ugt, lhs=v370, rhs_imm=64 }          -> x2
     terminator Bz { cond=v375, target=b6, fall=b5 }   (exit_acc=v375)
   block 5  start_pc=0
-    v2314 Imm(64)                                          -> x1
-    terminator Jmp(b7)   (exit_acc=v2314)
+    v2335 Imm(64)                                          -> x1
+    terminator Jmp(b7)   (exit_acc=v2335)
   block 6  start_pc=0
-    v2315 Extend { value=v370, kind=I32 }                  -> x2
+    v2336 Extend { value=v370, kind=I32 }                  -> x2
     terminator Jmp(b7)   (exit_acc=v370)
   block 7  start_pc=0
-    v2316 Phi { incoming=[b5:v2314, b6:v370], kind=I64 }   -> x1
-    v2317 Extend { value=v2316, kind=I32 }                 -> x2
-    v2318 LifetimeEnd(0)                                   -> -
-    v2319 Extend { value=v2316, kind=I32 }                 -> x2
-    v2320 Imm(0)                                           -> x2
-    v2321 Imm(0)                                           -> x2
-    v2322 X86SimdVal { op=__builtin_ia32_pslldi128, imm=None, args=[v256, v2316] } -> [spill 10]
-    v2323 Imm(0)                                           -> x1
-    v2324 LifetimeEnd(0)                                   -> -
-    v2325 LifetimeEnd(0)                                   -> -
-    v2326 Imm(0)                                           -> x1
-    v2327 Imm(0)                                           -> x1
-    v2328 Imm(0)                                           -> x1
-    v2329 Imm(0)                                           -> x1
-    v2330 Imm(0)                                           -> x1
-    v2331 Imm(0)                                           -> x1
-    v2332 LifetimeEnd(-369)                                -> -
-    v2333 LifetimeEnd(0)                                   -> -
-    v2334 Imm(0)                                           -> x1
-    v2335 Imm(0)                                           -> x1
-    v2336 Imm(0)                                           -> x1
-    v2337 Imm(0)                                           -> x1
-    v2338 X86SimdVal { op=__builtin_ia32_pshufd, imm=Some(27), args=[v255] } -> d12
-    v2339 Imm(0)                                           -> x1
-    v2340 Imm(0)                                           -> x1
-    v2341 Imm(0)                                           -> x1
-    v2342 Imm(0)                                           -> x1
-    v2343 Imm(0)                                           -> x1
+    v2337 Phi { incoming=[b5:v2335, b6:v370], kind=I64 }   -> x1
+    v2338 Extend { value=v2337, kind=I32 }                 -> x2
+    v2339 LifetimeEnd(0)                                   -> -
+    v2340 Extend { value=v2337, kind=I32 }                 -> x2
+    v2341 Imm(0)                                           -> x2
+    v2342 Imm(0)                                           -> x2
+    v2343 X86SimdVal { op=__builtin_ia32_pslldi128, imm=None, args=[v256, v2337] } -> [spill 10]
     v2344 Imm(0)                                           -> x1
-    v2345 Imm(0)                                           -> x1
-    v2346 Imm(0)                                           -> x1
+    v2345 LifetimeEnd(0)                                   -> -
+    v2346 LifetimeEnd(0)                                   -> -
     v2347 Imm(0)                                           -> x1
-    v2348 X86SimdVal { op=__builtin_ia32_pmulld128, imm=None, args=[v254, v2338] } -> d11
+    v2348 Imm(0)                                           -> x1
     v2349 Imm(0)                                           -> x1
     v2350 Imm(0)                                           -> x1
     v2351 Imm(0)                                           -> x1
     v2352 Imm(0)                                           -> x1
-    v2353 LifetimeEnd(0)                                   -> -
-    v2354 Imm(0)                                           -> x1
+    v2353 LifetimeEnd(-369)                                -> -
+    v2354 LifetimeEnd(0)                                   -> -
     v2355 Imm(0)                                           -> x1
     v2356 Imm(0)                                           -> x1
     v2357 Imm(0)                                           -> x1
     v2358 Imm(0)                                           -> x1
-    v2359 X86SimdVal { op=__builtin_ia32_vec_ext_v4si, imm=Some(2), args=[v2348] } -> x1
-    v2360 Imm(0)                                           -> x2
-    v2361 Extend { value=v2359, kind=I32 }                 -> x1
-    v2362 Imm(0)                                           -> x2
-    v2363 Imm(0)                                           -> x2
-    v2364 X86SimdVal { op=__builtin_ia32_vec_set_v4si, imm=Some(1), args=[v253, v2361] } -> d10
+    v2359 X86SimdVal { op=__builtin_ia32_pshufd, imm=Some(27), args=[v255] } -> d12
+    v2360 Imm(0)                                           -> x1
+    v2361 Imm(0)                                           -> x1
+    v2362 Imm(0)                                           -> x1
+    v2363 Imm(0)                                           -> x1
+    v2364 Imm(0)                                           -> x1
     v2365 Imm(0)                                           -> x1
     v2366 Imm(0)                                           -> x1
     v2367 Imm(0)                                           -> x1
     v2368 Imm(0)                                           -> x1
-    v2369 Imm(0)                                           -> x1
+    v2369 X86SimdVal { op=__builtin_ia32_pmulld128, imm=None, args=[v254, v2359] } -> d11
     v2370 Imm(0)                                           -> x1
     v2371 Imm(0)                                           -> x1
     v2372 Imm(0)                                           -> x1
     v2373 Imm(0)                                           -> x1
-    v2374 X86SimdVal { op=__builtin_ia32_pmaxud128, imm=None, args=[v252, v2364] } -> d9
+    v2374 LifetimeEnd(0)                                   -> -
     v2375 Imm(0)                                           -> x1
     v2376 Imm(0)                                           -> x1
     v2377 Imm(0)                                           -> x1
     v2378 Imm(0)                                           -> x1
-    v2379 LifetimeEnd(0)                                   -> -
-    v2380 Imm(0)                                           -> x1
-    v2381 Imm(0)                                           -> x1
-    v2382 Imm(0)                                           -> x1
-    v2383 Imm(0)                                           -> x1
-    v2384 Imm(0)                                           -> x1
-    v2385 Imm(0)                                           -> x1
-    v2386 X86SimdVal { op=__builtin_ia32_pminsd128, imm=None, args=[v251, v2374] } -> d8
+    v2379 Imm(0)                                           -> x1
+    v2380 X86SimdVal { op=__builtin_ia32_vec_ext_v4si, imm=Some(2), args=[v2369] } -> x1
+    v2381 Imm(0)                                           -> x2
+    v2382 Extend { value=v2380, kind=I32 }                 -> x1
+    v2383 Imm(0)                                           -> x2
+    v2384 Imm(0)                                           -> x2
+    v2385 X86SimdVal { op=__builtin_ia32_vec_set_v4si, imm=Some(1), args=[v253, v2382] } -> d10
+    v2386 Imm(0)                                           -> x1
     v2387 Imm(0)                                           -> x1
     v2388 Imm(0)                                           -> x1
     v2389 Imm(0)                                           -> x1
     v2390 Imm(0)                                           -> x1
-    v2391 LifetimeEnd(0)                                   -> -
+    v2391 Imm(0)                                           -> x1
     v2392 Imm(0)                                           -> x1
     v2393 Imm(0)                                           -> x1
     v2394 Imm(0)                                           -> x1
-    v2395 Imm(0)                                           -> x1
+    v2395 X86SimdVal { op=__builtin_ia32_pmaxud128, imm=None, args=[v252, v2385] } -> d9
     v2396 Imm(0)                                           -> x1
     v2397 Imm(0)                                           -> x1
-    v2398 X86SimdVal { op=__builtin_ia32_punpckldq128, imm=None, args=[v250, v2386] } -> d7
+    v2398 Imm(0)                                           -> x1
     v2399 Imm(0)                                           -> x1
-    v2400 Imm(0)                                           -> x1
+    v2400 LifetimeEnd(0)                                   -> -
     v2401 Imm(0)                                           -> x1
     v2402 Imm(0)                                           -> x1
-    v2403 LifetimeEnd(0)                                   -> -
+    v2403 Imm(0)                                           -> x1
     v2404 Imm(0)                                           -> x1
     v2405 Imm(0)                                           -> x1
     v2406 Imm(0)                                           -> x1
-    v2407 Imm(0)                                           -> x1
+    v2407 X86SimdVal { op=__builtin_ia32_pminsd128, imm=None, args=[v251, v2395] } -> d8
     v2408 Imm(0)                                           -> x1
     v2409 Imm(0)                                           -> x1
-    v2410 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v249, v2398] } -> d6
+    v2410 Imm(0)                                           -> x1
     v2411 Imm(0)                                           -> x1
-    v2412 Imm(0)                                           -> x1
+    v2412 LifetimeEnd(0)                                   -> -
     v2413 Imm(0)                                           -> x1
     v2414 Imm(0)                                           -> x1
-    v2415 LifetimeEnd(0)                                   -> -
+    v2415 Imm(0)                                           -> x1
     v2416 Imm(0)                                           -> x1
     v2417 Imm(0)                                           -> x1
     v2418 Imm(0)                                           -> x1
-    v2419 Imm(0)                                           -> x1
+    v2419 X86SimdVal { op=__builtin_ia32_punpckldq128, imm=None, args=[v250, v2407] } -> d7
     v2420 Imm(0)                                           -> x1
     v2421 Imm(0)                                           -> x1
-    v2422 X86SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v2410, v248] } -> d5
+    v2422 Imm(0)                                           -> x1
     v2423 Imm(0)                                           -> x1
-    v2424 Imm(0)                                           -> x1
+    v2424 LifetimeEnd(0)                                   -> -
     v2425 Imm(0)                                           -> x1
     v2426 Imm(0)                                           -> x1
-    v2427 LifetimeEnd(0)                                   -> -
+    v2427 Imm(0)                                           -> x1
     v2428 Imm(0)                                           -> x1
     v2429 Imm(0)                                           -> x1
     v2430 Imm(0)                                           -> x1
-    v2431 Imm(0)                                           -> x1
+    v2431 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v249, v2419] } -> d6
     v2432 Imm(0)                                           -> x1
     v2433 Imm(0)                                           -> x1
-    v2434 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v247, v247] } -> d1
+    v2434 Imm(0)                                           -> x1
     v2435 Imm(0)                                           -> x1
-    v2436 Imm(0)                                           -> x1
+    v2436 LifetimeEnd(0)                                   -> -
     v2437 Imm(0)                                           -> x1
     v2438 Imm(0)                                           -> x1
-    v2439 LifetimeEnd(0)                                   -> -
+    v2439 Imm(0)                                           -> x1
     v2440 Imm(0)                                           -> x1
     v2441 Imm(0)                                           -> x1
     v2442 Imm(0)                                           -> x1
-    v2443 Imm(0)                                           -> x1
+    v2443 X86SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v2431, v248] } -> d5
     v2444 Imm(0)                                           -> x1
     v2445 Imm(0)                                           -> x1
-    v2446 X86SimdVal { op=__builtin_ia32_psubd128, imm=None, args=[v246, v2422] } -> d4
+    v2446 Imm(0)                                           -> x1
     v2447 Imm(0)                                           -> x1
-    v2448 Imm(0)                                           -> x1
+    v2448 LifetimeEnd(0)                                   -> -
     v2449 Imm(0)                                           -> x1
     v2450 Imm(0)                                           -> x1
-    v2451 LifetimeEnd(0)                                   -> -
+    v2451 Imm(0)                                           -> x1
     v2452 Imm(0)                                           -> x1
     v2453 Imm(0)                                           -> x1
     v2454 Imm(0)                                           -> x1
-    v2455 Imm(0)                                           -> x1
+    v2455 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v247, v247] } -> d1
     v2456 Imm(0)                                           -> x1
     v2457 Imm(0)                                           -> x1
-    v2458 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v245, v2446] } -> d3
+    v2458 Imm(0)                                           -> x1
     v2459 Imm(0)                                           -> x1
-    v2460 Imm(0)                                           -> x1
+    v2460 LifetimeEnd(0)                                   -> -
     v2461 Imm(0)                                           -> x1
     v2462 Imm(0)                                           -> x1
-    v2463 LifetimeEnd(0)                                   -> -
+    v2463 Imm(0)                                           -> x1
     v2464 Imm(0)                                           -> x1
     v2465 Imm(0)                                           -> x1
     v2466 Imm(0)                                           -> x1
-    v2467 Imm(0)                                           -> x1
+    v2467 X86SimdVal { op=__builtin_ia32_psubd128, imm=None, args=[v246, v2443] } -> d4
     v2468 Imm(0)                                           -> x1
     v2469 Imm(0)                                           -> x1
-    v2470 X86SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v244, v2458] } -> d2
+    v2470 Imm(0)                                           -> x1
     v2471 Imm(0)                                           -> x1
-    v2472 Imm(0)                                           -> x1
+    v2472 LifetimeEnd(0)                                   -> -
     v2473 Imm(0)                                           -> x1
     v2474 Imm(0)                                           -> x1
-    v2475 LifetimeEnd(0)                                   -> -
+    v2475 Imm(0)                                           -> x1
     v2476 Imm(0)                                           -> x1
     v2477 Imm(0)                                           -> x1
     v2478 Imm(0)                                           -> x1
-    v2479 Imm(0)                                           -> x1
+    v2479 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v245, v2467] } -> d3
     v2480 Imm(0)                                           -> x1
     v2481 Imm(0)                                           -> x1
-    v2482 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v243, v2470] } -> d0
+    v2482 Imm(0)                                           -> x1
     v2483 Imm(0)                                           -> x1
-    v2484 Imm(0)                                           -> x1
+    v2484 LifetimeEnd(0)                                   -> -
     v2485 Imm(0)                                           -> x1
     v2486 Imm(0)                                           -> x1
-    v2487 LifetimeEnd(0)                                   -> -
-    v2488 Extend { value=v263, kind=I32 }                  -> x1
-    v2489 BinopI { op=add, lhs=v263, rhs_imm=1 }           -> x0
-    v2490 Extend { value=v2489, kind=I32, nsw }            -> x1
-    terminator Jmp(b8)   (exit_acc=v2489)
+    v2487 Imm(0)                                           -> x1
+    v2488 Imm(0)                                           -> x1
+    v2489 Imm(0)                                           -> x1
+    v2490 Imm(0)                                           -> x1
+    v2491 X86SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v244, v2479] } -> d2
+    v2492 Imm(0)                                           -> x1
+    v2493 Imm(0)                                           -> x1
+    v2494 Imm(0)                                           -> x1
+    v2495 Imm(0)                                           -> x1
+    v2496 LifetimeEnd(0)                                   -> -
+    v2497 Imm(0)                                           -> x1
+    v2498 Imm(0)                                           -> x1
+    v2499 Imm(0)                                           -> x1
+    v2500 Imm(0)                                           -> x1
+    v2501 Imm(0)                                           -> x1
+    v2502 Imm(0)                                           -> x1
+    v2503 X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v243, v2491] } -> d0
+    v2504 Imm(0)                                           -> x1
+    v2505 Imm(0)                                           -> x1
+    v2506 Imm(0)                                           -> x1
+    v2507 Imm(0)                                           -> x1
+    v2508 LifetimeEnd(0)                                   -> -
+    v2509 Extend { value=v263, kind=I32 }                  -> x1
+    v2510 BinopI { op=add, lhs=v263, rhs_imm=1 }           -> x0
+    v2511 Extend { value=v2510, kind=I32, nsw }            -> x1
+    terminator Jmp(b8)   (exit_acc=v2510)
   block 8  start_pc=0
-    v243 Phi { incoming=[b3:v238, b7:v2482], kind=V128 }  -> d0
-    v244 Phi { incoming=[b3:v232, b7:v2470], kind=V128 }  -> d2
-    v245 Phi { incoming=[b3:v226, b7:v2458], kind=V128 }  -> d3
-    v246 Phi { incoming=[b3:v220, b7:v2446], kind=V128 }  -> d4
-    v247 Phi { incoming=[b3:v214, b7:v2434], kind=V128 }  -> d1
-    v248 Phi { incoming=[b3:v208, b7:v2422], kind=V128 }  -> d5
-    v249 Phi { incoming=[b3:v202, b7:v2410], kind=V128 }  -> d6
-    v250 Phi { incoming=[b3:v196, b7:v2398], kind=V128 }  -> d7
-    v251 Phi { incoming=[b3:v190, b7:v2386], kind=V128 }  -> d8
-    v252 Phi { incoming=[b3:v184, b7:v2374], kind=V128 }  -> d9
-    v253 Phi { incoming=[b3:v178, b7:v2364], kind=V128 }  -> d10
-    v254 Phi { incoming=[b3:v172, b7:v2348], kind=V128 }  -> d11
-    v255 Phi { incoming=[b3:v166, b7:v2338], kind=V128 }  -> d12
-    v256 Phi { incoming=[b3:v160, b7:v2322], kind=V128 }  -> [spill 10]
+    v243 Phi { incoming=[b3:v238, b7:v2503], kind=V128 }  -> d0
+    v244 Phi { incoming=[b3:v232, b7:v2491], kind=V128 }  -> d2
+    v245 Phi { incoming=[b3:v226, b7:v2479], kind=V128 }  -> d3
+    v246 Phi { incoming=[b3:v220, b7:v2467], kind=V128 }  -> d4
+    v247 Phi { incoming=[b3:v214, b7:v2455], kind=V128 }  -> d1
+    v248 Phi { incoming=[b3:v208, b7:v2443], kind=V128 }  -> d5
+    v249 Phi { incoming=[b3:v202, b7:v2431], kind=V128 }  -> d6
+    v250 Phi { incoming=[b3:v196, b7:v2419], kind=V128 }  -> d7
+    v251 Phi { incoming=[b3:v190, b7:v2407], kind=V128 }  -> d8
+    v252 Phi { incoming=[b3:v184, b7:v2395], kind=V128 }  -> d9
+    v253 Phi { incoming=[b3:v178, b7:v2385], kind=V128 }  -> d10
+    v254 Phi { incoming=[b3:v172, b7:v2369], kind=V128 }  -> d11
+    v255 Phi { incoming=[b3:v166, b7:v2359], kind=V128 }  -> d12
+    v256 Phi { incoming=[b3:v160, b7:v2343], kind=V128 }  -> [spill 10]
     v257 Phi { incoming=[b3:v154, b7:v340], kind=V128 }   -> [spill 12]
     v258 Phi { incoming=[b3:v148, b7:v328], kind=V128 }   -> [spill 0]
     v259 Phi { incoming=[b3:v142, b7:v316], kind=V128 }   -> [spill 2]
     v260 Phi { incoming=[b3:v136, b7:v296], kind=V128 }   -> [spill 4]
     v261 Phi { incoming=[b3:v130, b7:v284], kind=V128 }   -> [spill 6]
     v262 Phi { incoming=[b3:v124, b7:v272], kind=V128 }   -> [spill 8]
-    v263 Phi { incoming=[b3:v122, b7:v2489], kind=I64 }   -> x0
+    v263 Phi { incoming=[b3:v122, b7:v2510], kind=I64 }   -> x0
     v264 Extend { value=v263, kind=I32 }                  -> x1
     v265 BinopI { op=lt, lhs=v263, rhs_imm=4 }            -> x1
     terminator Bz { cond=v265, target=b9, fall=b4 }   (exit_acc=v265)
@@ -2312,51 +2312,51 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v2055 Imm(0)                                           -> x1
     terminator Jmp(b43)   (exit_acc=v2054)
   block 41  start_pc=0
-    v2095 LocalAddr(-368)                                  -> x1
-    v2096 Extend { value=v2048, kind=I32 }                 -> x1
-    v2097 BinopI { op=shl, lhs=v2048, rhs_imm=4 }          -> x1
-    v2098 Binop { op=add, lhs=v1480, rhs=v2097 }           -> x2
-    v2099 Extend { value=v2089, kind=I32 }                 -> x8
-    v2100 Imm(0)                                           -> x8
-    v2101 Load { addr=v2098, disp=0, kind=V128 }           -> d0
-    v2102 Imm(0)                                           -> x2
-    v2103 Extend { value=v2089, kind=I32 }                 -> x2
-    v2104 LocalAddr(-42)                                   -> x2
-    v2105 Imm(0)                                           -> x8
-    v2106 Imm(0)                                           -> x8
-    v2107 Imm(0)                                           -> x8
-    v2108 Imm(0)                                           -> x8
+    v2104 LocalAddr(-368)                                  -> x1
+    v2105 Extend { value=v2048, kind=I32 }                 -> x1
+    v2106 BinopI { op=shl, lhs=v2048, rhs_imm=4 }          -> x1
+    v2107 Binop { op=add, lhs=v1480, rhs=v2106 }           -> x2
+    v2108 Extend { value=v2098, kind=I32 }                 -> x8
     v2109 Imm(0)                                           -> x8
-    v2110 Imm(0)                                           -> x8
-    v2111 Store { addr=v2104, disp=0, value=v2101, kind=V128, align=1 } -> -
-    v2112 LifetimeEnd(0)                                   -> -
-    v2113 LocalAddr(-42)                                   -> x8
-    v2114 BinopI { op=shl, lhs=v2089, rhs_imm=2 }          -> x8
-    v2115 Binop { op=add, lhs=v2104, rhs=v2114 }           -> x8
-    v2116 LoadIndexed { base=v2104, index=v2089, scale=4, kind=U32 } -> x2
-    v2117 LifetimeEnd(-42)                                 -> -
-    v2118 LifetimeEnd(0)                                   -> -
-    v2119 BinopI { op=and, lhs=v2116, rhs_imm=4294967295 } -> x8
-    v2120 LocalAddr(-40)                                   -> x8
-    v2121 Extend { value=v2048, kind=I32 }                 -> x9
-    v2122 BinopI { op=shl, lhs=v2048, rhs_imm=4 }          -> x9
-    v2123 Binop { op=add, lhs=v2120, rhs=v2097 }           -> x1
-    v2124 Extend { value=v2089, kind=I32 }                 -> x8
-    v2125 BinopI { op=shl, lhs=v2089, rhs_imm=2 }          -> x8
-    v2126 Binop { op=add, lhs=v2123, rhs=v2125 }           -> x8
-    v2127 LoadIndexed { base=v2123, index=v2089, scale=4, kind=U32 } -> x1
-    v2128 Binop { op=ne, lhs=v2116, rhs=v2127 }            -> x1
-    terminator Bz { cond=v2128, target=b42, fall=b53 }   (exit_acc=v2128)
+    v2110 Load { addr=v2107, disp=0, kind=V128 }           -> d0
+    v2111 Imm(0)                                           -> x2
+    v2112 Extend { value=v2098, kind=I32 }                 -> x2
+    v2113 LocalAddr(-42)                                   -> x2
+    v2114 Imm(0)                                           -> x8
+    v2115 Imm(0)                                           -> x8
+    v2116 Imm(0)                                           -> x8
+    v2117 Imm(0)                                           -> x8
+    v2118 Imm(0)                                           -> x8
+    v2119 Imm(0)                                           -> x8
+    v2120 Store { addr=v2113, disp=0, value=v2110, kind=V128, align=1 } -> -
+    v2121 LifetimeEnd(0)                                   -> -
+    v2122 LocalAddr(-42)                                   -> x8
+    v2123 BinopI { op=shl, lhs=v2098, rhs_imm=2 }          -> x8
+    v2124 Binop { op=add, lhs=v2113, rhs=v2123 }           -> x8
+    v2125 LoadIndexed { base=v2113, index=v2098, scale=4, kind=U32 } -> x2
+    v2126 LifetimeEnd(-42)                                 -> -
+    v2127 LifetimeEnd(0)                                   -> -
+    v2128 BinopI { op=and, lhs=v2125, rhs_imm=4294967295 } -> x8
+    v2129 LocalAddr(-40)                                   -> x8
+    v2130 Extend { value=v2048, kind=I32 }                 -> x9
+    v2131 BinopI { op=shl, lhs=v2048, rhs_imm=4 }          -> x9
+    v2132 Binop { op=add, lhs=v2129, rhs=v2106 }           -> x1
+    v2133 Extend { value=v2098, kind=I32 }                 -> x8
+    v2134 BinopI { op=shl, lhs=v2098, rhs_imm=2 }          -> x8
+    v2135 Binop { op=add, lhs=v2132, rhs=v2134 }           -> x8
+    v2136 LoadIndexed { base=v2132, index=v2098, scale=4, kind=U32 } -> x1
+    v2137 Binop { op=ne, lhs=v2125, rhs=v2136 }            -> x1
+    terminator Bz { cond=v2137, target=b42, fall=b53 }   (exit_acc=v2137)
   block 42  start_pc=0
-    v2092 Extend { value=v2089, kind=I32 }                 -> x1
-    v2093 BinopI { op=add, lhs=v2089, rhs_imm=1 }          -> x0
-    v2094 Extend { value=v2093, kind=I32, nsw }            -> x1
-    terminator Jmp(b43)   (exit_acc=v2093)
+    v2101 Extend { value=v2098, kind=I32 }                 -> x1
+    v2102 BinopI { op=add, lhs=v2098, rhs_imm=1 }          -> x0
+    v2103 Extend { value=v2102, kind=I32, nsw }            -> x1
+    terminator Jmp(b43)   (exit_acc=v2102)
   block 43  start_pc=0
-    v2089 Phi { incoming=[b40:v2054, b42:v2093], kind=I64 } -> x0
-    v2090 Extend { value=v2089, kind=I32 }                 -> x1
-    v2091 BinopI { op=lt, lhs=v2089, rhs_imm=4 }           -> x1
-    terminator Bz { cond=v2091, target=b44, fall=b41 }   (exit_acc=v2091)
+    v2098 Phi { incoming=[b40:v2054, b42:v2102], kind=I64 } -> x0
+    v2099 Extend { value=v2098, kind=I32 }                 -> x1
+    v2100 BinopI { op=lt, lhs=v2098, rhs_imm=4 }           -> x1
+    terminator Bz { cond=v2100, target=b44, fall=b41 }   (exit_acc=v2100)
   block 44  start_pc=0
     v2051 Extend { value=v2048, kind=I32 }                 -> x0
     v2052 BinopI { op=add, lhs=v2048, rhs_imm=1 }          -> x6
@@ -2371,53 +2371,53 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v2056 Imm(0)                                           -> x0
     v2057 Imm(-1)                                          -> x0
     v2058 Imm(-1)                                          -> x0
-    v2059 LocalAddr(-370)                                  -> x1
-    v2060 Mzero { dst=v2059, size=16, align=8 }            -> -
-    v2061 LocalAddr(-370)                                  -> x1
-    v2062 StoreLocal { off=-370, value=v2058, kind=I32 }   -> -
-    v2063 LocalAddr(-370)                                  -> x1
-    v2064 BinopI { op=add, lhs=v2059, rhs_imm=4 }          -> x1
-    v2065 StoreLocal { off=-370, disp=4, value=v2058, kind=I32 } -> -
-    v2066 LocalAddr(-370)                                  -> x1
-    v2067 BinopI { op=add, lhs=v2059, rhs_imm=8 }          -> x1
-    v2068 StoreLocal { off=-370, disp=8, value=v2058, kind=I32 } -> -
-    v2069 LocalAddr(-370)                                  -> x1
-    v2070 BinopI { op=add, lhs=v2059, rhs_imm=12 }         -> x1
-    v2071 StoreLocal { off=-370, disp=12, value=v2058, kind=I32 } -> -
-    v2072 LocalAddr(-370)                                  -> x0
-    v2073 LocalAddr(-370)                                  -> x0
-    v2074 Imm(0)                                           -> x0
-    v2075 Imm(0)                                           -> x0
-    v2076 LoadLocal { off=-370, kind=V128 }                -> d0
-    v2077 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v247, v2076] } -> d0
-    v2078 Imm(0)                                           -> x0
-    v2079 Imm(0)                                           -> x0
+    v2059 Imm(0)                                           -> x1
+    v2060 Imm(0)                                           -> x1
+    v2061 Imm(0)                                           -> x2
+    v2062 Imm(0)                                           -> x2
+    v2063 Imm(0)                                           -> x2
+    v2064 VecInsert { vec=v2060, value=v2058, off=0, kind=I32, bytes=16 } -> d0
+    v2065 Imm(0)                                           -> x2
+    v2066 Imm(0)                                           -> x2
+    v2067 Imm(4)                                           -> x2
+    v2068 Imm(0)                                           -> x2
+    v2069 VecInsert { vec=v2064, value=v2058, off=4, kind=I32, bytes=16 } -> d0
+    v2070 Imm(0)                                           -> x2
+    v2071 Imm(0)                                           -> x2
+    v2072 Imm(8)                                           -> x2
+    v2073 Imm(0)                                           -> x2
+    v2074 VecInsert { vec=v2069, value=v2058, off=8, kind=I32, bytes=16 } -> d0
+    v2075 Imm(0)                                           -> x2
+    v2076 Imm(0)                                           -> x2
+    v2077 Imm(12)                                          -> x2
+    v2078 Imm(0)                                           -> x2
+    v2079 VecInsert { vec=v2074, value=v2058, off=12, kind=I32, bytes=16 } -> d0
     v2080 Imm(0)                                           -> x0
     v2081 Imm(0)                                           -> x0
-    v2082 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v2077] } -> x0
-    v2083 Imm(0)                                           -> x1
-    v2084 Extend { value=v2082, kind=I32 }                 -> x1
-    v2085 Extend { value=v2082, kind=I32 }                 -> x1
-    v2086 LifetimeEnd(0)                                   -> -
-    v2087 Extend { value=v2082, kind=I32 }                 -> x1
-    v2088 BinopI { op=ne, lhs=v2082, rhs_imm=65535 }       -> x0
-    terminator Bz { cond=v2088, target=b48, fall=b47 }   (exit_acc=v2088)
+    v2082 Imm(0)                                           -> x0
+    v2083 Imm(0)                                           -> x0
+    v2084 Imm(0)                                           -> x0
+    v2085 Imm(0)                                           -> x0
+    v2086 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v247, v2079] } -> d0
+    v2087 Imm(0)                                           -> x0
+    v2088 Imm(0)                                           -> x0
+    v2089 Imm(0)                                           -> x0
+    v2090 Imm(0)                                           -> x0
+    v2091 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v2086] } -> x0
+    v2092 Imm(0)                                           -> x2
+    v2093 Extend { value=v2091, kind=I32 }                 -> x2
+    v2094 Extend { value=v2091, kind=I32 }                 -> x2
+    v2095 LifetimeEnd(0)                                   -> -
+    v2096 Extend { value=v2091, kind=I32 }                 -> x2
+    v2097 BinopI { op=ne, lhs=v2091, rhs_imm=65535 }       -> x0
+    terminator Bz { cond=v2097, target=b48, fall=b47 }   (exit_acc=v2097)
   block 47  start_pc=0
-    v2161 Imm(30)                                          -> x0
-    v2162 LifetimeEnd(-2)                                  -> -
-    v2163 LifetimeEnd(0)                                   -> -
-    v2164 LifetimeEnd(0)                                   -> -
-    v2165 LifetimeEnd(-368)                                -> -
-    v2166 LifetimeEnd(-40)                                 -> -
-    v2167 LifetimeEnd(0)                                   -> -
-    v2168 LifetimeEnd(0)                                   -> -
-    v2169 LifetimeEnd(0)                                   -> -
-    v2170 LifetimeEnd(0)                                   -> -
+    v2170 Imm(30)                                          -> x0
     v2171 LifetimeEnd(0)                                   -> -
     v2172 LifetimeEnd(0)                                   -> -
     v2173 LifetimeEnd(0)                                   -> -
-    v2174 LifetimeEnd(0)                                   -> -
-    v2175 LifetimeEnd(0)                                   -> -
+    v2174 LifetimeEnd(-368)                                -> -
+    v2175 LifetimeEnd(-40)                                 -> -
     v2176 LifetimeEnd(0)                                   -> -
     v2177 LifetimeEnd(0)                                   -> -
     v2178 LifetimeEnd(0)                                   -> -
@@ -2429,121 +2429,119 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v2184 LifetimeEnd(0)                                   -> -
     v2185 LifetimeEnd(0)                                   -> -
     v2186 LifetimeEnd(0)                                   -> -
-    v2187 LifetimeEnd(-80)                                 -> -
-    v2188 LifetimeEnd(-367)                                -> -
-    terminator Return(v2161)   (exit_acc=v2161)
+    v2187 LifetimeEnd(0)                                   -> -
+    v2188 LifetimeEnd(0)                                   -> -
+    v2189 LifetimeEnd(0)                                   -> -
+    v2190 LifetimeEnd(0)                                   -> -
+    v2191 LifetimeEnd(0)                                   -> -
+    v2192 LifetimeEnd(0)                                   -> -
+    v2193 LifetimeEnd(0)                                   -> -
+    v2194 LifetimeEnd(0)                                   -> -
+    v2195 LifetimeEnd(0)                                   -> -
+    v2196 LifetimeEnd(-80)                                 -> -
+    v2197 LifetimeEnd(-367)                                -> -
+    terminator Return(v2170)   (exit_acc=v2170)
   block 48  start_pc=0
-    v2189 Imm(1082130432)                                  -> x0 [f32]
-    v2190 Imm(1077936128)                                  -> x1 [f32]
-    v2191 Imm(1073741824)                                  -> x2 [f32]
-    v2192 Imm(1098907648)                                  -> x6 [f32]
-    v2193 LocalAddr(-371)                                  -> x7
-    v2194 Mzero { dst=v2193, size=16, align=8 }            -> -
-    v2195 LocalAddr(-371)                                  -> x7
-    v2196 StoreLocal { off=-371, value=v2192, kind=F32 }   -> -
-    v2197 LocalAddr(-371)                                  -> x6
-    v2198 BinopI { op=add, lhs=v2193, rhs_imm=4 }          -> x6
-    v2199 StoreLocal { off=-371, disp=4, value=v2191, kind=F32 } -> -
-    v2200 LocalAddr(-371)                                  -> x2
-    v2201 BinopI { op=add, lhs=v2193, rhs_imm=8 }          -> x2
-    v2202 StoreLocal { off=-371, disp=8, value=v2190, kind=F32 } -> -
-    v2203 LocalAddr(-371)                                  -> x1
-    v2204 BinopI { op=add, lhs=v2203, rhs_imm=12 }         -> x1
-    v2205 StoreLocal { off=-371, disp=12, value=v2189, kind=F32 } -> -
-    v2206 LocalAddr(-371)                                  -> x0
-    v2207 LocalAddr(-371)                                  -> x0
-    v2208 Imm(0)                                           -> x0
-    v2209 LoadLocal { off=-371, kind=V128 }                -> d0
-    v2210 Imm(0)                                           -> x0
-    v2211 LifetimeEnd(-371)                                -> -
-    v2212 Imm(0)                                           -> x0
-    v2213 Imm(0)                                           -> x0
-    v2214 Imm(0)                                           -> x0
-    v2215 X86SimdVal { op=__builtin_ia32_sqrtss, imm=None, args=[v2209] } -> d0
-    v2216 Imm(0)                                           -> x0
-    v2217 Imm(0)                                           -> x0
-    v2218 Imm(0)                                           -> x0
-    v2219 Imm(0)                                           -> x0
-    v2220 Imm(0)                                           -> x0
-    v2221 LifetimeEnd(0)                                   -> -
-    v2222 LocalAddr(-2)                                    -> x0
-    v2223 Imm(0)                                           -> x0
-    v2224 Imm(0)                                           -> x0
-    v2225 Imm(0)                                           -> x0
-    v2226 Imm(0)                                           -> x0
-    v2227 Imm(0)                                           -> x0
-    v2228 Imm(0)                                           -> x0
-    v2229 StoreLocal { off=-2, value=v2215, kind=V128 }    -> -
-    v2230 LifetimeEnd(0)                                   -> -
-    v2231 LocalAddr(-2)                                    -> x0
-    v2232 Imm(0)                                           -> x0
-    v2233 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
-    v2234 Imm(1082130432)                                  -> x0 [f32]
-    v2235 Binop { op=fne, lhs=v2233, rhs=v2234 }           -> x1
-    v2236 Imm(1)                                           -> x2
-    v2237 Imm(0)                                           -> x2
-    terminator Bnz { cond=v2235, target=b51, fall=b49 }   (exit_acc=v2235)
-  block 49  start_pc=0
-    v2238 LocalAddr(-2)                                    -> x1
-    v2239 Imm(4)                                           -> x1
-    v2240 BinopI { op=add, lhs=v2222, rhs_imm=4 }          -> x1
-    v2241 LoadLocal { off=-2, disp=4, kind=F32 }           -> d0 [f32]
-    v2242 Imm(1073741824)                                  -> x1 [f32]
-    v2243 Binop { op=fne, lhs=v2241, rhs=v2242 }           -> x1
-    v2244 BinopI { op=ne, lhs=v2243, rhs_imm=0 }           -> x2
-    v2245 Imm(0)                                           -> x2
-    v2246 Imm(0)                                           -> x2
-    v2247 Imm(0)                                           -> x2
-    v2248 Imm(0)                                           -> x2
-    terminator Bnz { cond=v2243, target=b51, fall=b50 }   (exit_acc=v2243)
-  block 50  start_pc=0
-    v2249 LocalAddr(-2)                                    -> x1
-    v2250 Imm(12)                                          -> x1
-    v2251 BinopI { op=add, lhs=v2222, rhs_imm=12 }         -> x1
-    v2252 LoadLocal { off=-2, disp=12, kind=F32 }          -> d0 [f32]
+    v2198 Imm(1082130432)                                  -> x0 [f32]
+    v2199 Imm(1077936128)                                  -> x6 [f32]
+    v2200 Imm(1073741824)                                  -> x2 [f32]
+    v2201 Imm(1098907648)                                  -> x7 [f32]
+    v2202 Imm(0)                                           -> x8
+    v2203 Imm(0)                                           -> x8
+    v2204 Imm(0)                                           -> x8
+    v2205 Imm(0)                                           -> x8
+    v2206 Imm(0)                                           -> x8
+    v2207 VecInsert { vec=v2060, value=v2201, off=0, kind=F32, bytes=16 } -> d0
+    v2208 Imm(0)                                           -> x1
+    v2209 Imm(0)                                           -> x1
+    v2210 Imm(4)                                           -> x1
+    v2211 Imm(0)                                           -> x1
+    v2212 VecInsert { vec=v2207, value=v2200, off=4, kind=F32, bytes=16 } -> d0
+    v2213 Imm(0)                                           -> x1
+    v2214 Imm(0)                                           -> x1
+    v2215 Imm(8)                                           -> x1
+    v2216 Imm(0)                                           -> x1
+    v2217 VecInsert { vec=v2212, value=v2199, off=8, kind=F32, bytes=16 } -> d0
+    v2218 Imm(0)                                           -> x1
+    v2219 Imm(0)                                           -> x1
+    v2220 Imm(12)                                          -> x1
+    v2221 Imm(0)                                           -> x1
+    v2222 VecInsert { vec=v2217, value=v2198, off=12, kind=F32, bytes=16 } -> d0
+    v2223 Imm(0)                                           -> x1
+    v2224 Imm(0)                                           -> x1
+    v2225 Imm(0)                                           -> x1
+    v2226 Imm(0)                                           -> x1
+    v2227 Imm(0)                                           -> x1
+    v2228 Imm(0)                                           -> x1
+    v2229 LifetimeEnd(0)                                   -> -
+    v2230 Imm(0)                                           -> x1
+    v2231 Imm(0)                                           -> x1
+    v2232 Imm(0)                                           -> x1
+    v2233 X86SimdVal { op=__builtin_ia32_sqrtss, imm=None, args=[v2222] } -> d0
+    v2234 Imm(0)                                           -> x1
+    v2235 Imm(0)                                           -> x1
+    v2236 Imm(0)                                           -> x1
+    v2237 Imm(0)                                           -> x1
+    v2238 Imm(0)                                           -> x1
+    v2239 LifetimeEnd(0)                                   -> -
+    v2240 Imm(0)                                           -> x1
+    v2241 Imm(0)                                           -> x1
+    v2242 Imm(0)                                           -> x1
+    v2243 Imm(0)                                           -> x1
+    v2244 Imm(0)                                           -> x1
+    v2245 Imm(0)                                           -> x1
+    v2246 Imm(0)                                           -> x1
+    v2247 Imm(0)                                           -> x1
+    v2248 LifetimeEnd(0)                                   -> -
+    v2249 Imm(0)                                           -> x1
+    v2250 Imm(0)                                           -> x1
+    v2251 Imm(0)                                           -> x1
+    v2252 VecExtract { vec=v2233, off=0, kind=F32, bytes=16 } -> d1 [f32]
     v2253 Imm(1082130432)                                  -> x1 [f32]
-    v2254 Binop { op=fne, lhs=v2252, rhs=v2234 }           -> x0
-    v2255 Imm(0)                                           -> x1
+    v2254 Binop { op=fne, lhs=v2252, rhs=v2198 }           -> x0
+    v2255 Imm(1)                                           -> x1
     v2256 Imm(0)                                           -> x1
-    v2257 Imm(0)                                           -> x1
-    terminator Bz { cond=v2254, target=b52, fall=b51 }   (exit_acc=v2254)
+    terminator Bnz { cond=v2254, target=b51, fall=b49 }   (exit_acc=v2254)
+  block 49  start_pc=0
+    v2257 Imm(0)                                           -> x0
+    v2258 Imm(4)                                           -> x0
+    v2259 Imm(4)                                           -> x0
+    v2260 Imm(0)                                           -> x0
+    v2261 VecExtract { vec=v2233, off=4, kind=F32, bytes=16 } -> d1 [f32]
+    v2262 Imm(1073741824)                                  -> x0 [f32]
+    v2263 Binop { op=fne, lhs=v2261, rhs=v2200 }           -> x0
+    v2264 BinopI { op=ne, lhs=v2263, rhs_imm=0 }           -> x1
+    v2265 Imm(0)                                           -> x1
+    v2266 Imm(0)                                           -> x1
+    v2267 Imm(0)                                           -> x1
+    v2268 Imm(0)                                           -> x1
+    terminator Bnz { cond=v2263, target=b51, fall=b50 }   (exit_acc=v2263)
+  block 50  start_pc=0
+    v2269 Imm(0)                                           -> x0
+    v2270 Imm(12)                                          -> x0
+    v2271 Imm(12)                                          -> x0
+    v2272 Imm(0)                                           -> x0
+    v2273 VecExtract { vec=v2233, off=12, kind=F32, bytes=16 } -> d0 [f32]
+    v2274 Imm(1082130432)                                  -> x0 [f32]
+    v2275 Binop { op=fne, lhs=v2273, rhs=v2274 }           -> x0
+    v2276 Imm(0)                                           -> x1
+    v2277 Imm(0)                                           -> x1
+    v2278 Imm(0)                                           -> x1
+    terminator Bz { cond=v2275, target=b52, fall=b51 }   (exit_acc=v2275)
   block 51  start_pc=0
-    v2258 Imm(31)                                          -> x0
-    v2259 LifetimeEnd(-2)                                  -> -
-    v2260 LifetimeEnd(0)                                   -> -
-    v2261 LifetimeEnd(0)                                   -> -
-    v2262 LifetimeEnd(-368)                                -> -
-    v2263 LifetimeEnd(-40)                                 -> -
-    v2264 LifetimeEnd(0)                                   -> -
-    v2265 LifetimeEnd(0)                                   -> -
-    v2266 LifetimeEnd(0)                                   -> -
-    v2267 LifetimeEnd(0)                                   -> -
-    v2268 LifetimeEnd(0)                                   -> -
-    v2269 LifetimeEnd(0)                                   -> -
-    v2270 LifetimeEnd(0)                                   -> -
-    v2271 LifetimeEnd(0)                                   -> -
-    v2272 LifetimeEnd(0)                                   -> -
-    v2273 LifetimeEnd(0)                                   -> -
-    v2274 LifetimeEnd(0)                                   -> -
-    v2275 LifetimeEnd(0)                                   -> -
-    v2276 LifetimeEnd(0)                                   -> -
-    v2277 LifetimeEnd(0)                                   -> -
-    v2278 LifetimeEnd(0)                                   -> -
-    v2279 LifetimeEnd(0)                                   -> -
+    v2279 Imm(31)                                          -> x0
     v2280 LifetimeEnd(0)                                   -> -
     v2281 LifetimeEnd(0)                                   -> -
     v2282 LifetimeEnd(0)                                   -> -
-    v2283 LifetimeEnd(0)                                   -> -
-    v2284 LifetimeEnd(-80)                                 -> -
-    v2285 LifetimeEnd(-367)                                -> -
-    terminator Return(v2258)   (exit_acc=v2258)
-  block 52  start_pc=0
-    v2286 Imm(0)                                           -> x0
-    v2287 LifetimeEnd(-2)                                  -> -
+    v2283 LifetimeEnd(-368)                                -> -
+    v2284 LifetimeEnd(-40)                                 -> -
+    v2285 LifetimeEnd(0)                                   -> -
+    v2286 LifetimeEnd(0)                                   -> -
+    v2287 LifetimeEnd(0)                                   -> -
     v2288 LifetimeEnd(0)                                   -> -
     v2289 LifetimeEnd(0)                                   -> -
-    v2290 LifetimeEnd(-368)                                -> -
-    v2291 LifetimeEnd(-40)                                 -> -
+    v2290 LifetimeEnd(0)                                   -> -
+    v2291 LifetimeEnd(0)                                   -> -
     v2292 LifetimeEnd(0)                                   -> -
     v2293 LifetimeEnd(0)                                   -> -
     v2294 LifetimeEnd(0)                                   -> -
@@ -2557,36 +2555,50 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v2302 LifetimeEnd(0)                                   -> -
     v2303 LifetimeEnd(0)                                   -> -
     v2304 LifetimeEnd(0)                                   -> -
-    v2305 LifetimeEnd(0)                                   -> -
-    v2306 LifetimeEnd(0)                                   -> -
-    v2307 LifetimeEnd(0)                                   -> -
+    v2305 LifetimeEnd(-80)                                 -> -
+    v2306 LifetimeEnd(-367)                                -> -
+    terminator Return(v2279)   (exit_acc=v2279)
+  block 52  start_pc=0
+    v2307 Imm(0)                                           -> x0
     v2308 LifetimeEnd(0)                                   -> -
     v2309 LifetimeEnd(0)                                   -> -
     v2310 LifetimeEnd(0)                                   -> -
-    v2311 LifetimeEnd(0)                                   -> -
-    v2312 LifetimeEnd(-80)                                 -> -
-    v2313 LifetimeEnd(-367)                                -> -
-    terminator Return(v2286)   (exit_acc=v2286)
+    v2311 LifetimeEnd(-368)                                -> -
+    v2312 LifetimeEnd(-40)                                 -> -
+    v2313 LifetimeEnd(0)                                   -> -
+    v2314 LifetimeEnd(0)                                   -> -
+    v2315 LifetimeEnd(0)                                   -> -
+    v2316 LifetimeEnd(0)                                   -> -
+    v2317 LifetimeEnd(0)                                   -> -
+    v2318 LifetimeEnd(0)                                   -> -
+    v2319 LifetimeEnd(0)                                   -> -
+    v2320 LifetimeEnd(0)                                   -> -
+    v2321 LifetimeEnd(0)                                   -> -
+    v2322 LifetimeEnd(0)                                   -> -
+    v2323 LifetimeEnd(0)                                   -> -
+    v2324 LifetimeEnd(0)                                   -> -
+    v2325 LifetimeEnd(0)                                   -> -
+    v2326 LifetimeEnd(0)                                   -> -
+    v2327 LifetimeEnd(0)                                   -> -
+    v2328 LifetimeEnd(0)                                   -> -
+    v2329 LifetimeEnd(0)                                   -> -
+    v2330 LifetimeEnd(0)                                   -> -
+    v2331 LifetimeEnd(0)                                   -> -
+    v2332 LifetimeEnd(0)                                   -> -
+    v2333 LifetimeEnd(-80)                                 -> -
+    v2334 LifetimeEnd(-367)                                -> -
+    terminator Return(v2307)   (exit_acc=v2307)
   block 53  start_pc=0
-    v2129 Imm(1)                                           -> x0
-    v2130 Extend { value=v2048, kind=I32 }                 -> x0
-    v2131 BinopI { op=add, lhs=v2048, rhs_imm=1 }          -> x0
-    v2132 Extend { value=v2131, kind=I32, nsw }            -> x1
-    v2133 Extend { value=v2131, kind=I32 }                 -> x1
-    v2134 LifetimeEnd(-2)                                  -> -
-    v2135 LifetimeEnd(0)                                   -> -
-    v2136 LifetimeEnd(0)                                   -> -
-    v2137 LifetimeEnd(-368)                                -> -
-    v2138 LifetimeEnd(-40)                                 -> -
-    v2139 LifetimeEnd(0)                                   -> -
-    v2140 LifetimeEnd(0)                                   -> -
-    v2141 LifetimeEnd(0)                                   -> -
-    v2142 LifetimeEnd(0)                                   -> -
+    v2138 Imm(1)                                           -> x0
+    v2139 Extend { value=v2048, kind=I32 }                 -> x0
+    v2140 BinopI { op=add, lhs=v2048, rhs_imm=1 }          -> x0
+    v2141 Extend { value=v2140, kind=I32, nsw }            -> x1
+    v2142 Extend { value=v2140, kind=I32 }                 -> x1
     v2143 LifetimeEnd(0)                                   -> -
     v2144 LifetimeEnd(0)                                   -> -
     v2145 LifetimeEnd(0)                                   -> -
-    v2146 LifetimeEnd(0)                                   -> -
-    v2147 LifetimeEnd(0)                                   -> -
+    v2146 LifetimeEnd(-368)                                -> -
+    v2147 LifetimeEnd(-40)                                 -> -
     v2148 LifetimeEnd(0)                                   -> -
     v2149 LifetimeEnd(0)                                   -> -
     v2150 LifetimeEnd(0)                                   -> -
@@ -2598,9 +2610,18 @@ fn ent_pc=524 n_params=0 variadic=false locals=80
     v2156 LifetimeEnd(0)                                   -> -
     v2157 LifetimeEnd(0)                                   -> -
     v2158 LifetimeEnd(0)                                   -> -
-    v2159 LifetimeEnd(-80)                                 -> -
-    v2160 LifetimeEnd(-367)                                -> -
-    terminator Return(v2131)   (exit_acc=v2131)
+    v2159 LifetimeEnd(0)                                   -> -
+    v2160 LifetimeEnd(0)                                   -> -
+    v2161 LifetimeEnd(0)                                   -> -
+    v2162 LifetimeEnd(0)                                   -> -
+    v2163 LifetimeEnd(0)                                   -> -
+    v2164 LifetimeEnd(0)                                   -> -
+    v2165 LifetimeEnd(0)                                   -> -
+    v2166 LifetimeEnd(0)                                   -> -
+    v2167 LifetimeEnd(0)                                   -> -
+    v2168 LifetimeEnd(-80)                                 -> -
+    v2169 LifetimeEnd(-367)                                -> -
+    terminator Return(v2140)   (exit_acc=v2140)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

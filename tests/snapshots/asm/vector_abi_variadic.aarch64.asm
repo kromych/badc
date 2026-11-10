@@ -366,60 +366,55 @@ Disassembly of section .text:
                	ret
 
 <ramp>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	and	x1, x0, #0xff
-               	sturb	w1, [x29, #-0x10]
-               	add	x2, x1, #0x1
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xf]
-               	add	x2, x1, #0x2
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xe]
-               	add	x2, x1, #0x3
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xd]
-               	add	x2, x1, #0x4
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xc]
-               	add	x2, x1, #0x5
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xb]
-               	add	x2, x1, #0x6
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0xa]
-               	add	x2, x1, #0x7
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0x9]
-               	add	x2, x1, #0x8
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0x8]
-               	add	x2, x1, #0x9
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0x7]
-               	add	x2, x1, #0xa
-               	and	x2, x2, #0xff
-               	sturb	w2, [x29, #-0x6]
-               	add	x1, x1, #0xb
-               	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x5]
                	and	x0, x0, #0xff
+               	mov	x1, #0x0                // =0
+               	fmov	d0, x1
+               	mov	v0.b[0], w0
+               	add	x1, x0, #0x1
+               	and	x1, x1, #0xff
+               	mov	v0.b[1], w1
+               	add	x1, x0, #0x2
+               	and	x1, x1, #0xff
+               	mov	v0.b[2], w1
+               	add	x1, x0, #0x3
+               	and	x1, x1, #0xff
+               	mov	v0.b[3], w1
+               	add	x1, x0, #0x4
+               	and	x1, x1, #0xff
+               	mov	v0.b[4], w1
+               	add	x1, x0, #0x5
+               	and	x1, x1, #0xff
+               	mov	v0.b[5], w1
+               	add	x1, x0, #0x6
+               	and	x1, x1, #0xff
+               	mov	v0.b[6], w1
+               	add	x1, x0, #0x7
+               	and	x1, x1, #0xff
+               	mov	v0.b[7], w1
+               	add	x1, x0, #0x8
+               	and	x1, x1, #0xff
+               	mov	v0.b[8], w1
+               	add	x1, x0, #0x9
+               	and	x1, x1, #0xff
+               	mov	v0.b[9], w1
+               	add	x1, x0, #0xa
+               	and	x1, x1, #0xff
+               	mov	v0.b[10], w1
+               	add	x1, x0, #0xb
+               	and	x1, x1, #0xff
+               	mov	v0.b[11], w1
                	add	x1, x0, #0xc
                	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x4]
+               	mov	v0.b[12], w1
                	add	x1, x0, #0xd
                	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x3]
+               	mov	v0.b[13], w1
                	add	x1, x0, #0xe
                	and	x1, x1, #0xff
-               	sturb	w1, [x29, #-0x2]
+               	mov	v0.b[14], w1
                	add	x0, x0, #0xf
                	and	x0, x0, #0xff
-               	sturb	w0, [x29, #-0x1]
-               	ldur	q0, [x29, #-0x10]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	v0.b[15], w0
                	ret
 
 <main>:

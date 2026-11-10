@@ -133,18 +133,21 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x40(%rbp), %eax
-               	cmpl	$0xb, %eax
+               	vpextrd	$0x0, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0xb, %rax
                	jne	<addr>
-               	movl	-0x3c(%rbp), %eax
-               	cmpl	$0x16, %eax
+               	vpextrd	$0x1, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x16, %rax
                	jne	<addr>
-               	movl	-0x38(%rbp), %eax
-               	cmpl	$0x21, %eax
+               	vpextrd	$0x2, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x21, %rax
                	jne	<addr>
-               	movl	-0x34(%rbp), %eax
-               	cmpl	$-0x24, %eax
+               	vpextrd	$0x3, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$-0x24, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -168,14 +171,13 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	movups	(%r10), %xmm2
                	callq	<addr>
-               	movups	%xmm0, -0x40(%rbp)
-               	movss	-0x40(%rbp), %xmm0
+               	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x34(%rbp), %xmm0
+               	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movl	$0x41080000, %eax       # imm = 0x41080000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -261,12 +263,13 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
-               	movups	%xmm0, -0x40(%rbp)
-               	movl	-0x40(%rbp), %eax
-               	cmpl	$0x5, %eax
+               	vpextrd	$0x0, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x5, %rax
                	jne	<addr>
-               	movl	-0x34(%rbp), %eax
-               	cmpl	$0x8, %eax
+               	vpextrd	$0x3, %xmm0, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	leave

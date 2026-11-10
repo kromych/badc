@@ -18,7 +18,10 @@
 //!   * `Fneg { Imm }` -> `Imm` with the sign bit flipped;
 //!   * `Neg { Imm }` -> the negated `Imm`, and `x * -1` / `0 - x` ->
 //!     `Neg { x }`, which takes one instruction where the multiply
-//!     takes three and needs no constant register.
+//!     takes three and needs no constant register;
+//!   * a `VecExtract` of a lane a `VecInsert` wrote -> the inserted value
+//!     read back as the extract's kind, past the inserts of other lanes,
+//!     and of a zero vector -> `Imm(0)` ([`fold_lane_reads`]).
 //!
 //! Save for that sign flip, only a plain integer `Inst::Imm` whose
 //! `f32_values` flag is clear participates: `ImmData` / `ImmCode` /
@@ -35,7 +38,8 @@
 
 use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result};
 use crate::c5::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId, is_comparison_op,
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    is_comparison_op,
 };
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -57,11 +61,98 @@ const MAX_ROUNDS: usize = 4;
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
         let folded = fold_round(func);
+        let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
-        if !folded && !forwarded {
+        if !folded && !lanes && !forwarded {
             return;
         }
     }
+}
+
+/// Inserts `fold_lane_reads` looks through for the lane it reads.
+const LANE_DEPTH: u32 = 64;
+
+/// Rewrite each `VecExtract` whose lane the vector's inserts determine:
+/// the value an insert of the same lane and width wrote, read back as the
+/// extract's kind reads it from memory (a sign or zero extension of its low
+/// bytes, or the value itself), looking past inserts of disjoint lanes; and
+/// a lane of a zero vector, zero. Returns whether any extract was rewritten.
+fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let Inst::VecExtract {
+            mut vec, off, kind, ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let width = match kind {
+            LoadKind::F32 => 4,
+            LoadKind::F64 => 8,
+            k => match k.int_bytes() {
+                Some(n) => n,
+                None => continue,
+            },
+        };
+        let mut found = None;
+        for _ in 0..LANE_DEPTH {
+            match func.insts[vec as usize] {
+                Inst::VecInsert {
+                    vec: base,
+                    value,
+                    off: at,
+                    kind: stored,
+                    ..
+                } => {
+                    let n = match stored {
+                        StoreKind::I8 => 1,
+                        StoreKind::I16 => 2,
+                        StoreKind::I32 | StoreKind::F32 => 4,
+                        _ => 8,
+                    };
+                    if at == off && n == width {
+                        found = Some((value, stored));
+                        break;
+                    }
+                    if at + n <= off || off + width <= at {
+                        vec = base;
+                        continue;
+                    }
+                    break;
+                }
+                Inst::Imm(0) if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+                    func.insts[i] = Inst::Imm(0);
+                    changed = true;
+                    break;
+                }
+                _ => break,
+            }
+        }
+        let Some((value, stored)) = found else {
+            continue;
+        };
+        let float = matches!(stored, StoreKind::F32 | StoreKind::F64);
+        func.insts[i] = match kind {
+            LoadKind::F32 | LoadKind::F64 if float => Inst::Copy { value, is_fp: true },
+            LoadKind::I64 if !float => Inst::Copy {
+                value,
+                is_fp: false,
+            },
+            LoadKind::I32 | LoadKind::I16 | LoadKind::I8 if !float => Inst::Extend {
+                value,
+                kind,
+                nsw: false,
+            },
+            LoadKind::U32 | LoadKind::U16 | LoadKind::U8 if !float => Inst::BinopI {
+                op: BinOp::And,
+                lhs: value,
+                rhs_imm: (1i64 << (8 * width)) - 1,
+            },
+            _ => continue,
+        };
+        changed = true;
+    }
+    changed
 }
 
 /// Producer depth `is_bool_value` chases through phis and extends.

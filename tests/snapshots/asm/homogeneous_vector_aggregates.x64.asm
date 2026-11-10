@@ -329,14 +329,13 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movups	-0x80(%rbp), %xmm0
-               	movups	%xmm0, -0x80(%rbp)
-               	movss	-0x80(%rbp), %xmm0
+               	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x74(%rbp), %xmm0
+               	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

@@ -1003,6 +1003,36 @@ pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
     0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SMOV <Xd>, <Vn>.<T>[index]` -- sign-extend one byte, halfword or word
+/// element of a vector register into a 64-bit general register.
+pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
+    debug_assert!(vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 4);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x4E00_2C00 | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `INS <Vd>.<T>[index], <Vn>.<T>[0]` -- copy the low element of `vn` into
+/// one element of `vd`, the others unchanged.
+pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x6E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `DUP <V>d, <Vn>.<T>[index]` -- one element of `vn` into scalar
+/// register `vd` (`mov <V>d, <Vn>.<T>[index]`).
+pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> u32 {
+    debug_assert!(vd < 32 && vn < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x5E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
+}
+
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
@@ -2905,6 +2935,20 @@ mod tests {
         assert_eq!(enc_umov_gen(Reg(5), 7, 2, 3), 0x0E0E_3CE5);
         assert_eq!(enc_umov_gen(Reg(3), 2, 4, 2), 0x0E14_3C43);
         assert_eq!(enc_umov_gen(Reg(0), 1, 8, 1), 0x4E18_3C20);
+    }
+
+    #[test]
+    fn smov_ins_and_dup_vector_elements() {
+        // smov x2, v3.b[5] / x0, v1.h[7] / x9, v4.s[3]
+        assert_eq!(enc_smov_gen(Reg(2), 3, 1, 5), 0x4E0B_2C62);
+        assert_eq!(enc_smov_gen(Reg(0), 1, 2, 7), 0x4E1E_2C20);
+        assert_eq!(enc_smov_gen(Reg(9), 4, 4, 3), 0x4E1C_2C89);
+        // mov v1.s[2], v5.s[0] / v0.d[1], v7.d[0]
+        assert_eq!(enc_ins_elem(1, 4, 2, 5), 0x6E14_04A1);
+        assert_eq!(enc_ins_elem(0, 8, 1, 7), 0x6E18_04E0);
+        // mov s0, v2.s[3] / d6, v1.d[1]
+        assert_eq!(enc_dup_elem_scalar(0, 2, 4, 3), 0x5E1C_0440);
+        assert_eq!(enc_dup_elem_scalar(6, 1, 8, 1), 0x5E18_0426);
     }
 
     #[test]

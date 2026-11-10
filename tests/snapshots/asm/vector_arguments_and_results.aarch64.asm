@@ -107,19 +107,18 @@ Disassembly of section .text:
                	ldr	q0, [x7]
                	ldr	q1, [x0]
                	bl	<addr>
-               	stur	q0, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x40]
-               	cmp	w0, #0xb
+               	smov	x0, v0.s[0]
+               	cmp	x0, #0xb
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x3c]
-               	cmp	w0, #0x16
+               	smov	x0, v0.s[1]
+               	cmp	x0, #0x16
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x38]
-               	cmp	w0, #0x21
+               	smov	x0, v0.s[2]
+               	cmp	x0, #0x21
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x34]
+               	smov	x0, v0.s[3]
                	mov	x17, #-0x24             // =-36
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60
@@ -144,12 +143,11 @@ Disassembly of section .text:
                	ldr	q1, [x0]
                	ldr	q2, [x1]
                	bl	<addr>
-               	stur	q0, [x29, #-0x40]
-               	ldur	s0, [x29, #-0x40]
-               	fmov	s1, #2.50000000
-               	fcmp	s0, s1
+               	mov	s1, v0.s[0]
+               	fmov	s2, #2.50000000
+               	fcmp	s1, s2
                	b.ne	<addr>
-               	ldur	s0, [x29, #-0x34]
+               	mov	s0, v0.s[3]
                	fmov	s1, #8.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
@@ -226,12 +224,11 @@ Disassembly of section .text:
                	ldr	q0, [x7]
                	ldr	q1, [x1]
                	bl	<addr>
-               	stur	q0, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x40]
-               	cmp	w0, #0x5
+               	smov	x0, v0.s[0]
+               	cmp	x0, #0x5
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x34]
-               	cmp	w0, #0x8
+               	smov	x0, v0.s[3]
+               	cmp	x0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x60

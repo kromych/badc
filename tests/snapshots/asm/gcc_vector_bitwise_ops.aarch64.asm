@@ -14,81 +14,73 @@ Disassembly of section .text:
                	brk	#0x1
 
 <same16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	q0, [x29, #-0x10]
-               	ldurb	w1, [x29, #-0x10]
+               	umov	w1, v0.b[0]
                	ldrb	w2, [x0]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0xf]
+               	umov	w1, v0.b[1]
                	ldrb	w2, [x0, #0x1]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xe]
+               	umov	w1, v0.b[2]
                	ldrb	w2, [x0, #0x2]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xd]
+               	umov	w1, v0.b[3]
                	ldrb	w2, [x0, #0x3]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xc]
+               	umov	w1, v0.b[4]
                	ldrb	w2, [x0, #0x4]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xb]
+               	umov	w1, v0.b[5]
                	ldrb	w2, [x0, #0x5]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0xa]
+               	umov	w1, v0.b[6]
                	ldrb	w2, [x0, #0x6]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x9]
+               	umov	w1, v0.b[7]
                	ldrb	w2, [x0, #0x7]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x8]
+               	umov	w1, v0.b[8]
                	ldrb	w2, [x0, #0x8]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x7]
+               	umov	w1, v0.b[9]
                	ldrb	w2, [x0, #0x9]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x6]
+               	umov	w1, v0.b[10]
                	ldrb	w2, [x0, #0xa]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x5]
+               	umov	w1, v0.b[11]
                	ldrb	w2, [x0, #0xb]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x4]
+               	umov	w1, v0.b[12]
                	ldrb	w2, [x0, #0xc]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x3]
+               	umov	w1, v0.b[13]
                	ldrb	w2, [x0, #0xd]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x2]
+               	umov	w1, v0.b[14]
                	ldrb	w2, [x0, #0xe]
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
-               	ldurb	w1, [x29, #-0x1]
+               	umov	w1, v0.b[15]
                	ldrb	w0, [x0, #0xf]
-               	cmp	w1, w0
+               	cmp	x1, x0
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

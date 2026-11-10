@@ -83,21 +83,16 @@ _POSIX_UNDEF = ["_Py_HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR"]
 _LINUX_EXCLUDE = [("Modules/_remote_debugging/", "_remote_debugging")]
 # pyconfig advertises headers badc's bundled set does not provide; undefining the
 # HAVE_ macros makes the module take a supported path: socket builds the common
-# families and raw CAN without the AF_PACKET/NETLINK/VSOCK/TIPC/QRTR/ALG, CAN
+# families, VSOCK and raw CAN without the AF_PACKET/NETLINK/TIPC/QRTR/ALG, CAN
 # BCM/ISOTP/J1939 and netfilter address handling, the allocators do not name
 # their mappings (<linux/prctl.h>), and os.stat does not offer statx.
 _LINUX_UNDEF = [
     "HAVE_NETPACKET_PACKET_H", "HAVE_SOCKADDR_ALG",
-    "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_VM_SOCKETS_H", "HAVE_LINUX_TIPC_H",
+    "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_TIPC_H",
     "HAVE_LINUX_QRTR_H", "HAVE_LINUX_NETFILTER_IPV4_H",
     "HAVE_LINUX_CAN_BCM_H", "HAVE_LINUX_CAN_ISOTP_H", "HAVE_LINUX_CAN_J1939_H",
     "_Py_HAVE_PR_SET_VMA_ANON_NAME", "HAVE_STATX",
 ]
-# badc's sys/epoll.h lays struct epoll_event out unpacked on x86-64 (16 bytes,
-# data at 8) against the kernel's packed 12-byte layout, so an epoll_wait
-# returning several events is misread; select keeps poll/select there.
-# TODO: the packed x86-64 layout in libc/include/sys/epoll.h lifts this.
-_LINUX_X64_UNDEF = ["HAVE_EPOLL", "HAVE_EPOLL_CREATE1", "HAVE_SYS_EPOLL_H"]
 
 # --- Windows targets -------------------------------------------------------
 
@@ -186,7 +181,7 @@ TARGETS = {
         "asm_trampoline": True,
         # badc has no x86 SSE/AVX intrinsics; build HACL's scalar BLAKE2 and drop
         # the vectorized variants (the runtime dispatch checks these macros).
-        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF + _LINUX_X64_UNDEF
+        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF
         + ["_Py_HACL_CAN_COMPILE_VEC128", "_Py_HACL_CAN_COMPILE_VEC256"],
         "exclude": _LINUX_EXCLUDE + [
             ("Hacl_Hash_Blake2s_Simd128.c", "_blake2_simd128"),

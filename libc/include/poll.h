@@ -57,6 +57,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 // struct timespec comes from <time.h> at the call site; the mask is passed by
 // address (sigset_t *, or NULL).
 struct timespec;
+#include <signal.h>
 int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *tmo,
-          const void *sigmask);
+          const sigset_t *sigmask);
 #endif

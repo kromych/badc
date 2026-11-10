@@ -197,6 +197,11 @@ typedef struct __locale_struct *locale_t;
 #define LC_GLOBAL_LOCALE ((locale_t)-1L)
 locale_t newlocale(int category_mask, const char *locale, locale_t base);
 locale_t duplocale(locale_t locobj);
+// The SDK's returns an int, 0 on success.
+#ifdef __APPLE__
+int freelocale(locale_t locobj);
+#else
 void freelocale(locale_t locobj);
+#endif
 locale_t uselocale(locale_t newloc);
 #endif

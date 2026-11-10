@@ -448,7 +448,7 @@ int sscanf(const char *src, const char *fmt, ...);
 #ifdef __linux__
 // GNU asprintf: allocate a buffer for the formatted result and store its
 // address through `strp`, and its `va_list` form.
-int asprintf(char **strp, char *fmt, ...);
+int asprintf(char **strp, const char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
 #endif
 // C99 7.19.6.14 vsscanf, 7.19.6.9 vfscanf and 7.19.6.11 vscanf. On Windows
@@ -500,7 +500,11 @@ void setbuf(FILE *stream, char *buf);
 // BSD extension (glibc / macOS, not msvcrt): setvbuf with a caller-sized
 // buffer, fully-buffered when `buf` is non-null.
 #ifndef _WIN32
+#ifdef __linux__
+void setbuffer(FILE *stream, char *buf, size_t size);
+#else
 void setbuffer(FILE *stream, char *buf, int size);
+#endif
 #endif
 int puts(const char *s);
 void perror(const char *s);
@@ -511,8 +515,17 @@ long ftell(FILE *stream);
 // POSIX large-file variants (off_t is 64-bit). Not provided on Windows
 // msvcrt under these names (`_fseeki64` / `_ftelli64` differ).
 #ifndef _WIN32
-int fseeko(FILE *stream, long offset, int whence);
-long ftello(FILE *stream);
+#ifndef __BADC_OFF_T
+#define __BADC_OFF_T
+// The file offset: the SDK's and msvcrt's 64-bit long long, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
+typedef long long off_t;
+#else
+typedef long off_t;
+#endif
+#endif
+int fseeko(FILE *stream, off_t offset, int whence);
+off_t ftello(FILE *stream);
 #else
 int _fseeki64(FILE *stream, long long offset, int whence);
 long long _ftelli64(FILE *stream);

@@ -94,7 +94,8 @@
 // mergesort: BSD stable sort, present in the macOS / BSD libc. glibc has no
 // such symbol, so portable code that reaches for it ships its own fallback
 // (which is what a Linux configure selects).
-int mergesort(char *base, int n, int size, int *cmp);
+int mergesort(void *base, size_t nel, size_t width,
+              int (*compar)(const void *, const void *));
 #pragma binding(libc::mergesort, "_mergesort")
 #endif
 

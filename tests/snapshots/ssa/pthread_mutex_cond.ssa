@@ -925,7 +925,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v467 Imm(0)                                           -> x0
     v468 Imm(0)                                           -> x7
     v469 LocalAddr(-14)                                   -> x6
-    v470 CallExt { binding_idx=131, args=[v468, v469], fp_arg_mask=0x0 } -> x0
+    v470 CallExt { binding_idx=3, args=[v468, v469], fp_arg_mask=0x0 } -> x0
     v471 LocalAddr(-12)                                   -> x0
     v472 LocalAddr(-14)                                   -> x1
     v473 Mcpy { dst=v471, src=v472, size=16, align=8 }    -> -
@@ -967,7 +967,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v711 LocalAddr(-14)                                   -> x0
     v712 Imm(0)                                           -> x7
     v713 LocalAddr(-16)                                   -> x6
-    v714 CallExt { binding_idx=131, args=[v712, v713], fp_arg_mask=0x0 } -> x0
+    v714 CallExt { binding_idx=3, args=[v712, v713], fp_arg_mask=0x0 } -> x0
     v715 LocalAddr(-16)                                   -> x0
     v716 LoadLocal { off=-16, kind=I64 }                  -> x0
     v717 LoadLocal { off=-14, kind=I64 }                  -> x1
@@ -1068,7 +1068,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v533 Imm(1)                                           -> x0
     v534 Imm(1)                                           -> x7
     v535 LocalAddr(-14)                                   -> x6
-    v536 CallExt { binding_idx=131, args=[v534, v535], fp_arg_mask=0x0 } -> x0
+    v536 CallExt { binding_idx=3, args=[v534, v535], fp_arg_mask=0x0 } -> x0
     v537 LocalAddr(-12)                                   -> x0
     v538 LocalAddr(-14)                                   -> x1
     v539 Mcpy { dst=v537, src=v538, size=16, align=8 }    -> -
@@ -1110,7 +1110,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v760 LocalAddr(-14)                                   -> x0
     v761 Imm(1)                                           -> x7
     v762 LocalAddr(-16)                                   -> x6
-    v763 CallExt { binding_idx=131, args=[v761, v762], fp_arg_mask=0x0 } -> x0
+    v763 CallExt { binding_idx=3, args=[v761, v762], fp_arg_mask=0x0 } -> x0
     v764 LocalAddr(-16)                                   -> x0
     v765 LoadLocal { off=-16, kind=I64 }                  -> x0
     v766 LoadLocal { off=-14, kind=I64 }                  -> x1

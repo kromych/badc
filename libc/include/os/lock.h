@@ -18,6 +18,6 @@ typedef struct os_unfair_lock_s {
 
 void os_unfair_lock_lock(os_unfair_lock_t lock);
 void os_unfair_lock_unlock(os_unfair_lock_t lock);
-int os_unfair_lock_trylock(os_unfair_lock_t lock);
+_Bool os_unfair_lock_trylock(os_unfair_lock_t lock);
 
 #endif

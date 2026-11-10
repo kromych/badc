@@ -282,7 +282,7 @@ int fallocate(int fd, int mode, long offset, long len);
 #define SYNC_FILE_RANGE_WAIT_BEFORE 1
 #define SYNC_FILE_RANGE_WRITE       2
 #define SYNC_FILE_RANGE_WAIT_AFTER  4
-int sync_file_range(int fd, long long offset, long long nbytes, unsigned int flags);
+int sync_file_range(int fd, off64_t offset, off64_t nbytes, unsigned int flags);
 #endif
 
 // creat(path, mode) is open(path, O_WRONLY | O_CREAT | O_TRUNC, mode) (POSIX).

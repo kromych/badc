@@ -86,7 +86,8 @@ typedef struct _ftsent {
 #endif
 
 #ifndef _WIN32
-FTS *fts_open(char **path_argv, int options, void *compar);
+FTS *fts_open(char *const *path_argv, int options,
+              int (*compar)(const FTSENT **, const FTSENT **));
 FTSENT *fts_read(FTS *ftsp);
 int fts_close(FTS *ftsp);
 #endif

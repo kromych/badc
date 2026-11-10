@@ -7,7 +7,7 @@
 
 typedef const void *CFTypeRef;
 typedef struct __CFString *CFStringRef;
-typedef struct __CFDictionary *CFDictionaryRef;
+typedef const struct __CFDictionary *CFDictionaryRef;
 typedef struct __CFAllocator *CFAllocatorRef;
 typedef long CFIndex;
 typedef unsigned long CFTypeID;

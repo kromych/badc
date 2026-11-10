@@ -611,10 +611,10 @@ fn ent_pc=14 n_params=0 variadic=false locals=13
   block 57  start_pc=0
     v379 Imm(0)                                           -> x0
     v380 Imm(0)                                           -> x7
-    v381 CallExt { binding_idx=3, args=[v380], fp_arg_mask=0x0 } -> x3
+    v381 CallExt { binding_idx=38, args=[v380], fp_arg_mask=0x0 } -> x3
     v382 Imm(0)                                           -> x0
     v383 Imm(0)                                           -> x7
-    v384 CallExt { binding_idx=2, args=[v383], fp_arg_mask=0x0 } -> x12
+    v384 CallExt { binding_idx=37, args=[v383], fp_arg_mask=0x0 } -> x12
     v385 Imm(0)                                           -> x0
     v386 Extend { value=v381, kind=I32 }                  -> x0
     v387 Extend { value=v384, kind=I32 }                  -> x0
@@ -633,7 +633,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=13
     terminator Return(v402)   (exit_acc=v402)
   block 59  start_pc=0
     v398 Imm(0)                                           -> x0
-    v399 CallExt { binding_idx=1, args=[], fp_arg_mask=0x0 } -> x0
+    v399 CallExt { binding_idx=36, args=[], fp_arg_mask=0x0 } -> x0
     v400 BinopI { op=eq, lhs=v399, rhs_imm=0 }            -> x1
     v401 BinopI { op=eq, lhs=v400, rhs_imm=0 }            -> x1
     terminator Bz { cond=v399, target=b61, fall=b60 }   (exit_acc=v401)

@@ -4,6 +4,7 @@
 
 #if defined(__APPLE__) || defined(__linux__)
 #include <signal.h>
+#include <sys/types.h>
 
 // The attribute and file-action objects, opaque to the program, in the C
 // library's size and alignment: a pointer the init call fills on macOS,
@@ -82,14 +83,15 @@ int posix_spawnattr_setsigmask(posix_spawnattr_t *attr, const sigset_t *mask);
 int posix_spawnattr_setsigdefault(posix_spawnattr_t *attr, const sigset_t *def);
 #ifdef __linux__
 // `struct sched_param` is opaque to c5; pass its address.
-int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, const char *param);
+struct sched_param;
+int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, const struct sched_param *param);
 int posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int policy);
 #endif
 
 int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fa, int fd,
-                                     const char *path, int oflag, int mode);
+                                     const char *path, int oflag, mode_t mode);
 int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd);
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd,
                                      int newfd);

@@ -30,15 +30,23 @@
 
 #ifdef __BADC_WINDOWS__
 typedef long long ssize_t;
-typedef long long off_t;
 typedef long long off64_t;
 typedef long long loff_t;
 #else
 typedef long ssize_t;
-typedef long off_t;
 typedef long off64_t;
 typedef long loff_t;
 #endif
+#ifndef __BADC_OFF_T
+#define __BADC_OFF_T
+// The file offset: the SDK's and msvcrt's 64-bit long long, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
+typedef long long off_t;
+#else
+typedef long off_t;
+#endif
+#endif
+
 typedef int pid_t;
 // glibc and Darwin make the user and group ids unsigned; the Windows CRT
 // defines neither.

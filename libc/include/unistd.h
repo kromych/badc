@@ -524,10 +524,7 @@ int access(const char *path, int mode);
 // Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
-// POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
-// off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
-// 2GB. `long` is off_t on LP64 (the POSIX targets lseek is declared for).
-long lseek(int fd, long offset, int whence);
+off_t lseek(int fd, off_t offset, int whence);
 int fsync(int fd);
 #endif
 int ftruncate(int fd, off_t len);
@@ -557,7 +554,11 @@ pid_t gettid(void);
 #endif
 #ifndef _WIN32
 int gethostname(char *name, unsigned long len);
-int sethostname(const char *name, unsigned long len);
+#ifdef __APPLE__
+int sethostname(const char *name, int len);
+#else
+int sethostname(const char *name, size_t len);
+#endif
 #endif
 unsigned int sleep(unsigned int seconds);
 #ifndef _WIN32
@@ -650,7 +651,11 @@ char *getlogin(void);
 int getlogin_r(char *buf, unsigned long len);
 // Supplementary group lists.
 int getgroups(int size, gid_t *list);
-int setgroups(unsigned long size, const gid_t *list);
+#ifdef __APPLE__
+int setgroups(int size, const gid_t *list);
+#else
+int setgroups(size_t size, const gid_t *list);
+#endif
 // Darwin takes the base group and returns the list as `int`, glibc as gid_t.
 #ifdef __APPLE__
 int initgroups(const char *user, int group);
@@ -684,7 +689,7 @@ int tcsetpgrp(int fd, int pgrp);
 int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
-int lockf(int fd, int cmd, long len);
+int lockf(int fd, int cmd, off_t len);
 #define F_ULOCK 0
 #define F_LOCK 1
 #define F_TLOCK 2
@@ -734,7 +739,7 @@ extern int opterr;
 extern int optopt;
 #ifndef _WIN32
 void sync(void);
-int confstr(int name, char *buf, int len);
+size_t confstr(int name, char *buf, size_t len);
 #endif
 
 #define LOCK_SH 1

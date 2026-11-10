@@ -78,8 +78,8 @@ int sem_destroy(sem_t *sem);
 int sem_wait(sem_t *sem);
 int sem_trywait(sem_t *sem);
 #ifdef __linux__
-int sem_timedwait(sem_t *sem, struct timespec *abs_timeout);
-int sem_clockwait(sem_t *sem, int clock, struct timespec *abs_timeout);
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+int sem_clockwait(sem_t *sem, clockid_t clock, const struct timespec *abs_timeout);
 #endif
 int sem_post(sem_t *sem);
 int sem_getvalue(sem_t *sem, int *sval);

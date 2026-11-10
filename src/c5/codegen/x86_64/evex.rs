@@ -348,6 +348,46 @@ const TABLE: &[(&str, Form)] = {
     ("vpsubb",  rvm(1, 1, false, 0xF8, FullMem)), ("vpsubw",  rvm(1, 1, false, 0xF9, FullMem)),
     ("vpshufb", rvm(1, 2, false, 0x00, FullMem)),
     ("vpmullw", rvm(1, 1, false, 0xD5, FullMem)), ("vpmaddwd", rvm(1, 1, false, 0xF5, FullMem)),
+    ("vpaddsb",  rvm(1, 1, false, 0xEC, FullMem)), ("vpaddsw",  rvm(1, 1, false, 0xED, FullMem)),
+    ("vpaddusb", rvm(1, 1, false, 0xDC, FullMem)), ("vpaddusw", rvm(1, 1, false, 0xDD, FullMem)),
+    ("vpsubsb",  rvm(1, 1, false, 0xE8, FullMem)), ("vpsubsw",  rvm(1, 1, false, 0xE9, FullMem)),
+    ("vpsubusb", rvm(1, 1, false, 0xD8, FullMem)), ("vpsubusw", rvm(1, 1, false, 0xD9, FullMem)),
+    ("vpmulhw",  rvm(1, 1, false, 0xE5, FullMem)), ("vpmulhuw", rvm(1, 1, false, 0xE4, FullMem)),
+    ("vpmulhrsw", rvm(1, 2, false, 0x0B, FullMem)), ("vpmaddubsw", rvm(1, 2, false, 0x04, FullMem)),
+    ("vpsadbw",  rvm(1, 1, false, 0xF6, FullMem)),
+    ("vpavgb",   rvm(1, 1, false, 0xE0, FullMem)), ("vpavgw",   rvm(1, 1, false, 0xE3, FullMem)),
+    ("vpminsb",  rvm(1, 2, false, 0x38, FullMem)), ("vpmaxsb",  rvm(1, 2, false, 0x3C, FullMem)),
+    ("vpminsw",  rvm(1, 1, false, 0xEA, FullMem)), ("vpmaxsw",  rvm(1, 1, false, 0xEE, FullMem)),
+    ("vpminub",  rvm(1, 1, false, 0xDA, FullMem)), ("vpmaxub",  rvm(1, 1, false, 0xDE, FullMem)),
+    ("vpminuw",  rvm(1, 2, false, 0x3A, FullMem)), ("vpmaxuw",  rvm(1, 2, false, 0x3E, FullMem)),
+    ("vpacksswb", rvm(1, 1, false, 0x63, FullMem)), ("vpackuswb", rvm(1, 1, false, 0x67, FullMem)),
+    ("vpunpcklbw", rvm(1, 1, false, 0x60, FullMem)), ("vpunpcklwd", rvm(1, 1, false, 0x61, FullMem)),
+    ("vpunpckhbw", rvm(1, 1, false, 0x68, FullMem)), ("vpunpckhwd", rvm(1, 1, false, 0x69, FullMem)),
+    // The word variable shifts and permutes (AVX512BW), W set.
+    ("vpsllvw", rvm(1, 2, true, 0x12, FullMem)), ("vpsrlvw", rvm(1, 2, true, 0x10, FullMem)),
+    ("vpsravw", rvm(1, 2, true, 0x11, FullMem)), ("vpermw",  rvm(1, 2, true, 0x8D, FullMem)),
+    ("vpermi2w", rvm(1, 2, true, 0x75, FullMem)), ("vpermt2w", rvm(1, 2, true, 0x7D, FullMem)),
+    // Dword sources, which broadcast.
+    ("vpackssdw", rvm(1, 1, false, 0x6B, Full)), ("vpackusdw", rvm(1, 2, false, 0x2B, Full)),
+    ("vpminud", rvm(1, 2, false, 0x3B, Full)), ("vpminuq", rvm(1, 2, true, 0x3B, Full)),
+    ("vpmaxud", rvm(1, 2, false, 0x3F, Full)), ("vpmaxuq", rvm(1, 2, true, 0x3F, Full)),
+    // AVX512-VNNI: dword accumulators of byte and word products.
+    ("vpdpbusd",  rvm(1, 2, false, 0x50, Full)), ("vpdpbusds", rvm(1, 2, false, 0x51, Full)),
+    ("vpdpwssd",  rvm(1, 2, false, 0x52, Full)), ("vpdpwssds", rvm(1, 2, false, 0x53, Full)),
+    // FMA: the 132 / 213 / 231 orders of the four sign variants, single
+    // with W clear and double with W set.
+    ("vfmadd132ps",  rvm(1, 2, false, 0x98, Full)), ("vfmadd132pd",  rvm(1, 2, true, 0x98, Full)),
+    ("vfmadd213ps",  rvm(1, 2, false, 0xA8, Full)), ("vfmadd213pd",  rvm(1, 2, true, 0xA8, Full)),
+    ("vfmadd231ps",  rvm(1, 2, false, 0xB8, Full)), ("vfmadd231pd",  rvm(1, 2, true, 0xB8, Full)),
+    ("vfmsub132ps",  rvm(1, 2, false, 0x9A, Full)), ("vfmsub132pd",  rvm(1, 2, true, 0x9A, Full)),
+    ("vfmsub213ps",  rvm(1, 2, false, 0xAA, Full)), ("vfmsub213pd",  rvm(1, 2, true, 0xAA, Full)),
+    ("vfmsub231ps",  rvm(1, 2, false, 0xBA, Full)), ("vfmsub231pd",  rvm(1, 2, true, 0xBA, Full)),
+    ("vfnmadd132ps", rvm(1, 2, false, 0x9C, Full)), ("vfnmadd132pd", rvm(1, 2, true, 0x9C, Full)),
+    ("vfnmadd213ps", rvm(1, 2, false, 0xAC, Full)), ("vfnmadd213pd", rvm(1, 2, true, 0xAC, Full)),
+    ("vfnmadd231ps", rvm(1, 2, false, 0xBC, Full)), ("vfnmadd231pd", rvm(1, 2, true, 0xBC, Full)),
+    ("vfnmsub132ps", rvm(1, 2, false, 0x9E, Full)), ("vfnmsub132pd", rvm(1, 2, true, 0x9E, Full)),
+    ("vfnmsub213ps", rvm(1, 2, false, 0xAE, Full)), ("vfnmsub213pd", rvm(1, 2, true, 0xAE, Full)),
+    ("vfnmsub231ps", rvm(1, 2, false, 0xBE, Full)), ("vfnmsub231pd", rvm(1, 2, true, 0xBE, Full)),
     // AVX512-IFMA: the 52-bit multiply-adds of qword elements.
     ("vpmadd52luq", rvm(1, 2, true, 0xB4, Full)), ("vpmadd52huq", rvm(1, 2, true, 0xB5, Full)),
     // Blends under the write mask; the byte and word forms take no broadcast.
@@ -415,6 +455,7 @@ const TABLE: &[(&str, Form)] = {
     ("vpslldq", vmi(false, 0x73, 7, FullMem)), ("vpsrldq", vmi(false, 0x73, 3, FullMem)),
     // 2-operand with a trailing immediate.
     ("vpshufd",   rmi(1, 1, false, 0x70, Full)),
+    ("vpshufhw",  rmi(2, 1, false, 0x70, FullMem)), ("vpshuflw", rmi(3, 1, false, 0x70, FullMem)),
     ("vpermilps", rmi(1, 3, false, 0x04, Full)), ("vpermilpd", rmi(1, 3, true, 0x05, Full)),
     // The lane-crossing quadword permutes take their control either as an
     // immediate (0F3A) or as a vector of indices (0F38); the two rows of each
@@ -453,6 +494,11 @@ const TABLE: &[(&str, Form)] = {
     ("vpmovzxwq", rm(1, 2, false, 0x34, QuarterMem)),
     ("vpmovsxbq", rm(1, 2, false, 0x22, EighthMem)),
     ("vpmovzxbq", rm(1, 2, false, 0x32, EighthMem)),
+    // Absolute values, and AVX512CD's leading-zero counts and conflict masks.
+    ("vpabsb", rm(1, 2, false, 0x1C, FullMem)), ("vpabsw", rm(1, 2, false, 0x1D, FullMem)),
+    ("vpabsd", rm(1, 2, false, 0x1E, Full)), ("vpabsq", rm(1, 2, true, 0x1F, Full)),
+    ("vplzcntd", rm(1, 2, false, 0x44, Full)), ("vplzcntq", rm(1, 2, true, 0x44, Full)),
+    ("vpconflictd", rm(1, 2, false, 0xC4, Full)), ("vpconflictq", rm(1, 2, true, 0xC4, Full)),
     // Compares and tests writing an opmask register. Byte and word elements
     // have no broadcast form; the immediate compares take the predicate as a
     // trailing byte.

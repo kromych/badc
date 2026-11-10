@@ -684,6 +684,38 @@ fn syntax_only_checks_units_and_writes_nothing() {
 /// prototype, its type as a pointer to it: a record or enum with an
 /// implementation tag (a leading underscore) or none is spelled by the
 /// typedef name that reaches it, a public tag as written.
+// `--dump-enumerators` lists the file-scope enumeration constants with their
+// values, a block-scope one left out (C17 6.2.1p4).
+#[test]
+fn dump_enumerators_lists_the_file_scope_constants() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-dump-enumerators");
+    let unit = dir.join("enums.c");
+    std::fs::write(
+        &unit,
+        "enum color { RED, GREEN = 5, BLUE };\nenum { BIG = 1000, NEG = -3 };\n\
+         int f(void) { enum { LOCAL = 7 }; return LOCAL; }\n",
+    )
+    .expect("write unit");
+    let out = Command::new(badc)
+        .args(["--dump-enumerators", "--target=linux-x64"])
+        .arg(&unit)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(
+        lines,
+        ["RED\t0", "GREEN\t5", "BLUE\t6", "BIG\t1000", "NEG\t-3"],
+        "{text}"
+    );
+}
+
 #[test]
 fn dump_prototypes_spells_the_declared_types() {
     let badc = env!("CARGO_BIN_EXE_badc");

@@ -125,6 +125,12 @@ ATOMIC_LONG_LOCK_FREE 2
 ATOMIC_POINTER_LOCK_FREE 2
 ATOMIC_SHORT_LOCK_FREE 2
 ATOMIC_WCHAR_T_LOCK_FREE 2
+memory_order_acq_rel 4
+memory_order_acquire 2
+memory_order_consume 1
+memory_order_relaxed 0
+memory_order_release 3
+memory_order_seq_cst 5
 
 math.h y
 FP_INFINITE 2
@@ -835,6 +841,63 @@ LOCK_NB 4
 LOCK_SH 1
 LOCK_UN 8
 
+CommonCrypto/CommonCryptoError.h y
+kCCAlignmentError -4303
+kCCBufferTooSmall -4301
+kCCCallSequenceError -4309
+kCCDecodeError -4304
+kCCInvalidKey -4311
+kCCKeySizeError -4310
+kCCMemoryFailure -4302
+kCCOverflow -4306
+kCCParamError -4300
+kCCRNGFailure -4307
+kCCSuccess 0
+kCCUnimplemented -4305
+kCCUnspecifiedError -4308
+
+CoreVideo/CoreVideo.h y
+kCVReturnAllocationFailed -6662
+kCVReturnDisplayLinkAlreadyRunning -6671
+kCVReturnDisplayLinkCallbacksNotSet -6673
+kCVReturnDisplayLinkNotRunning -6672
+kCVReturnError -6660
+kCVReturnFirst -6660
+kCVReturnInvalidArgument -6661
+kCVReturnInvalidDisplay -6670
+kCVReturnInvalidPixelBufferAttributes -6682
+kCVReturnInvalidPixelFormat -6680
+kCVReturnInvalidPoolAttributes -6691
+kCVReturnInvalidSize -6681
+kCVReturnLast -6699
+kCVReturnPixelBufferNotMetalCompatible -6684
+kCVReturnPixelBufferNotOpenGLCompatible -6683
+kCVReturnPoolAllocationFailed -6690
+kCVReturnRetry -6692
+kCVReturnSuccess 0
+kCVReturnUnsupported -6663
+kCVReturnWouldExceedAllocationThreshold -6689
+kCVSMPTETimeRunning 2
+kCVSMPTETimeType24 0
+kCVSMPTETimeType25 1
+kCVSMPTETimeType2997 4
+kCVSMPTETimeType2997Drop 5
+kCVSMPTETimeType30 3
+kCVSMPTETimeType30Drop 2
+kCVSMPTETimeType5994 7
+kCVSMPTETimeType60 6
+kCVSMPTETimeValid 1
+kCVTimeIsIndefinite 1
+kCVTimeStampBottomField 131072
+kCVTimeStampHostTimeValid 2
+kCVTimeStampIsInterlaced 196608
+kCVTimeStampRateScalarValid 16
+kCVTimeStampSMPTETimeValid 4
+kCVTimeStampTopField 65536
+kCVTimeStampVideoHostTimeValid 3
+kCVTimeStampVideoRefreshPeriodValid 8
+kCVTimeStampVideoTimeValid 1
+
 sys/attr.h y
 ATTR_BIT_MAP_COUNT 5
 ATTR_BULK_REQUIRED 2147483649
@@ -1449,6 +1512,9 @@ ST_NOSUID 2
 ST_RDONLY 1
 
 sys/wait.h y
+P_ALL 0
+P_PGID 2
+P_PID 1
 WCONTINUED 16
 WEXITED 4
 WNOHANG 1
@@ -1882,6 +1948,14 @@ MM_RECOVER 4096
 MM_SOFT 2
 MM_UTIL 32
 MM_WARNING 3
+
+search.h y
+ENTER 1
+FIND 0
+endorder 2
+leaf 3
+postorder 1
+preorder 0
 
 ulimit.h y
 UL_GETFSIZE 1

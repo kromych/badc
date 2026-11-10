@@ -583,6 +583,13 @@ pub struct Program {
 }
 
 impl Program {
+    /// Each file-scope enumeration constant and its value.
+    pub fn enumerators(&self) -> impl Iterator<Item = (&str, i64)> {
+        (self.symbols.iter())
+            .filter(|s| s.class == crate::c5::token::Token::Num as i64 && !s.name.is_empty())
+            .map(|s| (s.name.as_str(), s.val))
+    }
+
     /// The link names the unit declares or defines weak.
     pub(crate) fn weak_link_names(&self) -> alloc::collections::BTreeSet<&str> {
         (self.symbols.iter())

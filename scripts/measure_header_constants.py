@@ -5,8 +5,9 @@ values against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
 reference toolchain, badc lists the object-like macros a unit including it
-defines (`-dM -E`), less the predefined ones, the names C17 7.1.3 reserves
-to the implementation, and those an earlier unit measured. A probe built
+defines (`-dM -E`) and the enumeration constants it declares
+(`--dump-enumerators`), less the predefined ones, the names C17 7.1.3
+reserves to the implementation, and those an earlier unit measured. A probe built
 with the reference compiler keeps those that are integer constant
 expressions there and stores each one's value as a `long long`. A constant
 is listed under the first header, in registry order, whose unit the
@@ -60,6 +61,16 @@ def badc_macros(badc: str, target: str, src: str) -> dict[str, str] | None:
     return {m.group(1): m.group(2) for m in map(DEFINE.fullmatch, r.stdout.splitlines()) if m}
 
 
+def badc_enumerators(badc: str, target: str, src: str) -> dict[str, str]:
+    """The enumeration constants badc declares for `src`, name to value."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "unit.c")
+        Path(path).write_text(src)
+        r = subprocess.run([badc, f"--target={target}", "--dump-enumerators", path],
+                           capture_output=True, text=True)
+    return dict(line.split("\t", 1) for line in r.stdout.splitlines() if "\t" in line)
+
+
 def measure(cc: list[str], objcopy: str | None, src: str, names: list[str]) -> dict[str, int] | None:
     """The value of each name the reference takes as an integer constant
     expression; the others are dropped and the probe rebuilt."""
@@ -99,7 +110,7 @@ def main() -> int:
     require_current_badc(args.badc)
     cc = args.cc.split()
     predefined = badc_macros(args.badc, args.target, "") or {}
-    seen: set[str] = set(predefined)
+    seen: set[str] = set(predefined) | set(badc_enumerators(args.badc, args.target, ""))
     out = [f"# Reference integer constants for {args.target}, written by "
            "scripts/measure_header_constants.py.",
            "# `<header> y|p` (p: the unit includes the base headers first), then",
@@ -111,8 +122,9 @@ def main() -> int:
         if macros is None:
             print(f"skip {header}: badc rejects the unit", file=sys.stderr)
             continue
-        names = sorted(n for n, v in macros.items()
-                       if n not in seen and not RESERVED.match(n) and v.strip())
+        macros = {n: v for n, v in macros.items() if v.strip()}
+        macros.update(badc_enumerators(args.badc, args.target, src))
+        names = sorted(n for n in macros if n not in seen and not RESERVED.match(n))
         if not names:
             continue
         values = measure(cc, args.objcopy, src, names)

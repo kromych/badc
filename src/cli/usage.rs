@@ -88,6 +88,8 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-prototypes        Print each function and extern object a unit
                            declares with the type of its address,
                            spelled in C.
+  --dump-enumerators       Print each enumeration constant a unit
+                           declares at file scope with its value.
   --dump-records           Print the size, alignment and member offsets
                            of each structure and union a unit defines
                            with a tag or a typedef name, as laid out

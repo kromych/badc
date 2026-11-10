@@ -408,6 +408,9 @@ pub(crate) struct Cli {
     /// `--dump-prototypes`: each unit through the front end, its function
     /// declarations' types printed.
     pub(crate) dump_prototypes: bool,
+    /// `--dump-enumerators`: each unit through the front end, its
+    /// enumeration constants' values printed.
+    pub(crate) dump_enumerators: bool,
     /// `--freestanding`: no embedded startup runtime, and the program's
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
@@ -656,6 +659,7 @@ struct Parser {
     syntax_only: bool,
     dump_records: bool,
     dump_prototypes: bool,
+    dump_enumerators: bool,
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
@@ -1224,6 +1228,7 @@ impl Parser {
                 self.dump_prototypes = true;
                 self.front.prototypes = true;
             }
+            "--dump-enumerators" => self.dump_enumerators = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             "--verify-ssa" => self.codegen.verify_ssa = true,
@@ -2501,6 +2506,7 @@ impl Parser {
             syntax_only: self.syntax_only,
             dump_records: self.dump_records,
             dump_prototypes: self.dump_prototypes,
+            dump_enumerators: self.dump_enumerators,
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,

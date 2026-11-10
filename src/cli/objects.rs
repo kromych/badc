@@ -152,13 +152,20 @@ pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     }
 }
 
-/// `--dump-prototypes`: each C source through the front end, then one
-/// `<name>\t<type>` line per function it declares with a prototype, the
-/// type that of a pointer to the function.
-pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+/// Each C source through the front end, then one `<name>\t<text>` line per
+/// entry `entries` takes from its program.
+fn dump_units(
+    cli: &Cli,
+    inputs: &Inputs,
+    stdin: &StdinSource,
+    flag: &str,
+    entries: fn(&badc::Program) -> Vec<(String, String)>,
+) {
     let sources = &inputs.sources;
     if sources.is_empty() {
-        eprint_diagnostic("badc: error: --dump-prototypes requires at least one source input");
+        eprint_diagnostic(format!(
+            "badc: error: {flag} requires at least one source input"
+        ));
         std::process::exit(1);
     }
     let stdin_src = stdin.for_sources(sources);
@@ -170,8 +177,8 @@ pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let dumps = compile_units(sources, workers, |_, src| {
         let mut log = TuLog::default();
         let res = translate_tu(src, None, &cfg, &mut log).map(|p| {
-            (p.prototypes.iter())
-                .map(|(name, ty)| format!("{name}\t{ty}\n"))
+            (entries(&p).iter())
+                .map(|(name, text)| format!("{name}\t{text}\n"))
                 .collect::<String>()
         });
         (log, res)
@@ -179,6 +186,24 @@ pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     for dump in dumps {
         outln!("{dump}");
     }
+}
+
+/// `--dump-prototypes`: one `<name>\t<type>` line per function and extern
+/// object each source declares, the type that of its address.
+pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    dump_units(cli, inputs, stdin, "--dump-prototypes", |p| {
+        p.prototypes.clone()
+    });
+}
+
+/// `--dump-enumerators`: one `<name>\t<value>` line per enumeration
+/// constant each source declares at file scope.
+pub(crate) fn dump_enumerators(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    dump_units(cli, inputs, stdin, "--dump-enumerators", |p| {
+        (p.enumerators())
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect()
+    });
 }
 
 fn record_layouts(program: &badc::Program) -> String {

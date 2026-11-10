@@ -101,7 +101,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v75  LocalAddr(-20)                                   -> x0
     v76  Imm(0)                                           -> x1
     v77  LoadLocal { off=-20, kind=I32 }                  -> x7
-    v78  ImmData(48)                                      -> x6
+    v78  ImmData(8)                                       -> x6
     v79  Imm(2)                                           -> x2
     v80  CallExt { binding_idx=46, args=[v77, v78, v79, v76], fp_arg_mask=0x0 } -> x0
     v81  BinopI { op=ne, lhs=v80, rhs_imm=2 }             -> x0
@@ -155,7 +155,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     terminator Bnz { cond=v117, target=b17, fall=b16 }   (exit_acc=v117)
   block 16  start_pc=0
     v119 LocalAddr(-17)                                   -> x7
-    v120 ImmData(51)                                      -> x6
+    v120 ImmData(11)                                      -> x6
     v121 Imm(2)                                           -> x2
     v122 CallExt { binding_idx=81, args=[v119, v120, v121], fp_arg_mask=0x0 } -> x0
     v123 BinopI { op=ne, lhs=v122, rhs_imm=0 }            -> x1
@@ -335,7 +335,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v265 StoreLocal { off=-7, disp=24, value=v241, kind=I64 } -> -
     v266 LocalAddr(-7)                                    -> x0
     v267 BinopI { op=add, lhs=v263, rhs_imm=32 }          -> x0
-    v268 ImmData(64)                                      -> x0
+    v268 ImmData(16)                                      -> x0
     v269 StoreLocal { off=-7, disp=32, value=v268, kind=I64 } -> -
     v270 LocalAddr(-7)                                    -> x0
     v271 BinopI { op=add, lhs=v263, rhs_imm=40 }          -> x0

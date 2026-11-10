@@ -19,9 +19,9 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x20, x2
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x50]
+               	ldrsw	x1, [x1, #0x30]
                	adrp	x2, <page>
-               	ldrsw	x2, [x2, #0x58]
+               	ldrsw	x2, [x2, #0x38]
                	add	x1, x1, x2
                	cbnz	w1, <addr>
                	cmp	w20, #0x1
@@ -34,22 +34,22 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x1, eq
                	adrp	x0, <page>
-               	str	w1, [x0, #0x60]
+               	str	w1, [x0, #0x40]
                	cmp	w20, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x50]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x50]
+               	str	w1, [x0, #0x30]
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	cbnz	w20, <addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x58]
+               	ldrsw	x1, [x0, #0x38]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x58]
+               	str	w1, [x0, #0x38]
                	b	<addr>
                	add	x0, x20, #0x64
                	ldp	x29, x30, [sp, #0x10]
@@ -187,15 +187,15 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x50]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x2
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x58]
+               	ldrsw	x0, [x0, #0x38]
                	cmp	w0, #0x4
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x60]
+               	ldrsw	x0, [x0, #0x40]
                	cbnz	w0, <addr>
                	mov	x20, #0x5               // =5
                	sub	x0, x29, #0x258

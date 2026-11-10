@@ -3042,6 +3042,11 @@ impl Compiler {
             off
         } else {
             let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            // The fallback slot of an `extern` declaration is an object of its
+            // own, which the image drops when the declaration binds elsewhere.
+            if was_extern_only_decl && !self.symbols[id_idx].defined_here {
+                self.data_object_starts.push(off);
+            }
             self.note_global_relocated(id_idx, reuse_eligible, off);
             let prior = (
                 self.symbols[id_idx].val,

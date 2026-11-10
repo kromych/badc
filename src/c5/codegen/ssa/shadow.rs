@@ -1989,6 +1989,29 @@ mod tests {
         }
     }
 
+    // An `extern` declaration's fallback slot is an object of its own: when
+    // the declaration binds to library data nothing references the slot, and
+    // the image drops it rather than gluing it onto the object ahead of it.
+    #[test]
+    fn an_unreferenced_extern_slot_leaves_the_image() {
+        let target = Target::LinuxX64;
+        let src = "#pragma dylib(lib, \"libx.so\")\n\
+                   #pragma binding(data lib::e1, \"e1\")\n\
+                   #pragma binding(data lib::e2, \"e2\")\n\
+                   extern long e1;\nextern char *e2[4];\nlong a8 = 1;\n\
+                   int main(void) { return (int)a8; }\n";
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let a8 = data_syms(&c.program)
+            .iter()
+            .find(|(n, ..)| *n == "a8")
+            .map(|s| s.1);
+        assert_eq!(a8, Some(8), "the first object follows the NULL guard");
+        assert_eq!(c.program.data.len(), 16);
+    }
+
     // The packed offsets themselves, for a unit whose objects span three
     // alignments. A narrower live set must not move a kept object further
     // out than its own boundary requires.

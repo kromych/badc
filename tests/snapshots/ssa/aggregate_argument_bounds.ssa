@@ -116,7 +116,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
     terminator Bnz { cond=v221, target=b5, fall=b3 }   (exit_acc=v225)
   block 5  start_pc=0
     v13  LocalAddr(-2)                                    -> x7
-    v14  ImmData(88)                                      -> x1
+    v14  ImmData(8)                                       -> x1
     v15  Mcpy { dst=v13, src=v14, size=12, align=8 }      -> -
     v16  Imm(0)                                           -> x1
     v17  BinopI { op=sub, lhs=v221, rhs_imm=3 }           -> x1

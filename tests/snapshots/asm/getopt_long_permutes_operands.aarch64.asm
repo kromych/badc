@@ -352,7 +352,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x80]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x7
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0xf0]

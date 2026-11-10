@@ -3471,6 +3471,26 @@ fn block_typedef_redeclaration_rules() {
     );
 }
 
+/// GCC applies an aggregate's type attributes when they follow the keyword
+/// or the body; an `aligned` ahead of the keyword aligns the declared typedef
+/// name or object and leaves the aggregate's own alignment natural.
+#[test]
+fn an_alignment_ahead_of_the_struct_keyword_aligns_the_declarators() {
+    let src = "struct __attribute__((aligned(16))) A { int x; };\n\
+               struct B { int x; } __attribute__((aligned(16)));\n\
+               typedef __attribute__((aligned(16))) struct C { int x; } CT;\n\
+               __attribute__((aligned(16))) struct D { int x; } dv;\n\
+               _Alignas(32) struct E { int x; } ev;\n\
+               int main(void) {\n\
+                 return _Alignof(struct A) == 16 && _Alignof(struct B) == 16\n\
+                   && _Alignof(struct C) == 4 && _Alignof(CT) == 16 && sizeof(CT) == 4\n\
+                   && _Alignof(struct D) == 4 && _Alignof(dv) == 16\n\
+                   && _Alignof(struct E) == 4 && (unsigned long)&ev % 32 == 0 ? 0 : 1;\n\
+               }";
+    let prog = Compiler::new(src.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
 /// C17 6.7p3: a file-scope typedef may be redefined only to the type it
 /// already names, an array's length part of that type.
 #[test]

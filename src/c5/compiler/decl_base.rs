@@ -246,6 +246,11 @@ impl Compiler {
         let is_union = self.lex.tk == Token::Union;
         let kind = if is_union { "union" } else { "struct" };
         self.next()?;
+        // An alignment ahead of the keyword belongs to the declarators, not
+        // to the aggregate, whose attributes follow the keyword or the body
+        // (GCC type attributes).
+        let leading_align = core::mem::take(&mut self.pending.attrs.align);
+        let leading_alignas = core::mem::take(&mut self.pending.attrs.alignas);
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let leading_dllimport = self.pending.attrs.dllimport;
@@ -287,6 +292,8 @@ impl Compiler {
             let standalone = self.lex.tk == ';';
             self.find_or_forward_declare_struct(&name, is_union, standalone)?
         };
+        self.pending.attrs.align = self.pending.attrs.align.max(leading_align);
+        self.pending.attrs.alignas = self.pending.attrs.alignas.max(leading_alignas);
         Ok(struct_ty_for(id))
     }
 

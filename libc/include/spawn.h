@@ -5,13 +5,16 @@
 #if defined(__APPLE__) || defined(__linux__)
 #include <signal.h>
 
-// The attribute and file-action objects are opaque. macOS implements
-// each as a single pointer (8 bytes) the init call fills; Linux stores
-// the state inline (attr ~336 B, file actions ~80 B). An oversized
-// buffer covers both: macOS uses only the leading pointer, Linux uses
-// the whole region.
-typedef struct { unsigned char __opaque[512]; } posix_spawnattr_t;
-typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
+// The attribute and file-action objects, opaque to the program, in the C
+// library's size and alignment: a pointer the init call fills on macOS,
+// glibc's inline state on Linux.
+#ifdef __APPLE__
+typedef void *posix_spawnattr_t;
+typedef void *posix_spawn_file_actions_t;
+#else
+typedef union { char __size[336]; long __align; } posix_spawnattr_t;
+typedef union { char __size[80]; long __align; } posix_spawn_file_actions_t;
+#endif
 
 // Attribute flags (the value reaches the host libc, so each target uses
 // its own numbering).

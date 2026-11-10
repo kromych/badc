@@ -74,6 +74,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	movl	$0x1, %esi
                	xorl	%eax, %eax
                	callq	<addr>
                	testl	%eax, %eax

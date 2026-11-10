@@ -28,8 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x200, %rsp            # imm = 0x200
-               	leaq	-0x200(%rbp), %rdi
+               	subq	$0xd0, %rsp
+               	leaq	-0xc8(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leave

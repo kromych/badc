@@ -30,7 +30,12 @@ void seekdir(DIR *dir, long loc);
 
 #include <sys/types.h>
 
+// The SDK's DIR is a 136-byte structure; glibc's is incomplete.
+#ifdef __APPLE__
+struct __c5_DIR { union { char __opaque[136]; long __align; }; };
+#else
 struct __c5_DIR { char __opaque[256]; };
+#endif
 typedef struct __c5_DIR DIR;
 
 // `struct dirent` -- the per-entry shape returned by `readdir`. The

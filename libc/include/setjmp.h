@@ -4,15 +4,12 @@
 // `_setjmp` / `_longjmp` and `sigjmp_buf`, `sigsetjmp` / `siglongjmp`. The header
 // is a pure boundary: register-save / register-restore semantics
 // (C99 7.13.1.1 paragraph 3) live in the host libc, which c5 binds
-// to per-platform below. The buffer is sized to safely cover every
-// supported host's `jmp_buf` layout (macOS arm64 ~200 B, Linux
-// x86_64 ~200 B, Windows _setjmp 256 B plus alignment slack);
-// oversizing is harmless, undersizing is undefined behavior.
+// to per-platform below, and the buffers are the C library's.
 
 #pragma once
 
 #ifdef __APPLE__
-typedef long jmp_buf[64];
+typedef int jmp_buf[48];
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::setjmp,   "_setjmp")
 #pragma binding(libc::longjmp,  "_longjmp")
@@ -20,7 +17,7 @@ typedef long jmp_buf[64];
 #pragma binding(libc::_longjmp, "__longjmp")
 #pragma binding(libc::sigsetjmp,  "_sigsetjmp")
 #pragma binding(libc::siglongjmp, "_siglongjmp")
-typedef long sigjmp_buf[65];
+typedef int sigjmp_buf[49];
 int  setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
 int  _setjmp(jmp_buf env);
@@ -30,7 +27,17 @@ _Noreturn void siglongjmp(sigjmp_buf env, int val);
 #endif
 
 #ifdef __linux__
-typedef long jmp_buf[64];
+// glibc's: the registers, whether the signal mask was saved, and the mask.
+struct __jmp_buf_tag {
+#ifdef __aarch64__
+    unsigned long long __jmpbuf[22];
+#else
+    long __jmpbuf[8];
+#endif
+    int __mask_was_saved;
+    struct { unsigned long __val[16]; } __saved_mask;
+};
+typedef struct __jmp_buf_tag jmp_buf[1];
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::setjmp,   "setjmp")
 #pragma binding(libc::longjmp,  "longjmp")
@@ -38,7 +45,7 @@ typedef long jmp_buf[64];
 #pragma binding(libc::_longjmp, "_longjmp")
 #pragma binding(libc::__sigsetjmp, "__sigsetjmp")
 #pragma binding(libc::siglongjmp,  "siglongjmp")
-typedef jmp_buf sigjmp_buf;
+typedef struct __jmp_buf_tag sigjmp_buf[1];
 int  setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
 int  _setjmp(jmp_buf env);
@@ -100,14 +107,10 @@ _Noreturn void longjmp(jmp_buf env, int val);
         (long long *)(((unsigned long long)(env) + 15ULL) & ~15ULL), \
         (val))
 #endif
-#endif
-
-// POSIX sigsetjmp / siglongjmp / sigjmp_buf. The `savemask` argument
-// selects whether the signal mask is saved and restored; callers that
-// pass 0 (the common case, e.g. an emulator's execution-loop unwind) get
-// the plain non-local jump the per-target setjmp / longjmp above already
-// provide. The buffer aliases jmp_buf, which is sized with slack; on the
-// hosts whose libc setjmp saves the mask, the pair stays self-consistent.
+// msvcrt has no signal mask to save: sigsetjmp and siglongjmp are setjmp and
+// longjmp over the same buffer.
 typedef jmp_buf sigjmp_buf;
 #define sigsetjmp(env, savemask) setjmp(env)
 #define siglongjmp(env, val) longjmp(env, val)
+#endif
+

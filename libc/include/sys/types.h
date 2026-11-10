@@ -98,8 +98,21 @@ typedef long long ino64_t;
 typedef long ino_t;
 typedef long ino64_t;
 #endif
+// The link count and the I/O block size: the SDK's uint16_t and int32_t,
+// glibc's unsigned long and long on x86_64, unsigned int and int on aarch64.
+#if defined(__APPLE__)
+typedef unsigned short nlink_t;
+typedef int blksize_t;
+#elif defined(__linux__) && defined(__x86_64__)
+typedef unsigned long nlink_t;
+typedef long blksize_t;
+#elif defined(__linux__)
+typedef unsigned int nlink_t;
+typedef int blksize_t;
+#else
 typedef int nlink_t;
 typedef int blksize_t;
+#endif
 #ifdef __BADC_WINDOWS__
 typedef long long blkcnt_t;
 typedef long long blkcnt64_t;
@@ -115,7 +128,11 @@ typedef int useconds_t;
 typedef unsigned int id_t;
 typedef unsigned int useconds_t;
 #endif
+#ifdef __linux__
+typedef long suseconds_t;
+#else
 typedef int suseconds_t;
+#endif
 #ifndef __BADC_CLOCKID_T
 #define __BADC_CLOCKID_T
 typedef int clockid_t;

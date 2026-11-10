@@ -64,21 +64,23 @@
 #define PATH_MAX     4096
 #endif
 
-// Opaque-buffer typedef for libc's `FILE`. Different libcs use
-// wildly different layouts; programs only ever pass `FILE *`
-// through bound libc routines, so the buffer just needs to
-// reserve enough storage.
-struct __c5_FILE { char __opaque[256]; };
-typedef struct __c5_FILE FILE;
-
-// C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
-// `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
-// through the bound libc routines and never inspect the bytes. The
-// buffer is sized for the widest host layout (the Linux `fpos_t` is 16
-// bytes; macOS and Windows use 8) and the union member forces the
-// 8-byte alignment the libc fields expect.
+// `FILE` and `fpos_t` (C17 7.21.1), opaque to the program, in the C
+// library's size and alignment: the SDK's 152-byte FILE and 64-bit fpos_t,
+// glibc's 216-byte FILE and 16-byte fpos_t of a position and an mbstate_t.
+#if defined(__APPLE__)
+struct __c5_FILE { union { char __opaque[152]; long __align; }; };
+typedef long long fpos_t;
+#elif defined(__linux__)
+struct __c5_FILE { union { char __opaque[216]; long __align; }; };
 struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
 typedef struct __c5_fpos_t fpos_t;
+#else
+// TODO(#2018): the C runtime's layouts.
+struct __c5_FILE { char __opaque[256]; };
+struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
+typedef struct __c5_fpos_t fpos_t;
+#endif
+typedef struct __c5_FILE FILE;
 
 // Standard streams. These are real libc globals exported by the
 // platform's C runtime. c5 has no GOT-style data-symbol

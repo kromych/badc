@@ -35,14 +35,17 @@ typedef long ptrdiff_t;
 typedef __WCHAR_TYPE__ wchar_t;
 
 // C11 6.2.8: a type whose alignment is the greatest fundamental
-// alignment. Both members are 8-byte aligned -- c5 lays `long double`
-// out as `double` (doc/std-conformance.md), so this is 8 on every
-// target, where the two Linux ABIs give the platform type 16.
+// alignment, as the platform's headers define it: `long double` on Apple
+// targets, a structure of `long long` and `long double` elsewhere.
 #ifndef __max_align_t_defined
+#ifdef __APPLE__
+typedef long double max_align_t;
+#else
 typedef struct {
     long long __max_align_ll;
     long double __max_align_ld;
 } max_align_t;
+#endif
 #define __max_align_t_defined 1
 #endif
 

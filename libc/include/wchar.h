@@ -19,10 +19,19 @@ typedef __WINT_TYPE__ wint_t;
 #define WEOF ((wint_t)-1)
 #endif
 
-// Conversion state for the restartable multibyte functions (C99
-// 7.24.1). The contents are opaque; the host libc reads only the bytes
-// it wrote, so an oversized zeroed buffer is safe across libcs.
+// Conversion state for the restartable multibyte functions (C17 7.29.1), in
+// the C library's layout, since the library reads and writes it.
+#if defined(__APPLE__)
+typedef union { char __mbstate8[128]; long long _mbstateL; } mbstate_t;
+#elif defined(__linux__)
+typedef struct {
+    int __count;
+    union { unsigned int __wch; char __wchb[4]; } __value;
+} mbstate_t;
+#else
+// TODO(#2018): the C runtime's layout.
 typedef struct { unsigned char __opaque[128]; } mbstate_t;
+#endif
 
 // C17 7.29.1p2, as <stdint.h> defines them.
 #ifndef WCHAR_MIN

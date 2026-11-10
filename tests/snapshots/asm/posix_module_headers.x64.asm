@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x290, %rsp            # imm = 0x290
+               	subq	$0x1e0, %rsp            # imm = 0x1E0
                	movl	$0x41, %edi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -83,14 +83,14 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -100,7 +100,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	movl	$0xf, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -110,11 +110,11 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x280(%rbp), %rdi
+               	leaq	-0x1d0(%rbp), %rdi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x4, %edi
-               	leaq	-0x290(%rbp), %rsi
+               	leaq	-0x1e0(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

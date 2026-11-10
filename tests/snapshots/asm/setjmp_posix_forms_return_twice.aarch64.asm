@@ -63,6 +63,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2

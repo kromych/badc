@@ -9,7 +9,11 @@ struct pollfd {
     short revents;
 };
 
+#ifdef __APPLE__
+typedef unsigned int nfds_t;
+#else
 typedef unsigned long nfds_t;
+#endif
 
 #define POLLIN  0x001
 #define POLLPRI 0x002

@@ -353,8 +353,8 @@ Disassembly of section .text:
 <strings_and_conversions>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xe0, %rsp
-               	leaq	-0xc0(%rbp), %rdi
+               	subq	$0x60, %rsp
+               	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
@@ -364,22 +364,14 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rdi)
                	movups	0x30(%rax), %xmm14
                	movups	%xmm14, 0x30(%rdi)
-               	movq	$0x0, -0xc8(%rbp)
-               	leaq	-0x80(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
+               	movq	$0x0, -0x50(%rbp)
+               	leaq	-0x48(%rbp), %rax
+               	movq	$0x0, (%rax)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x2, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0xc0(%rbp), %rdi
+               	leaq	-0x40(%rbp), %rdi
                	cmpq	%rdi, %rax
                	jne	<addr>
                	leaq	<rip>, %rsi # <addr>
@@ -430,14 +422,14 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	leaq	-0xc8(%rbp), %rsi
+               	leaq	-0x50(%rbp), %rsi
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$-0x218711a00, %r11     # imm = 0xFFFFFFFDE78EE600
                	cmpq	%r11, %rax
                	jne	<addr>
-               	movq	-0xc8(%rbp), %rax
+               	movq	-0x50(%rbp), %rax
                	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x17, %eax
@@ -454,7 +446,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdi # <addr>
-               	leaq	-0xc8(%rbp), %rsi
+               	leaq	-0x50(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	$0x40200000, %eax       # imm = 0x40200000
@@ -462,7 +454,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movq	-0xc8(%rbp), %rax
+               	movq	-0x50(%rbp), %rax
                	movl	(%rax), %eax
                	cmpl	$0x78, %eax
                	jne	<addr>
@@ -470,8 +462,8 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	fstpt	-0xe0(%rbp)
-               	fldt	-0xe0(%rbp)
+               	fstpt	-0x60(%rbp)
+               	fldt	-0x60(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
@@ -482,7 +474,7 @@ Disassembly of section .text:
                	movl	$0x19, %eax
                	leave
                	retq
-               	leaq	-0x80(%rbp), %rdi
+               	leaq	-0x48(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -496,14 +488,14 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x1, %esi
-               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x48(%rbp), %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x1, %esi
-               	leaq	-0x80(%rbp), %rdx
+               	leaq	-0x48(%rbp), %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax

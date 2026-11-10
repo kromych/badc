@@ -53,7 +53,7 @@ struct dirent {
     long           d_off;     /* offset  8 */
     unsigned short d_reclen;  /* offset 16 */
     unsigned char  d_type;    /* offset 18 */
-    char d_name[1024];        /* offset 19 */
+    char d_name[256];         /* offset 19 */
 };
 #endif
 

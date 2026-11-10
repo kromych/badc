@@ -239,14 +239,10 @@ struct sockaddr_storage {
     long long __ss_align;
     char __ss_pad2[112];
 #elif defined(__linux__)
-    // The kernel's __kernel_sockaddr_storage, aligned to a pointer.
-    union {
-        struct {
-            unsigned short ss_family;
-            char ss_pad[126];
-        };
-        void *__ss_align;
-    };
+    // glibc's members, aligned by the unsigned long at offset 120.
+    unsigned short ss_family;
+    char __ss_padding[118];
+    unsigned long __ss_align;
 #elif defined(_WIN32)
     unsigned short ss_family;
     char ss_pad[126];

@@ -33,7 +33,6 @@ struct passwd {
     char *pw_dir;      /* offset 48 */
     char *pw_shell;    /* offset 56 */
     long  pw_expire;   /* offset 64, time_t */
-    char  __pad[64];
 };
 #else
 /* Linux layout: no pw_change, pw_class, pw_expire. */
@@ -45,7 +44,6 @@ struct passwd {
     char *pw_gecos;    /* offset 24 */
     char *pw_dir;      /* offset 32 */
     char *pw_shell;    /* offset 40 */
-    char  __pad[64];
 };
 #endif
 

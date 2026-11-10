@@ -43,11 +43,8 @@
 #define LC_MAX      LC_TIME
 #endif
 
-// `struct lconv` layout is implementation-defined (C99 7.11.2.1).
-// Only `decimal_point` is portably read across hosts; the rest are
-// rarely-used currency-formatting fields. Pad the trailing area
-// generously so the host libc can write its own larger struct
-// without overflowing this typedef.
+// `struct lconv` members are C17 7.11.2.1's; their order is the C library's,
+// since localeconv() returns the library's own object.
 #ifdef _WIN32
 // MSVC layout: the wide (_W_*) currency strings sit between the narrow
 // pointers and the trailing int_* sign/precedence chars. localeconv()
@@ -106,13 +103,19 @@ struct lconv {
     char n_sep_by_space;
     char p_sign_posn;
     char n_sign_posn;
+#ifdef __APPLE__
     char int_p_cs_precedes;
     char int_n_cs_precedes;
     char int_p_sep_by_space;
     char int_n_sep_by_space;
+#else
+    char int_p_cs_precedes;
+    char int_p_sep_by_space;
+    char int_n_cs_precedes;
+    char int_n_sep_by_space;
+#endif
     char int_p_sign_posn;
     char int_n_sign_posn;
-    unsigned char __pad[64];
 };
 #endif
 

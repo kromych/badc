@@ -1,0 +1,1061 @@
+# Reference record layouts for linux-aarch64, written by scripts/measure_record_layouts.py.
+# `<header> y|p` (p: the unit includes the base headers first), then
+# `struct|union <tag> <size> <align>` and per member
+# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
+
+arm_neon.h y
+struct uint8x16x4_t 64 16
+  val 0
+struct int8x8x2_t 16 8
+  val 0
+struct int8x16x2_t 32 16
+  val 0
+struct uint8x8x2_t 16 8
+  val 0
+struct uint8x16x2_t 32 16
+  val 0
+struct poly8x8x2_t 16 8
+  val 0
+struct poly8x16x2_t 32 16
+  val 0
+struct int16x4x2_t 16 8
+  val 0
+struct int16x8x2_t 32 16
+  val 0
+struct uint16x4x2_t 16 8
+  val 0
+struct uint16x8x2_t 32 16
+  val 0
+struct poly16x4x2_t 16 8
+  val 0
+struct poly16x8x2_t 32 16
+  val 0
+struct int32x2x2_t 16 8
+  val 0
+struct int32x4x2_t 32 16
+  val 0
+struct uint32x2x2_t 16 8
+  val 0
+struct uint32x4x2_t 32 16
+  val 0
+struct float32x2x2_t 16 8
+  val 0
+struct float32x4x2_t 32 16
+  val 0
+
+sched.h y
+struct sched_param 4 4
+  sched_priority 0
+
+locale.h y
+struct lconv 96 8
+  decimal_point 0
+  thousands_sep 8
+  grouping 16
+  int_curr_symbol 24
+  currency_symbol 32
+  mon_decimal_point 40
+  mon_thousands_sep 48
+  mon_grouping 56
+  positive_sign 64
+  negative_sign 72
+  int_frac_digits 80
+  frac_digits 81
+  p_cs_precedes 82
+  p_sep_by_space 83
+  n_cs_precedes 84
+  n_sep_by_space 85
+  p_sign_posn 86
+  n_sign_posn 87
+  int_p_cs_precedes 88
+  int_n_cs_precedes 90
+  int_p_sep_by_space 89
+  int_n_sep_by_space 91
+  int_p_sign_posn 92
+  int_n_sign_posn 93
+
+signal.h y
+union sigval 8 8
+  sival_int 0
+  sival_ptr 0
+struct sigaction 152 8
+  sa_handler 0
+  sa_sigaction 0
+  sa_mask 8
+  sa_flags 136
+  sa_restorer 144
+struct sigevent 64 8
+  sigev_value 0
+  sigev_signo 8
+  sigev_notify 12
+  sigev_notify_function 16
+  sigev_notify_attributes 24
+
+time.h y
+struct timespec 16 8
+  tv_sec 0
+  tv_nsec 8
+struct tm 56 8
+  tm_sec 0
+  tm_min 4
+  tm_hour 8
+  tm_mday 12
+  tm_mon 16
+  tm_year 20
+  tm_wday 24
+  tm_yday 28
+  tm_isdst 32
+  tm_gmtoff 40
+  tm_zone 48
+struct itimerspec 32 8
+  it_interval 0
+  it_value 16
+
+utime.h y
+struct utimbuf 16 8
+  actime 0
+  modtime 8
+
+netdb.h y
+struct timeval 16 8
+  tv_sec 0
+  tv_usec 8
+struct ucred 12 4
+  pid 0
+  uid 4
+  gid 8
+struct linger 8 4
+  l_onoff 0
+  l_linger 4
+struct sockaddr 16 2
+  sa_family 0
+  sa_data 2
+struct sockaddr_storage 128 8
+  ss_family 0
+  __ss_align 120
+struct iovec 16 8
+  iov_base 0
+  iov_len 8
+struct msghdr 56 8
+  msg_name 0
+  msg_namelen 8
+  msg_iov 16
+  msg_iovlen 24
+  msg_control 32
+  msg_controllen 40
+  msg_flags 48
+struct cmsghdr 16 8
+  cmsg_len 0
+  cmsg_level 8
+  cmsg_type 12
+struct mmsghdr 64 8
+  msg_hdr 0
+  msg_len 56
+struct addrinfo 48 8
+  ai_flags 0
+  ai_family 4
+  ai_socktype 8
+  ai_protocol 12
+  ai_addrlen 16
+  ai_addr 24
+  ai_canonname 32
+  ai_next 40
+struct servent 32 8
+  s_name 0
+  s_aliases 8
+  s_port 16
+  s_proto 24
+struct protoent 24 8
+  p_name 0
+  p_aliases 8
+  p_proto 16
+struct hostent 32 8
+  h_name 0
+  h_aliases 8
+  h_addrtype 16
+  h_length 20
+  h_addr_list 24
+
+ucontext.h y
+struct ucontext_t 4560 16
+  uc_flags 0
+  uc_link 8
+  uc_stack 16
+  uc_sigmask 40
+  uc_mcontext 176
+
+sys/prctl.h y
+struct prctl_mm_map 104 8
+  start_code 0
+  end_code 8
+  start_data 16
+  end_data 24
+  start_brk 32
+  brk 40
+  start_stack 48
+  arg_start 56
+  arg_end 64
+  env_start 72
+  env_end 80
+  auxv 88
+  auxv_size 96
+  exe_fd 100
+
+sys/epoll.h y
+union epoll_data 8 8
+  ptr 0
+  fd 0
+  u32 0
+  u64 0
+struct epoll_event 16 8
+  events 0
+  data 8
+
+sys/signalfd.h y
+struct signalfd_siginfo 128 8
+  ssi_signo 0
+  ssi_errno 4
+  ssi_code 8
+  ssi_pid 12
+  ssi_uid 16
+  ssi_fd 20
+  ssi_tid 24
+  ssi_band 28
+  ssi_overrun 32
+  ssi_trapno 36
+  ssi_status 40
+  ssi_int 44
+  ssi_ptr 48
+  ssi_utime 56
+  ssi_stime 64
+  ssi_addr 72
+  ssi_addr_lsb 80
+  __pad2 82
+  ssi_syscall 84
+  ssi_call_addr 88
+  ssi_arch 96
+  __pad 100
+
+sys/inotify.h y
+struct inotify_event 16 4
+  wd 0
+  mask 4
+  cookie 8
+  len 12
+  name 16
+
+sys/utsname.h y
+struct utsname 390 1
+  sysname 0
+  nodename 65
+  release 130
+  version 195
+  machine 260
+
+sys/sysinfo.h y
+struct sysinfo 112 8
+  uptime 0
+  loads 8
+  totalram 32
+  freeram 40
+  sharedram 48
+  bufferram 56
+  totalswap 64
+  freeswap 72
+  procs 80
+  totalhigh 88
+  freehigh 96
+  mem_unit 104
+
+grp.h y
+struct group 32 8
+  gr_name 0
+  gr_passwd 8
+  gr_gid 16
+  gr_mem 24
+
+netinet/in.h y
+struct in_addr 4 4
+  s_addr 0
+struct in6_addr 16 4
+  s6_addr 0
+struct sockaddr_in 16 4
+  sin_family 0
+  sin_port 2
+  sin_addr 4
+  sin_zero 8
+struct sockaddr_in6 28 4
+  sin6_family 0
+  sin6_port 2
+  sin6_flowinfo 4
+  sin6_addr 8
+  sin6_scope_id 24
+struct ip_mreq 8 4
+  imr_multiaddr 0
+  imr_interface 4
+struct ip_mreqn 12 4
+  imr_multiaddr 0
+  imr_address 4
+  imr_ifindex 8
+struct ipv6_mreq 20 4
+  ipv6mr_multiaddr 0
+  ipv6mr_interface 16
+struct in_pktinfo 12 4
+  ipi_ifindex 0
+  ipi_spec_dst 4
+  ipi_addr 8
+struct in6_pktinfo 20 4
+  ipi6_addr 0
+  ipi6_ifindex 16
+
+dirent.h y
+struct dirent 280 8
+  d_ino 0
+  d_off 8
+  d_reclen 16
+  d_type 18
+  d_name 19
+
+ftw.h y
+struct stat 128 8
+  st_dev 0
+  st_ino 8
+  st_mode 16
+  st_nlink 20
+  st_uid 24
+  st_gid 28
+  st_rdev 32
+  __pad1 40
+  st_size 48
+  st_blksize 56
+  __pad2 60
+  st_blocks 64
+  st_atim 72
+  st_atime 72
+  st_mtim 88
+  st_mtime 88
+  st_ctim 104
+  st_ctime 104
+struct statx_timestamp 16 8
+  tv_sec 0
+  tv_nsec 8
+  __reserved 12
+struct statx 256 8
+  stx_mask 0
+  stx_blksize 4
+  stx_attributes 8
+  stx_nlink 16
+  stx_uid 20
+  stx_gid 24
+  stx_mode 28
+  __spare0 30
+  stx_ino 32
+  stx_size 40
+  stx_blocks 48
+  stx_attributes_mask 56
+  stx_atime 64
+  stx_btime 80
+  stx_ctime 96
+  stx_mtime 112
+  stx_rdev_major 128
+  stx_rdev_minor 132
+  stx_dev_major 136
+  stx_dev_minor 140
+  stx_mnt_id 144
+  stx_dio_mem_align 152
+  stx_dio_offset_align 156
+  stx_subvol 160
+  stx_atomic_write_unit_min 168
+  stx_atomic_write_unit_max 172
+  stx_atomic_write_segments_max 176
+  stx_dio_read_offset_align 180
+  stx_atomic_write_unit_max_opt 184
+  __spare2 188
+  __spare3 192
+struct FTW 8 4
+  base 0
+  level 4
+
+fts.h y
+struct _ftsent 120 8
+  fts_path 48
+  fts_pathlen 64
+  fts_info 94
+  fts_statp 104
+
+pwd.h y
+struct passwd 48 8
+  pw_name 0
+  pw_passwd 8
+  pw_uid 16
+  pw_gid 20
+  pw_gecos 24
+  pw_dir 32
+  pw_shell 40
+
+shadow.h y
+struct spwd 72 8
+  sp_namp 0
+  sp_pwdp 8
+  sp_lstchg 16
+  sp_min 24
+  sp_max 32
+  sp_warn 40
+  sp_inact 48
+  sp_expire 56
+  sp_flag 64
+
+getopt.h y
+struct option 32 8
+  name 0
+  has_arg 8
+  flag 16
+  val 24
+
+fcntl.h y
+struct flock 32 8
+  l_type 0
+  l_whence 2
+  l_start 8
+  l_len 16
+  l_pid 24
+
+sys/ipc.h y
+struct ipc_perm 48 8
+  __key 0
+  uid 4
+  gid 8
+  cuid 12
+  cgid 16
+  mode 20
+  __seq 24
+  __pad2 26
+  __glibc_reserved1 32
+  __glibc_reserved2 40
+
+sys/shm.h y
+struct shmid_ds 112 8
+  shm_perm 0
+  shm_segsz 48
+  shm_atime 56
+  shm_dtime 64
+  shm_ctime 72
+  shm_cpid 80
+  shm_lpid 84
+  shm_nattch 88
+  __glibc_reserved5 96
+  __glibc_reserved6 104
+
+sys/sem.h y
+struct sembuf 6 2
+  sem_num 0
+  sem_op 2
+  sem_flg 4
+struct semid_ds 88 8
+  sem_perm 0
+  sem_otime 48
+  sem_ctime 56
+  sem_nsems 64
+  __glibc_reserved3 72
+  __glibc_reserved4 80
+struct seminfo 40 4
+  semmap 0
+  semmni 4
+  semmns 8
+  semmnu 12
+  semmsl 16
+  semopm 20
+  semume 24
+  semusz 28
+  semvmx 32
+  semaem 36
+
+sys/msg.h y
+struct msgbuf 16 8
+  mtype 0
+  mtext 8
+struct msqid_ds 120 8
+  msg_perm 0
+  msg_stime 48
+  msg_rtime 56
+  msg_ctime 64
+  __msg_cbytes 72
+  msg_qnum 80
+  msg_qbytes 88
+  msg_lspid 96
+  msg_lrpid 100
+  __glibc_reserved4 104
+  __glibc_reserved5 112
+struct msginfo 32 4
+  msgpool 0
+  msgmap 4
+  msgmax 8
+  msgmnb 12
+  msgmni 16
+  msgssz 20
+  msgtql 24
+  msgseg 28
+
+sys/un.h y
+struct sockaddr_un 110 2
+  sun_family 0
+  sun_path 2
+
+net/if.h y
+struct if_nameindex 16 8
+  if_index 0
+  if_name 8
+struct ifmap 24 8
+  mem_start 0
+  mem_end 8
+  base_addr 16
+  irq 18
+  dma 19
+  port 20
+struct ifreq 40 8
+  ifr_ifrn 0
+  ifr_ifru 16
+
+net/ethernet.h y
+struct ether_addr 6 1
+  ether_addr_octet 0
+struct ether_header 14 1
+  ether_dhost 0
+  ether_shost 6
+  ether_type 12
+
+link.h y
+struct link_map 40 8
+  l_addr 0
+  l_name 8
+  l_ld 16
+  l_next 24
+  l_prev 32
+
+linux/fs.h y
+struct file_clone_range 32 8
+  src_fd 0
+  src_offset 8
+  src_length 16
+  dest_offset 24
+
+linux/mman.h y
+struct cachestat_range 16 8
+  off 0
+  len 8
+struct cachestat 40 8
+  nr_cache 0
+  nr_dirty 8
+  nr_writeback 16
+  nr_evicted 24
+  nr_recently_evicted 32
+
+pty.h y
+struct termios 60 4
+  c_iflag 0
+  c_oflag 4
+  c_cflag 8
+  c_lflag 12
+  c_line 16
+  c_cc 17
+  c_ispeed 52
+  c_ospeed 56
+
+sys/statvfs.h y
+struct statvfs 112 8
+  f_bsize 0
+  f_frsize 8
+  f_blocks 16
+  f_bfree 24
+  f_bavail 32
+  f_files 40
+  f_ffree 48
+  f_favail 56
+  f_fsid 64
+  f_flag 72
+  f_namemax 80
+  f_type 88
+  __f_spare 92
+
+sys/vfs.h y
+struct statfs 120 8
+  f_type 0
+  f_bsize 8
+  f_blocks 16
+  f_bfree 24
+  f_bavail 32
+  f_files 40
+  f_ffree 48
+  f_fsid 56
+  f_namelen 64
+  f_frsize 72
+  f_flags 80
+  f_spare 88
+
+sys/resource.h y
+struct rlimit 16 8
+  rlim_cur 0
+  rlim_max 8
+struct rusage 144 8
+  ru_utime 0
+  ru_stime 16
+  ru_maxrss 32
+  ru_ixrss 40
+  ru_idrss 48
+  ru_isrss 56
+  ru_minflt 64
+  ru_majflt 72
+  ru_nswap 80
+  ru_inblock 88
+  ru_oublock 96
+  ru_msgsnd 104
+  ru_msgrcv 112
+  ru_nsignals 120
+  ru_nvcsw 128
+  ru_nivcsw 136
+
+sys/ioctl.h y
+struct winsize 8 2
+  ws_row 0
+  ws_col 2
+  ws_xpixel 4
+  ws_ypixel 6
+
+sys/time.h y
+struct timezone 8 4
+  tz_minuteswest 0
+  tz_dsttime 4
+struct itimerval 32 8
+  it_interval 0
+  it_value 16
+
+sys/times.h y
+struct tms 32 8
+  tms_utime 0
+  tms_stime 8
+  tms_cutime 16
+  tms_cstime 24
+
+poll.h y
+struct pollfd 8 4
+  fd 0
+  events 4
+  revents 6
+
+pthread.h y
+struct __pthread_cleanup_frame 24 8
+  __cancel_routine 0
+  __cancel_arg 8
+  __do_it 16
+
+mqueue.h y
+struct mq_attr 64 8
+  mq_flags 0
+  mq_maxmsg 8
+  mq_msgsize 16
+  mq_curmsgs 24
+  __pad 32
+
+aio.h y
+struct aiocb 168 8
+  aio_fildes 0
+  aio_lio_opcode 4
+  aio_reqprio 8
+  aio_buf 16
+  aio_nbytes 24
+  aio_sigevent 32
+  __next_prio 96
+  __abs_prio 104
+  __policy 108
+  __error_code 112
+  __return_value 120
+  aio_offset 128
+  __glibc_reserved 136
+struct aioinit 32 4
+  aio_threads 0
+  aio_num 4
+  aio_locks 8
+  aio_usedba 12
+  aio_debug 16
+  aio_numusers 20
+  aio_idle_time 24
+  aio_reserved 28
+struct aiocb64 168 8
+  aio_fildes 0
+  aio_lio_opcode 4
+  aio_reqprio 8
+  aio_buf 16
+  aio_nbytes 24
+  aio_sigevent 32
+  __next_prio 96
+  __abs_prio 104
+  __policy 108
+  __error_code 112
+  __return_value 120
+  aio_offset 128
+  __glibc_reserved 136
+
+search.h y
+struct entry 16 8
+  key 0
+  data 8
+struct qelem 24 8
+  q_forw 0
+  q_back 8
+  q_data 16
+struct hsearch_data 16 8
+  table 0
+  size 8
+  filled 12
+
+utmpx.h y
+struct __exit_status 4 2
+  e_termination 0
+  e_exit 2
+struct utmpx 400 8
+  ut_type 0
+  ut_pid 4
+  ut_line 8
+  ut_id 40
+  ut_user 44
+  ut_host 76
+  ut_exit 332
+  ut_session 336
+  ut_tv 344
+  ut_addr_v6 360
+  __glibc_reserved 376
+
+scsi/sg.h y
+struct sg_iovec 16 8
+  iov_base 0
+  iov_len 8
+struct sg_io_hdr 88 8
+  interface_id 0
+  dxfer_direction 4
+  cmd_len 8
+  mx_sb_len 9
+  iovec_count 10
+  dxfer_len 12
+  dxferp 16
+  cmdp 24
+  sbp 32
+  timeout 40
+  flags 44
+  pack_id 48
+  usr_ptr 56
+  status 64
+  masked_status 65
+  msg_status 66
+  sb_len_wr 67
+  host_status 68
+  driver_status 70
+  resid 72
+  duration 76
+  info 80
+struct sg_scsi_id 32 4
+  host_no 0
+  channel 4
+  scsi_id 8
+  lun 12
+  scsi_type 16
+  h_cmd_per_lun 20
+  d_queue_depth 22
+  unused 24
+struct sg_req_info 24 8
+  req_state 0
+  orphan 1
+  sg_io_owned 2
+  problem 3
+  pack_id 4
+  usr_ptr 8
+  duration 16
+  unused 20
+
+linux/ppdev.h y
+struct ppdev_frob_struct 2 1
+  mask 0
+  val 1
+
+linux/vm_sockets.h y
+struct sockaddr_vm 16 4
+  svm_family 0
+  svm_reserved1 2
+  svm_port 4
+  svm_cid 8
+  svm_flags 12
+  svm_zero 13
+
+linux/time_types.h y
+struct __kernel_timespec 16 8
+  tv_sec 0
+  tv_nsec 8
+struct __kernel_itimerspec 32 8
+  it_interval 0
+  it_value 16
+struct __kernel_old_timeval 16 8
+  tv_sec 0
+  tv_usec 8
+struct __kernel_old_timespec 16 8
+  tv_sec 0
+  tv_nsec 8
+struct __kernel_old_itimerval 32 8
+  it_interval 0
+  it_value 16
+struct __kernel_sock_timeval 16 8
+  tv_sec 0
+  tv_usec 8
+
+linux/errqueue.h p
+struct sock_ee_data_rfc4884 4 2
+  len 0
+  flags 2
+  reserved 3
+struct sock_extended_err 16 4
+  ee_errno 0
+  ee_origin 4
+  ee_type 5
+  ee_code 6
+  ee_pad 7
+  ee_info 8
+  ee_data 12
+  ee_rfc4884 12
+struct scm_timestamping 48 8
+  ts 0
+struct scm_timestamping64 48 8
+  ts 0
+
+linux/blkzoned.h y
+struct blk_zone 64 8
+  start 0
+  len 8
+  wp 16
+  type 24
+  cond 25
+  non_seq 26
+  reset 27
+  resv 28
+  capacity 32
+  reserved 40
+struct blk_zone_report 16 8
+  sector 0
+  nr_zones 8
+  flags 12
+  zones 16
+struct blk_zone_range 16 8
+  sector 0
+  nr_sectors 8
+
+linux/hdreg.h y
+struct hd_geometry 16 8
+  heads 0
+  sectors 1
+  cylinders 2
+  start 8
+
+linux/can.h y
+struct can_frame 16 8
+  can_id 0
+  len 4
+  can_dlc 4
+  __pad 5
+  __res0 6
+  len8_dlc 7
+  data 8
+struct canfd_frame 72 8
+  can_id 0
+  len 4
+  flags 5
+  __res0 6
+  __res1 7
+  data 8
+struct canxl_frame 2060 4
+  prio 0
+  flags 4
+  sdt 5
+  len 6
+  af 8
+  data 12
+struct sockaddr_can 24 8
+  can_family 0
+  can_ifindex 4
+  can_addr 8
+struct can_filter 8 4
+  can_id 0
+  can_mask 4
+
+linux/can/raw.h y
+struct can_raw_vcid_options 4 1
+  flags 0
+  tx_vcid 1
+  rx_vcid 2
+  rx_vcid_mask 3
+
+linux/can/j1939.h y
+struct j1939_filter 32 8
+  name 0
+  name_mask 8
+  pgn 16
+  pgn_mask 20
+  addr 24
+  addr_mask 25
+
+netpacket/packet.h y
+struct sockaddr_ll 20 4
+  sll_family 0
+  sll_protocol 2
+  sll_ifindex 4
+  sll_hatype 8
+  sll_pkttype 10
+  sll_halen 11
+  sll_addr 12
+struct packet_mreq 16 4
+  mr_ifindex 0
+  mr_type 4
+  mr_alen 6
+  mr_address 8
+
+linux/if_alg.h y
+struct sockaddr_alg 88 4
+  salg_family 0
+  salg_type 2
+  salg_feat 16
+  salg_mask 20
+  salg_name 24
+struct sockaddr_alg_new 24 4
+  salg_family 0
+  salg_type 2
+  salg_feat 16
+  salg_mask 20
+  salg_name 24
+struct af_alg_iv 4 4
+  ivlen 0
+  iv 4
+
+linux/netlink.h y
+struct sockaddr_nl 12 4
+  nl_family 0
+  nl_pad 2
+  nl_pid 4
+  nl_groups 8
+struct nlmsghdr 16 4
+  nlmsg_len 0
+  nlmsg_type 4
+  nlmsg_flags 6
+  nlmsg_seq 8
+  nlmsg_pid 12
+struct nlmsgerr 20 4
+  error 0
+  msg 4
+struct nl_pktinfo 4 4
+  group 0
+struct nl_mmap_req 16 4
+  nm_block_size 0
+  nm_block_nr 4
+  nm_frame_size 8
+  nm_frame_nr 12
+struct nl_mmap_hdr 24 4
+  nm_status 0
+  nm_len 4
+  nm_group 8
+  nm_pid 12
+  nm_uid 16
+  nm_gid 20
+struct nlattr 4 2
+  nla_len 0
+  nla_type 2
+struct nla_bitfield32 8 4
+  value 0
+  selector 4
+
+linux/tipc.h y
+struct tipc_socket_addr 8 4
+  ref 0
+  node 4
+struct tipc_service_addr 8 4
+  type 0
+  instance 4
+struct tipc_service_range 12 4
+  type 0
+  lower 4
+  upper 8
+struct tipc_subscr 28 4
+  seq 0
+  timeout 12
+  filter 16
+  usr_handle 20
+struct tipc_event 48 4
+  event 0
+  found_lower 4
+  found_upper 8
+  port 12
+  s 20
+struct sockaddr_tipc 16 4
+  family 0
+  addrtype 2
+  scope 3
+  addr 4
+struct tipc_group_req 16 4
+  type 0
+  instance 4
+  scope 8
+  flags 12
+struct tipc_sioc_ln_req 76 4
+  peer 0
+  bearer_id 4
+  linkname 8
+struct tipc_sioc_nodeid_req 20 4
+  peer 0
+  node_id 4
+struct tipc_aead_key 36 4
+  alg_name 0
+  keylen 32
+  key 36
+
+linux/qrtr.h y
+struct sockaddr_qrtr 12 4
+  sq_family 0
+  sq_node 4
+  sq_port 8
+struct qrtr_ctrl_pkt 20 1
+  cmd 0
+  server 4
+  client 4
+
+linux/netfilter.h y
+union nf_inet_addr 16 4
+  all 0
+  ip 0
+  ip6 0
+  in 0
+  in6 0
+
+linux/can/bcm.h y
+struct bcm_timeval 16 8
+  tv_sec 0
+  tv_usec 8
+struct bcm_msg_head 56 8
+  opcode 0
+  flags 4
+  count 8
+  ival1 16
+  ival2 32
+  can_id 48
+  nframes 52
+  frames 56
+
+linux/can/isotp.h y
+struct can_isotp_options 12 4
+  flags 0
+  frame_txtime 4
+  ext_address 8
+  txpad_content 9
+  rxpad_content 10
+  rx_ext_address 11
+struct can_isotp_fc_options 3 1
+  bs 0
+  stmin 1
+  wftmax 2
+struct can_isotp_ll_options 3 1
+  mtu 0
+  tx_dl 1
+  tx_flags 2

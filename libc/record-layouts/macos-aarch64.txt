@@ -1,0 +1,755 @@
+# Reference record layouts for macos-aarch64, written by scripts/measure_record_layouts.py.
+# `<header> y|p` (p: the unit includes the base headers first), then
+# `struct|union <tag> <size> <align>` and per member
+# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
+
+arm_neon.h y
+struct uint8x16x4_t 64 16
+  val 0
+struct int8x8x2_t 16 8
+  val 0
+struct int8x16x2_t 32 16
+  val 0
+struct uint8x8x2_t 16 8
+  val 0
+struct uint8x16x2_t 32 16
+  val 0
+struct poly8x8x2_t 16 8
+  val 0
+struct poly8x16x2_t 32 16
+  val 0
+struct int16x4x2_t 16 8
+  val 0
+struct int16x8x2_t 32 16
+  val 0
+struct uint16x4x2_t 16 8
+  val 0
+struct uint16x8x2_t 32 16
+  val 0
+struct poly16x4x2_t 16 8
+  val 0
+struct poly16x8x2_t 32 16
+  val 0
+struct int32x2x2_t 16 8
+  val 0
+struct int32x4x2_t 32 16
+  val 0
+struct uint32x2x2_t 16 8
+  val 0
+struct uint32x4x2_t 32 16
+  val 0
+struct float32x2x2_t 16 8
+  val 0
+struct float32x4x2_t 32 16
+  val 0
+
+sched.h y
+struct sched_param 8 4
+  sched_priority 0
+  __opaque 4
+
+stdatomic.h y
+struct atomic_flag 1 1
+  _Value 0
+
+locale.h y
+struct lconv 96 8
+  decimal_point 0
+  thousands_sep 8
+  grouping 16
+  int_curr_symbol 24
+  currency_symbol 32
+  mon_decimal_point 40
+  mon_thousands_sep 48
+  mon_grouping 56
+  positive_sign 64
+  negative_sign 72
+  int_frac_digits 80
+  frac_digits 81
+  p_cs_precedes 82
+  p_sep_by_space 83
+  n_cs_precedes 84
+  n_sep_by_space 85
+  p_sign_posn 86
+  n_sign_posn 87
+  int_p_cs_precedes 88
+  int_n_cs_precedes 89
+  int_p_sep_by_space 90
+  int_n_sep_by_space 91
+  int_p_sign_posn 92
+  int_n_sign_posn 93
+
+signal.h y
+union sigval 8 8
+  sival_int 0
+  sival_ptr 0
+struct sigaction 16 8
+  sa_handler 0
+  sa_sigaction 0
+  sa_mask 8
+  sa_flags 12
+struct sigevent 32 8
+  sigev_notify 0
+  sigev_signo 4
+  sigev_value 8
+  sigev_notify_function 16
+  sigev_notify_attributes 24
+
+time.h y
+struct timespec 16 8
+  tv_sec 0
+  tv_nsec 8
+struct tm 56 8
+  tm_sec 0
+  tm_min 4
+  tm_hour 8
+  tm_mday 12
+  tm_mon 16
+  tm_year 20
+  tm_wday 24
+  tm_yday 28
+  tm_isdst 32
+  tm_gmtoff 40
+  tm_zone 48
+
+utime.h y
+struct utimbuf 16 8
+  actime 0
+  modtime 8
+
+netdb.h y
+struct linger 8 4
+  l_onoff 0
+  l_linger 4
+struct sockaddr 16 1
+  sa_len 0
+  sa_family 1
+  sa_data 2
+struct sockaddr_storage 128 8
+  ss_len 0
+  ss_family 1
+  __ss_pad1 2
+  __ss_align 8
+  __ss_pad2 16
+struct iovec 16 8
+  iov_base 0
+  iov_len 8
+struct msghdr 48 8
+  msg_name 0
+  msg_namelen 8
+  msg_iov 16
+  msg_iovlen 24
+  msg_control 32
+  msg_controllen 40
+  msg_flags 44
+struct cmsghdr 12 4
+  cmsg_len 0
+  cmsg_level 4
+  cmsg_type 8
+struct sf_hdtr 32 8
+  headers 0
+  hdr_cnt 8
+  trailers 16
+  trl_cnt 24
+struct addrinfo 48 8
+  ai_flags 0
+  ai_family 4
+  ai_socktype 8
+  ai_protocol 12
+  ai_addrlen 16
+  ai_canonname 24
+  ai_addr 32
+  ai_next 40
+struct servent 32 8
+  s_name 0
+  s_aliases 8
+  s_port 16
+  s_proto 24
+struct protoent 24 8
+  p_name 0
+  p_aliases 8
+  p_proto 16
+struct hostent 32 8
+  h_name 0
+  h_aliases 8
+  h_addrtype 16
+  h_length 20
+  h_addr_list 24
+
+ucontext.h p
+struct in_addr 4 4
+  s_addr 0
+struct in6_addr 16 4
+  s6_addr 0
+struct sockaddr_in 16 4
+  sin_len 0
+  sin_family 1
+  sin_port 2
+  sin_addr 4
+  sin_zero 8
+struct sockaddr_in6 28 4
+  sin6_len 0
+  sin6_family 1
+  sin6_port 2
+  sin6_flowinfo 4
+  sin6_addr 8
+  sin6_scope_id 24
+struct ip_mreq 8 4
+  imr_multiaddr 0
+  imr_interface 4
+struct ip_mreqn 12 4
+  imr_multiaddr 0
+  imr_address 4
+  imr_ifindex 8
+struct ipv6_mreq 20 4
+  ipv6mr_multiaddr 0
+  ipv6mr_interface 16
+struct in_pktinfo 12 4
+  ipi_ifindex 0
+  ipi_spec_dst 4
+  ipi_addr 8
+struct in6_pktinfo 20 4
+  ipi6_addr 0
+  ipi6_ifindex 16
+struct __darwin_arm_exception_state64 16 8
+  __far 0
+  __esr 8
+  __exception 12
+struct __darwin_arm_thread_state64 272 8
+  __x 0
+  __fp 232
+  __lr 240
+  __sp 248
+  __pc 256
+  __cpsr 264
+  __pad 268
+struct __darwin_arm_neon_state64 528 16
+  __v 0
+  __fpsr 512
+  __fpcr 516
+struct __darwin_mcontext64 816 16
+  __es 0
+  __ss 16
+  __ns 288
+struct __darwin_ucontext 880 16
+  uc_onstack 0
+  uc_sigmask 4
+  uc_stack 8
+  uc_link 32
+  uc_mcsize 40
+  uc_mcontext 48
+  __mcontext_data 64
+
+sys/utsname.h y
+struct utsname 1280 1
+  sysname 0
+  nodename 256
+  release 512
+  version 768
+  machine 1024
+
+grp.h y
+struct group 32 8
+  gr_name 0
+  gr_passwd 8
+  gr_gid 16
+  gr_mem 24
+
+dirent.h y
+struct dirent 1048 8
+  d_ino 0
+  d_seekoff 8
+  d_reclen 16
+  d_namlen 18
+  d_type 20
+  d_name 21
+
+ftw.h y
+struct stat 144 8
+  st_dev 0
+  st_mode 4
+  st_nlink 6
+  st_ino 8
+  st_uid 16
+  st_gid 20
+  st_rdev 24
+  st_atimespec 32
+  st_atime 32
+  st_mtimespec 48
+  st_mtime 48
+  st_ctimespec 64
+  st_ctime 64
+  st_birthtimespec 80
+  st_birthtime 80
+  st_size 96
+  st_blocks 104
+  st_blksize 112
+  st_flags 116
+  st_gen 120
+  st_lspare 124
+struct FTW 8 4
+  base 0
+  level 4
+
+fts.h y
+struct _ftsent 112 8
+  fts_path 48
+  fts_pathlen 64
+  fts_info 88
+  fts_statp 96
+
+pwd.h y
+struct passwd 72 8
+  pw_name 0
+  pw_passwd 8
+  pw_uid 16
+  pw_gid 20
+  pw_change 24
+  pw_class 32
+  pw_gecos 40
+  pw_dir 48
+  pw_shell 56
+  pw_expire 64
+
+unistd.h y
+struct timeval 16 8
+  tv_sec 0
+  tv_usec 8
+
+getopt.h y
+struct option 32 8
+  name 0
+  has_arg 8
+  flag 16
+  val 24
+
+fcntl.h y
+struct flock 24 8
+  l_start 0
+  l_len 8
+  l_pid 16
+  l_type 20
+  l_whence 22
+
+sys/ipc.h y
+struct ipc_perm 24 4
+  uid 0
+  gid 4
+  cuid 8
+  cgid 12
+  mode 16
+  _seq 18
+  _key 20
+
+sys/shm.h y
+struct shmid_ds 76 4
+  shm_perm 0
+  shm_segsz 24
+  shm_lpid 32
+  shm_cpid 36
+  shm_nattch 40
+  shm_atime 44
+  shm_dtime 52
+  shm_ctime 60
+  shm_internal 68
+
+sys/sem.h y
+struct sembuf 6 2
+  sem_num 0
+  sem_op 2
+  sem_flg 4
+struct semid_ds 72 4
+  sem_perm 0
+  sem_base 24
+  sem_nsems 28
+  sem_otime 32
+  sem_pad1 40
+  sem_ctime 44
+  sem_pad2 52
+  sem_pad3 56
+union semun 8 8
+  val 0
+  buf 0
+  array 0
+
+sys/msg.h y
+struct msqid_ds 116 4
+  msg_perm 0
+  msg_first 24
+  msg_last 28
+  msg_cbytes 32
+  msg_qnum 40
+  msg_qbytes 48
+  msg_lspid 56
+  msg_lrpid 60
+  msg_stime 64
+  msg_pad1 72
+  msg_rtime 76
+  msg_pad2 84
+  msg_ctime 88
+  msg_pad3 96
+  msg_pad4 100
+
+sys/un.h y
+struct sockaddr_un 106 1
+  sun_len 0
+  sun_family 1
+  sun_path 2
+
+net/if.h y
+struct if_nameindex 16 8
+  if_index 0
+  if_name 8
+
+net/ethernet.h y
+struct ether_addr 6 1
+  ether_addr_octet 0
+struct ether_header 14 2
+  ether_dhost 0
+  ether_shost 6
+  ether_type 12
+
+CoreVideo/CoreVideo.h y
+struct CVSMPTETime 24 4
+  subframes 0
+  subframeDivisor 2
+  counter 4
+  type 8
+  flags 12
+  hours 16
+  minutes 18
+  seconds 20
+  frames 22
+
+sys/attr.h y
+struct fsobj_id 8 4
+  fid_objno 0
+  fid_generation 4
+struct attrlist 24 4
+  bitmapcount 0
+  reserved 2
+  commonattr 4
+  volattr 8
+  dirattr 12
+  fileattr 16
+  forkattr 20
+struct attribute_set 20 4
+  commonattr 0
+  volattr 4
+  dirattr 8
+  fileattr 12
+  forkattr 16
+struct attrreference 8 4
+  attr_dataoffset 0
+  attr_length 4
+
+mach/mach_time.h y
+struct mach_timebase_info 8 4
+  numer 0
+  denom 4
+
+mach/task.h y
+struct task_vm_info 372 4
+  virtual_size 0
+  region_count 8
+  page_size 12
+  resident_size 16
+  resident_size_peak 24
+  device 32
+  device_peak 40
+  internal 48
+  internal_peak 56
+  external 64
+  external_peak 72
+  reusable 80
+  reusable_peak 88
+  purgeable_volatile_pmap 96
+  purgeable_volatile_resident 104
+  purgeable_volatile_virtual 112
+  compressed 120
+  compressed_peak 128
+  compressed_lifetime 136
+  phys_footprint 144
+  min_address 152
+  max_address 160
+  ledger_phys_footprint_peak 168
+  ledger_purgeable_nonvolatile 176
+  ledger_purgeable_novolatile_compressed 184
+  ledger_purgeable_volatile 192
+  ledger_purgeable_volatile_compressed 200
+  ledger_tag_network_nonvolatile 208
+  ledger_tag_network_nonvolatile_compressed 216
+  ledger_tag_network_volatile 224
+  ledger_tag_network_volatile_compressed 232
+  ledger_tag_media_footprint 240
+  ledger_tag_media_footprint_compressed 248
+  ledger_tag_media_nofootprint 256
+  ledger_tag_media_nofootprint_compressed 264
+  ledger_tag_graphics_footprint 272
+  ledger_tag_graphics_footprint_compressed 280
+  ledger_tag_graphics_nofootprint 288
+  ledger_tag_graphics_nofootprint_compressed 296
+  ledger_tag_neural_footprint 304
+  ledger_tag_neural_footprint_compressed 312
+  ledger_tag_neural_nofootprint 320
+  ledger_tag_neural_nofootprint_compressed 328
+  limit_bytes_remaining 336
+  decompressions 344
+  ledger_swapins 348
+  ledger_tag_neural_nofootprint_total 356
+  ledger_tag_neural_nofootprint_peak 364
+
+mach/vm_region.h y
+struct vm_region_basic_info_64 36 4
+  protection 0
+  max_protection 4
+  inheritance 8
+  shared 12
+  reserved 16
+  offset 20
+  behavior 28
+  user_wired_count 32
+struct vm_region_basic_info 32 4
+  protection 0
+  max_protection 4
+  inheritance 8
+  shared 12
+  reserved 16
+  offset 20
+  behavior 24
+  user_wired_count 28
+
+sys/sys_domain.h y
+struct sockaddr_sys 32 4
+  ss_len 0
+  ss_family 1
+  ss_sysaddr 2
+  ss_reserved 4
+
+mach-o/loader.h y
+struct mach_header 28 4
+  magic 0
+  cputype 4
+  cpusubtype 8
+  filetype 12
+  ncmds 16
+  sizeofcmds 20
+  flags 24
+struct mach_header_64 32 4
+  magic 0
+  cputype 4
+  cpusubtype 8
+  filetype 12
+  ncmds 16
+  sizeofcmds 20
+  flags 24
+  reserved 28
+struct load_command 8 4
+  cmd 0
+  cmdsize 4
+struct segment_command 56 4
+  cmd 0
+  cmdsize 4
+  segname 8
+  vmaddr 24
+  vmsize 28
+  fileoff 32
+  filesize 36
+  maxprot 40
+  initprot 44
+  nsects 48
+  flags 52
+struct segment_command_64 72 8
+  cmd 0
+  cmdsize 4
+  segname 8
+  vmaddr 24
+  vmsize 32
+  fileoff 40
+  filesize 48
+  maxprot 56
+  initprot 60
+  nsects 64
+  flags 68
+struct section 68 4
+  sectname 0
+  segname 16
+  addr 32
+  size 36
+  offset 40
+  align 44
+  reloff 48
+  nreloc 52
+  flags 56
+  reserved1 60
+  reserved2 64
+struct section_64 80 8
+  sectname 0
+  segname 16
+  addr 32
+  size 40
+  offset 48
+  align 52
+  reloff 56
+  nreloc 60
+  flags 64
+  reserved1 68
+  reserved2 72
+  reserved3 76
+struct symtab_command 24 4
+  cmd 0
+  cmdsize 4
+  symoff 8
+  nsyms 12
+  stroff 16
+  strsize 20
+
+mach-o/fat.h y
+struct fat_header 8 4
+  magic 0
+  nfat_arch 4
+struct fat_arch 20 4
+  cputype 0
+  cpusubtype 4
+  offset 8
+  size 12
+  align 16
+struct fat_arch_64 32 8
+  cputype 0
+  cpusubtype 4
+  offset 8
+  size 16
+  align 24
+  reserved 28
+
+mach-o/nlist.h y
+struct nlist 12 4
+  n_un 0
+  n_type 4
+  n_sect 5
+  n_desc 6
+  n_value 8
+struct nlist_64 16 8
+  n_un 0
+  n_type 4
+  n_sect 5
+  n_desc 6
+  n_value 8
+
+sys/statvfs.h y
+struct statvfs 64 8
+  f_bsize 0
+  f_frsize 8
+  f_blocks 16
+  f_bfree 20
+  f_bavail 24
+  f_files 28
+  f_ffree 32
+  f_favail 36
+  f_fsid 40
+  f_flag 48
+  f_namemax 56
+
+sys/resource.h y
+struct rlimit 16 8
+  rlim_cur 0
+  rlim_max 8
+struct rusage 144 8
+  ru_utime 0
+  ru_stime 16
+  ru_maxrss 32
+  ru_ixrss 40
+  ru_idrss 48
+  ru_isrss 56
+  ru_minflt 64
+  ru_majflt 72
+  ru_nswap 80
+  ru_inblock 88
+  ru_oublock 96
+  ru_msgsnd 104
+  ru_msgrcv 112
+  ru_nsignals 120
+  ru_nvcsw 128
+  ru_nivcsw 136
+
+sys/ioctl.h y
+struct winsize 8 2
+  ws_row 0
+  ws_col 2
+  ws_xpixel 4
+  ws_ypixel 6
+struct ttysize 8 2
+  ts_lines 0
+  ts_cols 2
+  ts_xxx 4
+  ts_yyy 6
+
+sys/time.h y
+struct timezone 8 4
+  tz_minuteswest 0
+  tz_dsttime 4
+struct itimerval 32 8
+  it_interval 0
+  it_value 16
+
+sys/times.h y
+struct tms 32 8
+  tms_utime 0
+  tms_stime 8
+  tms_cutime 16
+  tms_cstime 24
+
+termios.h y
+struct termios 72 8
+  c_iflag 0
+  c_oflag 8
+  c_cflag 16
+  c_lflag 24
+  c_cc 32
+  c_ispeed 56
+  c_ospeed 64
+
+poll.h y
+struct pollfd 8 4
+  fd 0
+  events 4
+  revents 6
+
+aio.h y
+struct aiocb 80 8
+  aio_fildes 0
+  aio_offset 8
+  aio_buf 16
+  aio_nbytes 24
+  aio_reqprio 32
+  aio_sigevent 40
+  aio_lio_opcode 72
+
+nl_types.h y
+struct __nl_cat_d 16 8
+  __data 0
+  __size 8
+
+search.h y
+struct entry 16 8
+  key 0
+  data 8
+
+utmpx.h y
+struct utmpx 640 8
+  ut_user 0
+  ut_id 256
+  ut_line 260
+  ut_pid 292
+  ut_type 296
+  ut_tv 304
+  ut_host 320
+  ut_pad 576
+struct lastlogx 304 8
+  ll_tv 0
+  ll_line 16
+  ll_host 48
+
+os/lock.h y
+struct os_unfair_lock_s 4 4
+  _os_unfair_lock_opaque 0

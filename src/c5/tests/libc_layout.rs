@@ -256,7 +256,7 @@ fn sockaddr_storage_is_pointer_aligned_on_linux() {
         ty: "struct sockaddr_storage",
         size: 128,
         align: 8,
-        members: &[("ss_family", 0), ("ss_pad", 2)],
+        members: &[("ss_family", 0), ("__ss_padding", 2), ("__ss_align", 120)],
     }));
 }
 

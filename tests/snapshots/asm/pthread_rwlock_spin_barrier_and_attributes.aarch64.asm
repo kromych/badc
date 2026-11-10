@@ -56,17 +56,17 @@ Disassembly of section .text:
 <reentrant>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x4a0
+               	sub	sp, sp, #0x1a0
                	str	x20, [sp]
                	mov	x0, #0x5                // =5
                	str	w0, [sp, #0x18]
                	str	w0, [sp, #0x20]
                	str	xzr, [sp, #0x28]
-               	sub	x0, x29, #0x488
+               	sub	x0, x29, #0x188
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, x0
-               	sub	x0, x29, #0x480
+               	sub	x0, x29, #0x180
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x20, x0
@@ -77,10 +77,10 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	ldr	x20, [sp]
-               	add	sp, sp, #0x4a0
+               	add	sp, sp, #0x1a0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x450
+               	sub	x0, x29, #0x150
                	str	xzr, [sp, #0x50]
                	str	xzr, [sp, #0x58]
                	str	xzr, [sp, #0x60]
@@ -94,10 +94,10 @@ Disassembly of section .text:
                	str	w1, [sp, #0x5c]
                	mov	x1, #0x4                // =4
                	str	w1, [sp, #0x68]
-               	sub	x1, x29, #0x470
+               	sub	x1, x29, #0x170
                	bl	<addr>
                	mov	x1, x0
-               	sub	x0, x29, #0x470
+               	sub	x0, x29, #0x170
                	cmp	x1, x0
                	b.ne	<addr>
                	adrp	x1, <page>
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x15               // =21
                	ldr	x20, [sp]
-               	add	sp, sp, #0x4a0
+               	add	sp, sp, #0x1a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -115,26 +115,26 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	cbz	x20, <addr>
-               	sub	x1, x29, #0x418
-               	sub	x2, x29, #0x478
+               	sub	x1, x29, #0x118
+               	sub	x2, x29, #0x178
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	ldr	x0, [sp, #0x28]
-               	sub	x1, x29, #0x418
+               	sub	x1, x29, #0x118
                	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	ldr	x20, [sp]
-               	add	sp, sp, #0x4a0
+               	add	sp, sp, #0x1a0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
-               	add	sp, sp, #0x4a0
+               	add	sp, sp, #0x1a0
                	ldp	x29, x30, [sp], #0x10
                	ret
 

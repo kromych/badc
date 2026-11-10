@@ -1,24 +1,25 @@
 # Reference record layouts for windows-x64, written by scripts/measure_record_layouts.py.
 # `<header> y|p` (p: the unit includes the base headers first), then
-# `struct|union <tag>|typedef <name> <size> <align>` and per member
+# `struct|union <tag>|typedef <name> <size> <align> [signed|unsigned]`
+# and per member
 # `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
 
 x86intrin.h y
 struct localeinfo_struct 16 8
   locinfo 0
   mbcinfo 8
-typedef size_t 8 8
-typedef ptrdiff_t 8 8
-typedef wchar_t 2 2
+typedef size_t 8 8 unsigned
+typedef ptrdiff_t 8 8 signed
+typedef wchar_t 2 2 unsigned
 typedef max_align_t 32 16
   __max_align_ll 0
   __max_align_ld 16
-typedef errno_t 4 4
-typedef rsize_t 8 8
-typedef intptr_t 8 8
-typedef uintptr_t 8 8
-typedef __time32_t 4 4
-typedef __time64_t 8 8
+typedef errno_t 4 4 signed
+typedef rsize_t 8 8 unsigned
+typedef intptr_t 8 8 signed
+typedef uintptr_t 8 8 unsigned
+typedef __time32_t 4 4 signed
+typedef __time64_t 8 8 signed
 typedef pthreadlocinfo 8 8
 typedef pthreadmbcinfo 8 8
 typedef _locale_tstruct 16 8
@@ -46,32 +47,32 @@ typedef lldiv_t 16 8
   rem 8
 
 stdint.h y
-typedef int8_t 1 1
-typedef int16_t 2 2
-typedef int32_t 4 4
-typedef int64_t 8 8
-typedef intmax_t 8 8
-typedef uint8_t 1 1
-typedef uint16_t 2 2
-typedef uint32_t 4 4
-typedef uint64_t 8 8
-typedef uintmax_t 8 8
-typedef int_least8_t 1 1
-typedef int_least16_t 2 2
-typedef int_least32_t 4 4
-typedef int_least64_t 8 8
-typedef uint_least8_t 1 1
-typedef uint_least16_t 2 2
-typedef uint_least32_t 4 4
-typedef uint_least64_t 8 8
-typedef int_fast8_t 1 1
-typedef int_fast16_t 2 2
-typedef int_fast32_t 4 4
-typedef int_fast64_t 8 8
-typedef uint_fast8_t 1 1
-typedef uint_fast16_t 2 2
-typedef uint_fast32_t 4 4
-typedef uint_fast64_t 8 8
+typedef int8_t 1 1 signed
+typedef int16_t 2 2 signed
+typedef int32_t 4 4 signed
+typedef int64_t 8 8 signed
+typedef intmax_t 8 8 signed
+typedef uint8_t 1 1 unsigned
+typedef uint16_t 2 2 unsigned
+typedef uint32_t 4 4 unsigned
+typedef uint64_t 8 8 unsigned
+typedef uintmax_t 8 8 unsigned
+typedef int_least8_t 1 1 signed
+typedef int_least16_t 2 2 signed
+typedef int_least32_t 4 4 signed
+typedef int_least64_t 8 8 signed
+typedef uint_least8_t 1 1 unsigned
+typedef uint_least16_t 2 2 unsigned
+typedef uint_least32_t 4 4 unsigned
+typedef uint_least64_t 8 8 unsigned
+typedef int_fast8_t 1 1 signed
+typedef int_fast16_t 2 2 signed
+typedef int_fast32_t 4 4 signed
+typedef int_fast64_t 8 8 signed
+typedef uint_fast8_t 1 1 unsigned
+typedef uint_fast16_t 2 2 unsigned
+typedef uint_fast32_t 4 4 unsigned
+typedef uint_fast64_t 8 8 unsigned
 
 inttypes.h y
 typedef imaxdiv_t 16 8
@@ -90,7 +91,7 @@ struct sched_param 4 4
   sched_priority 0
 
 stdio.h y
-typedef fpos_t 8 8
+typedef fpos_t 8 8 signed
 typedef FILE 48 8
   _ptr 0
   _cnt 8
@@ -100,54 +101,54 @@ typedef FILE 48 8
   _charbuf 32
   _bufsiz 36
   _tmpfname 40
-typedef wint_t 2 2
+typedef wint_t 2 2 unsigned
 
 stdarg.h y
 typedef va_list 8 8
 
 stdatomic.h y
-typedef memory_order 4 4
-typedef atomic_bool 1 1
-typedef atomic_char 1 1
-typedef atomic_schar 1 1
-typedef atomic_uchar 1 1
-typedef atomic_short 2 2
-typedef atomic_ushort 2 2
-typedef atomic_int 4 4
-typedef atomic_uint 4 4
-typedef atomic_long 4 4
-typedef atomic_ulong 4 4
-typedef atomic_llong 8 8
-typedef atomic_ullong 8 8
-typedef atomic_char16_t 2 2
-typedef atomic_char32_t 4 4
-typedef atomic_wchar_t 2 2
-typedef atomic_int_least8_t 1 1
-typedef atomic_uint_least8_t 1 1
-typedef atomic_int_least16_t 2 2
-typedef atomic_uint_least16_t 2 2
-typedef atomic_int_least32_t 4 4
-typedef atomic_uint_least32_t 4 4
-typedef atomic_int_least64_t 8 8
-typedef atomic_uint_least64_t 8 8
-typedef atomic_int_fast8_t 1 1
-typedef atomic_uint_fast8_t 1 1
-typedef atomic_int_fast16_t 2 2
-typedef atomic_uint_fast16_t 2 2
-typedef atomic_int_fast32_t 4 4
-typedef atomic_uint_fast32_t 4 4
-typedef atomic_int_fast64_t 8 8
-typedef atomic_uint_fast64_t 8 8
-typedef atomic_intptr_t 8 8
-typedef atomic_uintptr_t 8 8
-typedef atomic_size_t 8 8
-typedef atomic_ptrdiff_t 8 8
-typedef atomic_intmax_t 8 8
-typedef atomic_uintmax_t 8 8
+typedef memory_order 4 4 unsigned
+typedef atomic_bool 1 1 unsigned
+typedef atomic_char 1 1 signed
+typedef atomic_schar 1 1 signed
+typedef atomic_uchar 1 1 unsigned
+typedef atomic_short 2 2 signed
+typedef atomic_ushort 2 2 unsigned
+typedef atomic_int 4 4 signed
+typedef atomic_uint 4 4 unsigned
+typedef atomic_long 4 4 signed
+typedef atomic_ulong 4 4 unsigned
+typedef atomic_llong 8 8 signed
+typedef atomic_ullong 8 8 unsigned
+typedef atomic_char16_t 2 2 unsigned
+typedef atomic_char32_t 4 4 unsigned
+typedef atomic_wchar_t 2 2 unsigned
+typedef atomic_int_least8_t 1 1 signed
+typedef atomic_uint_least8_t 1 1 unsigned
+typedef atomic_int_least16_t 2 2 signed
+typedef atomic_uint_least16_t 2 2 unsigned
+typedef atomic_int_least32_t 4 4 signed
+typedef atomic_uint_least32_t 4 4 unsigned
+typedef atomic_int_least64_t 8 8 signed
+typedef atomic_uint_least64_t 8 8 unsigned
+typedef atomic_int_fast8_t 1 1 signed
+typedef atomic_uint_fast8_t 1 1 unsigned
+typedef atomic_int_fast16_t 2 2 signed
+typedef atomic_uint_fast16_t 2 2 unsigned
+typedef atomic_int_fast32_t 4 4 signed
+typedef atomic_uint_fast32_t 4 4 unsigned
+typedef atomic_int_fast64_t 8 8 signed
+typedef atomic_uint_fast64_t 8 8 unsigned
+typedef atomic_intptr_t 8 8 signed
+typedef atomic_uintptr_t 8 8 unsigned
+typedef atomic_size_t 8 8 unsigned
+typedef atomic_ptrdiff_t 8 8 signed
+typedef atomic_intmax_t 8 8 signed
+typedef atomic_uintmax_t 8 8 unsigned
 typedef atomic_flag 1 1
 
 ctype.h y
-typedef wctype_t 2 2
+typedef wctype_t 2 2 unsigned
 
 locale.h y
 struct lconv 152 8
@@ -179,7 +180,7 @@ struct lconv 152 8
   _W_negative_sign 144
 
 signal.h y
-typedef sig_atomic_t 4 4
+typedef sig_atomic_t 4 4 signed
 
 time.h y
 struct timespec 16 8
@@ -195,9 +196,9 @@ struct tm 36 4
   tm_wday 24
   tm_yday 28
   tm_isdst 32
-typedef time_t 8 8
-typedef clock_t 4 4
-typedef clockid_t 4 4
+typedef time_t 8 8 signed
+typedef clock_t 4 4 signed
+typedef clockid_t 4 4 signed
 
 uchar.h y
 struct _wfinddata_t 560 8
@@ -215,8 +216,8 @@ struct _wfinddata64_t 560 8
   size 32
   name 40
 typedef mbstate_t 4 4
-typedef char16_t 2 2
-typedef char32_t 4 4
+typedef char16_t 2 2 unsigned
+typedef char32_t 4 4 unsigned
 
 utime.h y
 struct utimbuf 16 8
@@ -287,14 +288,14 @@ struct FTW 8 4
   level 4
 
 unistd.h y
-typedef ssize_t 8 8
-typedef off_t 4 4
-typedef off64_t 8 8
-typedef pid_t 8 8
-typedef mode_t 2 2
-typedef dev_t 4 4
-typedef ino_t 2 2
-typedef useconds_t 4 4
+typedef ssize_t 8 8 signed
+typedef off_t 4 4 signed
+typedef off64_t 8 8 signed
+typedef pid_t 8 8 signed
+typedef mode_t 2 2 unsigned
+typedef dev_t 4 4 unsigned
+typedef ino_t 2 2 unsigned
+typedef useconds_t 4 4 unsigned
 
 getopt.h y
 struct option 32 8
@@ -304,7 +305,7 @@ struct option 32 8
   val 24
 
 wctype.h y
-typedef wctrans_t 2 2
+typedef wctrans_t 2 2 unsigned
 
 sys/time.h y
 struct timeval 8 4
@@ -317,12 +318,12 @@ struct timezone 8 4
 pthread.h y
 typedef pthread_mutex_t 8 8
 typedef pthread_cond_t 8 8
-typedef pthread_mutexattr_t 4 4
-typedef pthread_condattr_t 4 4
+typedef pthread_mutexattr_t 4 4 unsigned
+typedef pthread_condattr_t 4 4 signed
 typedef pthread_attr_t 32 8
-typedef pthread_t 8 8
-typedef pthread_key_t 4 4
-typedef pthread_once_t 4 4
+typedef pthread_t 8 8 unsigned
+typedef pthread_key_t 4 4 unsigned
+typedef pthread_once_t 4 4 signed
 
 semaphore.h y
 typedef sem_t 8 8
@@ -334,11 +335,11 @@ struct entry 16 8
 typedef ENTRY 16 8
   key 0
   data 8
-typedef ACTION 4 4
-typedef VISIT 4 4
+typedef ACTION 4 4 unsigned
+typedef VISIT 4 4 unsigned
 
 fenv.h y
-typedef fexcept_t 4 4
+typedef fexcept_t 4 4 unsigned
 typedef fenv_t 8 4
   _Fe_ctl 0
   _Fe_stat 4
@@ -2650,11 +2651,11 @@ struct protoent 24 8
   p_name 0
   p_aliases 8
   p_proto 16
-typedef EXCEPTION_DISPOSITION 4 4
-typedef DWORD 4 4
-typedef BOOL 4 4
-typedef BYTE 1 1
-typedef WORD 2 2
+typedef EXCEPTION_DISPOSITION 4 4 signed
+typedef DWORD 4 4 unsigned
+typedef BOOL 4 4 signed
+typedef BYTE 1 1 unsigned
+typedef WORD 2 2 unsigned
 typedef FLOAT 4 4
 typedef PFLOAT 8 8
 typedef PBOOL 8 8
@@ -2670,21 +2671,21 @@ typedef PDWORD 8 8
 typedef LPDWORD 8 8
 typedef LPVOID 8 8
 typedef LPCVOID 8 8
-typedef INT 4 4
-typedef UINT 4 4
+typedef INT 4 4 signed
+typedef UINT 4 4 unsigned
 typedef PUINT 8 8
 typedef PVOID 8 8
-typedef CHAR 1 1
-typedef SHORT 2 2
-typedef LONG 4 4
-typedef ULONG 4 4
+typedef CHAR 1 1 signed
+typedef SHORT 2 2 signed
+typedef LONG 4 4 signed
+typedef ULONG 4 4 unsigned
 typedef PULONG 8 8
-typedef USHORT 2 2
+typedef USHORT 2 2 unsigned
 typedef PUSHORT 8 8
-typedef UCHAR 1 1
+typedef UCHAR 1 1 unsigned
 typedef PUCHAR 8 8
 typedef PLONG 8 8
-typedef WCHAR 2 2
+typedef WCHAR 2 2 unsigned
 typedef PWCHAR 8 8
 typedef LPWCH 8 8
 typedef PWCH 8 8
@@ -2705,78 +2706,78 @@ typedef LPSTR 8 8
 typedef PSTR 8 8
 typedef LPCSTR 8 8
 typedef PCSTR 8 8
-typedef TCHAR 1 1
+typedef TCHAR 1 1 signed
 typedef PTCHAR 8 8
-typedef TBYTE 1 1
+typedef TBYTE 1 1 unsigned
 typedef PTBYTE 8 8
 typedef PTSTR 8 8
 typedef LPTSTR 8 8
 typedef PCTSTR 8 8
 typedef LPCTSTR 8 8
-typedef LONGLONG 8 8
-typedef ULONGLONG 8 8
+typedef LONGLONG 8 8 signed
+typedef ULONGLONG 8 8 unsigned
 typedef PULONGLONG 8 8
-typedef DWORDLONG 8 8
-typedef INT_PTR 8 8
+typedef DWORDLONG 8 8 unsigned
+typedef INT_PTR 8 8 signed
 typedef PINT_PTR 8 8
-typedef UINT_PTR 8 8
+typedef UINT_PTR 8 8 unsigned
 typedef PUINT_PTR 8 8
-typedef LONG_PTR 8 8
+typedef LONG_PTR 8 8 signed
 typedef PLONG_PTR 8 8
-typedef ULONG_PTR 8 8
+typedef ULONG_PTR 8 8 unsigned
 typedef PULONG_PTR 8 8
-typedef SIZE_T 8 8
+typedef SIZE_T 8 8 unsigned
 typedef PSIZE_T 8 8
-typedef SSIZE_T 8 8
+typedef SSIZE_T 8 8 signed
 typedef PSSIZE_T 8 8
-typedef DWORD_PTR 8 8
+typedef DWORD_PTR 8 8 unsigned
 typedef PDWORD_PTR 8 8
-typedef LONG64 8 8
+typedef LONG64 8 8 signed
 typedef PLONG64 8 8
-typedef ULONG64 8 8
+typedef ULONG64 8 8 unsigned
 typedef PULONG64 8 8
-typedef DWORD64 8 8
+typedef DWORD64 8 8 unsigned
 typedef PDWORD64 8 8
-typedef INT8 1 1
+typedef INT8 1 1 signed
 typedef PINT8 8 8
-typedef INT16 2 2
+typedef INT16 2 2 signed
 typedef PINT16 8 8
-typedef INT32 4 4
+typedef INT32 4 4 signed
 typedef PINT32 8 8
-typedef INT64 8 8
+typedef INT64 8 8 signed
 typedef PINT64 8 8
-typedef UINT8 1 1
+typedef UINT8 1 1 unsigned
 typedef PUINT8 8 8
-typedef UINT16 2 2
+typedef UINT16 2 2 unsigned
 typedef PUINT16 8 8
-typedef UINT32 4 4
+typedef UINT32 4 4 unsigned
 typedef PUINT32 8 8
-typedef UINT64 8 8
+typedef UINT64 8 8 unsigned
 typedef PUINT64 8 8
-typedef LONG32 4 4
+typedef LONG32 4 4 signed
 typedef PLONG32 8 8
-typedef ULONG32 4 4
+typedef ULONG32 4 4 unsigned
 typedef PULONG32 8 8
-typedef DWORD32 4 4
+typedef DWORD32 4 4 unsigned
 typedef PDWORD32 8 8
-typedef WPARAM 8 8
-typedef LPARAM 8 8
-typedef LRESULT 8 8
-typedef HRESULT 4 4
-typedef NTSTATUS 4 4
-typedef BOOLEAN 1 1
-typedef ATOM 2 2
-typedef LCID 4 4
-typedef LANGID 2 2
-typedef LCTYPE 4 4
-typedef ACCESS_MASK 4 4
+typedef WPARAM 8 8 unsigned
+typedef LPARAM 8 8 signed
+typedef LRESULT 8 8 signed
+typedef HRESULT 4 4 signed
+typedef NTSTATUS 4 4 signed
+typedef BOOLEAN 1 1 unsigned
+typedef ATOM 2 2 unsigned
+typedef LCID 4 4 unsigned
+typedef LANGID 2 2 unsigned
+typedef LCTYPE 4 4 unsigned
+typedef ACCESS_MASK 4 4 unsigned
 typedef PACCESS_MASK 8 8
-typedef REGSAM 4 4
-typedef LSTATUS 4 4
-typedef COLORREF 4 4
+typedef REGSAM 4 4 unsigned
+typedef LSTATUS 4 4 signed
+typedef COLORREF 4 4 unsigned
 typedef LPCOLORREF 8 8
-typedef RPC_STATUS 4 4
-typedef EXECUTION_STATE 4 4
+typedef RPC_STATUS 4 4 signed
+typedef EXECUTION_STATE 4 4 unsigned
 typedef HANDLE 8 8
 typedef PHANDLE 8 8
 typedef SPHANDLE 8 8
@@ -2801,7 +2802,7 @@ typedef HSTR 8 8
 typedef HTASK 8 8
 typedef HWINSTA 8 8
 typedef HKL 8 8
-typedef HFILE 4 4
+typedef HFILE 4 4 signed
 typedef HWND 8 8
 typedef HHOOK 8 8
 typedef HGDIOBJ 8 8
@@ -2824,9 +2825,9 @@ typedef HUMPD 8 8
 typedef HCURSOR 8 8
 typedef HDROP 8 8
 typedef HRAWINPUT 8 8
-typedef HCRYPTPROV 8 8
-typedef HCRYPTKEY 8 8
-typedef HCRYPTHASH 8 8
+typedef HCRYPTPROV 8 8 unsigned
+typedef HCRYPTKEY 8 8 unsigned
+typedef HCRYPTHASH 8 8 unsigned
 typedef DLL_DIRECTORY_COOKIE 8 8
 typedef PDLL_DIRECTORY_COOKIE 8 8
 typedef BCRYPT_HANDLE 8 8
@@ -2865,7 +2866,7 @@ typedef PHANDLER_ROUTINE 8 8
 typedef PTOP_LEVEL_EXCEPTION_FILTER 8 8
 typedef LPTOP_LEVEL_EXCEPTION_FILTER 8 8
 typedef PVECTORED_EXCEPTION_HANDLER 8 8
-typedef GET_FILEEX_INFO_LEVELS 4 4
+typedef GET_FILEEX_INFO_LEVELS 4 4 unsigned
 typedef REASON_CONTEXT 32 8
   Version 0
   Flags 4
@@ -2936,7 +2937,7 @@ typedef SYSTEM_INFO 48 8
   wProcessorLevel 44
   wProcessorRevision 46
 typedef LPSYSTEM_INFO 8 8
-typedef KAFFINITY 8 8
+typedef KAFFINITY 8 8 unsigned
 typedef GROUP_AFFINITY 16 8
   Mask 0
   Group 8
@@ -3160,8 +3161,8 @@ typedef OSVERSIONINFOW 276 4
   szCSDVersion 20
 typedef LPOSVERSIONINFOW 8 8
 typedef POSVERSIONINFOW 8 8
-typedef COMPUTER_NAME_FORMAT 4 4
-typedef FILE_INFO_BY_HANDLE_CLASS 4 4
+typedef COMPUTER_NAME_FORMAT 4 4 unsigned
+typedef FILE_INFO_BY_HANDLE_CLASS 4 4 unsigned
 typedef PFILE_INFO_BY_HANDLE_CLASS 8 8
 typedef EXCEPTION_RECORD 152 8
   ExceptionCode 0
@@ -3453,7 +3454,7 @@ typedef CONSOLE_READCONSOLE_CONTROL 16 4
   dwControlKeyState 12
 typedef PCONSOLE_READCONSOLE_CONTROL 8 8
 typedef PFLS_CALLBACK_FUNCTION 8 8
-typedef SOCKET 8 8
+typedef SOCKET 8 8 unsigned
 typedef PCNZCH 8 8
 typedef PCNZWCH 8 8
 typedef WAITORTIMERCALLBACK 8 8
@@ -3815,11 +3816,11 @@ typedef RGBQUAD 4 1
   rgbRed 2
   rgbReserved 3
 typedef LPRGBQUAD 8 8
-typedef LCSCSTYPE 4 4
-typedef LCSGAMUTMATCH 4 4
-typedef FXPT16DOT16 4 4
+typedef LCSCSTYPE 4 4 signed
+typedef LCSGAMUTMATCH 4 4 signed
+typedef FXPT16DOT16 4 4 signed
 typedef LPFXPT16DOT16 8 8
-typedef FXPT2DOT30 4 4
+typedef FXPT2DOT30 4 4 signed
 typedef LPFXPT2DOT30 8 8
 typedef CIEXYZ 12 4
   ciexyzX 0
@@ -4029,7 +4030,7 @@ typedef ENHMETAHEADER 108 4
   szlMicrometers 100
 typedef PENHMETAHEADER 8 8
 typedef LPENHMETAHEADER 8 8
-typedef BCHAR 1 1
+typedef BCHAR 1 1 unsigned
 typedef TEXTMETRICA 56 4
   tmHeight 0
   tmAscent 4
@@ -4565,8 +4566,8 @@ typedef LPDISPLAY_DEVICE 8 8
 typedef DISPLAYCONFIG_RATIONAL 8 4
   Numerator 0
   Denominator 4
-typedef DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY 4 4
-typedef DISPLAYCONFIG_SCANLINE_ORDERING 4 4
+typedef DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY 4 4 signed
+typedef DISPLAYCONFIG_SCANLINE_ORDERING 4 4 unsigned
 typedef DISPLAYCONFIG_2DREGION 8 4
   cx 0
   cy 4
@@ -4579,10 +4580,10 @@ typedef DISPLAYCONFIG_VIDEO_SIGNAL_INFO 48 8
   AdditionalSignalInfo 40
   videoStandard 40
   scanLineOrdering 44
-typedef DISPLAYCONFIG_SCALING 4 4
-typedef DISPLAYCONFIG_ROTATION 4 4
-typedef DISPLAYCONFIG_MODE_INFO_TYPE 4 4
-typedef DISPLAYCONFIG_PIXELFORMAT 4 4
+typedef DISPLAYCONFIG_SCALING 4 4 unsigned
+typedef DISPLAYCONFIG_ROTATION 4 4 unsigned
+typedef DISPLAYCONFIG_MODE_INFO_TYPE 4 4 unsigned
+typedef DISPLAYCONFIG_PIXELFORMAT 4 4 unsigned
 typedef DISPLAYCONFIG_SOURCE_MODE 20 4
   width 0
   height 4
@@ -4624,8 +4625,8 @@ typedef DISPLAYCONFIG_PATH_INFO 72 4
   sourceInfo 0
   targetInfo 20
   flags 68
-typedef DISPLAYCONFIG_TOPOLOGY_ID 4 4
-typedef DISPLAYCONFIG_DEVICE_INFO_TYPE 4 4
+typedef DISPLAYCONFIG_TOPOLOGY_ID 4 4 unsigned
+typedef DISPLAYCONFIG_DEVICE_INFO_TYPE 4 4 unsigned
 typedef DISPLAYCONFIG_DEVICE_INFO_HEADER 20 4
   type 0
   size 4
@@ -4670,7 +4671,7 @@ typedef DISPLAYCONFIG_SUPPORT_VIRTUAL_RESOLUTION 24 4
   disableMonitorVirtualResolution bit 160 1
   reserved bit 161 31
   value 20
-typedef DISPLAYCONFIG_COLOR_ENCODING 4 4
+typedef DISPLAYCONFIG_COLOR_ENCODING 4 4 unsigned
 typedef DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO 32 4
   header 0
   advancedColorSupported bit 160 1
@@ -5063,7 +5064,7 @@ typedef ENUMTEXTMETRIC 488 4
   etmAxesList 96
 typedef PENUMTEXTMETRIC 8 8
 typedef LPENUMTEXTMETRIC 8 8
-typedef COLOR16 2 2
+typedef COLOR16 2 2 unsigned
 typedef TRIVERTEX 16 4
   x 0
   y 4
@@ -6172,14 +6173,14 @@ typedef WNDCLASS 72 8
   lpszMenuName 56
   lpszClassName 64
 typedef LPWNDCLASS 8 8
-typedef u_char 1 1
-typedef u_short 2 2
-typedef u_int 4 4
-typedef u_long 4 4
-typedef ADDRESS_FAMILY 2 2
+typedef u_char 1 1 unsigned
+typedef u_short 2 2 unsigned
+typedef u_int 4 4 unsigned
+typedef u_long 4 4 unsigned
+typedef ADDRESS_FAMILY 2 2 unsigned
 typedef WSAEVENT 8 8
 typedef LPWSAEVENT 8 8
-typedef GROUP 4 4
+typedef GROUP 4 4 unsigned
 typedef WSAOVERLAPPED 32 8
   Internal 0
   InternalHigh 8
@@ -6342,7 +6343,7 @@ struct DelayLoadInfo 72 8
   dwLastError 64
 typedef PImgThunkData 8 8
 typedef PCImgThunkData 8 8
-typedef RVA 4 4
+typedef RVA 4 4 unsigned
 typedef ImgDelayDescr 32 4
   grAttrs 0
   rvaDLLName 4
@@ -6374,14 +6375,14 @@ crtdbg.h y
 typedef _HFILE 8 8
 
 wincrypt.h p
-typedef ALG_ID 4 4
+typedef ALG_ID 4 4 unsigned
 
 tchar.h y
-typedef _TCHAR 1 1
-typedef _TSCHAR 1 1
-typedef _TUCHAR 1 1
-typedef _TXCHAR 1 1
-typedef _TINT 4 4
+typedef _TCHAR 1 1 signed
+typedef _TSCHAR 1 1 signed
+typedef _TUCHAR 1 1 unsigned
+typedef _TXCHAR 1 1 signed
+typedef _TINT 4 4 signed
 
 ws2tcpip.h y
 struct in6_addr 16 2
@@ -6412,7 +6413,7 @@ struct hostent 32 8
   h_addrtype 16
   h_length 18
   h_addr_list 24
-typedef socklen_t 4 4
+typedef socklen_t 4 4 signed
 typedef SOCKADDR_IN6 28 4
   sin6_family 0
   sin6_port 2
@@ -6451,7 +6452,7 @@ iphlpapi.h y
 union _NET_LUID 8 8
   Value 0
   Info 0
-typedef NET_IFINDEX 4 4
+typedef NET_IFINDEX 4 4 unsigned
 typedef NET_LUID 8 8
   Value 0
   Info 0
@@ -6465,7 +6466,7 @@ struct _SOCKADDR_BTH 30 1
   btAddr 2
   serviceClassId 10
   port 26
-typedef BTH_ADDR 8 8
+typedef BTH_ADDR 8 8 unsigned
 typedef PBTH_ADDR 8 8
 typedef SOCKADDR_BTH 30 1
   addressFamily 0

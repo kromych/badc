@@ -59,9 +59,14 @@ def prelude(header: str, cell: str, target: str) -> str:
     return FEATURES + "".join(f"#include <{h}>\n" for h in base + [header])
 
 
+# The pseudo-member a typedef of an integer type carries for its signedness.
+SIGN = "?signed"
+
+
 def badc_records(badc: str, target: str, src: str) -> list[tuple[str, str, list[tuple]]] | None:
     """(kind, tag, members) per record, members as (name, offset) or
-    (name, unit offset, bit offset, width); None when badc rejects the unit."""
+    (name, unit offset, bit offset, width), and an integer typedef's
+    signedness as (SIGN,); None when badc rejects the unit."""
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "unit.c")
         Path(path).write_text(src)
@@ -74,8 +79,8 @@ def badc_records(badc: str, target: str, src: str) -> list[tuple[str, str, list[
         if not line.strip():
             continue
         if not line.startswith(" "):
-            kind, tag = line.split()[:2]
-            records.append((kind, tag, []))
+            f = line.split()
+            records.append((f[0], f[1], [(SIGN,)] if len(f) == 5 else []))
         else:
             records[-1][2].append(tuple(line.split()))
     return records
@@ -97,7 +102,9 @@ def probe_source(src: str, records) -> tuple[str, dict[int, tuple]]:
         emit(f'  printf("R {i} %zu %zu\\n", sizeof({t}), _Alignof({t}));', (i, None))
         for m in members:
             name = m[0]
-            if len(m) == 2:
+            if name == SIGN:
+                emit(f'  printf("S {i} %d\\n", ({t})-1 < ({t})0);', (i, name))
+            elif len(m) == 2:
                 emit(f'  printf("M {i} {name} %zu\\n", offsetof({t}, {name}));', (i, name))
             else:
                 emit(f"  {{ {t} v; unsigned char b[sizeof v]; memset(&v, 0, sizeof v); "
@@ -139,6 +146,8 @@ def measure(cc: list[str], src: str, records) -> dict[int, tuple] | None:
         i = index[int(f[1])]
         if f[0] == "R":
             result[i] = (int(f[2]), int(f[3]), {})
+        elif f[0] == "S":
+            result[i][2][SIGN] = (int(f[2]),)
         elif f[0] == "M":
             result[i][2][f[2]] = (int(f[3]),)
         else:
@@ -157,7 +166,8 @@ def main() -> int:
     out = [f"# Reference record layouts for {args.target}, written by "
            "scripts/measure_record_layouts.py.",
            "# `<header> y|p` (p: the unit includes the base headers first), then",
-           "# `struct|union <tag>|typedef <name> <size> <align>` and per member",
+           "# `struct|union <tag>|typedef <name> <size> <align> [signed|unsigned]`",
+           "# and per member",
            "# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`."]
     for header, cell in shipped_headers(args.target):
         src = prelude(header, cell, args.target)
@@ -178,10 +188,11 @@ def main() -> int:
                 continue
             seen.add(f"{kind} {tag}")
             size, align, values = measured[i]
-            block.append(f"{kind} {tag} {size} {align}")
+            sign = {(1,): " signed", (0,): " unsigned"}.get(values.get(SIGN), "")
+            block.append(f"{kind} {tag} {size} {align}{sign}")
             for m in members:
                 v = values.get(m[0])
-                if v is None:
+                if v is None or m[0] == SIGN:
                     continue
                 block.append(f"  {m[0]} {v[0]}" if len(v) == 1 else f"  {m[0]} bit {v[0]} {v[1]}")
         if block:

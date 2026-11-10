@@ -193,13 +193,15 @@ pub struct AutoInclude {
 }
 
 /// A file-scope typedef name, the size and alignment of the type it names,
-/// and the index in `Program::structs` of the record it names, if any.
+/// the index in `Program::structs` of the record it names, if any, and
+/// whether an integer type it names is signed.
 #[derive(Debug, Clone)]
 pub struct TypedefLayout {
     pub name: String,
     pub size: usize,
     pub align: usize,
     pub record: Option<usize>,
+    pub signed: Option<bool>,
 }
 
 /// Compiled program ready for the VM.

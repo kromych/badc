@@ -170,7 +170,12 @@ fn record_layouts(program: &badc::Program) -> String {
         write_members(&mut out, s);
     }
     for t in &program.typedefs {
-        let _ = writeln!(out, "typedef {} {} {}", t.name, t.size, t.align);
+        let sign = match t.signed {
+            Some(true) => " signed",
+            Some(false) => " unsigned",
+            None => "",
+        };
+        let _ = writeln!(out, "typedef {} {} {}{sign}", t.name, t.size, t.align);
         if let Some(id) = t.record {
             write_members(&mut out, &program.structs[id]);
         }

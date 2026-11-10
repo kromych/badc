@@ -3544,11 +3544,13 @@ impl Compiler {
                 0 => self.align_of_type(ty),
                 a => a as usize,
             };
+            let integer = s.array_size == 0 && types::is_integer_scalar_ty(ty);
             out.push(crate::c5::program::TypedefLayout {
                 name: s.name.clone(),
                 size: self.size_of_type(ty) * count,
                 align,
                 record: record.filter(|_| s.array_size == 0),
+                signed: integer.then(|| !types::is_unsigned_ty(ty) && !types::is_bool_ty(ty)),
             });
         }
         out

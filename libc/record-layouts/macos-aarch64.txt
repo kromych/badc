@@ -1,6 +1,7 @@
 # Reference record layouts for macos-aarch64, written by scripts/measure_record_layouts.py.
 # `<header> y|p` (p: the unit includes the base headers first), then
-# `struct|union <tag>|typedef <name> <size> <align>` and per member
+# `struct|union <tag>|typedef <name> <size> <align> [signed|unsigned]`
+# and per member
 # `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
 
 arm_neon.h y
@@ -42,17 +43,17 @@ struct float32x2x2_t 16 8
   val 0
 struct float32x4x2_t 32 16
   val 0
-typedef int8_t 1 1
-typedef int16_t 2 2
-typedef int32_t 4 4
-typedef int64_t 8 8
-typedef uint8_t 1 1
-typedef uint16_t 2 2
-typedef uint32_t 4 4
-typedef uint64_t 8 8
-typedef poly8_t 1 1
-typedef poly16_t 2 2
-typedef poly64_t 8 8
+typedef int8_t 1 1 signed
+typedef int16_t 2 2 signed
+typedef int32_t 4 4 signed
+typedef int64_t 8 8 signed
+typedef uint8_t 1 1 unsigned
+typedef uint16_t 2 2 unsigned
+typedef uint32_t 4 4 unsigned
+typedef uint64_t 8 8 unsigned
+typedef poly8_t 1 1 unsigned
+typedef poly16_t 2 2 unsigned
+typedef poly64_t 8 8 unsigned
 typedef float32_t 4 4
 typedef float64_t 8 8
 typedef uint8x16x4_t 64 16
@@ -95,9 +96,9 @@ typedef float32x4x2_t 32 16
   val 0
 
 mm_malloc.h y
-typedef size_t 8 8
-typedef ptrdiff_t 8 8
-typedef wchar_t 4 4
+typedef size_t 8 8 unsigned
+typedef ptrdiff_t 8 8 signed
+typedef wchar_t 4 4 signed
 typedef max_align_t 8 8
 typedef div_t 8 4
   quot 0
@@ -110,26 +111,26 @@ typedef lldiv_t 16 8
   rem 8
 
 stdint.h y
-typedef intptr_t 8 8
-typedef intmax_t 8 8
-typedef uintptr_t 8 8
-typedef uintmax_t 8 8
-typedef int_least8_t 1 1
-typedef int_least16_t 2 2
-typedef int_least32_t 4 4
-typedef int_least64_t 8 8
-typedef uint_least8_t 1 1
-typedef uint_least16_t 2 2
-typedef uint_least32_t 4 4
-typedef uint_least64_t 8 8
-typedef int_fast8_t 1 1
-typedef int_fast16_t 2 2
-typedef int_fast32_t 4 4
-typedef int_fast64_t 8 8
-typedef uint_fast8_t 1 1
-typedef uint_fast16_t 2 2
-typedef uint_fast32_t 4 4
-typedef uint_fast64_t 8 8
+typedef intptr_t 8 8 signed
+typedef intmax_t 8 8 signed
+typedef uintptr_t 8 8 unsigned
+typedef uintmax_t 8 8 unsigned
+typedef int_least8_t 1 1 signed
+typedef int_least16_t 2 2 signed
+typedef int_least32_t 4 4 signed
+typedef int_least64_t 8 8 signed
+typedef uint_least8_t 1 1 unsigned
+typedef uint_least16_t 2 2 unsigned
+typedef uint_least32_t 4 4 unsigned
+typedef uint_least64_t 8 8 unsigned
+typedef int_fast8_t 1 1 signed
+typedef int_fast16_t 2 2 signed
+typedef int_fast32_t 4 4 signed
+typedef int_fast64_t 8 8 signed
+typedef uint_fast8_t 1 1 unsigned
+typedef uint_fast16_t 2 2 unsigned
+typedef uint_fast32_t 4 4 unsigned
+typedef uint_fast64_t 8 8 unsigned
 
 inttypes.h y
 typedef imaxdiv_t 16 8
@@ -146,12 +147,12 @@ struct sched_param 8 4
   __opaque 4
 
 spawn.h y
-typedef sigset_t 4 4
+typedef sigset_t 4 4 unsigned
 typedef posix_spawnattr_t 8 8
 typedef posix_spawn_file_actions_t 8 8
 
 stdio.h y
-typedef fpos_t 8 8
+typedef fpos_t 8 8 signed
 typedef FILE 152 8
 
 stdarg.h y
@@ -160,7 +161,7 @@ typedef va_list 8 8
 stdatomic.h y
 struct atomic_flag 1 1
   _Value 0
-typedef memory_order 4 4
+typedef memory_order 4 4 unsigned
 typedef atomic_bool 1 1
 typedef atomic_char 1 1
 typedef atomic_schar 1 1
@@ -244,7 +245,7 @@ struct sigevent 32 8
   sigev_value 8
   sigev_notify_function 16
   sigev_notify_attributes 24
-typedef sig_atomic_t 4 4
+typedef sig_atomic_t 4 4 signed
 typedef sig_t 8 8
 typedef siginfo_t 104 8
   si_signo 0
@@ -278,9 +279,9 @@ struct tm 56 8
   tm_isdst 32
   tm_gmtoff 40
   tm_zone 48
-typedef time_t 8 8
-typedef clock_t 8 8
-typedef clockid_t 4 4
+typedef time_t 8 8 signed
+typedef clock_t 8 8 unsigned
+typedef clockid_t 4 4 unsigned
 
 utime.h y
 struct utimbuf 16 8
@@ -345,38 +346,38 @@ struct hostent 32 8
   h_addrtype 16
   h_length 20
   h_addr_list 24
-typedef ssize_t 8 8
-typedef off_t 8 8
-typedef pid_t 4 4
-typedef uid_t 4 4
-typedef gid_t 4 4
-typedef mode_t 2 2
-typedef dev_t 4 4
-typedef u_int8_t 1 1
-typedef u_int16_t 2 2
-typedef u_int32_t 4 4
-typedef u_int64_t 8 8
-typedef u_char 1 1
-typedef u_short 2 2
-typedef u_int 4 4
-typedef u_long 8 8
-typedef quad_t 8 8
-typedef u_quad_t 8 8
-typedef ino_t 8 8
-typedef ino64_t 8 8
-typedef nlink_t 2 2
-typedef blksize_t 4 4
-typedef blkcnt_t 8 8
-typedef id_t 4 4
-typedef useconds_t 4 4
-typedef suseconds_t 4 4
-typedef fsblkcnt_t 4 4
-typedef fsfilcnt_t 4 4
-typedef socklen_t 4 4
-typedef key_t 4 4
+typedef ssize_t 8 8 signed
+typedef off_t 8 8 signed
+typedef pid_t 4 4 signed
+typedef uid_t 4 4 unsigned
+typedef gid_t 4 4 unsigned
+typedef mode_t 2 2 unsigned
+typedef dev_t 4 4 signed
+typedef u_int8_t 1 1 unsigned
+typedef u_int16_t 2 2 unsigned
+typedef u_int32_t 4 4 unsigned
+typedef u_int64_t 8 8 unsigned
+typedef u_char 1 1 unsigned
+typedef u_short 2 2 unsigned
+typedef u_int 4 4 unsigned
+typedef u_long 8 8 unsigned
+typedef quad_t 8 8 signed
+typedef u_quad_t 8 8 unsigned
+typedef ino_t 8 8 unsigned
+typedef ino64_t 8 8 unsigned
+typedef nlink_t 2 2 unsigned
+typedef blksize_t 4 4 signed
+typedef blkcnt_t 8 8 signed
+typedef id_t 4 4 unsigned
+typedef useconds_t 4 4 unsigned
+typedef suseconds_t 4 4 signed
+typedef fsblkcnt_t 4 4 unsigned
+typedef fsfilcnt_t 4 4 unsigned
+typedef socklen_t 4 4 unsigned
+typedef key_t 4 4 signed
 typedef fd_set 128 4
   fds_bits 0
-typedef sa_family_t 1 1
+typedef sa_family_t 1 1 unsigned
 
 ucontext.h p
 struct in_addr 4 4
@@ -441,8 +442,8 @@ struct __darwin_ucontext 880 16
   uc_mcsize 40
   uc_mcontext 48
   __mcontext_data 64
-typedef in_port_t 2 2
-typedef in_addr_t 4 4
+typedef in_port_t 2 2 unsigned
+typedef in_addr_t 4 4 unsigned
 typedef mcontext_t 8 8
 typedef ucontext_t 880 16
   uc_onstack 0
@@ -469,7 +470,7 @@ struct group 32 8
   gr_mem 24
 
 langinfo.h y
-typedef nl_item 4 4
+typedef nl_item 4 4 signed
 
 iconv.h y
 typedef iconv_t 8 8
@@ -577,7 +578,7 @@ struct shmid_ds 76 4
   shm_dtime 52
   shm_ctime 60
   shm_internal 68
-typedef shmatt_t 2 2
+typedef shmatt_t 2 2 unsigned
 
 sys/sem.h y
 struct sembuf 6 2
@@ -619,8 +620,8 @@ struct msqid_ds 116 4
   msg_ctime 88
   msg_pad3 96
   msg_pad4 100
-typedef msgqnum_t 8 8
-typedef msglen_t 8 8
+typedef msgqnum_t 8 8 unsigned
+typedef msglen_t 8 8 unsigned
 
 sys/un.h y
 struct sockaddr_un 106 1
@@ -646,15 +647,15 @@ typedef CFTypeRef 8 8
 typedef CFStringRef 8 8
 typedef CFDictionaryRef 8 8
 typedef CFAllocatorRef 8 8
-typedef CFIndex 8 8
-typedef CFTypeID 8 8
+typedef CFIndex 8 8 signed
+typedef CFTypeID 8 8 unsigned
 
 CommonCrypto/CommonCryptoError.h y
-typedef CCStatus 4 4
-typedef CCCryptorStatus 4 4
+typedef CCStatus 4 4 signed
+typedef CCCryptorStatus 4 4 signed
 
 CommonCrypto/CommonRandom.h y
-typedef CCRNGStatus 4 4
+typedef CCRNGStatus 4 4 signed
 
 CoreVideo/CoreVideo.h y
 struct CVSMPTETime 24 4
@@ -667,7 +668,7 @@ struct CVSMPTETime 24 4
   minutes 18
   seconds 20
   frames 22
-typedef CVOptionFlags 8 8
+typedef CVOptionFlags 8 8 unsigned
 typedef CVSMPTETime 24 4
   subframes 0
   subframeDivisor 2
@@ -678,9 +679,9 @@ typedef CVSMPTETime 24 4
   minutes 18
   seconds 20
   frames 22
-typedef CVSMPTETimeType 4 4
-typedef CVSMPTETimeFlags 4 4
-typedef CVTimeFlags 4 4
+typedef CVSMPTETimeType 4 4 unsigned
+typedef CVSMPTETimeFlags 4 4 unsigned
+typedef CVTimeFlags 4 4 signed
 typedef CVTime 16 8
   timeValue 0
   timeScale 8
@@ -695,8 +696,8 @@ typedef CVTimeStamp 80 8
   smpteTime 40
   flags 64
   reserved 72
-typedef CVTimeStampFlags 8 8
-typedef CVReturn 4 4
+typedef CVTimeStampFlags 8 8 unsigned
+typedef CVReturn 4 4 signed
 
 SystemConfiguration/SCDynamicStoreCopySpecific.h y
 typedef SCDynamicStoreRef 8 8
@@ -722,15 +723,15 @@ struct attribute_set 20 4
 struct attrreference 8 4
   attr_dataoffset 0
   attr_length 4
-typedef text_encoding_t 4 4
-typedef fsobj_type_t 4 4
-typedef fsobj_tag_t 4 4
-typedef fsfile_type_t 4 4
-typedef fsvolid_t 4 4
+typedef text_encoding_t 4 4 unsigned
+typedef fsobj_type_t 4 4 unsigned
+typedef fsobj_tag_t 4 4 unsigned
+typedef fsfile_type_t 4 4 unsigned
+typedef fsvolid_t 4 4 unsigned
 typedef fsobj_id_t 8 4
   fid_objno 0
   fid_generation 4
-typedef attrgroup_t 4 4
+typedef attrgroup_t 4 4 unsigned
 typedef attribute_set_t 20 4
   commonattr 0
   volattr 4
@@ -743,7 +744,7 @@ typedef attrreference_t 8 4
 
 copyfile.h y
 typedef copyfile_state_t 8 8
-typedef copyfile_flags_t 4 4
+typedef copyfile_flags_t 4 4 unsigned
 
 mach/mach_time.h y
 struct mach_timebase_info 8 4
@@ -755,15 +756,15 @@ typedef mach_timebase_info_data_t 8 4
   denom 4
 
 mach/mach.h y
-typedef mach_port_t 4 4
-typedef task_t 4 4
-typedef thread_t 4 4
-typedef kern_return_t 4 4
-typedef mach_msg_type_number_t 4 4
-typedef natural_t 4 4
-typedef integer_t 4 4
-typedef mach_vm_size_t 8 8
-typedef mach_vm_address_t 8 8
+typedef mach_port_t 4 4 unsigned
+typedef task_t 4 4 unsigned
+typedef thread_t 4 4 unsigned
+typedef kern_return_t 4 4 signed
+typedef mach_msg_type_number_t 4 4 unsigned
+typedef natural_t 4 4 unsigned
+typedef integer_t 4 4 signed
+typedef mach_vm_size_t 8 8 unsigned
+typedef mach_vm_address_t 8 8 unsigned
 typedef thread_array_t 8 8
 
 mach/task.h y
@@ -816,7 +817,7 @@ struct task_vm_info 372 4
   ledger_swapins 348
   ledger_tag_neural_nofootprint_total 356
   ledger_tag_neural_nofootprint_peak 364
-typedef task_flavor_t 4 4
+typedef task_flavor_t 4 4 unsigned
 typedef task_info_t 8 8
 typedef task_vm_info_data_t 372 4
   virtual_size 0
@@ -870,12 +871,12 @@ typedef task_vm_info_data_t 372 4
 typedef task_vm_info_t 8 8
 
 mach/machine.h y
-typedef cpu_type_t 4 4
-typedef cpu_subtype_t 4 4
-typedef cpu_threadtype_t 4 4
+typedef cpu_type_t 4 4 signed
+typedef cpu_subtype_t 4 4 signed
+typedef cpu_threadtype_t 4 4 signed
 
 mach/vm_prot.h y
-typedef vm_prot_t 4 4
+typedef vm_prot_t 4 4 signed
 
 mach/vm_region.h y
 struct vm_region_basic_info_64 36 4
@@ -896,15 +897,15 @@ struct vm_region_basic_info 32 4
   offset 20
   behavior 24
   user_wired_count 28
-typedef vm_inherit_t 4 4
-typedef vm_behavior_t 4 4
-typedef boolean_t 4 4
-typedef memory_object_offset_t 8 8
+typedef vm_inherit_t 4 4 unsigned
+typedef vm_behavior_t 4 4 signed
+typedef boolean_t 4 4 signed
+typedef memory_object_offset_t 8 8 unsigned
 typedef vm_region_info_t 8 8
 typedef vm_region_info_64_t 8 8
 typedef vm_region_recurse_info_t 8 8
 typedef vm_region_recurse_info_64_t 8 8
-typedef vm_region_flavor_t 4 4
+typedef vm_region_flavor_t 4 4 signed
 typedef vm_region_basic_info_64_t 8 8
 typedef vm_region_basic_info_data_64_t 36 4
   protection 0
@@ -927,11 +928,11 @@ typedef vm_region_basic_info_data_t 32 4
   user_wired_count 28
 
 mach/mach_vm.h y
-typedef vm_map_t 4 4
-typedef vm_map_read_t 4 4
-typedef vm_map_inspect_t 4 4
-typedef vm_offset_t 8 8
-typedef vm_size_t 8 8
+typedef vm_map_t 4 4 unsigned
+typedef vm_map_read_t 4 4 unsigned
+typedef vm_map_inspect_t 4 4 unsigned
+typedef vm_offset_t 8 8 unsigned
+typedef vm_size_t 8 8 unsigned
 
 sys/sys_domain.h y
 struct sockaddr_sys 32 4
@@ -1065,7 +1066,7 @@ struct statvfs 64 8
   f_namemax 56
 
 sys/wait.h y
-typedef idtype_t 4 4
+typedef idtype_t 4 4 unsigned
 
 sys/resource.h y
 struct rlimit 16 8
@@ -1088,12 +1089,12 @@ struct rusage 144 8
   ru_nsignals 120
   ru_nvcsw 128
   ru_nivcsw 136
-typedef rlim_t 8 8
+typedef rlim_t 8 8 unsigned
 
 wctype.h y
-typedef wint_t 4 4
-typedef wctype_t 4 4
-typedef wctrans_t 4 4
+typedef wint_t 4 4 signed
+typedef wctype_t 4 4 unsigned
+typedef wctrans_t 4 4 signed
 
 sys/ioctl.h y
 struct winsize 8 2
@@ -1131,16 +1132,16 @@ struct termios 72 8
   c_cc 32
   c_ispeed 56
   c_ospeed 64
-typedef tcflag_t 8 8
-typedef cc_t 1 1
-typedef speed_t 8 8
+typedef tcflag_t 8 8 unsigned
+typedef cc_t 1 1 unsigned
+typedef speed_t 8 8 unsigned
 
 poll.h y
 struct pollfd 8 4
   fd 0
   events 4
   revents 6
-typedef nfds_t 4 4
+typedef nfds_t 4 4 unsigned
 
 glob.h y
 typedef glob_t 88 8
@@ -1158,7 +1159,7 @@ typedef glob_t 88 8
   gl_stat 80
 
 regex.h y
-typedef regoff_t 8 8
+typedef regoff_t 8 8 signed
 typedef regex_t 32 8
   re_magic 0
   re_nsub 8
@@ -1191,13 +1192,13 @@ typedef pthread_rwlockattr_t 24 8
   __sig 0
   __opaque 8
 typedef pthread_t 8 8
-typedef pthread_key_t 8 8
+typedef pthread_key_t 8 8 unsigned
 typedef pthread_once_t 16 8
   __sig 0
   __opaque 8
 
 semaphore.h y
-typedef sem_t 4 4
+typedef sem_t 4 4 signed
 
 aio.h y
 struct aiocb 80 8
@@ -1228,8 +1229,8 @@ struct entry 16 8
 typedef ENTRY 16 8
   key 0
   data 8
-typedef ACTION 4 4
-typedef VISIT 4 4
+typedef ACTION 4 4 unsigned
+typedef VISIT 4 4 unsigned
 
 utmpx.h y
 struct utmpx 640 8
@@ -1261,14 +1262,14 @@ typedef Dl_info 32 8
   dli_saddr 24
 
 fenv.h y
-typedef fexcept_t 2 2
+typedef fexcept_t 2 2 unsigned
 typedef fenv_t 16 8
   __fpsr 0
   __fpcr 8
 
 os/log.h y
 typedef os_log_t 8 8
-typedef os_log_type_t 1 1
+typedef os_log_type_t 1 1 unsigned
 
 os/lock.h y
 struct os_unfair_lock_s 4 4

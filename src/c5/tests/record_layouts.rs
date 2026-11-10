@@ -26,6 +26,8 @@ struct Record<'a> {
     tag: &'a str,
     size: usize,
     align: usize,
+    /// Whether an integer type a typedef names is signed.
+    signed: Option<bool>,
     members: Vec<(&'a str, Member)>,
 }
 
@@ -50,6 +52,7 @@ fn parse(table: &str) -> Vec<Header<'_>> {
                 tag: f[1],
                 size: num(2),
                 align: num(3),
+                signed: f.get(4).map(|s| *s == "signed"),
                 members: Vec::new(),
             });
         } else {
@@ -100,6 +103,11 @@ const DEPARTURES: &[(Target, &str, &str)] = &[
     ),
     (Target::WindowsX64, "typedef pthread_mutex_t", PTHREAD),
     (Target::WindowsX64, "typedef pthread_cond_t", PTHREAD),
+    (
+        Target::WindowsX64,
+        "typedef EXCEPTION_DISPOSITION",
+        "the SDK's enum, where mingw-w64 spells it as int",
+    ),
     (Target::WindowsX64, "struct _nlsversioninfo", NLS),
     (Target::WindowsX64, "typedef NLSVERSIONINFO", NLS),
 ];
@@ -139,6 +147,7 @@ fn check(target: Target, table: &str) {
                             t.size,
                             t.align,
                             t.record.map(|id| &program.structs[id].fields),
+                            t.signed,
                         )
                     })
             } else {
@@ -149,12 +158,27 @@ fn check(target: Target, table: &str) {
                             && s.is_union == (kind == "union")
                             && s.name == r.tag
                     })
-                    .map(|s| (s.size, s.align, Some(&s.fields)))
+                    .map(|s| (s.size, s.align, Some(&s.fields), None))
             };
-            let Some((size, align, fields)) = found else {
+            let Some((size, align, fields, signed)) = found else {
                 failures.push(format!("{header}: {kind} {} is not defined", r.tag));
                 continue;
             };
+            if r.signed.is_some() && signed != r.signed {
+                let s = |v: Option<bool>| {
+                    if v == Some(true) {
+                        "signed"
+                    } else {
+                        "not signed"
+                    }
+                };
+                failures.push(format!(
+                    "{header}: {kind} {} is {}, the reference's {}",
+                    r.tag,
+                    s(signed),
+                    s(r.signed)
+                ));
+            }
             if (size, align) != (r.size, r.align) {
                 failures.push(format!(
                     "{header}: {kind} {}: size {size} align {align}, the reference's {} {}",

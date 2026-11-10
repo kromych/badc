@@ -802,14 +802,15 @@ def run_jobs(b: Build, jobs) -> list[str]:
 
 def build_libffi(b: Build) -> str:
     """libffi-8.dll as prepare_libffi.bat builds it with cl: configure's
-    MSVC sources (the C files, and win64_intel.S for ml64 or
-    win64_armasm.S for armasm64, preprocessed by the compiler), FFI_BUILDING_DLL
-    for the exports, and the headers _ctypes reads from libffiIncludeDir.
-    TODO(#1980): the GNU-syntax win64.S once badc assembles `.seh_*`."""
+    MSVC sources (the C files, and win64_armasm.S for armasm64, preprocessed
+    by the compiler), FFI_BUILDING_DLL for the exports, and the headers
+    _ctypes reads from libffiIncludeDir. On x64 the GNU-syntax win64.S,
+    whose `.seh_*` directives give its functions their unwind rows, is
+    assembled by badc in place of win64_intel.S for ml64. On arm64 the C
+    side declares the HFA helpers only win64_armasm.S defines."""
     x64 = b.target == "windows-x64"
-    assembler = b.tc.ml if x64 else b.tc.armasm
-    if assembler is None:
-        return "no ml64 or armasm64 on this host for libffi's MSVC assembly source"
+    if not x64 and b.tc.armasm is None:
+        return "no armasm64 on this host for libffi's MSVC assembly source"
     src = fetch_external("libffi-3.4.4", b.log)
     out = Path(b.globals["libffiOutDir"])
     inc = out / "include"
@@ -838,23 +839,26 @@ def build_libffi(b: Build) -> str:
     incs = [inc, src / "include", arch_dir]
     defines = ["_MT", "_DLL", "_WINDLL", "FFI_BUILDING_DLL"]
     objs = [obj / f"{c.stem}.obj" for c in sources]
+    if x64:
+        sources.append(arch_dir / "win64.S")
+        objs.append(obj / "win64.obj")
     fails = run_jobs(b, [(c.name, b.tc.compile_cmd(c, o, defines, incs)) for c, o in zip(sources, objs)])
-    asm = arch_dir / ("win64_intel.S" if x64 else "win64_armasm.S")
-    pre = obj / f"{asm.stem}.asm"
-    cmd = [b.tc.badc, "-E", "-P", f"--target={b.target}", "--msvc", "-nostdlibinc", "-DLIBFFI_ASM"]
-    for d in b.tc.include + incs:
-        cmd += ["-I", str(d)]
-    r = run(cmd + [str(asm), "-o", str(pre)])
-    if r.returncode != 0:
-        fails.append(f"{asm.name}: {first_diagnostic(r.stderr, r.returncode)[:300]}")
-    else:
-        aobj = obj / f"{asm.stem}.obj"
-        acmd = ([str(assembler), "/nologo", "/c", f"/Fo{aobj}", str(pre)] if x64
-                else [str(assembler), "-nologo", "-o", str(aobj), str(pre)])
-        r = run(acmd)
+    if not x64:
+        asm = arch_dir / "win64_armasm.S"
+        pre = obj / f"{asm.stem}.asm"
+        cmd = [b.tc.badc, "-E", "-P", f"--target={b.target}", "--msvc", "-nostdlibinc",
+               "-DLIBFFI_ASM"]
+        for d in b.tc.include + incs:
+            cmd += ["-I", str(d)]
+        r = run(cmd + [str(asm), "-o", str(pre)])
         if r.returncode != 0:
-            fails.append(f"{asm.name}: {(r.stdout + r.stderr).strip().splitlines()[-1:]}")
-        objs.append(aobj)
+            fails.append(f"{asm.name}: {first_diagnostic(r.stderr, r.returncode)[:300]}")
+        else:
+            aobj = obj / f"{asm.stem}.obj"
+            r = run([str(b.tc.armasm), "-nologo", "-o", str(aobj), str(pre)])
+            if r.returncode != 0:
+                fails.append(f"{asm.name}: {(r.stdout + r.stderr).strip().splitlines()[-1:]}")
+            objs.append(aobj)
     if fails:
         return f"{len(fails)} unit(s) failed: {fails[0]}"
     dll = out / "libffi-8.dll"

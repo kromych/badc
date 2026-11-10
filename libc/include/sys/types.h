@@ -64,8 +64,10 @@ typedef unsigned int mode_t;
 // matters in struct layout (it sits in stat and in libc runtime state):
 // 4 bytes on macOS (`int32_t`) and Windows (`unsigned int`), 8 on Linux
 // (glibc `__dev_t` is `unsigned long`).
-#if defined(__APPLE__) || defined(__BADC_WINDOWS__)
+#if defined(__APPLE__)
 typedef int dev_t;
+#elif defined(__BADC_WINDOWS__)
+typedef unsigned int dev_t;
 #else
 typedef unsigned long dev_t;
 #endif
@@ -124,7 +126,7 @@ typedef long blkcnt64_t;
 // Unsigned 32-bit in glibc and Darwin; Winsock's socklen_t is `int`.
 #ifdef __BADC_WINDOWS__
 typedef int id_t;
-typedef int useconds_t;
+typedef unsigned int useconds_t;
 #else
 typedef unsigned int id_t;
 typedef unsigned int useconds_t;
@@ -136,7 +138,13 @@ typedef int suseconds_t;
 #endif
 #ifndef __BADC_CLOCKID_T
 #define __BADC_CLOCKID_T
+// The SDK's is an enum of non-negative clocks, unsigned as gcc and clang
+// give such an enum.
+#ifdef __APPLE__
+typedef unsigned int clockid_t;
+#else
 typedef int clockid_t;
+#endif
 #endif
 typedef int timer_id_t;
 // statvfs block and inode counts: the SDK's are 32-bit, glibc LP64's are

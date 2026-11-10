@@ -4568,6 +4568,33 @@ fn linux_can_socket_and_block_headers() {
     assert!(!compiles(wrong), "a wrong constant should fail to compile");
 }
 
+/// The C library's integer types keep its signedness: char16_t's atomic
+/// type is unsigned everywhere (C17 7.17.6), the SDK's clockid_t is an
+/// unsigned enum, and msvcrt's dev_t and useconds_t are unsigned.
+#[test]
+fn library_integer_types_have_the_c_librarys_signedness() {
+    use crate::{CompileOptions, Compiler, Target};
+    let check = |src: &str, target: Target| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let r = Compiler::with_options(src.to_string(), target, opts).compile();
+        assert!(r.is_ok(), "{target:?}: {:?}", r.err());
+    };
+    let atomics = "#include <stdatomic.h>\n\
+                   _Static_assert((atomic_char16_t)-1 > 0 && (atomic_char32_t)-1 > 0, \"u\");\n";
+    for target in Target::ALL {
+        check(atomics, target);
+    }
+    check(
+        "#include <time.h>\n_Static_assert((clockid_t)-1 > 0, \"clockid_t\");\n",
+        Target::MacOSAarch64,
+    );
+    check(
+        "#include <sys/types.h>\n\
+         _Static_assert((dev_t)-1 > 0 && (useconds_t)-1 > 0, \"msvcrt\");\n",
+        Target::WindowsX64,
+    );
+}
+
 #[test]
 fn lockf_commands_nodev_and_j1939_header() {
     use crate::{CompileOptions, Compiler, Target};

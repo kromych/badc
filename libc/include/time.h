@@ -225,7 +225,13 @@ errno_t _strtime_s(char *_Buf, size_t _SizeInBytes);
 // POSIX: <time.h> defines clockid_t, as <sys/types.h> does.
 #ifndef __BADC_CLOCKID_T
 #define __BADC_CLOCKID_T
+// The SDK's is an enum of non-negative clocks, unsigned as gcc and clang
+// give such an enum.
+#ifdef __APPLE__
+typedef unsigned int clockid_t;
+#else
 typedef int clockid_t;
+#endif
 #endif
 
 // C99 7.23.2: time / clock / mktime return time_t / clock_t. A return

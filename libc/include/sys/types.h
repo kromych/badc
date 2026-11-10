@@ -91,12 +91,13 @@ typedef unsigned int u_int;
 typedef unsigned long u_long;
 typedef __INT64_TYPE__ quad_t;
 typedef __UINT64_TYPE__ u_quad_t;
+// The file serial number: msvcrt's _ino_t, unsigned 64-bit elsewhere.
 #ifdef __BADC_WINDOWS__
-typedef long long ino_t;
-typedef long long ino64_t;
+typedef unsigned short ino_t;
+typedef unsigned long long ino64_t;
 #else
-typedef long ino_t;
-typedef long ino64_t;
+typedef unsigned long ino_t;
+typedef unsigned long ino64_t;
 #endif
 // The link count and the I/O block size: the SDK's uint16_t and int32_t,
 // glibc's unsigned long and long on x86_64, unsigned int and int on aarch64.

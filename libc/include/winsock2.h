@@ -45,9 +45,17 @@ struct sockaddr_in {
     struct in_addr sin_addr;
     char           sin_zero[8];
 };
+// in6addr.h: the address as bytes or 16-bit words.
 struct in6_addr {
-    unsigned char s6_addr[16];
+    union {
+        unsigned char Byte[16];
+        unsigned short Word[8];
+    } u;
 };
+#define in_addr6 in6_addr
+#define s6_addr  u.Byte
+#define s6_bytes u.Byte
+#define s6_words u.Word
 struct sockaddr_in6 {
     short          sin6_family;
     unsigned short sin6_port;

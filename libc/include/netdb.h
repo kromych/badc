@@ -43,14 +43,23 @@ struct addrinfo {
 };
 #endif
 
-// POSIX `struct servent` and `struct hostent` -- identical layout on every
-// supported target.
+// POSIX `struct servent` and `struct hostent`; Winsock's 64-bit servent
+// places s_proto before a short s_port, and its hostent has short members.
+#ifdef _WIN32
+struct servent {
+    char *s_name;
+    char **s_aliases;
+    char *s_proto;
+    short s_port;
+};
+#else
 struct servent {
     char *s_name;
     char **s_aliases;
     int s_port;
     char *s_proto;
 };
+#endif
 
 // `struct protoent` is provided by <winsock2.h> on Windows; defining it here as
 // well would redefine it wherever both headers are included (ws2tcpip.h pulls in
@@ -66,8 +75,13 @@ struct protoent {
 struct hostent {
     char *h_name;
     char **h_aliases;
+#ifdef _WIN32
+    short h_addrtype;
+    short h_length;
+#else
     int h_addrtype;
     int h_length;
+#endif
     char **h_addr_list;
 };
 // BSD/POSIX alias for the first resolved address.

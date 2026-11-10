@@ -29,8 +29,9 @@ typedef struct {
     union { unsigned int __wch; char __wchb[4]; } __value;
 } mbstate_t;
 #else
-// TODO(#2018): the C runtime's layout.
-typedef struct { unsigned char __opaque[128]; } mbstate_t;
+// msvcrt keeps an int at the start; the rest holds the <uchar.h> conversion
+// state libc/lib/uchar_ext.c carries between calls, which msvcrt lacks.
+typedef struct { int __state; unsigned char __opaque[124]; } mbstate_t;
 #endif
 
 // C17 7.29.1p2, as <stdint.h> defines them.

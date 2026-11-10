@@ -244,8 +244,11 @@ struct sockaddr_storage {
     char __ss_padding[118];
     unsigned long __ss_align;
 #elif defined(_WIN32)
+    // ws2def.h's members, aligned by the 64-bit integer at offset 8.
     unsigned short ss_family;
-    char ss_pad[126];
+    char __ss_pad1[6];
+    long long __ss_align;
+    char __ss_pad2[112];
 #endif
 };
 

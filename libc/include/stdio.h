@@ -64,9 +64,9 @@
 #define PATH_MAX     4096
 #endif
 
-// `FILE` and `fpos_t` (C17 7.21.1), opaque to the program, in the C
-// library's size and alignment: the SDK's 152-byte FILE and 64-bit fpos_t,
-// glibc's 216-byte FILE and 16-byte fpos_t of a position and an mbstate_t.
+// `FILE` and `fpos_t` (C17 7.21.1) in the C library's size and alignment:
+// the SDK's 152-byte FILE and 64-bit fpos_t, glibc's 216-byte FILE and
+// 16-byte fpos_t of a position and an mbstate_t, msvcrt's 48-byte FILE.
 #if defined(__APPLE__)
 struct __c5_FILE { union { char __opaque[152]; long __align; }; };
 typedef long long fpos_t;
@@ -75,10 +75,18 @@ struct __c5_FILE { union { char __opaque[216]; long __align; }; };
 struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
 typedef struct __c5_fpos_t fpos_t;
 #else
-// TODO(#2018): the C runtime's layouts.
-struct __c5_FILE { char __opaque[256]; };
-struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
-typedef struct __c5_fpos_t fpos_t;
+// msvcrt's _iobuf and 64-bit position.
+struct __c5_FILE {
+    char *_ptr;
+    int _cnt;
+    char *_base;
+    int _flag;
+    int _file;
+    int _charbuf;
+    int _bufsiz;
+    char *_tmpfname;
+};
+typedef long long fpos_t;
 #endif
 typedef struct __c5_FILE FILE;
 

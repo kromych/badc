@@ -29,13 +29,15 @@ typedef BTH_ADDR *PBTH_ADDR;
 #define SO_BTH_MTU_MAX  0x80000008
 #define SO_BTH_MTU_MIN  0x8000000a
 
-// SOCKADDR_BTH (ws2bth.h): AF_BTH socket address. Packed to 1 by the
-// pshpack1.h / poppack.h pair the consumer wraps it in.
+// SOCKADDR_BTH (ws2bth.h): AF_BTH socket address, packed to 1 as the SDK
+// header packs it.
+#pragma pack(push, 1)
 typedef struct _SOCKADDR_BTH {
     USHORT    addressFamily;
     BTH_ADDR  btAddr;
     GUID      serviceClassId;
     ULONG     port;
 } SOCKADDR_BTH;
+#pragma pack(pop)
 typedef struct _SOCKADDR_BTH *PSOCKADDR_BTH;
 #endif

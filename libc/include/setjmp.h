@@ -88,24 +88,21 @@ _Noreturn void longjmp(long long *env, int val);
 #define longjmp(env, val) __c5_msvcrt_longjmp((long long *)(env), (val))
 #else
 // msvcrt's `_setjmp` saves xmm6-xmm15 with `movdqa`, which needs `env`
-// 16-byte aligned; the typedef leaves 16 bytes of slack and the macros
-// align the address at the call, so `_setjmp` captures the calling frame
-// itself (a wrapper would violate C99 7.13.2.1: the function holding the
-// live setjmp must not have returned).
-typedef long long jmp_buf[34];
+// 16-byte aligned: the buffer is the CRT's sixteen 16-byte-aligned pairs.
+// The macros call `_setjmp` from the calling frame itself (a wrapper would
+// violate C99 7.13.2.1: the function holding the live setjmp must not have
+// returned).
+typedef __attribute__((aligned(16))) struct _SETJMP_FLOAT128 {
+    unsigned long long Part[2];
+} SETJMP_FLOAT128;
+typedef SETJMP_FLOAT128 jmp_buf[16];
 #pragma binding(msvcrt::__c5_msvcrt_setjmp, "_setjmp")
 #pragma binding(msvcrt::setjmp, "_setjmp")
 int __c5_msvcrt_setjmp(long long *env, void *frame);
 int setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
-#define setjmp(env) \
-    __c5_msvcrt_setjmp( \
-        (long long *)(((unsigned long long)(env) + 15ULL) & ~15ULL), \
-        __c5_establisher_frame())
-#define longjmp(env, val) \
-    __c5_msvcrt_longjmp( \
-        (long long *)(((unsigned long long)(env) + 15ULL) & ~15ULL), \
-        (val))
+#define setjmp(env) __c5_msvcrt_setjmp((long long *)(env), __c5_establisher_frame())
+#define longjmp(env, val) __c5_msvcrt_longjmp((long long *)(env), (val))
 #endif
 // msvcrt has no signal mask to save: sigsetjmp and siglongjmp are setjmp and
 // longjmp over the same buffer.

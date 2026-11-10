@@ -76,12 +76,6 @@ struct lconv {
     unsigned short *_W_mon_thousands_sep;
     unsigned short *_W_positive_sign;
     unsigned short *_W_negative_sign;
-    char int_p_cs_precedes;
-    char int_n_cs_precedes;
-    char int_p_sep_by_space;
-    char int_n_sep_by_space;
-    char int_p_sign_posn;
-    char int_n_sign_posn;
 };
 #else
 struct lconv {

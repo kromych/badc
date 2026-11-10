@@ -230,28 +230,28 @@ fn zmm_mem(base: Reg, disp: i32) -> super::asm::Concrete {
     }
 }
 
-/// `vmovups` of a 256- or 512-bit register from `[base + disp]`.
+/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register from `[base + disp]`.
 fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
     if w == VecWidth::V512 {
-        emit_zmm(code, "vmovups", &[zmm_mem(base, disp), zmm(dst)]);
+        emit_zmm(code, "vmovdqu64", &[zmm_mem(base, disp), zmm(dst)]);
     } else {
         emit_vmovups_ymm_mem(code, dst, base, disp);
     }
 }
 
-/// `vmovups` of a 256- or 512-bit register to `[base + disp]`.
+/// `vmovups` / `vmovdqu64` of a 256- or 512-bit register to `[base + disp]`.
 fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: Reg) {
     if w == VecWidth::V512 {
-        emit_zmm(code, "vmovups", &[zmm(src), zmm_mem(base, disp)]);
+        emit_zmm(code, "vmovdqu64", &[zmm(src), zmm_mem(base, disp)]);
     } else {
         emit_vmovups_mem_ymm(code, base, disp, src);
     }
 }
 
-/// `vmovaps` between 256- or 512-bit registers.
+/// `vmovaps` / `vmovdqa64` between 256- or 512-bit registers.
 fn emit_wide_mov(code: &mut Vec<u8>, w: VecWidth, dst: Reg, src: Reg) {
     if w == VecWidth::V512 {
-        emit_zmm(code, "vmovaps", &[zmm(src), zmm(dst)]);
+        emit_zmm(code, "vmovdqa64", &[zmm(src), zmm(dst)]);
     } else {
         emit_vmovaps_ymm_ymm(code, dst, src);
     }

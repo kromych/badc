@@ -1787,7 +1787,11 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Rand
         | Sem::Perm4x64
         | Sem::PermVar32
-        | Sem::Perm2x128 => false,
+        | Sem::Perm2x128
+        | Sem::ShufLanes128
+        | Sem::DotBytes(_)
+        | Sem::DotWords(_)
+        | Sem::TernLog => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
@@ -1982,6 +1986,89 @@ fn the_interpreter_computes_the_floating_rows_as_the_instructions_do() {
                 .expect("compile");
             let rc = super::Vm::new(program).run().expect("run");
             assert_eq!(rc, 0, "{fixture} {target:?}: row {rc} differs");
+        }
+    }
+}
+
+/// The AVX-512 rows compute what the SDM defines: VNNI's dot product into
+/// an accumulator, the ternary logic, vpsadbw, the cross-lane permutes,
+/// vpmovb2m and vpmaddubsw at 512 bits, each against the same operation
+/// written per element, in the interpreter at -O0 and -O, and each emits
+/// its EVEX instruction.
+#[test]
+fn avx512_rows_compute_and_emit_their_instructions() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str = "typedef long long v8di __attribute__((vector_size(64)));\n\
+typedef int v16si __attribute__((vector_size(64)));\n\
+typedef char v64qi __attribute__((vector_size(64)));\n\
+typedef short v32hi __attribute__((vector_size(64)));\n\
+static unsigned char A[64], B[64], C[64];\n\
+int main(void) {\n\
+    for (int i = 0; i < 64; i++) A[i] = (unsigned char)(i * 37 + 11), B[i] = (unsigned char)(200 - i * 13), C[i] = (unsigned char)(i * i);\n\
+    v64qi a, b, c;\n\
+    __builtin_memcpy(&a, A, 64); __builtin_memcpy(&b, B, 64); __builtin_memcpy(&c, C, 64);\n\
+    v16si d = __builtin_ia32_vpdpbusd512((v16si)c, (v16si)a, (v16si)b);\n\
+    for (int i = 0; i < 16; i++) {\n\
+        int e = ((int *)C)[i];\n\
+        for (int j = 0; j < 4; j++) e += A[4 * i + j] * (signed char)B[4 * i + j];\n\
+        if (d[i] != e) return 1;\n\
+    }\n\
+    v8di t = __builtin_ia32_pternlogq512((v8di)a, (v8di)b, (v8di)c, 0x96);\n\
+    for (int i = 0; i < 64; i++) if (((unsigned char *)&t)[i] != (unsigned char)(A[i] ^ B[i] ^ C[i])) return 2;\n\
+    v8di s = __builtin_ia32_psadbw512(a, b);\n\
+    for (int q = 0; q < 8; q++) { long long e = 0; for (int j = 0; j < 8; j++) { int x = A[8*q+j] - B[8*q+j]; e += x < 0 ? -x : x; } if (s[q] != e) return 3; }\n\
+    v16si idx; for (int i = 0; i < 16; i++) idx[i] = 15 - i;\n\
+    v16si p = __builtin_ia32_permvarsi512((v16si)a, idx);\n\
+    for (int i = 0; i < 16; i++) if (p[i] != ((int *)A)[15 - i]) return 4;\n\
+    v8di sh = __builtin_ia32_shuf_i64x2((v8di)a, (v8di)b, 0x4e);\n\
+    long long *la = (long long *)A, *lb = (long long *)B;\n\
+    long long want[8] = {la[4], la[5], la[6], la[7], lb[0], lb[1], lb[2], lb[3]};\n\
+    for (int i = 0; i < 8; i++) if (sh[i] != want[i]) return 5;\n\
+    v8di pq = __builtin_ia32_permdi512((v8di)a, 0x1b);\n\
+    for (int h = 0; h < 2; h++) for (int i = 0; i < 4; i++) if (pq[4*h+i] != la[4*h + 3 - i]) return 6;\n\
+    long long mm = __builtin_ia32_pmovmskb512(a);\n\
+    for (int i = 0; i < 64; i++) if (((mm >> i) & 1) != (A[i] >> 7)) return 7;\n\
+    v32hi mw = __builtin_ia32_pmaddubsw512(a, b);\n\
+    for (int i = 0; i < 32; i++) { int e = A[2*i] * (signed char)B[2*i] + A[2*i+1] * (signed char)B[2*i+1]; if (e > 32767) e = 32767; if (e < -32768) e = -32768; if (mw[i] != e) return 8; }\n\
+    return 0;\n\
+}\n\
+";
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+    #[cfg(feature = "full")]
+    {
+        let opts = CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            crate::NativeOptions::new().with_optimize(),
+        )
+        .expect("emit_native for linux-x64");
+        // EVEX: 62, then P0 with its opcode map in bits 2:0 and bit 3 clear
+        // (its high bits are the inverted register extensions, which the
+        // allocation moves), then P1 with bit 2 set.
+        for (map, what) in [
+            (2, "an EVEX 0F38 instruction"),
+            (3, "an EVEX 0F3A instruction"),
+        ] {
+            assert!(
+                bytes
+                    .windows(3)
+                    .any(|w| w[0] == 0x62 && w[1] & 0x0F == map && w[2] & 0x04 != 0),
+                "no {what}"
+            );
         }
     }
 }

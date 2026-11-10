@@ -4006,7 +4006,7 @@ fn run_x86_simd(
 ) -> Result<(), C5Error> {
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
-    if row.bytes == 32 {
+    if row.bytes >= 32 {
         return run_x86_simd_wide(mem, frame, row, imm, args);
     }
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
@@ -4034,6 +4034,12 @@ fn run_x86_simd(
     }
     let imm8 = imm.unwrap_or(0);
     match row.form {
+        Form::Vvv | Form::VvvI => {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: {} has no 16-byte form",
+                row.name
+            )));
+        }
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
             let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
@@ -4099,7 +4105,7 @@ fn run_x86_simd(
     Ok(())
 }
 
-/// [`run_x86_simd`] for an AVX2 form over 32-byte vectors
+/// [`run_x86_simd`] for an AVX2 or AVX-512 form over 32- or 64-byte vectors
 /// ([`crate::c5::x86_simd::eval_wide`]).
 fn run_x86_simd_wide(
     mem: &mut Memory,
@@ -4109,46 +4115,60 @@ fn run_x86_simd_wide(
     args: &[ValueId],
 ) -> Result<(), C5Error> {
     use crate::c5::x86_simd::{self, Form};
+    let n = usize::from(row.bytes);
     let operand = |i: usize| -> Result<usize, C5Error> {
         args.get(i)
             .map(|&a| frame.regs[a as usize] as usize)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {} lacks operand {i}", row.name)))
     };
-    let read = |mem: &Memory, addr: usize| -> Result<[u8; 32], C5Error> {
-        Ok(mem.read_bytes(addr, 32)?.try_into().unwrap())
+    let read = |mem: &Memory, addr: usize| -> Result<[u8; 64], C5Error> {
+        let mut v = [0u8; 64];
+        v[..n].copy_from_slice(mem.read_bytes(addr, n)?);
+        Ok(v)
     };
-    let (imm8, zero) = (imm.unwrap_or(0), [0u8; 32]);
+    let (imm8, zero) = (imm.unwrap_or(0), [0u8; 64]);
+    let eval = |a: &[u8; 64], b: &[u8; 64], c: &[u8; 64], count: u64| {
+        x86_simd::eval_wide(row.sem, (a, b, c), imm8, count, n)
+    };
     let out = match row.form {
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
-            x86_simd::eval_wide(row.sem, &a, &b, imm8, 0)
+            eval(&a, &b, &zero, 0)
         }
-        Form::V | Form::VI => {
-            x86_simd::eval_wide(row.sem, &read(mem, operand(1)?)?, &zero, imm8, 0)
+        Form::Vvv | Form::VvvI => {
+            let (a, b, c) = (
+                read(mem, operand(1)?)?,
+                read(mem, operand(2)?)?,
+                read(mem, operand(3)?)?,
+            );
+            eval(&a, &b, &c, 0)
         }
+        Form::V | Form::VI => eval(&read(mem, operand(1)?)?, &zero, &zero, 0),
         Form::Shift => {
             let count = match imm {
                 Some(n) => u64::from(n),
                 None => frame.regs[args[2] as usize] as u64,
             };
-            x86_simd::eval_wide(row.sem, &read(mem, operand(1)?)?, &zero, 0, count)
+            eval(&read(mem, operand(1)?)?, &zero, &zero, count)
         }
         Form::Load | Form::Store => read(mem, operand(1)?)?,
         Form::MoveMask => {
             let a = read(mem, operand(1)?)?;
-            let lo = x86_simd::eval_movemask(a[..16].try_into().unwrap());
-            let hi = x86_simd::eval_movemask(a[16..].try_into().unwrap());
-            mem.write_bytes(operand(0)?, &((lo | hi << 16) as i64).to_le_bytes())?;
+            let mut m = 0u64;
+            for k in (0..n).step_by(16) {
+                m |= x86_simd::eval_movemask(a[k..k + 16].try_into().unwrap()) << k;
+            }
+            mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
             return Ok(());
         }
         _ => {
             return Err(C5Error::Runtime(format!(
-                "vm_ssa: {} has no 32-byte form",
+                "vm_ssa: {} has no {n}-byte form",
                 row.name
             )));
         }
     };
-    mem.write_bytes(operand(0)?, &out)
+    mem.write_bytes(operand(0)?, &out[..n])
 }
 
 fn run_intrinsic(

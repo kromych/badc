@@ -15,8 +15,8 @@ pub(super) fn emit_x86_simd(
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
-    if x86_simd::get(op).bytes == 32 {
-        return emit_x86_simd_ymm(code, op, imm, args, alloc, frame);
+    if x86_simd::get(op).bytes >= 32 {
+        return emit_x86_simd_wide(code, op, imm, args, alloc, frame);
     }
     let dst_x: u8 = frame.fp_scratch[1];
     let src_x: u8 = frame.fp_scratch[0];
@@ -85,6 +85,7 @@ pub(super) fn emit_x86_simd(
     }
     let imm8 = Concrete::Imm(imm.unwrap_or(0) as i64);
     match row.form {
+        Form::Vvv | Form::VvvI => return fail("x86 simd: a three-source form is 32 bytes or more"),
         Form::Vv | Form::VvI => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
@@ -457,8 +458,8 @@ pub(super) fn emit_x86_simd_val(
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
-    if row.bytes == 32 {
-        return emit_x86_simd_val_ymm(code, op, imm, args, dst, alloc, frame);
+    if row.bytes >= 32 {
+        return emit_x86_simd_val_wide(code, op, imm, args, dst, alloc, frame);
     }
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let xmm = |n: u8| Concrete::Reg {
@@ -524,6 +525,7 @@ pub(super) fn emit_x86_simd_val(
         _ => fail("x86 simd: integer result not int reg / spill"),
     };
     let w = match row.form {
+        Form::Vvv | Form::VvvI => return fail("x86 simd: a three-source form is 32 bytes or more"),
         Form::Vv | Form::VvI => {
             let commutes = row.form == Form::Vv && row.sem.commutes();
             let imm = (row.form == Form::VvI).then(|| imm.unwrap_or(0));
@@ -1871,70 +1873,133 @@ pub(super) fn emit_atomic_cas(
     Ok(())
 }
 
-/// The operands of an AVX2 form in AT&T order for its VEX instruction:
-/// `[imm8,] src2, src1, dst` with `a` the first source; `vpermd` reads its
-/// indices from VEX.vvvv, its second operand, and a one-source form names
-/// no `b`.
-fn ymm_operands(
+/// A vector register of a 32- or 64-byte form: ymm or zmm `n`.
+fn wide_reg(bytes: u8, n: u8) -> super::asm::Concrete {
+    use super::asm::{Concrete, YMM_BASE, ZMM_BASE};
+    Concrete::Reg {
+        reg: if bytes == 64 { ZMM_BASE } else { YMM_BASE } + n,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+/// A source of a wide form: a register, or a vector in memory, which the
+/// instruction's last source may read in place.
+#[derive(Clone, Copy)]
+enum WideSrc {
+    Reg(u8),
+    Mem(Reg, i32),
+}
+
+/// The operands of a wide form in AT&T order for its VEX or EVEX
+/// instruction: `[imm8,] src2, src1, dst`, `a` the first source; `vpermd`
+/// reads its indices from VEX.vvvv, its second operand, and a one-source
+/// form names no `b`.
+fn wide_operands(
     row: &crate::c5::x86_simd::SimdOp,
     imm: Option<u8>,
     a: u8,
-    b: Option<u8>,
+    b: Option<WideSrc>,
     d: u8,
 ) -> alloc::vec::Vec<super::asm::Concrete> {
-    use super::asm::{Concrete, YMM_BASE};
+    use super::asm::Concrete;
     use crate::c5::x86_simd::{Form, Sem};
-    let ymm = |n: u8| Concrete::Reg {
-        reg: YMM_BASE + n,
-        size: crate::c5::ir::AsmRegSize::Quad,
+    let reg = |n: u8| wide_reg(row.bytes, n);
+    let src = |s: WideSrc| match s {
+        WideSrc::Reg(n) => reg(n),
+        WideSrc::Mem(base, disp) => Concrete::Mem {
+            base: base.0,
+            index: None,
+            scale: 1,
+            disp,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        },
     };
     let mut ops = alloc::vec::Vec::with_capacity(4);
-    if matches!(row.form, Form::VvI | Form::VI) {
+    if matches!(row.form, Form::VvI | Form::VI | Form::VvvI) {
         ops.push(Concrete::Imm(i64::from(imm.unwrap_or(0))));
     }
     match (b, row.sem) {
-        (Some(b), Sem::PermVar32) => ops.extend([ymm(a), ymm(b)]),
-        (Some(b), _) => ops.extend([ymm(b), ymm(a)]),
-        (None, _) => ops.push(ymm(a)),
+        (Some(b), Sem::PermVar32) => ops.extend([reg(a), src(b)]),
+        (Some(b), _) => ops.extend([src(b), reg(a)]),
+        (None, _) => ops.push(reg(a)),
     }
-    ops.push(ymm(d));
+    ops.push(reg(d));
     ops
 }
 
-fn encode_ymm(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) -> Emit {
-    let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+/// Encode a wide form; one naming a zmm register takes its EVEX row, as the
+/// assembler settles it for the same operands.
+fn encode_wide(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) -> Emit {
+    use super::asm::{Concrete, Mnemonic};
+    let zmm = ops
+        .iter()
+        .any(|o| matches!(*o, Concrete::Reg { reg, .. } if super::evex::reg_needs_evex(reg)));
+    let m = if zmm {
+        let lead_imm = matches!(ops.first(), Some(Concrete::Imm(_)));
+        match super::evex::op(mnem, lead_imm) {
+            Some(f) => Mnemonic::Evex(f),
+            None => return fail(alloc::format!("x86 simd: `{mnem}` has no EVEX form")),
+        }
+    } else {
+        super::asm::mnemonic_by_name(mnem).unwrap_or(Mnemonic::Table(mnem))
+    };
     super::asm::encode(code, 8, m, None, ops).or_else(|e| fail(alloc::format!("x86 simd: {e}")))
 }
 
-/// `vpsll*` / `vpsrl*` / `vpsra*` of ymm `a` into `d` by an immediate, or by
-/// the count operand moved into the low quadword of xmm `scratch`.
-fn ymm_shift(
+/// A shift of wide register `a` into `d` by an immediate, or by the count
+/// operand moved into the low quadword of xmm `scratch`.
+fn wide_shift(
     code: &mut Vec<u8>,
-    mnem: &'static str,
+    row: &crate::c5::x86_simd::SimdOp,
     imm: Option<u8>,
     count: Option<Reg>,
     (a, d, scratch): (u8, u8, u8),
 ) -> Emit {
-    use super::asm::{Concrete, XMM_BASE, YMM_BASE};
-    let reg = |base: u8, n: u8| Concrete::Reg {
-        reg: base + n,
-        size: crate::c5::ir::AsmRegSize::Quad,
-    };
+    use super::asm::{Concrete, XMM_BASE};
     let by = match (imm, count) {
         (Some(i), _) => Concrete::Imm(i64::from(i)),
         (None, Some(c)) => {
             emit_vmovq_xmm_r(code, Reg(scratch), c);
-            reg(XMM_BASE, scratch)
+            Concrete::Reg {
+                reg: XMM_BASE + scratch,
+                size: crate::c5::ir::AsmRegSize::Quad,
+            }
         }
         (None, None) => return fail("x86 simd: shift count has no place"),
     };
-    encode_ymm(code, mnem, &[by, reg(YMM_BASE, a), reg(YMM_BASE, d)])
+    encode_wide(
+        code,
+        row.mnem,
+        &[by, wide_reg(row.bytes, a), wide_reg(row.bytes, d)],
+    )
 }
 
-/// [`emit_x86_simd`] for an AVX2 form: the 32-byte operands load into the
-/// FP scratch ymm registers through their addresses, and the result
-/// stores through the destination's.
-fn emit_x86_simd_ymm(
+/// The sign bits of the bytes of wide register `a` into general register
+/// `r`: `vpmovmskb` of a ymm register, or `vpmovb2m` into k1 and `kmovq`
+/// of a zmm one, which has no `vpmovmskb`.
+fn wide_movemask(code: &mut Vec<u8>, row: &crate::c5::x86_simd::SimdOp, a: u8, r: Reg) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let gpr = |size| Concrete::Reg { reg: r.0, size };
+    if row.bytes == 64 {
+        let k1 = Concrete::Reg {
+            reg: super::asm::MASK_BASE + 1,
+            size: AsmRegSize::Quad,
+        };
+        encode_wide(code, "vpmovb2m", &[wide_reg(64, a), k1])?;
+        return encode_wide(code, "kmovq", &[k1, gpr(AsmRegSize::Quad)]);
+    }
+    encode_wide(
+        code,
+        row.mnem,
+        &[wide_reg(row.bytes, a), gpr(AsmRegSize::Long)],
+    )
+}
+
+/// [`emit_x86_simd`] for a 32- or 64-byte form: the operands load into the
+/// FP scratch registers through their addresses, a three-source form's last
+/// one read in place, and the result stores through the destination's.
+fn emit_x86_simd_wide(
     code: &mut Vec<u8>,
     op: u32,
     imm: Option<u8>,
@@ -1944,6 +2009,7 @@ fn emit_x86_simd_ymm(
 ) -> Emit {
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
+    let w = VecWidth::of_bytes(row.bytes);
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Emit<Reg> {
         let place = args
@@ -1956,27 +2022,26 @@ fn emit_x86_simd_ymm(
     };
     let load = |code: &mut Vec<u8>, i: usize, n: u8| -> Emit {
         let a = operand(code, i, SCRATCH_R10)?;
-        emit_vmovups_ymm_mem(code, Reg(n), a, 0);
-        Ok(())
-    };
-    let store_dst = |code: &mut Vec<u8>, n: u8| -> Emit {
-        let d = operand(code, 0, SCRATCH_R10)?;
-        emit_vmovups_mem_ymm(code, d, 0, Reg(n));
+        emit_wide_load(code, w, Reg(n), a, 0);
         Ok(())
     };
     match row.form {
         Form::Vv | Form::VvI => {
             load(code, 1, dst_x)?;
             load(code, 2, src_x)?;
-            encode_ymm(
-                code,
-                row.mnem,
-                &ymm_operands(row, imm, dst_x, Some(src_x), dst_x),
-            )?;
+            let ops = wide_operands(row, imm, dst_x, Some(WideSrc::Reg(src_x)), dst_x);
+            encode_wide(code, row.mnem, &ops)?;
+        }
+        Form::Vvv | Form::VvvI => {
+            load(code, 1, dst_x)?;
+            load(code, 2, src_x)?;
+            let c = operand(code, 3, SCRATCH_R11)?;
+            let ops = wide_operands(row, imm, src_x, Some(WideSrc::Mem(c, 0)), dst_x);
+            encode_wide(code, row.mnem, &ops)?;
         }
         Form::V | Form::VI => {
             load(code, 1, src_x)?;
-            encode_ymm(code, row.mnem, &ymm_operands(row, imm, src_x, None, dst_x))?;
+            encode_wide(code, row.mnem, &wide_operands(row, imm, src_x, None, dst_x))?;
         }
         Form::Shift => {
             load(code, 1, dst_x)?;
@@ -1984,39 +2049,34 @@ fn emit_x86_simd_ymm(
                 Some(_) => None,
                 None => Some(operand(code, 2, SCRATCH_R10)?),
             };
-            ymm_shift(code, row.mnem, imm, count, (dst_x, dst_x, src_x))?;
+            wide_shift(code, row, imm, count, (dst_x, dst_x, src_x))?;
         }
         Form::Load => load(code, 1, dst_x)?,
         Form::Store => {
             load(code, 1, dst_x)?;
             let p = operand(code, 0, SCRATCH_R10)?;
-            emit_vmovups_mem_ymm(code, p, 0, Reg(dst_x));
+            emit_wide_store(code, w, p, 0, Reg(dst_x));
             return Ok(());
         }
         Form::MoveMask => {
             load(code, 1, src_x)?;
-            let r11 = super::asm::Concrete::Reg {
-                reg: SCRATCH_R11.0,
-                size: crate::c5::ir::AsmRegSize::Long,
-            };
-            encode_ymm(
-                code,
-                row.mnem,
-                &[ymm_operands(row, None, src_x, None, 0)[0], r11],
-            )?;
+            wide_movemask(code, row, src_x, SCRATCH_R11)?;
             let d = operand(code, 0, SCRATCH_R10)?;
-            emit_mov_mem32_r(code, d, 0, SCRATCH_R11);
+            emit_mov_mem_r(code, d, 0, SCRATCH_R11);
             return Ok(());
         }
-        _ => return fail(alloc::format!("x86 simd: {} has no 32-byte form", row.name)),
+        _ => return fail(alloc::format!("x86 simd: {} has no wide form", row.name)),
     }
-    store_dst(code, dst_x)
+    let d = operand(code, 0, SCRATCH_R10)?;
+    emit_wide_store(code, w, d, 0, Reg(dst_x));
+    Ok(())
 }
 
-/// [`emit_x86_simd_val`] for an AVX2 form: the VEX instruction on the
-/// operands' ymm registers, a spilled one loaded into an FP scratch, and
-/// the result formed in its register or in a scratch it is stored from.
-fn emit_x86_simd_val_ymm(
+/// [`emit_x86_simd_val`] for a 32- or 64-byte form: the instruction on the
+/// operands' registers, a spilled one loaded into an FP scratch (the last
+/// source of a three-source form read from its spill slot), and the result
+/// formed in its register or in a scratch it is stored from.
+fn emit_x86_simd_val_wide(
     code: &mut Vec<u8>,
     op: u32,
     imm: Option<u8>,
@@ -2027,7 +2087,7 @@ fn emit_x86_simd_val_ymm(
 ) -> Emit {
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
-    let w = VecWidth::V256;
+    let w = VecWidth::of_bytes(row.bytes);
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let place = |i: usize| {
         args.get(i)
@@ -2047,11 +2107,41 @@ fn emit_x86_simd_val_ymm(
         Form::Vv | Form::VvI => {
             let a = vector(code, 0, sa)?;
             let b = vector(code, 1, sb)?;
-            encode_ymm(code, row.mnem, &ymm_operands(row, imm, a, Some(b), rd))?;
+            encode_wide(
+                code,
+                row.mnem,
+                &wide_operands(row, imm, a, Some(WideSrc::Reg(b)), rd),
+            )?;
+        }
+        Form::Vvv | Form::VvvI => {
+            // The accumulator is copied into the register the result forms
+            // in; that is a scratch when the destination holds a source.
+            let a = vector(code, 1, sb)?;
+            let c = match place(2) {
+                Some(Place::FpReg(r)) => WideSrc::Reg(r),
+                Some(Place::Spill(slot)) => {
+                    let (base, off) = wide_spill_addr(frame, w, slot);
+                    WideSrc::Mem(base, off)
+                }
+                _ => return fail("x86 simd: operand 2 has no place"),
+            };
+            let reads = |r: u8| a == r || matches!(c, WideSrc::Reg(x) if x == r);
+            let work = if reads(rd) && place(0) != Some(Place::FpReg(rd)) {
+                sa
+            } else {
+                rd
+            };
+            let acc = vector(code, 0, work)?;
+            if acc != work {
+                emit_wide_mov(code, w, Reg(work), Reg(acc));
+            }
+            encode_wide(code, row.mnem, &wide_operands(row, imm, a, Some(c), work))?;
+            mirror_wide_dst(code, w, dst, Reg(work), frame);
+            return Ok(());
         }
         Form::V | Form::VI => {
             let a = vector(code, 0, sa)?;
-            encode_ymm(code, row.mnem, &ymm_operands(row, imm, a, None, rd))?;
+            encode_wide(code, row.mnem, &wide_operands(row, imm, a, None, rd))?;
         }
         Form::Shift => {
             let a = vector(code, 0, sa)?;
@@ -2062,22 +2152,14 @@ fn emit_x86_simd_val_ymm(
                     None => return fail("x86 simd: shift count has no place"),
                 },
             };
-            ymm_shift(code, row.mnem, imm, count, (a, rd, sb))?;
+            wide_shift(code, row, imm, count, (a, rd, sb))?;
         }
         Form::MoveMask => {
             let a = vector(code, 0, sa)?;
-            let ymm_a = ymm_operands(row, None, a, None, 0)[0];
-            let form = |code: &mut Vec<u8>, r: Reg| {
-                let gpr = super::asm::Concrete::Reg {
-                    reg: r.0,
-                    size: crate::c5::ir::AsmRegSize::Long,
-                };
-                encode_ymm(code, row.mnem, &[ymm_a, gpr])
-            };
             return match dst {
-                Place::IntReg(r) => form(code, Reg(r)),
+                Place::IntReg(r) => wide_movemask(code, row, a, Reg(r)),
                 Place::Spill(slot) => {
-                    form(code, SCRATCH_R11)?;
+                    wide_movemask(code, row, a, SCRATCH_R11)?;
                     let (sbase, off) = spill_slot_addr(frame, slot);
                     emit_mov_mem_r(code, sbase, off, SCRATCH_R11);
                     Ok(())
@@ -2087,7 +2169,7 @@ fn emit_x86_simd_val_ymm(
         }
         _ => {
             return fail(alloc::format!(
-                "x86 simd: {} has no 32-byte value form",
+                "x86 simd: {} has no wide value form",
                 row.name
             ));
         }

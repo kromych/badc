@@ -406,6 +406,7 @@ impl Compiler {
                 | Form::MoveMask
                 | Form::ToInt => i == 0,
                 Form::Vv | Form::VvI => i < 2,
+                Form::Vvv | Form::VvvI => i < 3,
                 Form::Store => i == 1,
                 Form::Load | Form::RdRand => false,
             };

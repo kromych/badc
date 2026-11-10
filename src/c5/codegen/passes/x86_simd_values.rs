@@ -81,6 +81,7 @@ fn run_one(func: &mut FunctionSsa) {
             let (vload, vstore) = match row.bytes {
                 8 => (LoadKind::F64, StoreKind::F64),
                 32 => (LoadKind::V256, StoreKind::V256),
+                64 => (LoadKind::V512, StoreKind::V512),
                 _ => (LoadKind::V128, StoreKind::V128),
             };
             match row.form {
@@ -102,7 +103,7 @@ fn run_one(func: &mut FunctionSsa) {
                     let mut srcs = Vec::new();
                     for (k, &a) in args.iter().enumerate().skip(1) {
                         let vector = match row.form {
-                            Form::Vv | Form::VvI => true,
+                            Form::Vv | Form::VvI | Form::Vvv | Form::VvvI => true,
                             _ => k == 1,
                         };
                         srcs.push(if vector {
@@ -114,7 +115,7 @@ fn run_one(func: &mut FunctionSsa) {
                     let kind = match row.form {
                         f if f.returns_vector() => vstore,
                         Form::ToInt if row.int_width == 8 => StoreKind::I64,
-                        Form::Extract if row.int_width == 8 => StoreKind::I64,
+                        Form::Extract | Form::MoveMask if row.int_width == 8 => StoreKind::I64,
                         _ => StoreKind::I32,
                     };
                     push(&mut ins, At::After(v), store(args[0], v, kind, 0));

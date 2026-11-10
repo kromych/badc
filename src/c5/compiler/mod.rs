@@ -3650,6 +3650,35 @@ impl Compiler {
             }
             out.push((s.name.clone(), text));
         }
+        // A typedef name, as `typedef <name>`, with the type of a pointer to
+        // the type it names: `long*` for `typedef long ssize_t`. One naming
+        // a record or an enumeration is its spelling of that type.
+        for (idx, s) in self.symbols.iter().enumerate() {
+            if s.class != Token::Typedef as i64 || s.name.is_empty() || s.array_dims.len() > 1 {
+                continue;
+            }
+            let ty = s.type_;
+            let tagged = (types::is_struct_ty(ty) && types::struct_ptr_depth(ty) == 0)
+                || (types::enum_id_of(ty).is_some() && types::ptr_depth_of(ty) == 0);
+            let mut text = match (self.symbol_fn(idx), s.array_size) {
+                (Some((f, _)), 0) if s.is_function_type => {
+                    types::fn_type_spelling(ty, &f, 1, &structs)
+                }
+                (Some((f, depth)), 0) => {
+                    types::fn_type_spelling(types::add_ptr_level(ty), &f, depth + 1, &structs)
+                }
+                (Some(_), _) => continue,
+                (None, 0) if tagged => continue,
+                (None, 0) => alloc::format!("{}*", types::format_type(ty, &structs)),
+                (None, n) if n < 0 => continue,
+                (None, n) => alloc::format!("{} (*)[{n}]", types::format_type(ty, &structs)),
+            };
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
+            text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+            out.push((alloc::format!("typedef {}", s.name), text));
+        }
         out
     }
 

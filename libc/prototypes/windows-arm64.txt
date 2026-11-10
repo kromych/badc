@@ -99,6 +99,8 @@ _wtol	long (*)(const unsigned short*)
 _wtol_l	long (*)(const unsigned short*, _locale_tstruct*)
 abort	void (*)(void)
 abs	int (*)(int)
+aligned_alloc	void* (*)(unsigned long long, unsigned long long)
+alloca	void* (*)(unsigned long long)
 atexit	int (*)(void (*)(void))
 atof	double (*)(const char*)
 atoi	int (*)(const char*)
@@ -139,6 +141,18 @@ strtoll	long long (*)(const char*, char**, int)
 strtoul	unsigned long (*)(const char*, char**, int)
 strtoull	unsigned long long (*)(const char*, char**, int)
 system	int (*)(const char*)
+typedef __time32_t	long*
+typedef __time64_t	long long*
+typedef _locale_t	_locale_tstruct**
+typedef errno_t	int*
+typedef intptr_t	long long*
+typedef pthreadlocinfo	struct threadlocaleinfostruct**
+typedef pthreadmbcinfo	struct threadmbcinfostruct**
+typedef ptrdiff_t	long long*
+typedef rsize_t	unsigned long long*
+typedef size_t	unsigned long long*
+typedef uintptr_t	unsigned long long*
+typedef wchar_t	unsigned short*
 ultoa	char* (*)(unsigned long, char*, int)
 wcstod	double (*)(const unsigned short*, unsigned short**)
 wcstof	float (*)(const unsigned short*, unsigned short**)
@@ -149,6 +163,32 @@ wcstombs_s	int (*)(unsigned long long*, char*, unsigned long long, const unsigne
 wcstoul	unsigned long (*)(const unsigned short*, unsigned short**, int)
 wctomb	int (*)(char*, unsigned short)
 
+stdint.h y
+typedef int16_t	short*
+typedef int32_t	int*
+typedef int64_t	long long*
+typedef int8_t	signed char*
+typedef int_fast32_t	int*
+typedef int_fast64_t	long long*
+typedef int_fast8_t	signed char*
+typedef int_least16_t	short*
+typedef int_least32_t	int*
+typedef int_least64_t	long long*
+typedef int_least8_t	signed char*
+typedef intmax_t	long long*
+typedef uint16_t	unsigned short*
+typedef uint32_t	unsigned int*
+typedef uint64_t	unsigned long long*
+typedef uint8_t	unsigned char*
+typedef uint_fast32_t	unsigned int*
+typedef uint_fast64_t	unsigned long long*
+typedef uint_fast8_t	unsigned char*
+typedef uint_least16_t	unsigned short*
+typedef uint_least32_t	unsigned int*
+typedef uint_least64_t	unsigned long long*
+typedef uint_least8_t	unsigned char*
+typedef uintmax_t	unsigned long long*
+
 inttypes.h y
 imaxabs	long long (*)(long long)
 imaxdiv	imaxdiv_t (*)(long long, long long)
@@ -157,6 +197,8 @@ strtoumax	unsigned long long (*)(const char*, char**, int)
 
 setjmp.h y
 longjmp	void (*)(unsigned long long*, int)
+setjmp	int (*)(unsigned long long*)
+typedef jmp_buf	unsigned long long (*)[24]
 
 string.h y
 __wcserror	unsigned short* (*)(const unsigned short*)
@@ -220,6 +262,8 @@ strcspn	unsigned long long (*)(const char*, const char*)
 strdup	char* (*)(const char*)
 strerror	char* (*)(int)
 stricmp	int (*)(const char*, const char*)
+strlcat	unsigned long long (*)(char*, const char*, unsigned long long)
+strlcpy	unsigned long long (*)(char*, const char*, unsigned long long)
 strlen	unsigned long long (*)(const char*)
 strlwr	char* (*)(char*)
 strncat	char* (*)(char*, const char*, unsigned long long)
@@ -276,6 +320,14 @@ sched.h y
 sched_get_priority_max	int (*)(int)
 sched_get_priority_min	int (*)(int)
 sched_yield	int (*)(void)
+typedef clockid_t	int*
+typedef dev_t	unsigned int*
+typedef ino_t	unsigned short*
+typedef mode_t	unsigned short*
+typedef off64_t	long long*
+typedef ssize_t	long long*
+typedef time_t	long long*
+typedef useconds_t	unsigned int*
 
 stdio.h y
 __acrt_iob_func	FILE* (*)(unsigned int)
@@ -445,6 +497,8 @@ swscanf_s	int (*)(const unsigned short*, const unsigned short*, ...)
 tmpfile	FILE* (*)(void)
 tmpnam	char* (*)(char*)
 tmpnam_s	int (*)(char*, unsigned long long)
+typedef fpos_t	long long*
+typedef wint_t	unsigned short*
 ungetc	int (*)(int, FILE*)
 ungetwc	unsigned short (*)(unsigned short, FILE*)
 vfprintf	int (*)(FILE*, const char*, char*)
@@ -470,6 +524,46 @@ wprintf	int (*)(const unsigned short*, ...)
 wprintf_s	int (*)(const unsigned short*, ...)
 wscanf	int (*)(const unsigned short*, ...)
 wscanf_s	int (*)(const unsigned short*, ...)
+
+stdarg.h y
+typedef va_list	char**
+
+stdatomic.h y
+typedef atomic_bool	_Atomic _Bool*
+typedef atomic_char	_Atomic char*
+typedef atomic_char16_t	_Atomic unsigned short*
+typedef atomic_char32_t	_Atomic unsigned int*
+typedef atomic_int	_Atomic int*
+typedef atomic_int_fast32_t	_Atomic int*
+typedef atomic_int_fast64_t	_Atomic long long*
+typedef atomic_int_fast8_t	_Atomic signed char*
+typedef atomic_int_least16_t	_Atomic short*
+typedef atomic_int_least32_t	_Atomic int*
+typedef atomic_int_least64_t	_Atomic long long*
+typedef atomic_int_least8_t	_Atomic signed char*
+typedef atomic_intmax_t	_Atomic long long*
+typedef atomic_intptr_t	_Atomic long long*
+typedef atomic_llong	_Atomic long long*
+typedef atomic_long	_Atomic long*
+typedef atomic_ptrdiff_t	_Atomic long long*
+typedef atomic_schar	_Atomic signed char*
+typedef atomic_short	_Atomic short*
+typedef atomic_size_t	_Atomic unsigned long long*
+typedef atomic_uchar	_Atomic unsigned char*
+typedef atomic_uint	_Atomic unsigned int*
+typedef atomic_uint_fast32_t	_Atomic unsigned int*
+typedef atomic_uint_fast64_t	_Atomic unsigned long long*
+typedef atomic_uint_fast8_t	_Atomic unsigned char*
+typedef atomic_uint_least16_t	_Atomic unsigned short*
+typedef atomic_uint_least32_t	_Atomic unsigned int*
+typedef atomic_uint_least64_t	_Atomic unsigned long long*
+typedef atomic_uint_least8_t	_Atomic unsigned char*
+typedef atomic_uintmax_t	_Atomic unsigned long long*
+typedef atomic_uintptr_t	_Atomic unsigned long long*
+typedef atomic_ullong	_Atomic unsigned long long*
+typedef atomic_ulong	_Atomic unsigned long*
+typedef atomic_ushort	_Atomic unsigned short*
+typedef atomic_wchar_t	_Atomic unsigned short*
 
 ctype.h y
 __pctype_func	const unsigned short* (*)(void)
@@ -525,6 +619,7 @@ tolower	int (*)(int)
 toupper	int (*)(int)
 towlower	unsigned short (*)(unsigned short)
 towupper	unsigned short (*)(unsigned short)
+typedef wctype_t	unsigned short*
 
 math.h y
 acos	double (*)(double)
@@ -710,6 +805,7 @@ setlocale	char* (*)(int, const char*)
 signal.h y
 raise	int (*)(int)
 signal	void (*(*)(int, void (*)(int)))(int)
+typedef sig_atomic_t	int*
 
 time.h y
 _ctime32_s	int (*)(char*, unsigned long long, const long*)
@@ -745,6 +841,7 @@ nanosleep	int (*)(const struct timespec*, struct timespec*)
 strftime	unsigned long long (*)(char*, unsigned long long, const char*, const struct tm*)
 time	long long (*)(long long*)
 timezone	long*
+typedef clock_t	long*
 tzname	char* (*)[2]
 tzset	void (*)(void)
 wcsftime	unsigned long long (*)(unsigned short*, unsigned long long, const unsigned short*, const struct tm*)
@@ -807,6 +904,8 @@ mbrlen	unsigned long long (*)(const char*, unsigned long long, mbstate_t*)
 mbrtowc	unsigned long long (*)(unsigned short*, const char*, unsigned long long, mbstate_t*)
 mbsinit	int (*)(const mbstate_t*)
 mbsrtowcs	unsigned long long (*)(unsigned short*, const char**, unsigned long long, mbstate_t*)
+typedef char16_t	unsigned short*
+typedef char32_t	unsigned int*
 wcrtomb	unsigned long long (*)(char*, unsigned short, mbstate_t*)
 wcsrtombs	unsigned long long (*)(char*, const unsigned short**, unsigned long long, mbstate_t*)
 wcstoll	long long (*)(const unsigned short*, unsigned short**, int)
@@ -906,6 +1005,7 @@ creat	int (*)(const char*, int)
 
 wctype.h y
 towctrans	unsigned short (*)(unsigned short, unsigned short)
+typedef wctrans_t	unsigned short*
 wctrans	unsigned short (*)(const char*)
 wctype	unsigned short (*)(const char*)
 
@@ -959,6 +1059,11 @@ pthread_mutexattr_settype	int (*)(unsigned int*, int)
 pthread_once	int (*)(long*, void (*)(void))
 pthread_self	unsigned long long (*)(void)
 pthread_setspecific	int (*)(unsigned int, const void*)
+typedef pthread_condattr_t	int*
+typedef pthread_key_t	unsigned int*
+typedef pthread_mutexattr_t	unsigned int*
+typedef pthread_once_t	long*
+typedef pthread_t	unsigned long long*
 
 semaphore.h y
 sem_close	int (*)(void**)
@@ -971,6 +1076,7 @@ sem_timedwait	int (*)(void**, const struct timespec*)
 sem_trywait	int (*)(void**)
 sem_unlink	int (*)(const char*)
 sem_wait	int (*)(void**)
+typedef sem_t	void**
 
 search.h y
 _lfind	void* (*)(const void*, const void*, unsigned int*, unsigned int, int (*)(const void*, const void*))
@@ -995,6 +1101,7 @@ fesetexceptflag	int (*)(const unsigned long*, int)
 fesetround	int (*)(int)
 fetestexcept	int (*)(int)
 feupdateenv	int (*)(const fenv_t*)
+typedef fexcept_t	unsigned long*
 
 direct.h y
 _chdir	int (*)(const char*)
@@ -1925,6 +2032,744 @@ sendto	int (*)(unsigned long long, const char*, int, int, const SOCKADDR*, int)
 setsockopt	int (*)(unsigned long long, int, int, const char*, int)
 shutdown	int (*)(unsigned long long, int)
 socket	unsigned long long (*)(int, int, int)
+typedef ABORTPROC	int (**)(struct HDC__*, int)
+typedef ACCESS_MASK	unsigned long*
+typedef ADDRESS_FAMILY	unsigned short*
+typedef ATOM	unsigned short*
+typedef BCHAR	unsigned char*
+typedef BCRYPT_ALG_HANDLE	void**
+typedef BCRYPT_HANDLE	void**
+typedef BOOL	int*
+typedef BOOLEAN	unsigned char*
+typedef BYTE	unsigned char*
+typedef CHAR	char*
+typedef COLOR16	unsigned short*
+typedef COLORREF	unsigned long*
+typedef DLL_DIRECTORY_COOKIE	void**
+typedef DWORD	unsigned long*
+typedef DWORD32	unsigned int*
+typedef DWORD64	unsigned long long*
+typedef DWORDLONG	unsigned long long*
+typedef DWORD_PTR	unsigned long long*
+typedef ENHMFENUMPROC	int (**)(struct HDC__*, HANDLETABLE*, const ENHMETARECORD*, int, long long)
+typedef EXCEPTION_ROUTINE	EXCEPTION_DISPOSITION (*)(EXCEPTION_RECORD*, void*, ARM64_NT_CONTEXT*, void*)
+typedef EXECUTION_STATE	unsigned long*
+typedef FARPROC	long long (**)()
+typedef FLOAT	float*
+typedef FONTENUMPROC	int (**)(const LOGFONTA*, const TEXTMETRICA*, unsigned long, long long)
+typedef FONTENUMPROCA	int (**)(const LOGFONTA*, const TEXTMETRICA*, unsigned long, long long)
+typedef FONTENUMPROCW	int (**)(const LOGFONTW*, const TEXTMETRICW*, unsigned long, long long)
+typedef FXPT16DOT16	long*
+typedef FXPT2DOT30	long*
+typedef GLOBALHANDLE	void**
+typedef GOBJENUMPROC	int (**)(void*, long long)
+typedef GROUP	unsigned int*
+typedef HACCEL	struct HACCEL__**
+typedef HANDLE	void**
+typedef HBITMAP	struct HBITMAP__**
+typedef HBRUSH	struct HBRUSH__**
+typedef HCOLORSPACE	struct HCOLORSPACE__**
+typedef HCRYPTHASH	unsigned long long*
+typedef HCRYPTKEY	unsigned long long*
+typedef HCRYPTPROV	unsigned long long*
+typedef HCURSOR	struct HICON__**
+typedef HDC	struct HDC__**
+typedef HDESK	struct HDESK__**
+typedef HDROP	struct HDROP__**
+typedef HENHMETAFILE	struct HENHMETAFILE__**
+typedef HFILE	int*
+typedef HFONT	struct HFONT__**
+typedef HGDIOBJ	void**
+typedef HGLOBAL	void**
+typedef HGLRC	struct HGLRC__**
+typedef HHOOK	struct HHOOK__**
+typedef HICON	struct HICON__**
+typedef HINSTANCE	struct HINSTANCE__**
+typedef HKEY	struct HKEY__**
+typedef HKL	struct HKL__**
+typedef HLOCAL	void**
+typedef HLSURF	struct HLSURF__**
+typedef HMENU	struct HMENU__**
+typedef HMETAFILE	struct HMETAFILE__**
+typedef HMODULE	struct HINSTANCE__**
+typedef HMONITOR	struct HMONITOR__**
+typedef HPALETTE	struct HPALETTE__**
+typedef HPEN	struct HPEN__**
+typedef HRAWINPUT	struct HRAWINPUT__**
+typedef HRESULT	long*
+typedef HRGN	struct HRGN__**
+typedef HRSRC	struct HRSRC__**
+typedef HSPRITE	struct HSPRITE__**
+typedef HSTR	struct HSTR__**
+typedef HTASK	struct HTASK__**
+typedef HUMPD	struct HUMPD__**
+typedef HWINEVENTHOOK	struct HWINEVENTHOOK__**
+typedef HWINSTA	struct HWINSTA__**
+typedef HWND	struct HWND__**
+typedef ICMENUMPROCA	int (**)(char*, long long)
+typedef ICMENUMPROCW	int (**)(unsigned short*, long long)
+typedef INT	int*
+typedef INT16	short*
+typedef INT32	int*
+typedef INT64	long long*
+typedef INT8	signed char*
+typedef INT_PTR	long long*
+typedef KAFFINITY	unsigned long long*
+typedef LANGID	unsigned short*
+typedef LCID	unsigned long*
+typedef LCSCSTYPE	long*
+typedef LCSGAMUTMATCH	long*
+typedef LCTYPE	unsigned long*
+typedef LINEDDAPROC	void (**)(int, int, long long)
+typedef LOCALHANDLE	void**
+typedef LONG	long*
+typedef LONG32	int*
+typedef LONG64	long long*
+typedef LONGLONG	long long*
+typedef LONG_PTR	long long*
+typedef LPABC	ABC**
+typedef LPABCFLOAT	ABCFLOAT**
+typedef LPARAM	long long*
+typedef LPAXESLIST	AXESLISTA**
+typedef LPAXESLISTA	AXESLISTA**
+typedef LPAXESLISTW	AXESLISTW**
+typedef LPAXISINFO	AXISINFOA**
+typedef LPAXISINFOA	AXISINFOA**
+typedef LPAXISINFOW	AXISINFOW**
+typedef LPBITMAP	BITMAP**
+typedef LPBITMAPCOREHEADER	BITMAPCOREHEADER**
+typedef LPBITMAPCOREINFO	BITMAPCOREINFO**
+typedef LPBITMAPFILEHEADER	BITMAPFILEHEADER**
+typedef LPBITMAPINFO	BITMAPINFO**
+typedef LPBITMAPINFOHEADER	BITMAPINFOHEADER**
+typedef LPBITMAPV4HEADER	BITMAPV4HEADER**
+typedef LPBITMAPV5HEADER	BITMAPV5HEADER**
+typedef LPBOOL	int**
+typedef LPBYTE	unsigned char**
+typedef LPBY_HANDLE_FILE_INFORMATION	BY_HANDLE_FILE_INFORMATION**
+typedef LPCCH	const char**
+typedef LPCH	char**
+typedef LPCHARSETINFO	CHARSETINFO**
+typedef LPCIEXYZ	CIEXYZ**
+typedef LPCIEXYZTRIPLE	CIEXYZTRIPLE**
+typedef LPCOLORADJUSTMENT	COLORADJUSTMENT**
+typedef LPCOLORREF	unsigned long**
+typedef LPCRECT	const RECT**
+typedef LPCRECTL	const RECTL**
+typedef LPCRITICAL_SECTION	RTL_CRITICAL_SECTION**
+typedef LPCSTR	const char**
+typedef LPCTSTR	const char**
+typedef LPCVOID	const void**
+typedef LPCWCH	const unsigned short**
+typedef LPCWSTR	const unsigned short**
+typedef LPDESIGNVECTOR	DESIGNVECTOR**
+typedef LPDEVMODE	DEVMODEA**
+typedef LPDEVMODEA	DEVMODEA**
+typedef LPDEVMODEW	DEVMODEW**
+typedef LPDIBSECTION	DIBSECTION**
+typedef LPDISPLAY_DEVICE	DISPLAY_DEVICEA**
+typedef LPDISPLAY_DEVICEA	DISPLAY_DEVICEA**
+typedef LPDISPLAY_DEVICEW	DISPLAY_DEVICEW**
+typedef LPDOCINFO	DOCINFOA**
+typedef LPDOCINFOA	DOCINFOA**
+typedef LPDOCINFOW	DOCINFOW**
+typedef LPDWORD	unsigned long**
+typedef LPENHMETAHEADER	ENHMETAHEADER**
+typedef LPENHMETARECORD	ENHMETARECORD**
+typedef LPENUMLOGFONT	ENUMLOGFONTA**
+typedef LPENUMLOGFONTA	ENUMLOGFONTA**
+typedef LPENUMLOGFONTEX	ENUMLOGFONTEXA**
+typedef LPENUMLOGFONTEXA	ENUMLOGFONTEXA**
+typedef LPENUMLOGFONTEXDV	ENUMLOGFONTEXDVA**
+typedef LPENUMLOGFONTEXDVA	ENUMLOGFONTEXDVA**
+typedef LPENUMLOGFONTEXDVW	ENUMLOGFONTEXDVW**
+typedef LPENUMLOGFONTEXW	ENUMLOGFONTEXW**
+typedef LPENUMLOGFONTW	ENUMLOGFONTW**
+typedef LPENUMTEXTMETRIC	ENUMTEXTMETRICA**
+typedef LPENUMTEXTMETRICA	ENUMTEXTMETRICA**
+typedef LPENUMTEXTMETRICW	ENUMTEXTMETRICW**
+typedef LPEXCEPTION_POINTERS	EXCEPTION_POINTERS**
+typedef LPEXTLOGFONT	EXTLOGFONTA**
+typedef LPEXTLOGFONTA	EXTLOGFONTA**
+typedef LPEXTLOGFONTW	EXTLOGFONTW**
+typedef LPEXTLOGPEN	EXTLOGPEN**
+typedef LPEXTLOGPEN32	EXTLOGPEN32**
+typedef LPFILETIME	FILETIME**
+typedef LPFNDEVCAPS	unsigned long (**)(char*, char*, unsigned int, char*, DEVMODEA*)
+typedef LPFNDEVMODE	unsigned int (**)(struct HWND__*, struct HINSTANCE__*, DEVMODEA*, char*, char*, DEVMODEA*, char*, unsigned int)
+typedef LPFONTSIGNATURE	FONTSIGNATURE**
+typedef LPFXPT16DOT16	long**
+typedef LPFXPT2DOT30	long**
+typedef LPGCP_RESULTS	GCP_RESULTSA**
+typedef LPGCP_RESULTSA	GCP_RESULTSA**
+typedef LPGCP_RESULTSW	GCP_RESULTSW**
+typedef LPGLYPHMETRICS	GLYPHMETRICS**
+typedef LPGLYPHMETRICSFLOAT	GLYPHMETRICSFLOAT**
+typedef LPGLYPHSET	GLYPHSET**
+typedef LPGRADIENT_RECT	GRADIENT_RECT**
+typedef LPGRADIENT_TRIANGLE	GRADIENT_TRIANGLE**
+typedef LPGUID	GUID**
+typedef LPHANDLE	void***
+typedef LPHANDLETABLE	HANDLETABLE**
+typedef LPINIT_ONCE	RTL_RUN_ONCE**
+typedef LPINT	int**
+typedef LPKERNINGPAIR	KERNINGPAIR**
+typedef LPLAYERPLANEDESCRIPTOR	LAYERPLANEDESCRIPTOR**
+typedef LPLOCALESIGNATURE	LOCALESIGNATURE**
+typedef LPLOGBRUSH	LOGBRUSH**
+typedef LPLOGBRUSH32	LOGBRUSH32**
+typedef LPLOGCOLORSPACE	LOGCOLORSPACEA**
+typedef LPLOGCOLORSPACEA	LOGCOLORSPACEA**
+typedef LPLOGCOLORSPACEW	LOGCOLORSPACEW**
+typedef LPLOGFONT	LOGFONTA**
+typedef LPLOGFONTA	LOGFONTA**
+typedef LPLOGFONTW	LOGFONTW**
+typedef LPLOGPALETTE	LOGPALETTE**
+typedef LPLOGPEN	LOGPEN**
+typedef LPLONG	long**
+typedef LPMAT2	MAT2**
+typedef LPMETAFILEPICT	METAFILEPICT**
+typedef LPMETAHEADER	METAHEADER**
+typedef LPMETARECORD	METARECORD**
+typedef LPMONITORINFO	MONITORINFO**
+typedef LPMONITORINFOEX	MONITORINFOEXA**
+typedef LPMONITORINFOEXA	MONITORINFOEXA**
+typedef LPMONITORINFOEXW	MONITORINFOEXW**
+typedef LPMSG	MSG**
+typedef LPNEWTEXTMETRIC	NEWTEXTMETRICA**
+typedef LPNEWTEXTMETRICA	NEWTEXTMETRICA**
+typedef LPNEWTEXTMETRICW	NEWTEXTMETRICW**
+typedef LPNLSVERSIONINFO	NLSVERSIONINFO**
+typedef LPOSVERSIONINFO	OSVERSIONINFOA**
+typedef LPOSVERSIONINFOA	OSVERSIONINFOA**
+typedef LPOSVERSIONINFOEX	OSVERSIONINFOEXA**
+typedef LPOSVERSIONINFOEXA	OSVERSIONINFOEXA**
+typedef LPOSVERSIONINFOEXW	OSVERSIONINFOEXW**
+typedef LPOSVERSIONINFOW	OSVERSIONINFOW**
+typedef LPOUTLINETEXTMETRIC	OUTLINETEXTMETRICA**
+typedef LPOUTLINETEXTMETRICA	OUTLINETEXTMETRICA**
+typedef LPOUTLINETEXTMETRICW	OUTLINETEXTMETRICW**
+typedef LPOVERLAPPED	OVERLAPPED**
+typedef LPPAINTSTRUCT	PAINTSTRUCT**
+typedef LPPALETTEENTRY	PALETTEENTRY**
+typedef LPPANOSE	PANOSE**
+typedef LPPATTERN	LOGBRUSH**
+typedef LPPELARRAY	PELARRAY**
+typedef LPPIXELFORMATDESCRIPTOR	PIXELFORMATDESCRIPTOR**
+typedef LPPOINT	POINT**
+typedef LPPOINTFX	POINTFX**
+typedef LPPOINTS	POINTS**
+typedef LPPOLYTEXT	POLYTEXTA**
+typedef LPPOLYTEXTA	POLYTEXTA**
+typedef LPPOLYTEXTW	POLYTEXTW**
+typedef LPPROCESS_INFORMATION	PROCESS_INFORMATION**
+typedef LPQOS	QOS**
+typedef LPRASTERIZER_STATUS	RASTERIZER_STATUS**
+typedef LPRECT	RECT**
+typedef LPRECTL	RECTL**
+typedef LPRGBQUAD	RGBQUAD**
+typedef LPRGBTRIPLE	RGBTRIPLE**
+typedef LPRGNDATA	RGNDATA**
+typedef LPSECURITY_ATTRIBUTES	SECURITY_ATTRIBUTES**
+typedef LPSIZE	SIZE**
+typedef LPSIZEL	SIZE**
+typedef LPSOCKADDR	SOCKADDR**
+typedef LPSOCKADDR_IN	SOCKADDR_IN**
+typedef LPSTARTUPINFO	STARTUPINFOA**
+typedef LPSTARTUPINFOA	STARTUPINFOA**
+typedef LPSTARTUPINFOEX	STARTUPINFOEXA**
+typedef LPSTARTUPINFOEXA	STARTUPINFOEXA**
+typedef LPSTARTUPINFOEXW	STARTUPINFOEXW**
+typedef LPSTARTUPINFOW	STARTUPINFOW**
+typedef LPSTR	char**
+typedef LPSYSTEMTIME	SYSTEMTIME**
+typedef LPSYSTEM_INFO	SYSTEM_INFO**
+typedef LPTEXTMETRIC	TEXTMETRICA**
+typedef LPTEXTMETRICA	TEXTMETRICA**
+typedef LPTEXTMETRICW	TEXTMETRICW**
+typedef LPTHREAD_START_ROUTINE	unsigned long (**)(void*)
+typedef LPTIME_ZONE_INFORMATION	TIME_ZONE_INFORMATION**
+typedef LPTOP_LEVEL_EXCEPTION_FILTER	long (**)(EXCEPTION_POINTERS*)
+typedef LPTRIVERTEX	TRIVERTEX**
+typedef LPTSTR	char**
+typedef LPTTPOLYCURVE	TTPOLYCURVE**
+typedef LPTTPOLYGONHEADER	TTPOLYGONHEADER**
+typedef LPVOID	void**
+typedef LPWCH	unsigned short**
+typedef LPWCRANGE	WCRANGE**
+typedef LPWGLSWAP	WGLSWAP**
+typedef LPWIN32_FILE_ATTRIBUTE_DATA	WIN32_FILE_ATTRIBUTE_DATA**
+typedef LPWIN32_FIND_DATA	WIN32_FIND_DATAA**
+typedef LPWIN32_FIND_DATAA	WIN32_FIND_DATAA**
+typedef LPWIN32_FIND_DATAW	WIN32_FIND_DATAW**
+typedef LPWINDOWPLACEMENT	WINDOWPLACEMENT**
+typedef LPWNDCLASS	WNDCLASSA**
+typedef LPWNDCLASSA	WNDCLASSA**
+typedef LPWNDCLASSW	WNDCLASSW**
+typedef LPWORD	unsigned short**
+typedef LPWSABUF	WSABUF**
+typedef LPWSADATA	WSADATA**
+typedef LPWSAEVENT	void***
+typedef LPWSANETWORKEVENTS	WSANETWORKEVENTS**
+typedef LPWSAOVERLAPPED	OVERLAPPED**
+typedef LPWSAOVERLAPPED_COMPLETION_ROUTINE	void (**)(unsigned long, unsigned long, OVERLAPPED*, unsigned long)
+typedef LPWSAPROTOCOL_INFO	WSAPROTOCOL_INFOA**
+typedef LPWSAPROTOCOL_INFOA	WSAPROTOCOL_INFOA**
+typedef LPWSAPROTOCOL_INFOW	WSAPROTOCOL_INFOW**
+typedef LPWSTR	unsigned short**
+typedef LPXFORM	XFORM**
+typedef LRESULT	long long*
+typedef LSTATUS	long*
+typedef MFENUMPROC	int (**)(struct HDC__*, HANDLETABLE*, METARECORD*, int, long long)
+typedef MONITORENUMPROC	int (**)(struct HMONITOR__*, struct HDC__*, RECT*, long long)
+typedef NEARPROC	long long (**)()
+typedef NPABC	ABC**
+typedef NPABCFLOAT	ABCFLOAT**
+typedef NPBITMAP	BITMAP**
+typedef NPCHARSETINFO	CHARSETINFO**
+typedef NPDEVMODE	DEVMODEA**
+typedef NPDEVMODEA	DEVMODEA**
+typedef NPDEVMODEW	DEVMODEW**
+typedef NPEXTLOGFONT	EXTLOGFONTA**
+typedef NPEXTLOGFONTA	EXTLOGFONTA**
+typedef NPEXTLOGFONTW	EXTLOGFONTW**
+typedef NPEXTLOGPEN	EXTLOGPEN**
+typedef NPEXTLOGPEN32	EXTLOGPEN32**
+typedef NPLOGBRUSH	LOGBRUSH**
+typedef NPLOGBRUSH32	LOGBRUSH32**
+typedef NPLOGFONT	LOGFONTA**
+typedef NPLOGFONTA	LOGFONTA**
+typedef NPLOGFONTW	LOGFONTW**
+typedef NPLOGPALETTE	LOGPALETTE**
+typedef NPLOGPEN	LOGPEN**
+typedef NPNEWTEXTMETRIC	NEWTEXTMETRICA**
+typedef NPNEWTEXTMETRICA	NEWTEXTMETRICA**
+typedef NPNEWTEXTMETRICW	NEWTEXTMETRICW**
+typedef NPOUTLINETEXTMETRIC	OUTLINETEXTMETRICA**
+typedef NPOUTLINETEXTMETRICA	OUTLINETEXTMETRICA**
+typedef NPOUTLINETEXTMETRICW	OUTLINETEXTMETRICW**
+typedef NPPATTERN	LOGBRUSH**
+typedef NPPELARRAY	PELARRAY**
+typedef NPPOINT	POINT**
+typedef NPPOLYTEXT	POLYTEXTA**
+typedef NPPOLYTEXTA	POLYTEXTA**
+typedef NPPOLYTEXTW	POLYTEXTW**
+typedef NPRECT	RECT**
+typedef NPRGBTRIPLE	RGBTRIPLE**
+typedef NPRGNDATA	RGNDATA**
+typedef NPSTR	char**
+typedef NPTEXTMETRIC	TEXTMETRICA**
+typedef NPTEXTMETRICA	TEXTMETRICA**
+typedef NPTEXTMETRICW	TEXTMETRICW**
+typedef NTSTATUS	long*
+typedef NWPSTR	unsigned short**
+typedef OLDFONTENUMPROCA	int (**)(const LOGFONTA*, const TEXTMETRICA*, unsigned long, long long)
+typedef OLDFONTENUMPROCW	int (**)(const LOGFONTW*, const TEXTMETRICW*, unsigned long, long long)
+typedef PABC	ABC**
+typedef PABCFLOAT	ABCFLOAT**
+typedef PACCESS_MASK	unsigned long**
+typedef PARM64_NT_CONTEXT	ARM64_NT_CONTEXT**
+typedef PARM64_NT_NEON128	ARM64_NT_NEON128**
+typedef PAXESLIST	AXESLISTA**
+typedef PAXESLISTA	AXESLISTA**
+typedef PAXESLISTW	AXESLISTW**
+typedef PAXISINFO	AXISINFOA**
+typedef PAXISINFOA	AXISINFOA**
+typedef PAXISINFOW	AXISINFOW**
+typedef PBITMAP	BITMAP**
+typedef PBITMAPCOREHEADER	BITMAPCOREHEADER**
+typedef PBITMAPCOREINFO	BITMAPCOREINFO**
+typedef PBITMAPFILEHEADER	BITMAPFILEHEADER**
+typedef PBITMAPINFO	BITMAPINFO**
+typedef PBITMAPINFOHEADER	BITMAPINFOHEADER**
+typedef PBITMAPV4HEADER	BITMAPV4HEADER**
+typedef PBITMAPV5HEADER	BITMAPV5HEADER**
+typedef PBLENDFUNCTION	BLENDFUNCTION**
+typedef PBOOL	int**
+typedef PBYTE	unsigned char**
+typedef PBY_HANDLE_FILE_INFORMATION	BY_HANDLE_FILE_INFORMATION**
+typedef PCCH	const char**
+typedef PCH	char**
+typedef PCHAR	char**
+typedef PCHARSETINFO	CHARSETINFO**
+typedef PCHAR_INFO	CHAR_INFO**
+typedef PCNZCH	const char**
+typedef PCNZWCH	const unsigned short**
+typedef PCOLORADJUSTMENT	COLORADJUSTMENT**
+typedef PCONDITION_VARIABLE	RTL_CONDITION_VARIABLE**
+typedef PCONSOLE_READCONSOLE_CONTROL	CONSOLE_READCONSOLE_CONTROL**
+typedef PCONSOLE_SCREEN_BUFFER_INFO	CONSOLE_SCREEN_BUFFER_INFO**
+typedef PCONTEXT	ARM64_NT_CONTEXT**
+typedef PCOORD	COORD**
+typedef PCRAWINPUTDEVICE	const RAWINPUTDEVICE**
+typedef PCRITICAL_SECTION	RTL_CRITICAL_SECTION**
+typedef PCSTR	const char**
+typedef PCTSTR	const char**
+typedef PCWCH	const unsigned short**
+typedef PCWSTR	const unsigned short**
+typedef PDESIGNVECTOR	DESIGNVECTOR**
+typedef PDEVMODE	DEVMODEA**
+typedef PDEVMODEA	DEVMODEA**
+typedef PDEVMODEW	DEVMODEW**
+typedef PDIBSECTION	DIBSECTION**
+typedef PDISPLAY_DEVICE	DISPLAY_DEVICEA**
+typedef PDISPLAY_DEVICEA	DISPLAY_DEVICEA**
+typedef PDISPLAY_DEVICEW	DISPLAY_DEVICEW**
+typedef PDLL_DIRECTORY_COOKIE	void***
+typedef PDRAWPATRECT	DRAWPATRECT**
+typedef PDWORD	unsigned long**
+typedef PDWORD32	unsigned int**
+typedef PDWORD64	unsigned long long**
+typedef PDWORD_PTR	unsigned long long**
+typedef PEMR	EMR**
+typedef PEMRABORTPATH	EMRABORTPATH**
+typedef PEMRALPHABLEND	EMRALPHABLEND**
+typedef PEMRANGLEARC	EMRANGLEARC**
+typedef PEMRARC	EMRARC**
+typedef PEMRARCTO	EMRARC**
+typedef PEMRBEGINPATH	EMRABORTPATH**
+typedef PEMRBITBLT	EMRBITBLT**
+typedef PEMRCHORD	EMRARC**
+typedef PEMRCLOSEFIGURE	EMRABORTPATH**
+typedef PEMRCOLORCORRECTPALETTE	EMRCOLORCORRECTPALETTE**
+typedef PEMRCOLORMATCHTOTARGET	EMRCOLORMATCHTOTARGET**
+typedef PEMRCREATEBRUSHINDIRECT	EMRCREATEBRUSHINDIRECT**
+typedef PEMRCREATECOLORSPACE	EMRCREATECOLORSPACE**
+typedef PEMRCREATECOLORSPACEW	EMRCREATECOLORSPACEW**
+typedef PEMRCREATEDIBPATTERNBRUSHPT	EMRCREATEDIBPATTERNBRUSHPT**
+typedef PEMRCREATEMONOBRUSH	EMRCREATEMONOBRUSH**
+typedef PEMRCREATEPALETTE	EMRCREATEPALETTE**
+typedef PEMRCREATEPEN	EMRCREATEPEN**
+typedef PEMRDELETECOLORSPACE	EMRSETCOLORSPACE**
+typedef PEMRDELETEOBJECT	EMRSELECTOBJECT**
+typedef PEMRDRAWESCAPE	EMREXTESCAPE**
+typedef PEMRELLIPSE	EMRELLIPSE**
+typedef PEMRENDPATH	EMRABORTPATH**
+typedef PEMREOF	EMREOF**
+typedef PEMREXCLUDECLIPRECT	EMREXCLUDECLIPRECT**
+typedef PEMREXTCREATEFONTINDIRECTW	EMREXTCREATEFONTINDIRECTW**
+typedef PEMREXTCREATEPEN	EMREXTCREATEPEN**
+typedef PEMREXTESCAPE	EMREXTESCAPE**
+typedef PEMREXTFLOODFILL	EMREXTFLOODFILL**
+typedef PEMREXTSELECTCLIPRGN	EMREXTSELECTCLIPRGN**
+typedef PEMREXTTEXTOUTA	EMREXTTEXTOUTA**
+typedef PEMREXTTEXTOUTW	EMREXTTEXTOUTA**
+typedef PEMRFILLPATH	EMRFILLPATH**
+typedef PEMRFILLRGN	EMRFILLRGN**
+typedef PEMRFLATTENPATH	EMRABORTPATH**
+typedef PEMRFORMAT	EMRFORMAT**
+typedef PEMRFRAMERGN	EMRFRAMERGN**
+typedef PEMRGDICOMMENT	EMRGDICOMMENT**
+typedef PEMRGLSBOUNDEDRECORD	EMRGLSBOUNDEDRECORD**
+typedef PEMRGLSRECORD	EMRGLSRECORD**
+typedef PEMRGRADIENTFILL	EMRGRADIENTFILL**
+typedef PEMRINTERSECTCLIPRECT	EMREXCLUDECLIPRECT**
+typedef PEMRINVERTRGN	EMRINVERTRGN**
+typedef PEMRLINETO	EMRLINETO**
+typedef PEMRMASKBLT	EMRMASKBLT**
+typedef PEMRMODIFYWORLDTRANSFORM	EMRMODIFYWORLDTRANSFORM**
+typedef PEMRMOVETOEX	EMRLINETO**
+typedef PEMRNAMEDESCAPE	EMRNAMEDESCAPE**
+typedef PEMROFFSETCLIPRGN	EMROFFSETCLIPRGN**
+typedef PEMRPAINTRGN	EMRINVERTRGN**
+typedef PEMRPIE	EMRARC**
+typedef PEMRPIXELFORMAT	EMRPIXELFORMAT**
+typedef PEMRPLGBLT	EMRPLGBLT**
+typedef PEMRPOLYBEZIER	EMRPOLYLINE**
+typedef PEMRPOLYBEZIER16	EMRPOLYLINE16**
+typedef PEMRPOLYBEZIERTO	EMRPOLYLINE**
+typedef PEMRPOLYBEZIERTO16	EMRPOLYLINE16**
+typedef PEMRPOLYDRAW	EMRPOLYDRAW**
+typedef PEMRPOLYDRAW16	EMRPOLYDRAW16**
+typedef PEMRPOLYGON	EMRPOLYLINE**
+typedef PEMRPOLYGON16	EMRPOLYLINE16**
+typedef PEMRPOLYLINE	EMRPOLYLINE**
+typedef PEMRPOLYLINE16	EMRPOLYLINE16**
+typedef PEMRPOLYLINETO	EMRPOLYLINE**
+typedef PEMRPOLYLINETO16	EMRPOLYLINE16**
+typedef PEMRPOLYPOLYGON	EMRPOLYPOLYLINE**
+typedef PEMRPOLYPOLYGON16	EMRPOLYPOLYLINE16**
+typedef PEMRPOLYPOLYLINE	EMRPOLYPOLYLINE**
+typedef PEMRPOLYPOLYLINE16	EMRPOLYPOLYLINE16**
+typedef PEMRPOLYTEXTOUTA	EMRPOLYTEXTOUTA**
+typedef PEMRPOLYTEXTOUTW	EMRPOLYTEXTOUTA**
+typedef PEMRREALIZEPALETTE	EMRABORTPATH**
+typedef PEMRRECTANGLE	EMRELLIPSE**
+typedef PEMRRESIZEPALETTE	EMRRESIZEPALETTE**
+typedef PEMRRESTOREDC	EMRRESTOREDC**
+typedef PEMRROUNDRECT	EMRROUNDRECT**
+typedef PEMRSAVEDC	EMRABORTPATH**
+typedef PEMRSCALEVIEWPORTEXTEX	EMRSCALEVIEWPORTEXTEX**
+typedef PEMRSCALEWINDOWEXTEX	EMRSCALEVIEWPORTEXTEX**
+typedef PEMRSELECTCLIPPATH	EMRSELECTCLIPPATH**
+typedef PEMRSELECTCOLORSPACE	EMRSETCOLORSPACE**
+typedef PEMRSELECTOBJECT	EMRSELECTOBJECT**
+typedef PEMRSELECTPALETTE	EMRSELECTPALETTE**
+typedef PEMRSETARCDIRECTION	EMRSETARCDIRECTION**
+typedef PEMRSETBKCOLOR	EMRSETBKCOLOR**
+typedef PEMRSETBKMODE	EMRSELECTCLIPPATH**
+typedef PEMRSETBRUSHORGEX	EMRSETVIEWPORTORGEX**
+typedef PEMRSETCOLORADJUSTMENT	EMRSETCOLORADJUSTMENT**
+typedef PEMRSETCOLORSPACE	EMRSETCOLORSPACE**
+typedef PEMRSETDIBITSTODEVICE	EMRSETDIBITSTODEVICE**
+typedef PEMRSETICMMODE	EMRSELECTCLIPPATH**
+typedef PEMRSETICMPROFILE	EMRSETICMPROFILE**
+typedef PEMRSETICMPROFILEA	EMRSETICMPROFILE**
+typedef PEMRSETICMPROFILEW	EMRSETICMPROFILE**
+typedef PEMRSETLAYOUT	EMRSELECTCLIPPATH**
+typedef PEMRSETMAPMODE	EMRSELECTCLIPPATH**
+typedef PEMRSETMAPPERFLAGS	EMRSETMAPPERFLAGS**
+typedef PEMRSETMETARGN	EMRABORTPATH**
+typedef PEMRSETMITERLIMIT	EMRSETMITERLIMIT**
+typedef PEMRSETPALETTEENTRIES	EMRSETPALETTEENTRIES**
+typedef PEMRSETPIXELV	EMRSETPIXELV**
+typedef PEMRSETPOLYFILLMODE	EMRSELECTCLIPPATH**
+typedef PEMRSETROP2	EMRSELECTCLIPPATH**
+typedef PEMRSETSTRETCHBLTMODE	EMRSELECTCLIPPATH**
+typedef PEMRSETTEXTALIGN	EMRSELECTCLIPPATH**
+typedef PEMRSETTEXTCOLOR	EMRSETBKCOLOR**
+typedef PEMRSETVIEWPORTEXTEX	EMRSETVIEWPORTEXTEX**
+typedef PEMRSETVIEWPORTORGEX	EMRSETVIEWPORTORGEX**
+typedef PEMRSETWINDOWEXTEX	EMRSETVIEWPORTEXTEX**
+typedef PEMRSETWINDOWORGEX	EMRSETVIEWPORTORGEX**
+typedef PEMRSETWORLDTRANSFORM	EMRSETWORLDTRANSFORM**
+typedef PEMRSTRETCHBLT	EMRSTRETCHBLT**
+typedef PEMRSTRETCHDIBITS	EMRSTRETCHDIBITS**
+typedef PEMRSTROKEANDFILLPATH	EMRFILLPATH**
+typedef PEMRSTROKEPATH	EMRFILLPATH**
+typedef PEMRTEXT	EMRTEXT**
+typedef PEMRTRANSPARENTBLT	EMRTRANSPARENTBLT**
+typedef PEMRWIDENPATH	EMRABORTPATH**
+typedef PENHMETAHEADER	ENHMETAHEADER**
+typedef PENHMETARECORD	ENHMETARECORD**
+typedef PENUMLOGFONTEXDV	ENUMLOGFONTEXDVA**
+typedef PENUMLOGFONTEXDVA	ENUMLOGFONTEXDVA**
+typedef PENUMLOGFONTEXDVW	ENUMLOGFONTEXDVW**
+typedef PENUMTEXTMETRIC	ENUMTEXTMETRICA**
+typedef PENUMTEXTMETRICA	ENUMTEXTMETRICA**
+typedef PENUMTEXTMETRICW	ENUMTEXTMETRICW**
+typedef PEXCEPTION_POINTERS	EXCEPTION_POINTERS**
+typedef PEXCEPTION_RECORD	EXCEPTION_RECORD**
+typedef PEXCEPTION_ROUTINE	EXCEPTION_DISPOSITION (**)(EXCEPTION_RECORD*, void*, ARM64_NT_CONTEXT*, void*)
+typedef PEXTLOGFONT	EXTLOGFONTA**
+typedef PEXTLOGFONTA	EXTLOGFONTA**
+typedef PEXTLOGFONTW	EXTLOGFONTW**
+typedef PEXTLOGPEN	EXTLOGPEN**
+typedef PEXTLOGPEN32	EXTLOGPEN32**
+typedef PFILETIME	FILETIME**
+typedef PFILE_ID_128	FILE_ID_128**
+typedef PFILE_INFO_BY_HANDLE_CLASS	FILE_INFO_BY_HANDLE_CLASS**
+typedef PFLASHWINFO	FLASHWINFO**
+typedef PFLOAT	float**
+typedef PFLS_CALLBACK_FUNCTION	void (**)(void*)
+typedef PFOCUS_EVENT_RECORD	FOCUS_EVENT_RECORD**
+typedef PFONTSIGNATURE	FONTSIGNATURE**
+typedef PGLYPHMETRICSFLOAT	GLYPHMETRICSFLOAT**
+typedef PGLYPHSET	GLYPHSET**
+typedef PGRADIENT_RECT	GRADIENT_RECT**
+typedef PGRADIENT_TRIANGLE	GRADIENT_TRIANGLE**
+typedef PGROUP_AFFINITY	GROUP_AFFINITY**
+typedef PHANDLE	void***
+typedef PHANDLER_ROUTINE	int (**)(unsigned long)
+typedef PHANDLETABLE	HANDLETABLE**
+typedef PHKEY	struct HKEY__***
+typedef PICONINFO	ICONINFO**
+typedef PIMAGE_ARM64_RUNTIME_FUNCTION_ENTRY	IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY**
+typedef PIMAGE_BASE_RELOCATION	IMAGE_BASE_RELOCATION**
+typedef PIMAGE_DATA_DIRECTORY	IMAGE_DATA_DIRECTORY**
+typedef PIMAGE_DOS_HEADER	IMAGE_DOS_HEADER**
+typedef PIMAGE_EXPORT_DIRECTORY	IMAGE_EXPORT_DIRECTORY**
+typedef PIMAGE_FILE_HEADER	IMAGE_FILE_HEADER**
+typedef PIMAGE_IMPORT_BY_NAME	IMAGE_IMPORT_BY_NAME**
+typedef PIMAGE_IMPORT_DESCRIPTOR	IMAGE_IMPORT_DESCRIPTOR**
+typedef PIMAGE_NT_HEADERS	IMAGE_NT_HEADERS64**
+typedef PIMAGE_NT_HEADERS32	IMAGE_NT_HEADERS32**
+typedef PIMAGE_NT_HEADERS64	IMAGE_NT_HEADERS64**
+typedef PIMAGE_OPTIONAL_HEADER	IMAGE_OPTIONAL_HEADER64**
+typedef PIMAGE_OPTIONAL_HEADER32	IMAGE_OPTIONAL_HEADER32**
+typedef PIMAGE_OPTIONAL_HEADER64	IMAGE_OPTIONAL_HEADER64**
+typedef PIMAGE_RESOURCE_DATA_ENTRY	IMAGE_RESOURCE_DATA_ENTRY**
+typedef PIMAGE_RESOURCE_DIRECTORY	IMAGE_RESOURCE_DIRECTORY**
+typedef PIMAGE_RESOURCE_DIRECTORY_ENTRY	IMAGE_RESOURCE_DIRECTORY_ENTRY**
+typedef PIMAGE_RESOURCE_DIRECTORY_STRING	IMAGE_RESOURCE_DIRECTORY_STRING**
+typedef PIMAGE_RESOURCE_DIR_STRING_U	IMAGE_RESOURCE_DIR_STRING_U**
+typedef PIMAGE_RUNTIME_FUNCTION_ENTRY	IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY**
+typedef PIMAGE_SECTION_HEADER	IMAGE_SECTION_HEADER**
+typedef PIMAGE_THUNK_DATA	IMAGE_THUNK_DATA64**
+typedef PIMAGE_THUNK_DATA32	IMAGE_THUNK_DATA32**
+typedef PIMAGE_THUNK_DATA64	IMAGE_THUNK_DATA64**
+typedef PIMAGE_TLS_CALLBACK	void (**)(void*, unsigned long, void*)
+typedef PIMAGE_TLS_DIRECTORY	IMAGE_TLS_DIRECTORY64**
+typedef PIMAGE_TLS_DIRECTORY32	IMAGE_TLS_DIRECTORY32**
+typedef PIMAGE_TLS_DIRECTORY64	IMAGE_TLS_DIRECTORY64**
+typedef PINIT_ONCE	RTL_RUN_ONCE**
+typedef PINPUT_RECORD	INPUT_RECORD**
+typedef PINT	int**
+typedef PINT16	short**
+typedef PINT32	int**
+typedef PINT64	long long**
+typedef PINT8	signed char**
+typedef PINT_PTR	long long**
+typedef PKEY_EVENT_RECORD	KEY_EVENT_RECORD**
+typedef PKNONVOLATILE_CONTEXT_POINTERS	KNONVOLATILE_CONTEXT_POINTERS_ARM64**
+typedef PKNONVOLATILE_CONTEXT_POINTERS_ARM64	KNONVOLATILE_CONTEXT_POINTERS_ARM64**
+typedef PLARGE_INTEGER	LARGE_INTEGER**
+typedef PLAYERPLANEDESCRIPTOR	LAYERPLANEDESCRIPTOR**
+typedef PLOCALESIGNATURE	LOCALESIGNATURE**
+typedef PLOGBRUSH	LOGBRUSH**
+typedef PLOGBRUSH32	LOGBRUSH32**
+typedef PLOGFONT	LOGFONTA**
+typedef PLOGFONTA	LOGFONTA**
+typedef PLOGFONTW	LOGFONTW**
+typedef PLOGPALETTE	LOGPALETTE**
+typedef PLOGPEN	LOGPEN**
+typedef PLONG	long**
+typedef PLONG32	int**
+typedef PLONG64	long long**
+typedef PLONG_PTR	long long**
+typedef PLUID	LUID**
+typedef PM128A	M128A**
+typedef PMEMORY_BASIC_INFORMATION	MEMORY_BASIC_INFORMATION**
+typedef PMENU_EVENT_RECORD	MENU_EVENT_RECORD**
+typedef PMETAHEADER	METAHEADER**
+typedef PMETARECORD	METARECORD**
+typedef PMINMAXINFO	MINMAXINFO**
+typedef PMOUSE_EVENT_RECORD	MOUSE_EVENT_RECORD**
+typedef PMSG	MSG**
+typedef PNEON128	ARM64_NT_NEON128**
+typedef PNEWTEXTMETRIC	NEWTEXTMETRICA**
+typedef PNEWTEXTMETRICA	NEWTEXTMETRICA**
+typedef PNEWTEXTMETRICW	NEWTEXTMETRICW**
+typedef POSVERSIONINFO	OSVERSIONINFOA**
+typedef POSVERSIONINFOA	OSVERSIONINFOA**
+typedef POSVERSIONINFOEX	OSVERSIONINFOEXA**
+typedef POSVERSIONINFOEXA	OSVERSIONINFOEXA**
+typedef POSVERSIONINFOEXW	OSVERSIONINFOEXW**
+typedef POSVERSIONINFOW	OSVERSIONINFOW**
+typedef POUTLINETEXTMETRIC	OUTLINETEXTMETRICA**
+typedef POUTLINETEXTMETRICA	OUTLINETEXTMETRICA**
+typedef POUTLINETEXTMETRICW	OUTLINETEXTMETRICW**
+typedef PPALETTEENTRY	PALETTEENTRY**
+typedef PPATTERN	LOGBRUSH**
+typedef PPELARRAY	PELARRAY**
+typedef PPIXELFORMATDESCRIPTOR	PIXELFORMATDESCRIPTOR**
+typedef PPOINT	POINT**
+typedef PPOINTFLOAT	POINTFLOAT**
+typedef PPOINTL	POINTL**
+typedef PPOINTS	POINTS**
+typedef PPOLYTEXT	POLYTEXTA**
+typedef PPOLYTEXTA	POLYTEXTA**
+typedef PPOLYTEXTW	POLYTEXTW**
+typedef PPROCESSOR_NUMBER	PROCESSOR_NUMBER**
+typedef PPROCESS_INFORMATION	PROCESS_INFORMATION**
+typedef PPSFEATURE_CUSTPAPER	PSFEATURE_CUSTPAPER**
+typedef PPSFEATURE_OUTPUT	PSFEATURE_OUTPUT**
+typedef PPSINJECTDATA	PSINJECTDATA**
+typedef PRAWINPUTDEVICE	RAWINPUTDEVICE**
+typedef PRAWINPUTDEVICELIST	RAWINPUTDEVICELIST**
+typedef PREASON_CONTEXT	REASON_CONTEXT**
+typedef PRECT	RECT**
+typedef PRECTL	RECTL**
+typedef PRGBTRIPLE	RGBTRIPLE**
+typedef PRGNDATA	RGNDATA**
+typedef PRGNDATAHEADER	RGNDATAHEADER**
+typedef PRID_DEVICE_INFO	RID_DEVICE_INFO**
+typedef PROC	long long (**)()
+typedef PRTL_CONDITION_VARIABLE	RTL_CONDITION_VARIABLE**
+typedef PRTL_CRITICAL_SECTION	RTL_CRITICAL_SECTION**
+typedef PRTL_RUN_ONCE	RTL_RUN_ONCE**
+typedef PRTL_SRWLOCK	RTL_SRWLOCK**
+typedef PRUNTIME_FUNCTION	IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY**
+typedef PSECURITY_ATTRIBUTES	SECURITY_ATTRIBUTES**
+typedef PSECURITY_DESCRIPTOR	void**
+typedef PSID	void**
+typedef PSIZE	SIZE**
+typedef PSIZEL	SIZE**
+typedef PSIZE_T	unsigned long long**
+typedef PSMALL_RECT	SMALL_RECT**
+typedef PSOCKADDR	SOCKADDR**
+typedef PSOCKADDR_IN	SOCKADDR_IN**
+typedef PSRWLOCK	RTL_SRWLOCK**
+typedef PSSIZE_T	long long**
+typedef PSTR	char**
+typedef PSYSTEMTIME	SYSTEMTIME**
+typedef PTBYTE	unsigned char**
+typedef PTCHAR	char**
+typedef PTEXTMETRIC	TEXTMETRICA**
+typedef PTEXTMETRICA	TEXTMETRICA**
+typedef PTEXTMETRICW	TEXTMETRICW**
+typedef PTHREAD_START_ROUTINE	unsigned long (**)(void*)
+typedef PTIMERAPCROUTINE	void (**)(void*, unsigned long, unsigned long)
+typedef PTIME_ZONE_INFORMATION	TIME_ZONE_INFORMATION**
+typedef PTOKEN_PRIVILEGES	TOKEN_PRIVILEGES**
+typedef PTOP_LEVEL_EXCEPTION_FILTER	long (**)(EXCEPTION_POINTERS*)
+typedef PTRIVERTEX	TRIVERTEX**
+typedef PTSTR	char**
+typedef PUCHAR	unsigned char**
+typedef PUINT	unsigned int**
+typedef PUINT16	unsigned short**
+typedef PUINT32	unsigned int**
+typedef PUINT64	unsigned long long**
+typedef PUINT8	unsigned char**
+typedef PUINT_PTR	unsigned long long**
+typedef PULARGE_INTEGER	ULARGE_INTEGER**
+typedef PULONG	unsigned long**
+typedef PULONG32	unsigned int**
+typedef PULONG64	unsigned long long**
+typedef PULONGLONG	unsigned long long**
+typedef PULONG_PTR	unsigned long long**
+typedef PUNWIND_HISTORY_TABLE	UNWIND_HISTORY_TABLE**
+typedef PUNWIND_HISTORY_TABLE_ENTRY	UNWIND_HISTORY_TABLE_ENTRY**
+typedef PUSHORT	unsigned short**
+typedef PVECTORED_EXCEPTION_HANDLER	long (**)(EXCEPTION_POINTERS*)
+typedef PVOID	void**
+typedef PWCH	unsigned short**
+typedef PWCHAR	unsigned short**
+typedef PWCRANGE	WCRANGE**
+typedef PWGLSWAP	WGLSWAP**
+typedef PWIN32_FIND_DATA	WIN32_FIND_DATAA**
+typedef PWIN32_FIND_DATAA	WIN32_FIND_DATAA**
+typedef PWIN32_FIND_DATAW	WIN32_FIND_DATAW**
+typedef PWINDOWPLACEMENT	WINDOWPLACEMENT**
+typedef PWINDOW_BUFFER_SIZE_RECORD	WINDOW_BUFFER_SIZE_RECORD**
+typedef PWORD	unsigned short**
+typedef PWSTR	unsigned short**
+typedef PXFORM	XFORM**
+typedef PXSAVE_FORMAT	XSAVE_FORMAT**
+typedef REGSAM	unsigned long*
+typedef RPC_STATUS	long*
+typedef SHORT	short*
+typedef SIZE_T	unsigned long long*
+typedef SOCKET	unsigned long long*
+typedef SPHANDLE	void***
+typedef SSIZE_T	long long*
+typedef TBYTE	unsigned char*
+typedef TCHAR	char*
+typedef TIMERPROC	void (**)(struct HWND__*, unsigned int, unsigned long long, unsigned long)
+typedef UCHAR	unsigned char*
+typedef UINT	unsigned int*
+typedef UINT16	unsigned short*
+typedef UINT32	unsigned int*
+typedef UINT64	unsigned long long*
+typedef UINT8	unsigned char*
+typedef UINT_PTR	unsigned long long*
+typedef ULONG	unsigned long*
+typedef ULONG32	unsigned int*
+typedef ULONG64	unsigned long long*
+typedef ULONGLONG	unsigned long long*
+typedef ULONG_PTR	unsigned long long*
+typedef USHORT	unsigned short*
+typedef WAITORTIMERCALLBACK	void (**)(void*, unsigned char)
+typedef WCHAR	unsigned short*
+typedef WNDPROC	long long (**)(struct HWND__*, unsigned int, unsigned long long, long long)
+typedef WORD	unsigned short*
+typedef WPARAM	unsigned long long*
+typedef WSAEVENT	void**
+typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY	_IMAGE_RUNTIME_FUNCTION_ENTRY**
+typedef u_char	unsigned char*
+typedef u_int	unsigned int*
+typedef u_long	unsigned long*
+typedef u_short	unsigned short*
 wglCopyContext	int (*)(struct HGLRC__*, struct HGLRC__*, unsigned int)
 wglCreateContext	struct HGLRC__* (*)(struct HDC__*)
 wglCreateLayerContext	struct HGLRC__* (*)(struct HDC__*, int)
@@ -2331,9 +3176,17 @@ PathCchSkipRoot	long (*)(const unsigned short*, const unsigned short**)
 psapi.h p
 EnumProcessModules	int (*)(void*, struct HINSTANCE__**, unsigned long, unsigned long*)
 GetProcessMemoryInfo	int (*)(void*, PROCESS_MEMORY_COUNTERS*, unsigned long)
+typedef PPROCESS_MEMORY_COUNTERS	PROCESS_MEMORY_COUNTERS**
 
 delayimp.h p
 __HrLoadAllImportsForDll	long (*)(const char*)
+typedef PCImgDelayDescr	const ImgDelayDescr**
+typedef PCImgThunkData	const IMAGE_THUNK_DATA64**
+typedef PDelayLoadInfo	DelayLoadInfo**
+typedef PImgDelayDescr	ImgDelayDescr**
+typedef PImgThunkData	IMAGE_THUNK_DATA64**
+typedef PfnDliHook	long long (*(**)(unsigned int, DelayLoadInfo*))()
+typedef RVA	unsigned long*
 
 versionhelpers.h p
 IsWindows7OrGreater	int (*)(void)
@@ -2343,6 +3196,9 @@ IsWindows8Point1OrGreater	int (*)(void)
 IsWindowsVersionOrGreater	int (*)(unsigned short, unsigned short, unsigned short)
 IsWindowsVistaOrGreater	int (*)(void)
 IsWindowsXPOrGreater	int (*)(void)
+
+crtdbg.h y
+typedef _HFILE	void**
 
 sddl.h p
 ConvertStringSecurityDescriptorToSecurityDescriptorA	int (*)(const char*, unsigned long, void**, unsigned long*)
@@ -2360,9 +3216,15 @@ CryptGetHashParam	int (*)(unsigned long long, unsigned long, unsigned char*, uns
 CryptHashData	int (*)(unsigned long long, const unsigned char*, unsigned long, unsigned long)
 CryptImportKey	int (*)(unsigned long long, const unsigned char*, unsigned long, unsigned long long, unsigned long, unsigned long long*)
 CryptReleaseContext	int (*)(unsigned long long, unsigned long)
+typedef ALG_ID	unsigned int*
 
 tchar.h y
 __strncnt	unsigned long long (*)(const char*, unsigned long long)
+typedef _TCHAR	char*
+typedef _TINT	int*
+typedef _TSCHAR	signed char*
+typedef _TUCHAR	unsigned char*
+typedef _TXCHAR	char*
 
 mbstring.h y
 _ismbblead	int (*)(unsigned int)
@@ -2601,11 +3463,29 @@ getnameinfo	int (*)(const SOCKADDR*, int, char*, unsigned long, char*, unsigned 
 getservbyname	struct servent* (*)(const char*, const char*)
 inet_ntop	const char* (*)(int, const void*, char*, unsigned long long)
 inet_pton	int (*)(int, const char*, void*)
+typedef LPSOCKADDR_IN6	SOCKADDR_IN6**
+typedef PSOCKADDR_IN6	SOCKADDR_IN6**
+typedef socklen_t	int*
+
+mswsock.h y
+typedef LPFN_ACCEPTEX	int (**)(unsigned long long, unsigned long long, void*, unsigned long, unsigned long, unsigned long, unsigned long*, OVERLAPPED*)
+typedef LPFN_CONNECTEX	int (**)(unsigned long long, const SOCKADDR*, int, void*, unsigned long, unsigned long*, OVERLAPPED*)
+typedef LPFN_DISCONNECTEX	int (**)(unsigned long long, OVERLAPPED*, unsigned long, unsigned long)
+typedef LPFN_GETACCEPTEXSOCKADDRS	void (**)(void*, unsigned long, unsigned long, unsigned long, SOCKADDR**, int*, SOCKADDR**, int*)
+typedef LPFN_TRANSMITFILE	int (**)(unsigned long long, void*, unsigned long, unsigned long, OVERLAPPED*, TRANSMIT_FILE_BUFFERS*, unsigned long)
+typedef LPTRANSMIT_FILE_BUFFERS	TRANSMIT_FILE_BUFFERS**
+typedef PTRANSMIT_FILE_BUFFERS	TRANSMIT_FILE_BUFFERS**
 
 iphlpapi.h y
 ConvertInterfaceLuidToNameW	unsigned long (*)(const NET_LUID*, unsigned short*, unsigned long long)
 if_indextoname	char* (*)(unsigned long, char*)
 if_nametoindex	unsigned long (*)(const char*)
+typedef NET_IFINDEX	unsigned long*
+
+ws2bth.h p
+typedef BTH_ADDR	unsigned long long*
+typedef PBTH_ADDR	unsigned long long**
+typedef PSOCKADDR_BTH	SOCKADDR_BTH**
 
 Rpc.h y
 RpcStringFreeA	long (*)(unsigned char**)
@@ -2614,3 +3494,9 @@ UuidFromStringA	long (*)(unsigned char*, GUID*)
 UuidFromStringW	long (*)(unsigned short*, GUID*)
 UuidToStringA	long (*)(const GUID*, unsigned char**)
 UuidToStringW	long (*)(const GUID*, unsigned short**)
+typedef RPC_CSTR	unsigned char**
+typedef RPC_WSTR	unsigned short**
+
+winternl.h y
+typedef POBJECT_ATTRIBUTES	OBJECT_ATTRIBUTES**
+typedef PUNICODE_STRING	UNICODE_STRING**

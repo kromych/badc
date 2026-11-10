@@ -101,9 +101,13 @@ typedef unsigned int u_int;
 typedef unsigned long u_long;
 typedef __INT64_TYPE__ quad_t;
 typedef __UINT64_TYPE__ u_quad_t;
-// The file serial number: msvcrt's _ino_t, unsigned 64-bit elsewhere.
+// The file serial number: msvcrt's _ino_t, the SDK's __uint64_t, glibc's
+// unsigned long.
 #ifdef __BADC_WINDOWS__
 typedef unsigned short ino_t;
+typedef unsigned long long ino64_t;
+#elif defined(__APPLE__)
+typedef unsigned long long ino_t;
 typedef unsigned long long ino64_t;
 #else
 typedef unsigned long ino_t;
@@ -124,7 +128,8 @@ typedef int blksize_t;
 typedef int nlink_t;
 typedef int blksize_t;
 #endif
-#ifdef __BADC_WINDOWS__
+// The block count: the SDK's __int64_t, glibc's long.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
 typedef long long blkcnt_t;
 typedef long long blkcnt64_t;
 #else

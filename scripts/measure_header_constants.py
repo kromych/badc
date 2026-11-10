@@ -37,7 +37,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from measure_header_targets import TARGETS, require_current_badc  # noqa: E402
+from measure_header_targets import TARGETS, is_clang, require_current_badc  # noqa: E402
 from measure_record_layouts import int64s, placed, prelude, probe_bytes, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "header-constants"
@@ -89,10 +89,8 @@ def badc_function_macros(badc: str, target: str, src: str) -> dict[str, int]:
 def reference_flags(cc: list[str]) -> tuple[str, ...]:
     """Warnings off. gcc refuses an array bound whose folding shifts out of
     range or overflows, which drops the name; clang folds it with a warning,
-    which these flags make the error that drops it, and stops at 20 errors
-    unless told otherwise."""
-    version = subprocess.run(cc + ["--version"], capture_output=True, text=True).stdout
-    if "clang" not in version:
+    which these flags make the error that drops it."""
+    if not is_clang(cc):
         return ("-w",)
     return ("-Wno-everything", "-Werror=shift-count-overflow", "-Werror=shift-count-negative",
             "-Werror=integer-overflow", "-ferror-limit=0")

@@ -6,9 +6,9 @@
 #ifdef __APPLE__
 
 typedef const void *CFTypeRef;
-typedef struct __CFString *CFStringRef;
+typedef const struct __CFString *CFStringRef;
 typedef const struct __CFDictionary *CFDictionaryRef;
-typedef struct __CFAllocator *CFAllocatorRef;
+typedef const struct __CFAllocator *CFAllocatorRef;
 typedef long CFIndex;
 typedef unsigned long CFTypeID;
 

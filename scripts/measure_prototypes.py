@@ -5,10 +5,11 @@ compatible with, which a unit test holds badc's declarations against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
 reference toolchain, badc lists the functions and objects a unit including
-it declares, each with the type of its address (`--dump-prototypes`). A
+it declares, each with the type of its address, and its typedef names, each
+with the type of a pointer to the type it names (`--dump-prototypes`). A
 probe built with the reference compiler initializes a pointer of badc's
-type with each, `__typeof__(<badc's type>) p = &name;`, incompatible
-pointer types an error: a failed initialization is a declaration that
+type with each, `__typeof__(<badc's type>) p = &name;` or
+`= (name *)0;`, incompatible pointer types an error: a failed initialization is a declaration that
 differs from the C library's, which the run reports and leaves out; a
 name the reference does not declare is left out. gcc records a
 `noreturn` or `const` attribute as a qualifier of the function type, which
@@ -38,12 +39,16 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from measure_header_targets import TARGETS, require_current_badc  # noqa: E402
+from measure_header_targets import TARGETS, is_clang, require_current_badc  # noqa: E402
 from measure_record_layouts import prelude, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "prototypes"
-# Incompatible pointer types are the one diagnostic that fails a check.
-FLAGS = ["-fsyntax-only", "-w", "-Werror=incompatible-pointer-types"]
+# Incompatible pointer types are the one diagnostic that fails a check: gcc
+# and clang 22 make them errors, clang 21 warns, and its -w would silence
+# the -Werror= that promotes them.
+GCC_FLAGS = ["-fsyntax-only", "-w", "-Werror=incompatible-pointer-types"]
+CLANG_FLAGS = ["-fsyntax-only", "-Wno-everything", "-Werror=incompatible-pointer-types",
+               "-ferror-limit=0"]
 # Declarations badc keeps different on purpose, reported as departures.
 GNU_ENUM = ("glibc's _GNU_SOURCE declaration takes the resource, priority or "
             "timer selector as an enum compatible with unsigned int; badc keeps "
@@ -56,8 +61,12 @@ DEPARTURES = {
                  "getitimer", "setitimer")},
     **{("windows", n): SDK
        for n in ("_atoflt", "_atoflt_l", "RtlAddFunctionTable", "RtlDeleteFunctionTable",
-                 "RtlLookupFunctionEntry", "RtlVirtualUnwind")},
-    **{("windows", n): OFF_T for n in ("ftruncate", "truncate")},
+                 "RtlLookupFunctionEntry", "RtlVirtualUnwind", "typedef PRUNTIME_FUNCTION",
+                 "typedef PXMM_SAVE_AREA32")},
+    **{("windows", n): OFF_T for n in ("ftruncate", "truncate", "typedef off_t")},
+    **{("windows", f"typedef {n}"): "the 16-bit fast types are MSVC's int"
+       for n in ("int_fast16_t", "uint_fast16_t", "atomic_int_fast16_t", "atomic_uint_fast16_t")},
+    ("windows", "typedef pid_t"): "msvcrt's _getpid returns int",
 }
 # The compilers' intrinsic headers: their vector types are each compiler's
 # own, which no declaration of the other's is compatible with.
@@ -76,8 +85,15 @@ def badc_prototypes(badc: str, target: str, src: str) -> dict[str, str] | None:
     return dict(line.split("\t", 1) for line in r.stdout.splitlines() if "\t" in line)
 
 
+def address(name: str) -> str:
+    """The expression of the type badc's entry spells: a declared name's
+    address, or for a typedef name a null pointer to its type."""
+    return f"({name[8:]} *)0" if name.startswith("typedef ") else f"&{name}"
+
+
 def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], list[str]] | None:
     """The names the reference finds compatible and those it finds not."""
+    flags = CLANG_FLAGS if is_clang(cc) else GCC_FLAGS
     kept = sorted(protos)
     differ: list[str] = []
     for _ in range(256):
@@ -86,13 +102,13 @@ def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], l
         # `timezone`.
         head = "#include <stdarg.h>\n" + src + "void __badc_probe(void) {\n"
         first = head.count("\n") + 1
-        lines = [f"  __typeof__({protos[n]}) __badc_p{i} = &{n};"
+        lines = [f"  __typeof__({protos[n]}) __badc_p{i} = {address(n)};"
                  for i, n in enumerate(kept)]
         text = head + "\n".join(lines) + "\n}\n"
         with tempfile.TemporaryDirectory() as tmp:
             c = os.path.join(tmp, "probe.c")
             Path(c).write_text(text)
-            r = subprocess.run(cc + FLAGS + [c], capture_output=True, text=True)
+            r = subprocess.run(cc + flags + [c], capture_output=True, text=True)
         if r.returncode == 0:
             return kept, differ
         failed, other = set(), set()

@@ -36,6 +36,12 @@ PREREQS = {
 }
 
 
+def is_clang(cc: list[str]) -> bool:
+    """Whether the reference compiler is clang, whose -w also silences the
+    warnings -Werror= names and which stops at 20 errors by default."""
+    return "clang" in subprocess.run(cc + ["--version"], capture_output=True, text=True).stdout
+
+
 def require_current_badc(badc: str) -> None:
     """Stop unless `badc` embeds this tree's headers, which the tables
     measure: a release build without the `full` feature leaves an older

@@ -71,10 +71,46 @@ strtoll	long long (*)(const char*, char**, int)
 strtoul	unsigned long (*)(const char*, char**, int)
 strtoull	unsigned long long (*)(const char*, char**, int)
 system	int (*)(const char*)
+typedef size_t	unsigned long*
+typedef wchar_t	int*
 unlockpt	int (*)(int)
 valloc	void* (*)(unsigned long)
 wcstombs	unsigned long (*)(char*, const int*, unsigned long)
 wctomb	int (*)(char*, int)
+
+stddef.h y
+typedef max_align_t	long double*
+typedef ptrdiff_t	long*
+
+stdint.h y
+typedef int16_t	short*
+typedef int32_t	int*
+typedef int64_t	long long*
+typedef int8_t	signed char*
+typedef int_fast16_t	short*
+typedef int_fast32_t	int*
+typedef int_fast64_t	long long*
+typedef int_fast8_t	signed char*
+typedef int_least16_t	short*
+typedef int_least32_t	int*
+typedef int_least64_t	long long*
+typedef int_least8_t	signed char*
+typedef intmax_t	long*
+typedef intptr_t	long*
+typedef uint16_t	unsigned short*
+typedef uint32_t	unsigned int*
+typedef uint64_t	unsigned long long*
+typedef uint8_t	unsigned char*
+typedef uint_fast16_t	unsigned short*
+typedef uint_fast32_t	unsigned int*
+typedef uint_fast64_t	unsigned long long*
+typedef uint_fast8_t	unsigned char*
+typedef uint_least16_t	unsigned short*
+typedef uint_least32_t	unsigned int*
+typedef uint_least64_t	unsigned long long*
+typedef uint_least8_t	unsigned char*
+typedef uintmax_t	unsigned long*
+typedef uintptr_t	unsigned long*
 
 inttypes.h y
 imaxabs	long (*)(long)
@@ -89,9 +125,15 @@ longjmp	void (*)(int*, int)
 setjmp	int (*)(int*)
 siglongjmp	void (*)(int*, int)
 sigsetjmp	int (*)(int*, int)
+typedef jmp_buf	int (*)[48]
+typedef sigjmp_buf	int (*)[49]
 
 string.h y
+bcmp	int (*)(const void*, const void*, unsigned long)
+bcopy	void (*)(const void*, void*, unsigned long)
+bzero	void (*)(void*, unsigned long)
 ffs	int (*)(int)
+index	char* (*)(const char*, int)
 memccpy	void* (*)(void*, const void*, int, unsigned long)
 memchr	void* (*)(const void*, int, unsigned long)
 memcmp	int (*)(const void*, const void*, unsigned long)
@@ -99,6 +141,7 @@ memcpy	void* (*)(void*, const void*, unsigned long)
 memmem	void* (*)(const void*, unsigned long, const void*, unsigned long)
 memmove	void* (*)(void*, const void*, unsigned long)
 memset	void* (*)(void*, int, unsigned long)
+rindex	char* (*)(const char*, int)
 strcasecmp	int (*)(const char*, const char*)
 strcasestr	char* (*)(const char*, const char*)
 strcat	char* (*)(char*, const char*)
@@ -149,6 +192,15 @@ posix_spawnattr_setpgroup	int (*)(void**, int)
 posix_spawnattr_setsigdefault	int (*)(void**, const unsigned int*)
 posix_spawnattr_setsigmask	int (*)(void**, const unsigned int*)
 posix_spawnp	int (*)(int*, const char*, void* const *, void* const *, char* const *, char* const *)
+typedef mode_t	unsigned short*
+typedef pid_t	int*
+typedef posix_spawn_file_actions_t	void**
+typedef posix_spawnattr_t	void**
+typedef sigset_t	unsigned int*
+typedef u_int16_t	unsigned short*
+typedef u_int32_t	unsigned int*
+typedef u_int64_t	unsigned long long*
+typedef u_int8_t	unsigned char*
 
 stdio.h y
 __stderrp	FILE**
@@ -210,6 +262,8 @@ sscanf	int (*)(const char*, const char*, ...)
 tempnam	char* (*)(const char*, const char*)
 tmpfile	FILE* (*)(void)
 tmpnam	char* (*)(char*)
+typedef fpos_t	long long*
+typedef off_t	long long*
 ungetc	int (*)(int, FILE*)
 vdprintf	int (*)(int, const char*, char*)
 vfprintf	int (*)(FILE*, const char*, char*)
@@ -222,6 +276,48 @@ vsscanf	int (*)(const char*, const char*, char*)
 
 alloca.h y
 alloca	void* (*)(unsigned long)
+
+stdarg.h y
+typedef va_list	char**
+
+stdatomic.h y
+typedef atomic_bool	_Atomic _Bool*
+typedef atomic_char	_Atomic char*
+typedef atomic_char16_t	_Atomic unsigned short*
+typedef atomic_char32_t	_Atomic unsigned int*
+typedef atomic_int	_Atomic int*
+typedef atomic_int_fast16_t	_Atomic short*
+typedef atomic_int_fast32_t	_Atomic int*
+typedef atomic_int_fast64_t	_Atomic long long*
+typedef atomic_int_fast8_t	_Atomic signed char*
+typedef atomic_int_least16_t	_Atomic short*
+typedef atomic_int_least32_t	_Atomic int*
+typedef atomic_int_least64_t	_Atomic long long*
+typedef atomic_int_least8_t	_Atomic signed char*
+typedef atomic_intmax_t	_Atomic long*
+typedef atomic_intptr_t	_Atomic long*
+typedef atomic_llong	_Atomic long long*
+typedef atomic_long	_Atomic long*
+typedef atomic_ptrdiff_t	_Atomic long*
+typedef atomic_schar	_Atomic signed char*
+typedef atomic_short	_Atomic short*
+typedef atomic_size_t	_Atomic unsigned long*
+typedef atomic_uchar	_Atomic unsigned char*
+typedef atomic_uint	_Atomic unsigned int*
+typedef atomic_uint_fast16_t	_Atomic unsigned short*
+typedef atomic_uint_fast32_t	_Atomic unsigned int*
+typedef atomic_uint_fast64_t	_Atomic unsigned long long*
+typedef atomic_uint_fast8_t	_Atomic unsigned char*
+typedef atomic_uint_least16_t	_Atomic unsigned short*
+typedef atomic_uint_least32_t	_Atomic unsigned int*
+typedef atomic_uint_least64_t	_Atomic unsigned long long*
+typedef atomic_uint_least8_t	_Atomic unsigned char*
+typedef atomic_uintmax_t	_Atomic unsigned long*
+typedef atomic_uintptr_t	_Atomic unsigned long*
+typedef atomic_ullong	_Atomic unsigned long long*
+typedef atomic_ulong	_Atomic unsigned long*
+typedef atomic_ushort	_Atomic unsigned short*
+typedef atomic_wchar_t	_Atomic int*
 
 ctype.h y
 isalnum	int (*)(int)
@@ -426,6 +522,7 @@ freelocale	int (*)(struct _xlocale*)
 localeconv	struct lconv* (*)(void)
 newlocale	struct _xlocale* (*)(int, const char*, struct _xlocale*)
 setlocale	char* (*)(int, const char*)
+typedef locale_t	struct _xlocale**
 uselocale	struct _xlocale* (*)(struct _xlocale*)
 
 signal.h y
@@ -451,6 +548,8 @@ sigrelse	int (*)(int)
 sigset	void (*(*)(int, void (*)(int)))(int)
 sigsuspend	int (*)(const unsigned int*)
 sigwait	int (*)(const unsigned int*, int*)
+typedef sig_atomic_t	int*
+typedef sig_t	void (**)(int)
 
 time.h y
 asctime	char* (*)(const struct tm*)
@@ -476,6 +575,9 @@ strptime	char* (*)(const char*, const char*, struct tm*)
 time	long (*)(long*)
 timespec_get	int (*)(struct timespec*, int)
 timezone	long*
+typedef clock_t	unsigned long*
+typedef clockid_t	unsigned int*
+typedef time_t	long*
 tzname	char* (*)[2]
 tzset	void (*)(void)
 
@@ -513,6 +615,29 @@ shutdown	int (*)(int, int)
 sockatmark	int (*)(int)
 socket	int (*)(int, int, int)
 socketpair	int (*)(int, int, int, int*)
+typedef blkcnt_t	long long*
+typedef blksize_t	int*
+typedef dev_t	int*
+typedef fsblkcnt_t	unsigned int*
+typedef fsfilcnt_t	unsigned int*
+typedef gid_t	unsigned int*
+typedef id_t	unsigned int*
+typedef ino64_t	unsigned long long*
+typedef ino_t	unsigned long long*
+typedef key_t	int*
+typedef nlink_t	unsigned short*
+typedef quad_t	long long*
+typedef sa_family_t	unsigned char*
+typedef socklen_t	unsigned int*
+typedef ssize_t	long*
+typedef suseconds_t	int*
+typedef u_char	unsigned char*
+typedef u_int	unsigned int*
+typedef u_long	unsigned long*
+typedef u_quad_t	unsigned long long*
+typedef u_short	unsigned short*
+typedef uid_t	unsigned int*
+typedef useconds_t	unsigned int*
 
 err.h y
 err	void (*)(int, const char*, ...)
@@ -529,6 +654,9 @@ getcontext	int (*)(ucontext_t*)
 makecontext	void (*)(ucontext_t*, void (*)(void), int, ...)
 setcontext	int (*)(const ucontext_t*)
 swapcontext	int (*)(ucontext_t*, const ucontext_t*)
+typedef in_addr_t	unsigned int*
+typedef in_port_t	unsigned short*
+typedef mcontext_t	struct __darwin_mcontext64**
 
 sys/utsname.h y
 uname	int (*)(struct utsname*)
@@ -544,11 +672,13 @@ setgrent	void (*)(void)
 
 langinfo.h y
 nl_langinfo	char* (*)(int)
+typedef nl_item	int*
 
 iconv.h y
 iconv	unsigned long (*)(struct __tag_iconv_t*, char**, unsigned long*, char**, unsigned long*)
 iconv_close	int (*)(struct __tag_iconv_t*)
 iconv_open	struct __tag_iconv_t* (*)(const char*, const char*)
+typedef iconv_t	struct __tag_iconv_t**
 
 arpa/inet.h y
 inet_addr	unsigned int (*)(const char*)
@@ -734,6 +864,7 @@ shmat	void* (*)(int, const void*, int)
 shmctl	int (*)(int, int, struct shmid_ds*)
 shmdt	int (*)(const void*)
 shmget	int (*)(int, unsigned long, int)
+typedef shmatt_t	unsigned short*
 
 sys/sem.h y
 semctl	int (*)(int, int, int, ...)
@@ -745,6 +876,8 @@ msgctl	int (*)(int, int, struct msqid_ds*)
 msgget	int (*)(int, int)
 msgrcv	long (*)(int, void*, unsigned long, long, int)
 msgsnd	int (*)(int, const void*, unsigned long, int)
+typedef msglen_t	unsigned long*
+typedef msgqnum_t	unsigned long*
 
 net/if.h y
 if_freenameindex	void (*)(struct if_nameindex*)
@@ -759,21 +892,49 @@ CoreFoundation/CoreFoundation.h y
 CFGetTypeID	unsigned long (*)(const void*)
 CFRelease	void (*)(const void*)
 CFRetain	const void* (*)(const void*)
+typedef CFAllocatorRef	const struct __CFAllocator**
+typedef CFDictionaryRef	const struct __CFDictionary**
+typedef CFIndex	long*
+typedef CFStringRef	const struct __CFString**
+typedef CFTypeID	unsigned long*
+typedef CFTypeRef	const void**
+
+CommonCrypto/CommonCryptoError.h y
+typedef CCCryptorStatus	int*
+typedef CCStatus	int*
 
 CommonCrypto/CommonRandom.h y
 CCRandomGenerateBytes	int (*)(void*, unsigned long)
+typedef CCRNGStatus	int*
 
 CoreVideo/CoreVideo.h y
 CVGetCurrentHostTime	unsigned long long (*)(void)
 CVGetHostClockFrequency	double (*)(void)
 CVGetHostClockMinimumTimeDelta	unsigned int (*)(void)
+typedef CVOptionFlags	unsigned long long*
+typedef CVReturn	int*
+typedef CVSMPTETimeFlags	unsigned int*
+typedef CVSMPTETimeType	unsigned int*
+typedef CVTimeFlags	int*
+typedef CVTimeStampFlags	unsigned long long*
 
 SystemConfiguration/SCDynamicStoreCopySpecific.h y
 SCDynamicStoreCopyProxies	const struct __CFDictionary* (*)(const struct __SCDynamicStore*)
+typedef SCDynamicStoreRef	const struct __SCDynamicStore**
+
+sys/attr.h y
+typedef attrgroup_t	unsigned int*
+typedef fsfile_type_t	unsigned int*
+typedef fsobj_tag_t	unsigned int*
+typedef fsobj_type_t	unsigned int*
+typedef fsvolid_t	unsigned int*
+typedef text_encoding_t	unsigned int*
 
 copyfile.h y
 copyfile	int (*)(const char*, const char*, struct _copyfile_state*, unsigned int)
 fcopyfile	int (*)(int, int, struct _copyfile_state*, unsigned int)
+typedef copyfile_flags_t	unsigned int*
+typedef copyfile_state_t	struct _copyfile_state**
 
 mach/mach_time.h y
 mach_absolute_time	unsigned long long (*)(void)
@@ -782,13 +943,48 @@ mach_continuous_approximate_time	unsigned long long (*)(void)
 mach_continuous_time	unsigned long long (*)(void)
 mach_timebase_info	int (*)(mach_timebase_info_data_t*)
 mach_wait_until	int (*)(unsigned long long)
+typedef mach_timebase_info_t	mach_timebase_info_data_t**
 
 mach/mach.h y
 task_for_pid	int (*)(unsigned int, int, unsigned int*)
 task_threads	int (*)(unsigned int, unsigned int**, unsigned int*)
+typedef integer_t	int*
+typedef kern_return_t	int*
+typedef mach_msg_type_number_t	unsigned int*
+typedef mach_port_t	unsigned int*
+typedef mach_vm_address_t	unsigned long long*
+typedef mach_vm_size_t	unsigned long long*
+typedef natural_t	unsigned int*
+typedef task_t	unsigned int*
+typedef thread_array_t	unsigned int**
+typedef thread_t	unsigned int*
 
 mach/task.h y
 task_info	int (*)(unsigned int, unsigned int, int*, unsigned int*)
+typedef task_flavor_t	unsigned int*
+typedef task_info_t	int**
+typedef task_vm_info_t	task_vm_info_data_t**
+
+mach/machine.h y
+typedef cpu_subtype_t	int*
+typedef cpu_threadtype_t	int*
+typedef cpu_type_t	int*
+
+mach/vm_prot.h y
+typedef vm_prot_t	int*
+
+mach/vm_region.h y
+typedef boolean_t	int*
+typedef memory_object_offset_t	unsigned long long*
+typedef vm_behavior_t	int*
+typedef vm_inherit_t	unsigned int*
+typedef vm_region_basic_info_64_t	vm_region_basic_info_data_64_t**
+typedef vm_region_basic_info_t	vm_region_basic_info_data_t**
+typedef vm_region_flavor_t	int*
+typedef vm_region_info_64_t	int**
+typedef vm_region_info_t	int**
+typedef vm_region_recurse_info_64_t	int**
+typedef vm_region_recurse_info_t	int**
 
 mach/mach_vm.h y
 mach_vm_allocate	int (*)(unsigned int, unsigned long long*, unsigned long long, int)
@@ -799,6 +995,11 @@ mach_vm_read	int (*)(unsigned int, unsigned long long, unsigned long long, unsig
 mach_vm_read_overwrite	int (*)(unsigned int, unsigned long long, unsigned long long, unsigned long long, unsigned long long*)
 mach_vm_region	int (*)(unsigned int, unsigned long long*, unsigned long long*, int, int*, unsigned int*, unsigned int*)
 mach_vm_write	int (*)(unsigned int, unsigned long long, unsigned long, unsigned int)
+typedef vm_map_inspect_t	unsigned int*
+typedef vm_map_read_t	unsigned int*
+typedef vm_map_t	unsigned int*
+typedef vm_offset_t	unsigned long*
+typedef vm_size_t	unsigned long*
 
 libproc.h y
 proc_clear_dirty	int (*)(int, unsigned int)
@@ -873,6 +1074,7 @@ getrlimit	int (*)(int, struct rlimit*)
 getrusage	int (*)(int, struct rusage*)
 setpriority	int (*)(int, unsigned int, int)
 setrlimit	int (*)(int, const struct rlimit*)
+typedef rlim_t	unsigned long long*
 
 wctype.h y
 iswalnum	int (*)(int)
@@ -891,6 +1093,9 @@ iswxdigit	int (*)(int)
 towctrans	int (*)(int, int)
 towlower	int (*)(int)
 towupper	int (*)(int)
+typedef wctrans_t	int*
+typedef wctype_t	unsigned int*
+typedef wint_t	int*
 wctrans	int (*)(const char*)
 wctype	unsigned int (*)(const char*)
 
@@ -921,9 +1126,13 @@ tcgetattr	int (*)(int, struct termios*)
 tcgetsid	int (*)(int)
 tcsendbreak	int (*)(int, int)
 tcsetattr	int (*)(int, int, const struct termios*)
+typedef cc_t	unsigned char*
+typedef speed_t	unsigned long*
+typedef tcflag_t	unsigned long*
 
 poll.h y
 poll	int (*)(struct pollfd*, unsigned int, int)
+typedef nfds_t	unsigned int*
 
 malloc/malloc.h y
 malloc_size	unsigned long (*)(const void*)
@@ -949,6 +1158,7 @@ regcomp	int (*)(regex_t*, const char*, int)
 regerror	unsigned long (*)(int, const regex_t*, char*, unsigned long)
 regexec	int (*)(const regex_t*, const char*, unsigned long, regmatch_t*, int)
 regfree	void (*)(regex_t*)
+typedef regoff_t	long long*
 
 pthread.h y
 pthread_atfork	int (*)(void (*)(void), void (*)(void), void (*)(void))
@@ -1035,6 +1245,8 @@ pthread_setschedparam	int (*)(struct _opaque_pthread_t*, int, const struct sched
 pthread_setspecific	int (*)(unsigned long, const void*)
 pthread_testcancel	void (*)(void)
 pthread_threadid_np	int (*)(struct _opaque_pthread_t*, unsigned long long*)
+typedef pthread_key_t	unsigned long*
+typedef pthread_t	struct _opaque_pthread_t**
 
 semaphore.h y
 sem_close	int (*)(int*)
@@ -1046,6 +1258,7 @@ sem_post	int (*)(int*)
 sem_trywait	int (*)(int*)
 sem_unlink	int (*)(const char*)
 sem_wait	int (*)(int*)
+typedef sem_t	int*
 
 aio.h y
 aio_cancel	int (*)(int, struct aiocb*)
@@ -1061,6 +1274,7 @@ nl_types.h y
 catclose	int (*)(struct __nl_cat_d*)
 catgets	char* (*)(struct __nl_cat_d*, int, int, const char*)
 catopen	struct __nl_cat_d* (*)(const char*, int)
+typedef nl_catd	struct __nl_cat_d**
 
 monetary.h y
 strfmon	long (*)(char*, unsigned long, const char*, ...)
@@ -1136,16 +1350,20 @@ fesetexceptflag	int (*)(const unsigned short*, int)
 fesetround	int (*)(int)
 fetestexcept	int (*)(int)
 feupdateenv	int (*)(const fenv_t*)
+typedef fexcept_t	unsigned short*
 
 os/log.h y
 _os_log_default	struct os_log_s*
 _os_log_internal	void (*)(void*, struct os_log_s*, unsigned char, const char*, ...)
 os_log_create	struct os_log_s* (*)(const char*, const char*)
+typedef os_log_t	struct os_log_s**
+typedef os_log_type_t	unsigned char*
 
 os/lock.h y
 os_unfair_lock_lock	void (*)(os_unfair_lock*)
 os_unfair_lock_trylock	_Bool (*)(os_unfair_lock*)
 os_unfair_lock_unlock	void (*)(os_unfair_lock*)
+typedef os_unfair_lock_t	os_unfair_lock**
 
 crt_externs.h y
 _NSGetArgc	int* (*)(void)
@@ -1157,6 +1375,14 @@ xlocale.h y
 _c_locale	struct _xlocale* const*
 localeconv_l	struct lconv* (*)(struct _xlocale*)
 querylocale	const char* (*)(int, struct _xlocale*)
+wcschr	int* (*)(const int*, int)
+wcscmp	int (*)(const int*, const int*)
+wcslen	unsigned long (*)(const int*)
+wcsncmp	int (*)(const int*, const int*, unsigned long)
+wmemchr	int* (*)(const int*, int, unsigned long)
+wmemcmp	int (*)(const int*, const int*, unsigned long)
+wmemcpy	int* (*)(int*, const int*, unsigned long)
+wmemmove	int* (*)(int*, const int*, unsigned long)
 
 wchar.h y
 btowc	int (*)(int)
@@ -1186,15 +1412,11 @@ vwprintf	int (*)(const int*, char*)
 vwscanf	int (*)(const int*, char*)
 wcrtomb	unsigned long (*)(char*, int, mbstate_t*)
 wcscat	int* (*)(int*, const int*)
-wcschr	int* (*)(const int*, int)
-wcscmp	int (*)(const int*, const int*)
 wcscoll	int (*)(const int*, const int*)
 wcscpy	int* (*)(int*, const int*)
 wcscspn	unsigned long (*)(const int*, const int*)
 wcsftime	unsigned long (*)(int*, unsigned long, const int*, const struct tm*)
-wcslen	unsigned long (*)(const int*)
 wcsncat	int* (*)(int*, const int*, unsigned long)
-wcsncmp	int (*)(const int*, const int*, unsigned long)
 wcsncpy	int* (*)(int*, const int*, unsigned long)
 wcspbrk	int* (*)(const int*, const int*)
 wcsrchr	int* (*)(const int*, int)
@@ -1213,10 +1435,6 @@ wcswidth	int (*)(const int*, unsigned long)
 wcsxfrm	unsigned long (*)(int*, const int*, unsigned long)
 wctob	int (*)(int)
 wcwidth	int (*)(int)
-wmemchr	int* (*)(const int*, int, unsigned long)
-wmemcmp	int (*)(const int*, const int*, unsigned long)
-wmemcpy	int* (*)(int*, const int*, unsigned long)
-wmemmove	int* (*)(int*, const int*, unsigned long)
 wmemset	int* (*)(int*, int, unsigned long)
 wprintf	int (*)(const int*, ...)
 wscanf	int (*)(const int*, ...)

@@ -1140,7 +1140,8 @@ impl VecLane {
         }
         // x86-64 code assumes x86-64-v3, whose AVX2 has every ymm form; the
         // zmm ones are AVX-512's, which a unit enables.
-        if bytes == 32 && x86.is_none() || bytes > 32 {
+        let zmm = |f: crate::c5::X86Features| f.avx512f() && (self.bytes() >= 4 || f.avx512bw());
+        if bytes == 32 && x86.is_none() || bytes == 64 && !x86.is_some_and(zmm) || bytes > 64 {
             return false;
         }
         let x86 = x86.is_some();

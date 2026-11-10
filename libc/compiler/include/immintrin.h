@@ -295,19 +295,14 @@ static inline __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
 
 /* The shifts by a count: one past the lane width clears the lane, or fills
 ** it with the sign. */
-#define __BADC_AVX2_SHIFTI(name, row)                                             \
-    static inline __m256i _mm256_##name(__m256i __A, int __N) {                   \
-        return (__m256i)__builtin_ia32_##row(__A, __N);                           \
-    }
-__BADC_AVX2_SHIFTI(slli_epi16, psllwi256)
-__BADC_AVX2_SHIFTI(slli_epi32, pslldi256)
-__BADC_AVX2_SHIFTI(slli_epi64, psllqi256)
-__BADC_AVX2_SHIFTI(srli_epi16, psrlwi256)
-__BADC_AVX2_SHIFTI(srli_epi32, psrldi256)
-__BADC_AVX2_SHIFTI(srli_epi64, psrlqi256)
-__BADC_AVX2_SHIFTI(srai_epi16, psrawi256)
-__BADC_AVX2_SHIFTI(srai_epi32, psradi256)
-#undef __BADC_AVX2_SHIFTI
+#define _mm256_slli_epi16(A, N) ((__m256i)__builtin_ia32_psllwi256((__m256i)(A), (int)(N)))
+#define _mm256_slli_epi32(A, N) ((__m256i)__builtin_ia32_pslldi256((__m256i)(A), (int)(N)))
+#define _mm256_slli_epi64(A, N) ((__m256i)__builtin_ia32_psllqi256((__m256i)(A), (int)(N)))
+#define _mm256_srli_epi16(A, N) ((__m256i)__builtin_ia32_psrlwi256((__m256i)(A), (int)(N)))
+#define _mm256_srli_epi32(A, N) ((__m256i)__builtin_ia32_psrldi256((__m256i)(A), (int)(N)))
+#define _mm256_srli_epi64(A, N) ((__m256i)__builtin_ia32_psrlqi256((__m256i)(A), (int)(N)))
+#define _mm256_srai_epi16(A, N) ((__m256i)__builtin_ia32_psrawi256((__m256i)(A), (int)(N)))
+#define _mm256_srai_epi32(A, N) ((__m256i)__builtin_ia32_psradi256((__m256i)(A), (int)(N)))
 
 /* The forms of an imm8 are macros, which keep it a literal. VPBLENDD gives
 ** each half four of its bits, and VPCLMULQDQ, an extension beyond
@@ -1950,3 +1945,481 @@ static inline void _m_prefetchw(void *__P) {
     __asm__ __volatile__("prefetchw (%0)" : : "r"(__P));
 }
 #endif
+
+/* AVX-512: the 512-bit types and the integer operations of AVX512F, BW, DQ,
+** CD and VNNI with VPCLMULQDQ, and the masked transfers of AVX512VL. An
+** operation AVX-512 has an instruction for is gcc's builtin of it, the EVEX
+** instruction on zmm registers; a mask is an integer the lowering moves
+** into an opmask register; the rest are written over the vector extension.
+** The forms of an imm8 are macros. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+typedef long long __m512i __attribute__((__vector_size__(64), __aligned__(64)));
+typedef long long __m512i_u __attribute__((__vector_size__(64), __may_alias__, __aligned__(1)));
+typedef float __m512 __attribute__((__vector_size__(64), __aligned__(64)));
+typedef double __m512d __attribute__((__vector_size__(64), __aligned__(64)));
+typedef long long __v8di __attribute__((__vector_size__(64)));
+typedef unsigned long long __v8du __attribute__((__vector_size__(64)));
+typedef int __v16si __attribute__((__vector_size__(64)));
+typedef unsigned int __v16su __attribute__((__vector_size__(64)));
+typedef short __v32hi __attribute__((__vector_size__(64)));
+typedef unsigned short __v32hu __attribute__((__vector_size__(64)));
+typedef char __v64qi __attribute__((__vector_size__(64)));
+typedef signed char __v64qs __attribute__((__vector_size__(64)));
+typedef unsigned char __v64qu __attribute__((__vector_size__(64)));
+typedef float __v16sf __attribute__((__vector_size__(64)));
+typedef double __v8df __attribute__((__vector_size__(64)));
+#pragma pop_macro("__attribute__")
+typedef unsigned char __mmask8;
+typedef unsigned short __mmask16;
+typedef unsigned int __mmask32;
+typedef unsigned long long __mmask64;
+
+static inline __m512i _mm512_loadu_si512(void const *__P) {
+    return (__m512i)__builtin_ia32_loaddqu512((char const *)__P);
+}
+static inline __m512i _mm512_load_si512(void const *__P) { return _mm512_loadu_si512(__P); }
+static inline void _mm512_storeu_si512(void *__P, __m512i __A) {
+    __builtin_ia32_storedqu512((char *)__P, __A);
+}
+static inline void _mm512_store_si512(void *__P, __m512i __A) { _mm512_storeu_si512(__P, __A); }
+#define _mm512_loadu_epi8 _mm512_loadu_si512
+#define _mm512_loadu_epi16 _mm512_loadu_si512
+#define _mm512_loadu_epi32 _mm512_loadu_si512
+#define _mm512_loadu_epi64 _mm512_loadu_si512
+#define _mm512_storeu_epi8 _mm512_storeu_si512
+#define _mm512_storeu_epi16 _mm512_storeu_si512
+#define _mm512_storeu_epi32 _mm512_storeu_si512
+#define _mm512_storeu_epi64 _mm512_storeu_si512
+
+static inline __m512i _mm512_setzero_si512(void) { return (__m512i){0, 0, 0, 0, 0, 0, 0, 0}; }
+#define _mm512_setzero_epi32 _mm512_setzero_si512
+static inline __m512i _mm512_set1_epi64(long long __A) {
+    return (__m512i){__A, __A, __A, __A, __A, __A, __A, __A};
+}
+static inline __m512i _mm512_set1_epi32(int __A) {
+    unsigned long long __q = (unsigned)__A * 0x100000001ull;
+    return _mm512_set1_epi64((long long)__q);
+}
+static inline __m512i _mm512_set1_epi16(short __A) {
+    return _mm512_set1_epi64((long long)((unsigned short)__A * 0x0001000100010001ull));
+}
+static inline __m512i _mm512_set1_epi8(char __A) {
+    return _mm512_set1_epi64((long long)((unsigned char)__A * 0x0101010101010101ull));
+}
+static inline __m512i _mm512_set_epi64(long long __H, long long __G, long long __F, long long __E,
+                                       long long __D, long long __C, long long __B, long long __A) {
+    return (__m512i){__A, __B, __C, __D, __E, __F, __G, __H};
+}
+static inline __m512i _mm512_setr_epi64(long long __A, long long __B, long long __C, long long __D,
+                                        long long __E, long long __F, long long __G, long long __H) {
+    return (__m512i){__A, __B, __C, __D, __E, __F, __G, __H};
+}
+static inline __m512i _mm512_set_epi32(int __P, int __O, int __N, int __M, int __L, int __K, int __J,
+                                       int __I, int __H, int __G, int __F, int __E, int __D, int __C,
+                                       int __B, int __A) {
+    return (__m512i)(__v16si){__A, __B, __C, __D, __E, __F, __G, __H,
+                              __I, __J, __K, __L, __M, __N, __O, __P};
+}
+static inline __m512i _mm512_setr_epi32(int __A, int __B, int __C, int __D, int __E, int __F, int __G,
+                                        int __H, int __I, int __J, int __K, int __L, int __M, int __N,
+                                        int __O, int __P) {
+    return (__m512i)(__v16si){__A, __B, __C, __D, __E, __F, __G, __H,
+                              __I, __J, __K, __L, __M, __N, __O, __P};
+}
+#define _mm512_set4_epi64(D, C, B, A) _mm512_set_epi64(D, C, B, A, D, C, B, A)
+#define _mm512_set4_epi32(D, C, B, A)                                             \
+    _mm512_set_epi32(D, C, B, A, D, C, B, A, D, C, B, A, D, C, B, A)
+
+/* The casts reinterpret; the widening ones leave the upper lanes zero, as
+** the zero-extending ones define. */
+static inline __m256i _mm512_castsi512_si256(__m512i __A) {
+    return (__m256i){__A[0], __A[1], __A[2], __A[3]};
+}
+static inline __m128i _mm512_castsi512_si128(__m512i __A) { return (__m128i){__A[0], __A[1]}; }
+static inline __m512i _mm512_zextsi256_si512(__m256i __A) {
+    return (__m512i){__A[0], __A[1], __A[2], __A[3], 0, 0, 0, 0};
+}
+static inline __m512i _mm512_zextsi128_si512(__m128i __A) {
+    return (__m512i){__A[0], __A[1], 0, 0, 0, 0, 0, 0};
+}
+#define _mm512_castsi256_si512 _mm512_zextsi256_si512
+#define _mm512_castsi128_si512 _mm512_zextsi128_si512
+static inline __m512 _mm512_castsi512_ps(__m512i __A) { return (__m512)__A; }
+static inline __m512d _mm512_castsi512_pd(__m512i __A) { return (__m512d)__A; }
+static inline __m512i _mm512_castps_si512(__m512 __A) { return (__m512i)__A; }
+static inline __m512i _mm512_castpd_si512(__m512d __A) { return (__m512i)__A; }
+static inline __m512 _mm512_castpd_ps(__m512d __A) { return (__m512)__A; }
+static inline __m512d _mm512_castps_pd(__m512 __A) { return (__m512d)__A; }
+
+static inline __m256i _mm512_extracti64x4_epi64(__m512i __A, const int __N) {
+    int __h = 4 * (__N & 1);
+    return (__m256i){__A[__h], __A[__h + 1], __A[__h + 2], __A[__h + 3]};
+}
+static inline __m128i _mm512_extracti32x4_epi32(__m512i __A, const int __N) {
+    int __h = 2 * (__N & 3);
+    return (__m128i){__A[__h], __A[__h + 1]};
+}
+#define _mm512_extracti64x2_epi64 _mm512_extracti32x4_epi32
+static inline __m512i _mm512_inserti64x4(__m512i __A, __m256i __B, const int __N) {
+    int __h = 4 * (__N & 1);
+    for (int __i = 0; __i < 4; __i++)
+        __A[__h + __i] = __B[__i];
+    return __A;
+}
+static inline __m512i _mm512_inserti32x4(__m512i __A, __m128i __B, const int __N) {
+    int __h = 2 * (__N & 3);
+    __A[__h] = __B[0];
+    __A[__h + 1] = __B[1];
+    return __A;
+}
+#define _mm512_inserti64x2 _mm512_inserti32x4
+static inline __m512i _mm512_broadcast_i32x4(__m128i __A) {
+    return (__m512i){__A[0], __A[1], __A[0], __A[1], __A[0], __A[1], __A[0], __A[1]};
+}
+static inline __m512i _mm512_broadcast_i64x4(__m256i __A) {
+    return (__m512i){__A[0], __A[1], __A[2], __A[3], __A[0], __A[1], __A[2], __A[3]};
+}
+#define _mm512_broadcast_i64x2 _mm512_broadcast_i32x4
+static inline __m512i _mm512_broadcastd_epi32(__m128i __A) {
+    return _mm512_set1_epi32(((__v4si)__A)[0]);
+}
+static inline __m512i _mm512_broadcastq_epi64(__m128i __A) { return _mm512_set1_epi64(__A[0]); }
+static inline __m512i _mm512_broadcastb_epi8(__m128i __A) {
+    return _mm512_set1_epi8(((__v16qi)__A)[0]);
+}
+static inline __m512i _mm512_broadcastw_epi16(__m128i __A) {
+    return _mm512_set1_epi16(((__v8hi)__A)[0]);
+}
+
+/* The element-wise integer arithmetic and the bitwise operations are the
+** vector extension's operators. */
+#define __BADC_512_OP(name, vec, op)                                              \
+    static inline __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
+        return (__m512i)((vec)__A op (vec)__B);                                   \
+    }
+__BADC_512_OP(add_epi8, __v64qu, +)
+__BADC_512_OP(add_epi16, __v32hu, +)
+__BADC_512_OP(add_epi32, __v16su, +)
+__BADC_512_OP(add_epi64, __v8du, +)
+__BADC_512_OP(sub_epi8, __v64qu, -)
+__BADC_512_OP(sub_epi16, __v32hu, -)
+__BADC_512_OP(sub_epi32, __v16su, -)
+__BADC_512_OP(sub_epi64, __v8du, -)
+__BADC_512_OP(and_si512, __v8du, &)
+__BADC_512_OP(or_si512, __v8du, |)
+__BADC_512_OP(xor_si512, __v8du, ^)
+#undef __BADC_512_OP
+#define _mm512_and_epi32 _mm512_and_si512
+#define _mm512_and_epi64 _mm512_and_si512
+#define _mm512_or_epi32 _mm512_or_si512
+#define _mm512_or_epi64 _mm512_or_si512
+#define _mm512_xor_epi32 _mm512_xor_si512
+#define _mm512_xor_epi64 _mm512_xor_si512
+
+#define __BADC_512_ROW(name, row)                                                 \
+    static inline __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
+        return (__m512i)__builtin_ia32_##row(__A, __B);                           \
+    }
+__BADC_512_ROW(andnot_si512, andnotsi512)
+__BADC_512_ROW(mullo_epi16, pmullw512)
+__BADC_512_ROW(mullo_epi32, pmulld512)
+__BADC_512_ROW(mul_epu32, pmuludq512)
+__BADC_512_ROW(mul_epi32, pmuldq512)
+__BADC_512_ROW(mulhi_epi16, pmulhw512)
+__BADC_512_ROW(mulhi_epu16, pmulhuw512)
+__BADC_512_ROW(mulhrs_epi16, pmulhrsw512)
+__BADC_512_ROW(madd_epi16, pmaddwd512)
+__BADC_512_ROW(maddubs_epi16, pmaddubsw512)
+__BADC_512_ROW(sad_epu8, psadbw512)
+__BADC_512_ROW(adds_epi8, paddsb512)
+__BADC_512_ROW(adds_epi16, paddsw512)
+__BADC_512_ROW(adds_epu8, paddusb512)
+__BADC_512_ROW(adds_epu16, paddusw512)
+__BADC_512_ROW(subs_epi8, psubsb512)
+__BADC_512_ROW(subs_epi16, psubsw512)
+__BADC_512_ROW(subs_epu8, psubusb512)
+__BADC_512_ROW(subs_epu16, psubusw512)
+__BADC_512_ROW(avg_epu8, pavgb512)
+__BADC_512_ROW(avg_epu16, pavgw512)
+__BADC_512_ROW(min_epi8, pminsb512)
+__BADC_512_ROW(min_epi16, pminsw512)
+__BADC_512_ROW(min_epi32, pminsd512)
+__BADC_512_ROW(min_epu8, pminub512)
+__BADC_512_ROW(min_epu16, pminuw512)
+__BADC_512_ROW(min_epu32, pminud512)
+__BADC_512_ROW(max_epi8, pmaxsb512)
+__BADC_512_ROW(max_epi16, pmaxsw512)
+__BADC_512_ROW(max_epi32, pmaxsd512)
+__BADC_512_ROW(max_epu8, pmaxub512)
+__BADC_512_ROW(max_epu16, pmaxuw512)
+__BADC_512_ROW(max_epu32, pmaxud512)
+__BADC_512_ROW(packs_epi16, packsswb512)
+__BADC_512_ROW(packs_epi32, packssdw512)
+__BADC_512_ROW(packus_epi16, packuswb512)
+__BADC_512_ROW(packus_epi32, packusdw512)
+__BADC_512_ROW(unpacklo_epi8, punpcklbw512)
+__BADC_512_ROW(unpacklo_epi16, punpcklwd512)
+__BADC_512_ROW(unpacklo_epi32, punpckldq512)
+__BADC_512_ROW(unpacklo_epi64, punpcklqdq512)
+__BADC_512_ROW(unpackhi_epi8, punpckhbw512)
+__BADC_512_ROW(unpackhi_epi16, punpckhwd512)
+__BADC_512_ROW(unpackhi_epi32, punpckhdq512)
+__BADC_512_ROW(unpackhi_epi64, punpckhqdq512)
+__BADC_512_ROW(shuffle_epi8, pshufb512)
+#undef __BADC_512_ROW
+#define _mm512_andnot_epi32 _mm512_andnot_si512
+#define _mm512_andnot_epi64 _mm512_andnot_si512
+
+static inline __m512i _mm512_abs_epi8(__m512i __A) { return (__m512i)__builtin_ia32_pabsb512(__A); }
+static inline __m512i _mm512_abs_epi16(__m512i __A) { return (__m512i)__builtin_ia32_pabsw512(__A); }
+static inline __m512i _mm512_abs_epi32(__m512i __A) { return (__m512i)__builtin_ia32_pabsd512(__A); }
+
+#define _mm512_slli_epi16(A, N) ((__m512i)__builtin_ia32_psllwi512((__m512i)(A), (int)(N)))
+#define _mm512_slli_epi32(A, N) ((__m512i)__builtin_ia32_pslldi512((__m512i)(A), (int)(N)))
+#define _mm512_slli_epi64(A, N) ((__m512i)__builtin_ia32_psllqi512((__m512i)(A), (int)(N)))
+#define _mm512_srli_epi16(A, N) ((__m512i)__builtin_ia32_psrlwi512((__m512i)(A), (int)(N)))
+#define _mm512_srli_epi32(A, N) ((__m512i)__builtin_ia32_psrldi512((__m512i)(A), (int)(N)))
+#define _mm512_srli_epi64(A, N) ((__m512i)__builtin_ia32_psrlqi512((__m512i)(A), (int)(N)))
+#define _mm512_srai_epi16(A, N) ((__m512i)__builtin_ia32_psrawi512((__m512i)(A), (int)(N)))
+#define _mm512_srai_epi32(A, N) ((__m512i)__builtin_ia32_psradi512((__m512i)(A), (int)(N)))
+#define _mm512_bslli_epi128(A, N)                                                 \
+    ((__m512i)__builtin_ia32_pslldqi512((__m512i)(A), (int)(N) * 8))
+#define _mm512_bsrli_epi128(A, N)                                                 \
+    ((__m512i)__builtin_ia32_psrldqi512((__m512i)(A), (int)(N) * 8))
+#define _mm512_shuffle_epi32(A, M) ((__m512i)__builtin_ia32_pshufd512((__m512i)(A), (int)(M)))
+#define _mm512_shufflehi_epi16(A, M)                                              \
+    ((__m512i)__builtin_ia32_pshufhw512((__m512i)(A), (int)(M)))
+#define _mm512_shufflelo_epi16(A, M)                                              \
+    ((__m512i)__builtin_ia32_pshuflw512((__m512i)(A), (int)(M)))
+#define _mm512_alignr_epi8(A, B, N)                                               \
+    ((__m512i)__builtin_ia32_palignr512((__m512i)(A), (__m512i)(B), (int)(N) * 8))
+#define _mm512_permutex_epi64(A, M) ((__m512i)__builtin_ia32_permdi512((__m512i)(A), (int)(M)))
+#define _mm512_shuffle_i64x2(A, B, M)                                             \
+    ((__m512i)__builtin_ia32_shuf_i64x2((__m512i)(A), (__m512i)(B), (int)(M)))
+#define _mm512_shuffle_i32x4 _mm512_shuffle_i64x2
+#define _mm512_clmulepi64_epi128(A, B, I)                                         \
+    ((__m512i)__builtin_ia32_pclmulqdq512((__m512i)(A), (__m512i)(B), (int)(I)))
+#define _mm512_ternarylogic_epi64(A, B, C, I)                                     \
+    ((__m512i)__builtin_ia32_pternlogq512((__m512i)(A), (__m512i)(B), (__m512i)(C), (int)(I)))
+#define _mm512_ternarylogic_epi32 _mm512_ternarylogic_epi64
+static inline __m512i _mm512_permutexvar_epi32(__m512i __I, __m512i __A) {
+    return (__m512i)__builtin_ia32_permvarsi512(__A, __I);
+}
+#define _mm512_permutexvar_epi64(I, A)                                            \
+    _mm512_permutexvar_epi32(_mm512_add_epi32(_mm512_slli_epi32(                 \
+        _mm512_shuffle_epi32((__m512i)(I), 0xA0), 1), _mm512_set1_epi64(1LL << 32)), A)
+
+/* AVX512-VNNI: each doubleword of the accumulator plus four byte or two
+** word products. */
+#define __BADC_512_DOT(name, row)                                                 \
+    static inline __m512i _mm512_##name(__m512i __S, __m512i __A, __m512i __B) {  \
+        return (__m512i)__builtin_ia32_##row(__S, __A, __B);                      \
+    }
+__BADC_512_DOT(dpbusd_epi32, vpdpbusd512)
+__BADC_512_DOT(dpbusds_epi32, vpdpbusds512)
+__BADC_512_DOT(dpwssd_epi32, vpdpwssd512)
+__BADC_512_DOT(dpwssds_epi32, vpdpwssds512)
+#undef __BADC_512_DOT
+
+/* The compares into a mask by predicate (0 eq, 1 lt, 2 le, 4 ne, 5 nlt,
+** 6 nle), signed and unsigned, and their named forms. */
+#define _mm512_cmp_epi8_mask(A, B, P) ((__mmask64)__builtin_ia32_cmpb512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epu8_mask(A, B, P) ((__mmask64)__builtin_ia32_ucmpb512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epi16_mask(A, B, P) ((__mmask32)__builtin_ia32_cmpw512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epu16_mask(A, B, P) ((__mmask32)__builtin_ia32_ucmpw512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epi32_mask(A, B, P) ((__mmask16)__builtin_ia32_cmpd512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epu32_mask(A, B, P) ((__mmask16)__builtin_ia32_ucmpd512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epi64_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpq512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define _mm512_cmp_epu64_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpq512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
+#define __BADC_512_CMPS(t, mt)                                                    \
+    static inline mt _mm512_cmpeq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 0); } \
+    static inline mt _mm512_cmplt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 1); } \
+    static inline mt _mm512_cmple_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 2); } \
+    static inline mt _mm512_cmpneq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 4); } \
+    static inline mt _mm512_cmpge_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 5); } \
+    static inline mt _mm512_cmpgt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 6); }
+__BADC_512_CMPS(epi8, __mmask64)
+__BADC_512_CMPS(epu8, __mmask64)
+__BADC_512_CMPS(epi16, __mmask32)
+__BADC_512_CMPS(epu16, __mmask32)
+__BADC_512_CMPS(epi32, __mmask16)
+__BADC_512_CMPS(epu32, __mmask16)
+__BADC_512_CMPS(epi64, __mmask8)
+__BADC_512_CMPS(epu64, __mmask8)
+#undef __BADC_512_CMPS
+static inline __mmask64 _mm512_test_epi8_mask(__m512i __A, __m512i __B) {
+    return _mm512_cmpneq_epi8_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
+}
+static inline __mmask64 _mm512_testn_epi8_mask(__m512i __A, __m512i __B) {
+    return _mm512_cmpeq_epi8_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
+}
+static inline __mmask16 _mm512_test_epi32_mask(__m512i __A, __m512i __B) {
+    return _mm512_cmpneq_epi32_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
+}
+static inline __mmask64 _mm512_movepi8_mask(__m512i __A) {
+    return (__mmask64)__builtin_ia32_pmovmskb512(__A);
+}
+
+/* The blends and the masked forms of an operation: the lanes a mask selects
+** from the operation, the others from the source or zero. */
+#define __BADC_512_BLEND(t, mt, row)                                              \
+    static inline __m512i _mm512_mask_mov_##t(__m512i __S, mt __K, __m512i __A) { \
+        return (__m512i)__builtin_ia32_##row(__S, __K, __A);                      \
+    }                                                                             \
+    static inline __m512i _mm512_maskz_mov_##t(mt __K, __m512i __A) {             \
+        return _mm512_mask_mov_##t(_mm512_setzero_si512(), __K, __A);             \
+    }                                                                             \
+    static inline __m512i _mm512_mask_blend_##t(mt __K, __m512i __A, __m512i __B) { \
+        return _mm512_mask_mov_##t(__A, __K, __B);                                \
+    }
+__BADC_512_BLEND(epi8, __mmask64, blendmb_512)
+__BADC_512_BLEND(epi16, __mmask32, blendmw_512)
+__BADC_512_BLEND(epi32, __mmask16, blendmd_512)
+__BADC_512_BLEND(epi64, __mmask8, blendmq_512)
+#undef __BADC_512_BLEND
+#define __BADC_512_MASKED(name, t, mt)                                            \
+    static inline __m512i _mm512_mask_##name(__m512i __S, mt __K, __m512i __A, __m512i __B) { \
+        return _mm512_mask_mov_##t(__S, __K, _mm512_##name(__A, __B));            \
+    }                                                                             \
+    static inline __m512i _mm512_maskz_##name(mt __K, __m512i __A, __m512i __B) { \
+        return _mm512_maskz_mov_##t(__K, _mm512_##name(__A, __B));                \
+    }
+__BADC_512_MASKED(add_epi8, epi8, __mmask64)
+__BADC_512_MASKED(add_epi16, epi16, __mmask32)
+__BADC_512_MASKED(add_epi32, epi32, __mmask16)
+__BADC_512_MASKED(add_epi64, epi64, __mmask8)
+__BADC_512_MASKED(sub_epi8, epi8, __mmask64)
+__BADC_512_MASKED(sub_epi16, epi16, __mmask32)
+__BADC_512_MASKED(sub_epi32, epi32, __mmask16)
+__BADC_512_MASKED(sub_epi64, epi64, __mmask8)
+__BADC_512_MASKED(and_epi32, epi32, __mmask16)
+__BADC_512_MASKED(or_epi32, epi32, __mmask16)
+__BADC_512_MASKED(xor_epi32, epi32, __mmask16)
+__BADC_512_MASKED(min_epu8, epi8, __mmask64)
+__BADC_512_MASKED(max_epu8, epi8, __mmask64)
+#undef __BADC_512_MASKED
+
+/* The masked transfers (AVX512BW / AVX512F, AVX512VL at 256 and 128 bits):
+** only the lanes a mask selects are read or written. */
+#define __BADC_MASKED_IO(pre, vt, t, mt, sfx, bits)                               \
+    static inline vt pre##_maskz_loadu_##t(mt __K, void const *__P) {             \
+        return (vt)__builtin_ia32_loaddqu##sfx##bits##_mask(__K, (char const *)__P); \
+    }                                                                             \
+    static inline void pre##_mask_storeu_##t(void *__P, mt __K, vt __A) {         \
+        __builtin_ia32_storedqu##sfx##bits##_mask((char *)__P, __K, __A);         \
+    }
+__BADC_MASKED_IO(_mm512, __m512i, epi8, __mmask64, qi, 512)
+__BADC_MASKED_IO(_mm512, __m512i, epi16, __mmask32, hi, 512)
+__BADC_MASKED_IO(_mm512, __m512i, epi32, __mmask16, si, 512)
+__BADC_MASKED_IO(_mm512, __m512i, epi64, __mmask8, di, 512)
+__BADC_MASKED_IO(_mm256, __m256i, epi8, __mmask32, qi, 256)
+__BADC_MASKED_IO(_mm256, __m256i, epi16, __mmask16, hi, 256)
+__BADC_MASKED_IO(_mm256, __m256i, epi32, __mmask8, si, 256)
+__BADC_MASKED_IO(_mm256, __m256i, epi64, __mmask8, di, 256)
+__BADC_MASKED_IO(_mm, __m128i, epi8, __mmask16, qi, 128)
+__BADC_MASKED_IO(_mm, __m128i, epi16, __mmask8, hi, 128)
+__BADC_MASKED_IO(_mm, __m128i, epi32, __mmask8, si, 128)
+__BADC_MASKED_IO(_mm, __m128i, epi64, __mmask8, di, 128)
+#undef __BADC_MASKED_IO
+static inline __m512i _mm512_mask_loadu_epi8(__m512i __S, __mmask64 __K, void const *__P) {
+    return _mm512_mask_mov_epi8(__S, __K, _mm512_maskz_loadu_epi8(__K, __P));
+}
+static inline __m512i _mm512_mask_loadu_epi32(__m512i __S, __mmask16 __K, void const *__P) {
+    return _mm512_mask_mov_epi32(__S, __K, _mm512_maskz_loadu_epi32(__K, __P));
+}
+
+/* The reductions and AVX512CD's counts, element by element. */
+static inline int _mm512_reduce_add_epi32(__m512i __A) {
+    __v16su __a = (__v16su)__A;
+    unsigned __s = 0;
+    for (int __i = 0; __i < 16; __i++)
+        __s += __a[__i];
+    return (int)__s;
+}
+static inline long long _mm512_reduce_add_epi64(__m512i __A) {
+    unsigned long long __s = 0;
+    for (int __i = 0; __i < 8; __i++)
+        __s += (unsigned long long)__A[__i];
+    return (long long)__s;
+}
+static inline int _mm512_reduce_or_epi32(__m512i __A) {
+    __v16si __a = (__v16si)__A;
+    int __s = 0;
+    for (int __i = 0; __i < 16; __i++)
+        __s |= __a[__i];
+    return __s;
+}
+static inline __m512i _mm512_lzcnt_epi32(__m512i __A) {
+    __v16su __a = (__v16su)__A;
+    for (int __i = 0; __i < 16; __i++)
+        __a[__i] = __a[__i] ? (unsigned)__builtin_clz(__a[__i]) : 32;
+    return (__m512i)__a;
+}
+static inline __m512i _mm512_lzcnt_epi64(__m512i __A) {
+    __v8du __a = (__v8du)__A;
+    for (int __i = 0; __i < 8; __i++)
+        __a[__i] = __a[__i] ? (unsigned long long)__builtin_clzll(__a[__i]) : 64;
+    return (__m512i)__a;
+}
+
+/* The opmask operations on integers. */
+static inline __mmask64 _kand_mask64(__mmask64 __A, __mmask64 __B) { return __A & __B; }
+static inline __mmask64 _kor_mask64(__mmask64 __A, __mmask64 __B) { return __A | __B; }
+static inline __mmask64 _knot_mask64(__mmask64 __A) { return ~__A; }
+static inline __mmask16 _mm512_kand(__mmask16 __A, __mmask16 __B) { return __A & __B; }
+static inline __mmask16 _mm512_kor(__mmask16 __A, __mmask16 __B) { return __A | __B; }
+static inline __mmask16 _mm512_knot(__mmask16 __A) { return (__mmask16)~__A; }
+static inline unsigned long long _cvtmask64_u64(__mmask64 __A) { return __A; }
+static inline __mmask64 _cvtu64_mask64(unsigned long long __A) { return __A; }
+static inline unsigned int _cvtmask32_u32(__mmask32 __A) { return __A; }
+static inline __mmask32 _cvtu32_mask32(unsigned int __A) { return __A; }
+static inline int _mm512_kortestz(__mmask16 __A, __mmask16 __B) { return (__A | __B) == 0; }
+static inline unsigned char _kortestz_mask64_u8(__mmask64 __A, __mmask64 __B) {
+    return (__A | __B) == 0;
+}
+
+/* AVX512F floating point: the vector extension's operators, and the
+** fused forms and roots element by element. */
+static inline __m512 _mm512_setzero_ps(void) { return (__m512)_mm512_setzero_si512(); }
+static inline __m512d _mm512_setzero_pd(void) { return (__m512d)_mm512_setzero_si512(); }
+static inline __m512 _mm512_set1_ps(float __A) {
+    return (__m512){__A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A};
+}
+static inline __m512d _mm512_set1_pd(double __A) {
+    return (__m512d){__A, __A, __A, __A, __A, __A, __A, __A};
+}
+static inline __m512 _mm512_loadu_ps(void const *__P) { return (__m512)_mm512_loadu_si512(__P); }
+static inline __m512d _mm512_loadu_pd(void const *__P) { return (__m512d)_mm512_loadu_si512(__P); }
+static inline void _mm512_storeu_ps(void *__P, __m512 __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
+static inline void _mm512_storeu_pd(void *__P, __m512d __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
+#define __BADC_512_FOP(name, op)                                                  \
+    static inline __m512 _mm512_##name##_ps(__m512 __A, __m512 __B) { return __A op __B; } \
+    static inline __m512d _mm512_##name##_pd(__m512d __A, __m512d __B) { return __A op __B; }
+__BADC_512_FOP(add, +)
+__BADC_512_FOP(sub, -)
+__BADC_512_FOP(mul, *)
+__BADC_512_FOP(div, /)
+#undef __BADC_512_FOP
+static inline __m512 _mm512_fmadd_ps(__m512 __A, __m512 __B, __m512 __C) {
+    for (int __i = 0; __i < 16; __i++)
+        __A[__i] = __builtin_fmaf(__A[__i], __B[__i], __C[__i]);
+    return __A;
+}
+static inline __m512d _mm512_fmadd_pd(__m512d __A, __m512d __B, __m512d __C) {
+    for (int __i = 0; __i < 8; __i++)
+        __A[__i] = __builtin_fma(__A[__i], __B[__i], __C[__i]);
+    return __A;
+}
+static inline float _mm512_reduce_add_ps(__m512 __A) {
+    float __s = 0;
+    for (int __i = 0; __i < 16; __i++)
+        __s += __A[__i];
+    return __s;
+}
+static inline double _mm512_reduce_add_pd(__m512d __A) {
+    double __s = 0;
+    for (int __i = 0; __i < 8; __i++)
+        __s += __A[__i];
+    return __s;
+}

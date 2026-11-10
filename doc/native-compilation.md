@@ -97,8 +97,10 @@ Feature macros:
   combined as gcc combines them; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
   `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
   intrinsics the headers carry, from SSE3 to AVX2, FMA, F16C, the AES, SHA,
-  VAES and carry-less multiply instructions, RDRAND, RDSEED, and BMI, and
-  refuses any other. `-mno-sse` and `-mgeneral-regs-only` leave the set
+  VAES and carry-less multiply instructions, RDRAND, RDSEED, BMI, and
+  AVX-512F, BW, DQ, VL, CD, and VNNI, and refuses any other. Under AVX-512F
+  `__BIGGEST_ALIGNMENT__` is 64 and the 64-byte GNU vectors are values in
+  the zmm registers. `-mno-sse` and `-mgeneral-regs-only` leave the set
   unchanged.
 - AArch64 predefines no feature macro, `__ARM_NEON` included. `-mcpu=`'s
   `+aes`, `+sha2`, and `+crypto` modifiers define `__ARM_FEATURE_AES`,

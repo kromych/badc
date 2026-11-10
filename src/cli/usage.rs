@@ -598,7 +598,9 @@ Compile knobs:
                            ssse3, sse4.1, sse4.2, popcnt, crc32, avx,
                            avx2, fma, f16c, aes, pclmul, sha, vaes,
                            vpclmulqdq, rdrnd, rdseed, bmi, bmi2, lzcnt,
-                           adx, xsave, clflushopt, clwb, prfchw, sahf.
+                           adx, xsave, clflushopt, clwb, prfchw, sahf,
+                           avx512f, avx512bw, avx512dq, avx512vl,
+                           avx512cd, avx512vnni.
                            `-mno-` also drops the ones implying it, and
                            is refused for an x86-64-v3 extension the
                            code generator emits unless -mno-sse keeps

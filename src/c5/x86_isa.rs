@@ -6,47 +6,53 @@
 
 /// A set of x86 extensions beyond the x86-64 baseline (SSE2).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct X86Features(u32);
+pub struct X86Features(u64);
 
-const SSE3: u32 = 1 << 0;
-const SSSE3: u32 = 1 << 1;
-const SSE4_1: u32 = 1 << 2;
-const SSE4_2: u32 = 1 << 3;
-const POPCNT: u32 = 1 << 4;
-const CRC32: u32 = 1 << 5;
-const AVX: u32 = 1 << 6;
-const AVX2: u32 = 1 << 7;
-const FMA: u32 = 1 << 8;
-const F16C: u32 = 1 << 9;
-const AES: u32 = 1 << 10;
-const PCLMUL: u32 = 1 << 11;
-const SHA: u32 = 1 << 12;
-const VAES: u32 = 1 << 13;
-const VPCLMULQDQ: u32 = 1 << 14;
-const RDRND: u32 = 1 << 15;
-const RDSEED: u32 = 1 << 16;
-const BMI: u32 = 1 << 17;
-const BMI2: u32 = 1 << 18;
-const LZCNT: u32 = 1 << 19;
-const ADX: u32 = 1 << 20;
-const XSAVE: u32 = 1 << 21;
-const CLFLUSHOPT: u32 = 1 << 22;
-const CLWB: u32 = 1 << 23;
-const PRFCHW: u32 = 1 << 24;
-const SAHF: u32 = 1 << 25;
+const SSE3: u64 = 1 << 0;
+const SSSE3: u64 = 1 << 1;
+const SSE4_1: u64 = 1 << 2;
+const SSE4_2: u64 = 1 << 3;
+const POPCNT: u64 = 1 << 4;
+const CRC32: u64 = 1 << 5;
+const AVX: u64 = 1 << 6;
+const AVX2: u64 = 1 << 7;
+const FMA: u64 = 1 << 8;
+const F16C: u64 = 1 << 9;
+const AES: u64 = 1 << 10;
+const PCLMUL: u64 = 1 << 11;
+const SHA: u64 = 1 << 12;
+const VAES: u64 = 1 << 13;
+const VPCLMULQDQ: u64 = 1 << 14;
+const RDRND: u64 = 1 << 15;
+const RDSEED: u64 = 1 << 16;
+const BMI: u64 = 1 << 17;
+const BMI2: u64 = 1 << 18;
+const LZCNT: u64 = 1 << 19;
+const ADX: u64 = 1 << 20;
+const XSAVE: u64 = 1 << 21;
+const CLFLUSHOPT: u64 = 1 << 22;
+const CLWB: u64 = 1 << 23;
+const PRFCHW: u64 = 1 << 24;
+const SAHF: u64 = 1 << 25;
+const AVX512F: u64 = 1 << 26;
+const AVX512BW: u64 = 1 << 27;
+const AVX512DQ: u64 = 1 << 28;
+const AVX512VL: u64 = 1 << 29;
+const AVX512CD: u64 = 1 << 30;
+const AVX512VNNI: u64 = 1 << 31;
 
 /// An extension: its option name, its bit, its macro, the extensions
 /// enabling it enables, and those disabling it also disables beside its
 /// dependents (gcc's `-mno-sse4.2` drops POPCNT and CRC32).
 struct Ext {
     name: &'static str,
-    bit: u32,
+    bit: u64,
     mac: &'static str,
-    implies: u32,
-    unsets: u32,
+    implies: u64,
+    unsets: u64,
 }
 
-const fn ext(name: &'static str, bit: u32, mac: &'static str, implies: u32) -> Ext {
+const fn ext(name: &'static str, bit: u64, mac: &'static str, implies: u64) -> Ext {
     Ext {
         name,
         bit,
@@ -86,15 +92,23 @@ const EXTS: &[Ext] = &[
     ext("clwb", CLWB, "__CLWB__", 0),
     ext("prfchw", PRFCHW, "__PRFCHW__", 0),
     ext("sahf", SAHF, "__LAHF_SAHF__", 0),
+    ext("avx512f", AVX512F, "__AVX512F__", AVX2),
+    ext("avx512bw", AVX512BW, "__AVX512BW__", AVX512F),
+    ext("avx512dq", AVX512DQ, "__AVX512DQ__", AVX512F),
+    ext("avx512vl", AVX512VL, "__AVX512VL__", AVX512F),
+    ext("avx512cd", AVX512CD, "__AVX512CD__", AVX512F),
+    ext("avx512vnni", AVX512VNNI, "__AVX512VNNI__", AVX512F),
 ];
 
 /// The x86-64 psABI levels 2 and 3 within the set.
-const V2: u32 = SSE3 | SSSE3 | SSE4_1 | SSE4_2 | POPCNT | CRC32 | SAHF;
-const V3: u32 = V2 | AVX | AVX2 | FMA | F16C | BMI | BMI2 | LZCNT | XSAVE;
+const V2: u64 = SSE3 | SSSE3 | SSE4_1 | SSE4_2 | POPCNT | CRC32 | SAHF;
+const V3: u64 = V2 | AVX | AVX2 | FMA | F16C | BMI | BMI2 | LZCNT | XSAVE;
+/// The AVX-512 part of x86-64-v4 within the set.
+const V4: u64 = AVX512F | AVX512BW | AVX512DQ | AVX512VL | AVX512CD;
 
 /// gcc's `-march=` names and their extensions within the set.
 #[rustfmt::skip]
-const CPUS: &[(&[&str], u32)] = &[
+const CPUS: &[(&[&str], u64)] = &[
     (&["x86-64", "k8", "opteron", "athlon64", "athlon-fx"], 0),
     (&["nocona", "k8-sse3", "opteron-sse3", "athlon64-sse3"], SSE3),
     (&["eden-x2"], SSE3 | SAHF),
@@ -115,26 +129,35 @@ const CPUS: &[(&[&str], u32)] = &[
     (&["bdver1"], V2 | AVX | AES | PCLMUL | LZCNT | XSAVE | PRFCHW),
     (&["bdver2", "bdver3"], V2 | AVX | FMA | F16C | AES | PCLMUL | BMI | LZCNT | XSAVE | PRFCHW),
     (&["btver2"], V2 | AVX | F16C | AES | PCLMUL | BMI | LZCNT | XSAVE | PRFCHW),
-    (&["x86-64-v3", "x86-64-v4"], V3),
+    (&["x86-64-v3"], V3),
+    (&["x86-64-v4"], V3 | V4),
     (&["haswell", "core-avx2"], V3 | PCLMUL | RDRND),
     (&["bdver4"], V3 | AES | PCLMUL | RDRND | PRFCHW),
     (&["broadwell"], V3 | PCLMUL | RDRND | RDSEED | ADX | PRFCHW),
     (&["skylake"], V3 | AES | PCLMUL | RDRND | RDSEED | ADX | CLFLUSHOPT | PRFCHW),
-    (&["skylake-avx512", "cascadelake", "cooperlake"],
-     V3 | AES | PCLMUL | RDRND | RDSEED | ADX | CLFLUSHOPT | CLWB | PRFCHW),
+    (&["skylake-avx512"],
+     V3 | V4 | AES | PCLMUL | RDRND | RDSEED | ADX | CLFLUSHOPT | CLWB | PRFCHW),
+    (&["cascadelake", "cooperlake"],
+     V3 | V4 | AVX512VNNI | AES | PCLMUL | RDRND | RDSEED | ADX | CLFLUSHOPT | CLWB | PRFCHW),
     (&["yongfeng", "shijidadao"], V3 | AES | PCLMUL | SHA | RDRND | RDSEED | ADX | PRFCHW),
-    (&["cannonlake", "znver1", "c86-4g-m4", "c86-4g-m6"],
+    (&["znver1", "c86-4g-m4", "c86-4g-m6"],
      V3 | AES | PCLMUL | SHA | RDRND | RDSEED | ADX | CLFLUSHOPT | PRFCHW),
+    (&["cannonlake"],
+     V3 | V4 | AES | PCLMUL | SHA | RDRND | RDSEED | ADX | CLFLUSHOPT | PRFCHW),
     (&["znver2"], V3 | AES | PCLMUL | SHA | RDRND | RDSEED | ADX | CLFLUSHOPT | CLWB | PRFCHW),
     (&["icelake-client", "rocketlake"],
-     V3 | AES | PCLMUL | SHA | VAES | VPCLMULQDQ | RDRND | RDSEED | ADX | CLFLUSHOPT | PRFCHW),
-    (&["icelake-server", "tigerlake", "sapphirerapids", "emeraldrapids", "alderlake",
-       "raptorlake", "meteorlake", "graniterapids", "graniterapids-d", "arrowlake",
-       "arrowlake-s", "lunarlake", "pantherlake", "diamondrapids", "wildcatlake", "novalake",
-       "gracemont", "sierraforest", "grandridge", "clearwaterforest", "znver3", "znver4",
-       "znver5", "znver6", "c86-4g-m7", "c86-4g-m8"],
+     V3 | V4 | AVX512VNNI | AES | PCLMUL | SHA | VAES | VPCLMULQDQ | RDRND | RDSEED | ADX
+        | CLFLUSHOPT | PRFCHW),
+    (&["alderlake", "raptorlake", "meteorlake", "arrowlake", "arrowlake-s", "lunarlake",
+       "pantherlake", "wildcatlake", "gracemont", "sierraforest", "grandridge",
+       "clearwaterforest", "znver3"],
      V3 | AES | PCLMUL | SHA | VAES | VPCLMULQDQ | RDRND | RDSEED | ADX | CLFLUSHOPT | CLWB
         | PRFCHW),
+    (&["icelake-server", "tigerlake", "sapphirerapids", "emeraldrapids", "graniterapids",
+       "graniterapids-d", "diamondrapids", "novalake", "znver4", "znver5", "znver6",
+       "c86-4g-m7", "c86-4g-m8"],
+     V3 | V4 | AVX512VNNI | AES | PCLMUL | SHA | VAES | VPCLMULQDQ | RDRND | RDSEED | ADX
+        | CLFLUSHOPT | CLWB | PRFCHW),
 ];
 
 /// gcc's x86 extension names outside the set: `-mno-<name>` asks for
@@ -286,11 +309,36 @@ impl X86Features {
         f
     }
 
-    /// The feature macros gcc predefines for the set.
+    /// The feature macros gcc predefines for the set; AVX512VL's
+    /// `__EVEX256__` too.
     pub fn macros(self) -> impl Iterator<Item = &'static str> {
+        let evex256 = (self.0 & AVX512VL != 0).then_some("__EVEX256__");
         EXTS.iter()
             .filter(move |e| self.0 & e.bit != 0)
             .map(|e| e.mac)
+            .chain(evex256)
+    }
+
+    /// `__BIGGEST_ALIGNMENT__`, the widest register's: 16 bytes, 32 under
+    /// AVX, 64 under AVX-512F.
+    pub fn biggest_alignment(self) -> u8 {
+        if self.0 & AVX512F != 0 {
+            64
+        } else if self.0 & AVX != 0 {
+            32
+        } else {
+            16
+        }
+    }
+
+    /// AVX-512F: the 512-bit registers and the EVEX encodings.
+    pub fn avx512f(self) -> bool {
+        self.0 & AVX512F != 0
+    }
+
+    /// AVX-512BW: the byte and word elements at 512 bits.
+    pub fn avx512bw(self) -> bool {
+        self.0 & AVX512BW != 0
     }
 
     /// Whether the set holds x86-64-v3, which the code generator assumes.
@@ -356,6 +404,23 @@ mod tests {
         f.disable("sse4.2");
         assert!(!macros(f).contains(&"__POPCNT__"));
         assert!(macros(f).contains(&"__SSE4_1__"));
+    }
+
+    /// gcc 16's AVX-512 model: AVX512F implies AVX2, the others AVX512F,
+    /// AVX512VL adds `__EVEX256__`, and the alignment is 64.
+    #[test]
+    fn avx512_extensions_imply_and_predefine_as_gccs() {
+        let mut f = X86Features::NONE;
+        f.enable("avx512vl");
+        let m = macros(f);
+        for name in ["__AVX2__", "__AVX512F__", "__AVX512VL__", "__EVEX256__"] {
+            assert!(m.contains(&name), "{name}: {m:?}");
+        }
+        assert_eq!(f.biggest_alignment(), 64);
+        f.disable("avx512f");
+        assert!(!f.avx512f() && f.avx2() && f.biggest_alignment() == 32);
+        assert!(X86Features::for_cpu("x86-64-v4").unwrap().avx512bw());
+        assert!(!X86Features::for_cpu("alderlake").unwrap().avx512f());
     }
 
     #[test]

@@ -2144,3 +2144,121 @@ int main(void) {\n\
         );
     }
 }
+
+/// A 64-byte GNU vector operation is one zmm instruction under AVX-512F,
+/// a byte or word one under AVX512BW too: `vpaddd` with an EVEX prefix.
+#[cfg(feature = "full")]
+#[test]
+fn a_64_byte_vector_add_is_one_zmm_instruction_under_avx512f() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, X86Features};
+    const SRC: &str = "typedef int v16si __attribute__((vector_size(64)));\n\
+void add(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
+    let text = |ext: Option<&str>| {
+        let mut f = X86Features::NONE;
+        if let Some(e) = ext {
+            f.enable(e);
+        }
+        let opts = CompileOptions::default()
+            .with_optimize(true)
+            .with_no_entry_point(true)
+            .with_x86_features(f);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            x86_features: f,
+            ..NativeOptions::new().with_optimize()
+        };
+        crate::c5::object::emit_native_single_tu_for_test(&program, Target::LinuxX64, opts)
+            .expect("emit")
+    };
+    // `vpaddd %zmm1, %zmm0, %zmm0`: 62 F1 7D 48 FE C1.
+    let evex_paddd = |b: &[u8]| {
+        b.windows(5)
+            .any(|w| w[0] == 0x62 && w[3] == 0x48 && w[4] == 0xFE)
+    };
+    assert!(
+        evex_paddd(&text(Some("avx512f"))),
+        "no zmm vpaddd under AVX-512F"
+    );
+    assert!(!evex_paddd(&text(None)), "a zmm vpaddd without AVX-512F");
+}
+
+/// The <immintrin.h> AVX-512 intrinsics compute as the per-element C they
+/// stand for: an Adler-32 of 64-byte blocks by vpsadbw and vpdpbusd with a
+/// masked tail load against the bytewise sum, a compare into a mask and the
+/// blend it selects, the ternary logic, the quadword permute by index, and
+/// the reductions; in the interpreter at -O0 and -O, and the unit lowers.
+#[test]
+fn avx512_intrinsics_compute_as_their_definitions() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str = "#include <immintrin.h>\n\
+static unsigned char buf[1000];\n\
+static unsigned adler_ref(const unsigned char *p, int n) { unsigned a = 1, b = 0; for (int i = 0; i < n; i++) { a = (a + p[i]) % 65521; b = (b + a) % 65521; } return a | b << 16; }\n\
+static unsigned adler_512(const unsigned char *p, int n) {\n\
+    const __m512i w = _mm512_set_epi32(0x01020304, 0x05060708, 0x090a0b0c, 0x0d0e0f10, 0x11121314, 0x15161718, 0x191a1b1c, 0x1d1e1f20,\n\
+                                       0x21222324, 0x25262728, 0x292a2b2c, 0x2d2e2f30, 0x31323334, 0x35363738, 0x393a3b3c, 0x3d3e3f40);\n\
+    unsigned a = 1, b = 0;\n\
+    while (n >= 64) {\n\
+        int k = n < 5504 ? n & ~63 : 5504;\n\
+        n -= k;\n\
+        __m512i va = _mm512_zextsi128_si512(_mm_cvtsi32_si128((int)a)), vb = _mm512_zextsi128_si512(_mm_cvtsi32_si128((int)b)), vp = _mm512_setzero_si512();\n\
+        for (; k > 0; k -= 64, p += 64) {\n\
+            __m512i x = _mm512_loadu_si512(p);\n\
+            vp = _mm512_add_epi32(vp, va);\n\
+            va = _mm512_add_epi32(va, _mm512_sad_epu8(x, _mm512_setzero_si512()));\n\
+            vb = _mm512_dpbusd_epi32(vb, x, w);\n\
+        }\n\
+        vb = _mm512_add_epi32(vb, _mm512_slli_epi32(vp, 6));\n\
+        a = (unsigned)_mm512_reduce_add_epi32(va) % 65521;\n\
+        b = (unsigned)_mm512_reduce_add_epi32(vb) % 65521;\n\
+    }\n\
+    __m512i t = _mm512_maskz_loadu_epi8(n ? ~0ULL >> (64 - n) : 0, p);\n\
+    unsigned char tb[64]; _mm512_storeu_si512(tb, t);\n\
+    for (int i = 0; i < n; i++) { a = (a + tb[i]) % 65521; b = (b + a) % 65521; }\n\
+    return a | b << 16;\n\
+}\n\
+int main(void) {\n\
+    for (int i = 0; i < 1000; i++) buf[i] = (unsigned char)(i * 131 + (i >> 3));\n\
+    for (int n = 0; n <= 1000; n += 37) if (adler_512(buf, n) != adler_ref(buf, n)) return 1;\n\
+    __m512i x = _mm512_loadu_si512(buf), y = _mm512_loadu_si512(buf + 64);\n\
+    __mmask64 m = _mm512_cmpgt_epu8_mask(x, y);\n\
+    for (int i = 0; i < 64; i++) if (((m >> i) & 1) != (buf[i] > buf[64 + i])) return 2;\n\
+    __m512i mx = _mm512_mask_blend_epi8(m, y, x);\n\
+    unsigned char o[64]; _mm512_storeu_si512(o, mx);\n\
+    for (int i = 0; i < 64; i++) if (o[i] != (buf[i] > buf[64 + i] ? buf[i] : buf[64 + i])) return 3;\n\
+    __m512i tl = _mm512_ternarylogic_epi32(x, y, mx, 0x96);\n\
+    _mm512_storeu_si512(o, tl);\n\
+    for (int i = 0; i < 64; i++) if (o[i] != (unsigned char)(buf[i] ^ buf[64 + i] ^ (buf[i] > buf[64 + i] ? buf[i] : buf[64 + i]))) return 4;\n\
+    __m512i px = _mm512_permutexvar_epi64(_mm512_set_epi64(0, 1, 2, 3, 4, 5, 6, 7), x);\n\
+    long long *q = (long long *)buf;\n\
+    for (int i = 0; i < 8; i++) if (((long long *)&px)[i] != q[7 - i]) return 5;\n\
+    if (_mm512_reduce_add_epi64(_mm512_set1_epi64(3)) != 24) return 6;\n\
+    return 0;\n\
+}\n\
+";
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+    #[cfg(feature = "full")]
+    {
+        let opts = CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            crate::NativeOptions::new().with_optimize(),
+        )
+        .expect("emit_native for linux-x64");
+    }
+}

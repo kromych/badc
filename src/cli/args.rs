@@ -4217,6 +4217,9 @@ mod tests {
             features(&["-mno-avx512f", "-mno-sse4a"]),
             badc::X86Features::NONE
         );
+        assert!(features(&["-march=znver4"]).avx512bw());
+        assert!(!features(&["-march=znver4", "-mno-avx512f"]).avx512bw());
+        assert!(!features(&["-march=alderlake"]).avx512f());
         // x86-64 code assumes x86-64-v3: a CPU below it, and the removal of
         // an extension of it the code generator emits, are refused.
         assert_eq!(
@@ -4233,8 +4236,8 @@ mod tests {
             );
         }
         assert_eq!(
-            reject(&[X64, "-mavx512f", "-c", "a.c"]).0,
-            "badc: error: `-mavx512f`: badc does not implement the extension's intrinsics"
+            reject(&[X64, "-mavx512vbmi", "-c", "a.c"]).0,
+            "badc: error: `-mavx512vbmi`: badc does not implement the extension's intrinsics"
         );
         assert_eq!(
             reject(&[X64, "-march=pentium9", "-c", "a.c"]).0,

@@ -439,10 +439,7 @@ pub(super) fn wide_binary(
         ops.push(Concrete::Imm(i64::from(i)));
     }
     ops.extend([reg(rb), reg(ra), reg(rd)]);
-    let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
-    if let Err(e) = super::asm::encode(code, 8, m, None, &ops) {
-        return fail(alloc::format!("wide vector {mnem}: {e}"));
-    }
+    encode_wide(code, mnem, &ops)?;
     mirror_wide_dst(code, w, dst, rd, frame);
     Ok(())
 }
@@ -2021,6 +2018,39 @@ fn wide_shift(
     (a, d, scratch): (u8, u8, u8),
 ) -> Emit {
     use super::asm::{Concrete, XMM_BASE};
+    // EVEX shifts a zmm register by a variable count per lane: the count,
+    // capped at 255 so its low 16 bits stand for it as the whole does,
+    // broadcast to every quadword.
+    if let (None, Some(c), 64) = (imm, count, row.bytes) {
+        let var = match row.mnem {
+            "vpsllw" => "vpsllvw",
+            "vpslld" => "vpsllvd",
+            "vpsllq" => "vpsllvq",
+            "vpsrlw" => "vpsrlvw",
+            "vpsrld" => "vpsrlvd",
+            "vpsrlq" => "vpsrlvq",
+            "vpsraw" => "vpsravw",
+            "vpsrad" => "vpsravd",
+            m => return fail(alloc::format!("x86 simd: `{m}` has no variable zmm form")),
+        };
+        let q = |r: Reg| Concrete::Reg {
+            reg: r.0,
+            size: crate::c5::ir::AsmRegSize::Quad,
+        };
+        if c.0 != SCRATCH_R10.0 {
+            emit_mov_rr(code, SCRATCH_R10, c);
+        }
+        encode_wide(code, "mov", &[Concrete::Imm(255), q(SCRATCH_R11)])?;
+        encode_wide(code, "cmp", &[q(SCRATCH_R11), q(SCRATCH_R10)])?;
+        encode_wide(code, "cmova", &[q(SCRATCH_R11), q(SCRATCH_R10)])?;
+        encode_wide(
+            code,
+            "vpbroadcastq",
+            &[q(SCRATCH_R10), wide_reg(64, scratch)],
+        )?;
+        let ops = [wide_reg(64, scratch), wide_reg(64, a), wide_reg(64, d)];
+        return encode_wide(code, var, &ops);
+    }
     let by = match (imm, count) {
         (Some(i), _) => Concrete::Imm(i64::from(i)),
         (None, Some(c)) => {

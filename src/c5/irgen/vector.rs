@@ -74,7 +74,7 @@ impl<'a> Walker<'a> {
         both_vectors: bool,
     ) -> Option<crate::c5::ir::VecLane> {
         use crate::c5::ir::VecLane;
-        if !matches!(size, 8 | 16 | 32)
+        if !matches!(size, 8 | 16 | 32 | 64)
             || !both_vectors
             || is_vector_compare_op(op)
             || self.no_fp_regs
@@ -136,6 +136,7 @@ impl<'a> Walker<'a> {
                 let lv = self.walk_copy_operand(b, lhs)?;
                 let rv = self.walk_copy_operand(b, rhs)?;
                 let (lk, sk) = match size {
+                    64 => (LoadKind::V512, StoreKind::V512),
                     32 => (LoadKind::V256, StoreKind::V256),
                     16 => (LoadKind::V128, StoreKind::V128),
                     _ => (LoadKind::F64, StoreKind::F64),

@@ -1404,9 +1404,9 @@ impl Preprocessor {
         for name in features.macros() {
             self.macros.insert(name.into(), "1".into());
         }
-        if features.avx() {
-            self.macros
-                .insert("__BIGGEST_ALIGNMENT__".into(), "32".into());
+        if features.biggest_alignment() > 16 {
+            let align = features.biggest_alignment().to_string();
+            self.macros.insert("__BIGGEST_ALIGNMENT__".into(), align);
         }
     }
 

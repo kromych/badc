@@ -3294,8 +3294,8 @@ impl Compiler {
             measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
             target,
-            biggest_align: if target.is_x86_64() && opts.x86_features.avx() {
-                32
+            biggest_align: if target.is_x86_64() {
+                i64::from(opts.x86_features.biggest_alignment())
             } else {
                 16
             },

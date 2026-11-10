@@ -198,7 +198,7 @@ def main() -> int:
         if block:
             out += ["", f"{header} {cell}"] + block
     OUT_DIR.mkdir(exist_ok=True)
-    (OUT_DIR / f"{args.target}.txt").write_text("\n".join(out) + "\n")
+    (OUT_DIR / f"{args.target}.txt").write_text("\n".join(out) + "\n", newline="\n")
     print(f"{OUT_DIR / (args.target + '.txt')}: {len(seen)} records", file=sys.stderr)
     return 0
 

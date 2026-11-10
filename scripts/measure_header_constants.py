@@ -118,7 +118,7 @@ def main() -> int:
             out += ["", f"{header} {cell}"] + [f"{n} {v}" for n, v in sorted(values.items())]
             count += len(values)
     OUT_DIR.mkdir(exist_ok=True)
-    (OUT_DIR / f"{args.target}.txt").write_text("\n".join(out) + "\n")
+    (OUT_DIR / f"{args.target}.txt").write_text("\n".join(out) + "\n", newline="\n")
     print(f"{OUT_DIR / (args.target + '.txt')}: {count} constants", file=sys.stderr)
     return 0
 

@@ -96,7 +96,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldursw	x0, [x29, #-0x70]
+               	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0x1ff
                	cmp	w0, #0x1a0
                	b.ne	<addr>
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldursw	x0, [x29, #-0x6c]
+               	ldur	w0, [x29, #-0x6c]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

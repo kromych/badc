@@ -194,9 +194,9 @@
 // its SDK does; Windows keeps a trailing __pad[].
 #ifdef __APPLE__
 struct flock {
-    long  l_start;     /* offset  0 */
-    long  l_len;       /* offset  8 */
-    int   l_pid;       /* offset 16 */
+    off_t l_start;     /* offset  0 */
+    off_t l_len;       /* offset  8 */
+    pid_t l_pid;       /* offset 16 */
     short l_type;      /* offset 20 */
     short l_whence;    /* offset 22 */
 };
@@ -206,9 +206,9 @@ struct flock {
     short l_whence;    /* offset  2 */
     /* Linux inserts 4 bytes of padding so off_t l_start is 8-aligned. */
     int   __pad0;      /* offset  4 */
-    long  l_start;     /* offset  8 */
-    long  l_len;       /* offset 16 */
-    int   l_pid;       /* offset 24 */
+    off_t l_start;     /* offset  8 */
+    off_t l_len;       /* offset 16 */
+    pid_t l_pid;       /* offset 24 */
 #ifndef __linux__
     char  __pad[64];
 #endif

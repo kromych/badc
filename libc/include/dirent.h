@@ -45,8 +45,8 @@ typedef struct __c5_DIR DIR;
 // Linux at offset 19.
 #ifdef __APPLE__
 struct dirent {
-    unsigned long  d_ino;     /* offset  0 */
-    unsigned long  d_seekoff; /* offset  8 */
+    unsigned long long d_ino;     /* offset  0 */
+    unsigned long long d_seekoff; /* offset  8 */
     unsigned short d_reclen;  /* offset 16 */
     unsigned short d_namlen;  /* offset 18 */
     unsigned char  d_type;    /* offset 20 */

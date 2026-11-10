@@ -67,15 +67,18 @@
 // struct now uses `short st_mode; short st_nlink;` directly --
 // reading those fields lands on the right libc bytes without any
 // dword splitting / mask ceremony.
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/types.h>
+#endif
 #ifdef __APPLE__
 struct stat {
-    int             st_dev;            /* offset  0, 4 bytes */
-    unsigned short  st_mode;           /* offset  4, 2 bytes */
-    unsigned short  st_nlink;          /* offset  6, 2 bytes */
-    long            st_ino;            /* offset  8, 8 bytes */
-    unsigned int    st_uid;            /* offset 16, 4 bytes, uid_t */
-    unsigned int    st_gid;            /* offset 20, 4 bytes, gid_t */
-    int             st_rdev;           /* offset 24, 4 bytes */
+    dev_t           st_dev;            /* offset  0, 4 bytes */
+    mode_t          st_mode;           /* offset  4, 2 bytes */
+    nlink_t         st_nlink;          /* offset  6, 2 bytes */
+    ino_t           st_ino;            /* offset  8, 8 bytes */
+    uid_t           st_uid;            /* offset 16, 4 bytes */
+    gid_t           st_gid;            /* offset 20, 4 bytes */
+    dev_t           st_rdev;           /* offset 24, 4 bytes */
     int             __pad28;           /* offset 28, 4 bytes */
     // The nanosecond timestamp fields, named both as a timespec
     // (st_atimespec, BSD) and as the historical flat tv_sec / tv_nsec
@@ -97,14 +100,13 @@ struct stat {
         struct timespec st_birthtimespec; /* offset 80 */
         struct { long st_birthtime; long st_birthtimensec; };
     };
-    long            st_size;           /* offset 96, 8 bytes */
-    long            st_blocks;         /* offset 104, 8 bytes */
-    int             st_blksize;        /* offset 112, 4 bytes */
+    off_t           st_size;           /* offset 96, 8 bytes */
+    blkcnt_t        st_blocks;         /* offset 104, 8 bytes */
+    blksize_t       st_blksize;        /* offset 112, 4 bytes */
     unsigned int    st_flags;          /* offset 116, 4 bytes */
-    int             st_gen;            /* offset 120, 4 bytes */
+    unsigned int    st_gen;            /* offset 120, 4 bytes */
     int             st_lspare;         /* offset 124, 4 bytes */
-    long            st_qspare0;        /* offset 128, 8 bytes */
-    long            st_qspare1;        /* offset 136, 8 bytes */
+    long long       st_qspare[2];      /* offset 128, 16 bytes */
 };
 #elif defined(__linux__) && defined(__x86_64__)
 // Linux x86_64 layout. See bits/struct_stat.h:
@@ -112,17 +114,17 @@ struct stat {
 // size, blksize, blocks each 8 bytes; three timespec slots;
 // trailing __unused[3] longs. 144 bytes total.
 struct stat {
-    long st_dev;             /* offset   0, 8 bytes */
-    long st_ino;             /* offset   8, 8 bytes */
-    long st_nlink;           /* offset  16, 8 bytes */
-    int  st_mode;            /* offset  24, 4 bytes */
-    unsigned int st_uid;     /* offset  28, 4 bytes, uid_t */
-    unsigned int st_gid;     /* offset  32, 4 bytes, gid_t */
+    dev_t st_dev;            /* offset   0, 8 bytes */
+    ino_t st_ino;            /* offset   8, 8 bytes */
+    nlink_t st_nlink;        /* offset  16, 8 bytes */
+    mode_t st_mode;          /* offset  24, 4 bytes */
+    uid_t st_uid;            /* offset  28, 4 bytes */
+    gid_t st_gid;            /* offset  32, 4 bytes */
     int  __pad0;             /* offset  36, 4 bytes */
-    long st_rdev;            /* offset  40, 8 bytes */
-    long st_size;            /* offset  48, 8 bytes */
-    long st_blksize;         /* offset  56, 8 bytes */
-    long st_blocks;          /* offset  64, 8 bytes */
+    dev_t st_rdev;           /* offset  40, 8 bytes */
+    off_t st_size;           /* offset  48, 8 bytes */
+    blksize_t st_blksize;    /* offset  56, 8 bytes */
+    blkcnt_t st_blocks;      /* offset  64, 8 bytes */
     union {
         struct timespec st_atim; /* offset  72 */
         struct { long st_atime; long st_atimensec; };
@@ -144,18 +146,18 @@ struct stat {
 // after a pair of 8-byte dev/ino. blksize is 4 bytes here. 128
 // bytes total.
 struct stat {
-    long st_dev;             /* offset   0, 8 bytes */
-    long st_ino;             /* offset   8, 8 bytes */
-    int  st_mode;            /* offset  16, 4 bytes */
-    int  st_nlink;           /* offset  20, 4 bytes */
-    unsigned int st_uid;     /* offset  24, 4 bytes, uid_t */
-    unsigned int st_gid;     /* offset  28, 4 bytes, gid_t */
-    long st_rdev;            /* offset  32, 8 bytes */
-    long __pad1;             /* offset  40, 8 bytes */
-    long st_size;            /* offset  48, 8 bytes */
-    int  st_blksize;         /* offset  56, 4 bytes */
+    dev_t st_dev;            /* offset   0, 8 bytes */
+    ino_t st_ino;            /* offset   8, 8 bytes */
+    mode_t st_mode;          /* offset  16, 4 bytes */
+    nlink_t st_nlink;        /* offset  20, 4 bytes */
+    uid_t st_uid;            /* offset  24, 4 bytes */
+    gid_t st_gid;            /* offset  28, 4 bytes */
+    dev_t st_rdev;           /* offset  32, 8 bytes */
+    dev_t __pad1;            /* offset  40, 8 bytes */
+    off_t st_size;           /* offset  48, 8 bytes */
+    blksize_t st_blksize;    /* offset  56, 4 bytes */
     int  __pad2;             /* offset  60, 4 bytes */
-    long st_blocks;          /* offset  64, 8 bytes */
+    blkcnt_t st_blocks;      /* offset  64, 8 bytes */
     union {
         struct timespec st_atim; /* offset  72 */
         struct { long st_atime; long st_atimensec; };

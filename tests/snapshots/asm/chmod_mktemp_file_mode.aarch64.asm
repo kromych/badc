@@ -66,7 +66,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x70]
+               	ldur	w0, [x29, #-0x70]
                	tbnz	w0, #0x7, <addr>
                	sub	x0, x29, #0x90
                	mov	x1, #0x180              // =384
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x0, [x29, #-0x70]
+               	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0x80
                	cmp	w0, #0x0
                	cset	x0, ne

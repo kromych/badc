@@ -120,11 +120,10 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	ldursw	x0, [x29, #-0x70]
+               	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0xf000
-               	mov	x17, #0x1000            // =4096
-               	cmp	w0, w17
-               	b.eq	<addr>
+               	eor	x0, x0, #0x1000
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	add	sp, sp, #0x1b0

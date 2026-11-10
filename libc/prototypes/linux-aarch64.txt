@@ -1084,6 +1084,7 @@ futimens	int (*)(int, const struct timespec*)
 lstat	int (*)(const char*, struct stat*)
 member struct FTW.base	int*
 member struct FTW.level	int*
+member struct stat.__pad1	unsigned long*
 member struct stat.__pad2	int*
 member struct stat.st_atim	struct timespec*
 member struct stat.st_atime	long*
@@ -1091,9 +1092,14 @@ member struct stat.st_blksize	int*
 member struct stat.st_blocks	long*
 member struct stat.st_ctim	struct timespec*
 member struct stat.st_ctime	long*
+member struct stat.st_dev	unsigned long*
 member struct stat.st_gid	unsigned int*
+member struct stat.st_ino	unsigned long*
+member struct stat.st_mode	unsigned int*
 member struct stat.st_mtim	struct timespec*
 member struct stat.st_mtime	long*
+member struct stat.st_nlink	unsigned int*
+member struct stat.st_rdev	unsigned long*
 member struct stat.st_size	long*
 member struct stat.st_uid	unsigned int*
 member struct statx.__spare0	unsigned short (*)[1]

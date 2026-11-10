@@ -1106,9 +1106,14 @@ member struct stat.st_blksize	long*
 member struct stat.st_blocks	long*
 member struct stat.st_ctim	struct timespec*
 member struct stat.st_ctime	long*
+member struct stat.st_dev	unsigned long*
 member struct stat.st_gid	unsigned int*
+member struct stat.st_ino	unsigned long*
+member struct stat.st_mode	unsigned int*
 member struct stat.st_mtim	struct timespec*
 member struct stat.st_mtime	long*
+member struct stat.st_nlink	unsigned long*
+member struct stat.st_rdev	unsigned long*
 member struct stat.st_size	long*
 member struct stat.st_uid	unsigned int*
 member struct statx.__spare0	unsigned short (*)[1]

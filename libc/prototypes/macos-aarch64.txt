@@ -866,9 +866,11 @@ dirent.h y
 closedir	int (*)(DIR*)
 dirfd	int (*)(DIR*)
 fdopendir	DIR* (*)(int)
+member struct dirent.d_ino	unsigned long long*
 member struct dirent.d_name	char (*)[1024]
 member struct dirent.d_namlen	unsigned short*
 member struct dirent.d_reclen	unsigned short*
+member struct dirent.d_seekoff	unsigned long long*
 member struct dirent.d_type	unsigned char*
 opendir	DIR* (*)(const char*)
 readdir	struct dirent* (*)(DIR*)
@@ -896,17 +898,22 @@ member struct stat.st_atimespec	struct timespec*
 member struct stat.st_birthtime	long*
 member struct stat.st_birthtimespec	struct timespec*
 member struct stat.st_blksize	int*
+member struct stat.st_blocks	long long*
 member struct stat.st_ctime	long*
 member struct stat.st_ctimespec	struct timespec*
 member struct stat.st_dev	int*
 member struct stat.st_flags	unsigned int*
+member struct stat.st_gen	unsigned int*
 member struct stat.st_gid	unsigned int*
+member struct stat.st_ino	unsigned long long*
 member struct stat.st_lspare	int*
 member struct stat.st_mode	unsigned short*
 member struct stat.st_mtime	long*
 member struct stat.st_mtimespec	struct timespec*
 member struct stat.st_nlink	unsigned short*
+member struct stat.st_qspare	long long (*)[2]
 member struct stat.st_rdev	int*
+member struct stat.st_size	long long*
 member struct stat.st_uid	unsigned int*
 mkdir	int (*)(const char*, unsigned short)
 mkdirat	int (*)(int, const char*, unsigned short)
@@ -1055,7 +1062,9 @@ optreset	int*
 fcntl.h y
 creat	int (*)(const char*, unsigned short)
 fcntl	int (*)(int, int, ...)
+member struct flock.l_len	long long*
 member struct flock.l_pid	int*
+member struct flock.l_start	long long*
 member struct flock.l_type	short*
 member struct flock.l_whence	short*
 openat	int (*)(int, const char*, int, ...)

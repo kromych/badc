@@ -145,9 +145,17 @@ sched.h y
 struct sched_param 8 4
   sched_priority 0
   __opaque 4
+typedef ssize_t 8 8 signed
+typedef off_t 8 8 signed
+typedef u_int8_t 1 1 unsigned
+typedef u_int16_t 2 2 unsigned
+typedef u_int32_t 4 4 unsigned
+typedef u_int64_t 8 8 unsigned
 
 spawn.h y
 typedef sigset_t 4 4 unsigned
+typedef pid_t 4 4 signed
+typedef mode_t 2 2 unsigned
 typedef posix_spawnattr_t 8 8
 typedef posix_spawn_file_actions_t 8 8
 
@@ -346,17 +354,9 @@ struct hostent 32 8
   h_addrtype 16
   h_length 20
   h_addr_list 24
-typedef ssize_t 8 8 signed
-typedef off_t 8 8 signed
-typedef pid_t 4 4 signed
 typedef uid_t 4 4 unsigned
 typedef gid_t 4 4 unsigned
-typedef mode_t 2 2 unsigned
 typedef dev_t 4 4 signed
-typedef u_int8_t 1 1 unsigned
-typedef u_int16_t 2 2 unsigned
-typedef u_int32_t 4 4 unsigned
-typedef u_int64_t 8 8 unsigned
 typedef u_char 1 1 unsigned
 typedef u_short 2 2 unsigned
 typedef u_int 4 4 unsigned

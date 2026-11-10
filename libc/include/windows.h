@@ -561,10 +561,28 @@ typedef RTL_RUN_ONCE INIT_ONCE;
 typedef PRTL_RUN_ONCE PINIT_ONCE, LPINIT_ONCE;
 #define INIT_ONCE_STATIC_INIT {0}
 
+typedef struct _LIST_ENTRY {
+    struct _LIST_ENTRY *Flink;
+    struct _LIST_ENTRY *Blink;
+} LIST_ENTRY, *PLIST_ENTRY, *PRLIST_ENTRY;
+
+typedef struct _RTL_CRITICAL_SECTION_DEBUG {
+    WORD Type;
+    WORD CreatorBackTraceIndex;
+    struct _RTL_CRITICAL_SECTION *CriticalSection;
+    LIST_ENTRY ProcessLocksList;
+    DWORD EntryCount;
+    DWORD ContentionCount;
+    DWORD Flags;
+    WORD CreatorBackTraceIndexHigh;
+    WORD Identifier;
+} RTL_CRITICAL_SECTION_DEBUG, *PRTL_CRITICAL_SECTION_DEBUG, RTL_RESOURCE_DEBUG,
+    *PRTL_RESOURCE_DEBUG;
+
 // Layout matches RTL_CRITICAL_SECTION so the type embeds at the right
 // size inside other structures (x64: 40 bytes).
 typedef struct _RTL_CRITICAL_SECTION {
-    PVOID     DebugInfo;
+    PRTL_CRITICAL_SECTION_DEBUG DebugInfo;
     LONG      LockCount;
     LONG      RecursionCount;
     HANDLE    OwningThread;
@@ -872,13 +890,24 @@ typedef struct _MEMORY_BASIC_INFORMATION {
 } MEMORY_BASIC_INFORMATION;
 typedef struct _MEMORY_BASIC_INFORMATION *PMEMORY_BASIC_INFORMATION;
 
-// COPYFILE2_EXTENDED_PARAMETERS (winbase.h) passed by pointer to CopyFile2.
+// COPYFILE2_EXTENDED_PARAMETERS (winbase.h) passed by pointer to CopyFile2,
+// whose progress routine takes the copy engine's message.
+typedef enum _COPYFILE2_MESSAGE_ACTION {
+    COPYFILE2_PROGRESS_CONTINUE = 0,
+    COPYFILE2_PROGRESS_CANCEL,
+    COPYFILE2_PROGRESS_STOP,
+    COPYFILE2_PROGRESS_QUIET,
+    COPYFILE2_PROGRESS_PAUSE
+} COPYFILE2_MESSAGE_ACTION;
+typedef struct COPYFILE2_MESSAGE COPYFILE2_MESSAGE;
+typedef COPYFILE2_MESSAGE_ACTION (*PCOPYFILE2_PROGRESS_ROUTINE)(
+    const COPYFILE2_MESSAGE *pMessage, PVOID pvCallbackContext);
 typedef struct _COPYFILE2_EXTENDED_PARAMETERS {
     DWORD  dwSize;
     DWORD  dwCopyFlags;
-    int   *pfCancel;
-    void  *pProgressRoutine;
-    void  *pvCallbackContext;
+    BOOL  *pfCancel;
+    PCOPYFILE2_PROGRESS_ROUTINE pProgressRoutine;
+    PVOID  pvCallbackContext;
 } COPYFILE2_EXTENDED_PARAMETERS;
 typedef struct _FILE_FS_PERSISTENT_VOLUME_INFORMATION {
     ULONG VolumeFlags;

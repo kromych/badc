@@ -333,6 +333,7 @@ wcsxfrm	unsigned long long (*)(unsigned short*, const unsigned short*, unsigned 
 
 sched.h y
 member struct sched_param.sched_priority	int*
+member struct timespec.tv_nsec	long*
 member struct timespec.tv_sec	long long*
 sched_get_priority_max	int (*)(int)
 sched_get_priority_min	int (*)(int)
@@ -2353,6 +2354,7 @@ member COORD.X	short*
 member COORD.Y	short*
 member COPYFILE2_EXTENDED_PARAMETERS.dwCopyFlags	unsigned long*
 member COPYFILE2_EXTENDED_PARAMETERS.dwSize	unsigned long*
+member COPYFILE2_EXTENDED_PARAMETERS.pProgressRoutine	COPYFILE2_MESSAGE_ACTION (**)(const COPYFILE2_MESSAGE*, void*)
 member COPYFILE2_EXTENDED_PARAMETERS.pfCancel	int**
 member COPYFILE2_EXTENDED_PARAMETERS.pvCallbackContext	void**
 member DESIGNVECTOR.dvNumAxes	unsigned long*
@@ -3301,6 +3303,8 @@ member LAYERPLANEDESCRIPTOR.iLayerPlane	unsigned char*
 member LAYERPLANEDESCRIPTOR.iPixelType	unsigned char*
 member LAYERPLANEDESCRIPTOR.nSize	unsigned short*
 member LAYERPLANEDESCRIPTOR.nVersion	unsigned short*
+member LIST_ENTRY.Blink	LIST_ENTRY**
+member LIST_ENTRY.Flink	LIST_ENTRY**
 member LOCALESIGNATURE.lsCsbDefault	unsigned long (*)[2]
 member LOCALESIGNATURE.lsCsbSupported	unsigned long (*)[2]
 member LOCALESIGNATURE.lsUsb	unsigned long (*)[4]
@@ -3751,11 +3755,20 @@ member RID_DEVICE_INFO_MOUSE.dwNumberOfButtons	unsigned long*
 member RID_DEVICE_INFO_MOUSE.dwSampleRate	unsigned long*
 member RID_DEVICE_INFO_MOUSE.fHasHorizontalWheel	int*
 member RTL_CONDITION_VARIABLE.Ptr	void**
+member RTL_CRITICAL_SECTION.DebugInfo	RTL_CRITICAL_SECTION_DEBUG**
 member RTL_CRITICAL_SECTION.LockCount	long*
 member RTL_CRITICAL_SECTION.LockSemaphore	void**
 member RTL_CRITICAL_SECTION.OwningThread	void**
 member RTL_CRITICAL_SECTION.RecursionCount	long*
 member RTL_CRITICAL_SECTION.SpinCount	unsigned long long*
+member RTL_CRITICAL_SECTION_DEBUG.ContentionCount	unsigned long*
+member RTL_CRITICAL_SECTION_DEBUG.CreatorBackTraceIndex	unsigned short*
+member RTL_CRITICAL_SECTION_DEBUG.CreatorBackTraceIndexHigh	unsigned short*
+member RTL_CRITICAL_SECTION_DEBUG.CriticalSection	RTL_CRITICAL_SECTION**
+member RTL_CRITICAL_SECTION_DEBUG.EntryCount	unsigned long*
+member RTL_CRITICAL_SECTION_DEBUG.Flags	unsigned long*
+member RTL_CRITICAL_SECTION_DEBUG.ProcessLocksList	LIST_ENTRY*
+member RTL_CRITICAL_SECTION_DEBUG.Type	unsigned short*
 member RTL_RUN_ONCE.Ptr	void**
 member RTL_SRWLOCK.Ptr	void**
 member SECURITY_ATTRIBUTES.bInheritHandle	int*
@@ -4472,6 +4485,7 @@ typedef PCONSOLE_READCONSOLE_CONTROL	CONSOLE_READCONSOLE_CONTROL**
 typedef PCONSOLE_SCREEN_BUFFER_INFO	CONSOLE_SCREEN_BUFFER_INFO**
 typedef PCONTEXT	ARM64_NT_CONTEXT**
 typedef PCOORD	COORD**
+typedef PCOPYFILE2_PROGRESS_ROUTINE	COPYFILE2_MESSAGE_ACTION (**)(const COPYFILE2_MESSAGE*, void*)
 typedef PCRAWINPUTDEVICE	const RAWINPUTDEVICE**
 typedef PCRITICAL_SECTION	RTL_CRITICAL_SECTION**
 typedef PCSTR	const char**
@@ -4686,6 +4700,7 @@ typedef PKNONVOLATILE_CONTEXT_POINTERS	KNONVOLATILE_CONTEXT_POINTERS_ARM64**
 typedef PKNONVOLATILE_CONTEXT_POINTERS_ARM64	KNONVOLATILE_CONTEXT_POINTERS_ARM64**
 typedef PLARGE_INTEGER	LARGE_INTEGER**
 typedef PLAYERPLANEDESCRIPTOR	LAYERPLANEDESCRIPTOR**
+typedef PLIST_ENTRY	LIST_ENTRY**
 typedef PLOCALESIGNATURE	LOCALESIGNATURE**
 typedef PLOGBRUSH	LOGBRUSH**
 typedef PLOGBRUSH32	LOGBRUSH32**
@@ -4745,9 +4760,12 @@ typedef PRGBTRIPLE	RGBTRIPLE**
 typedef PRGNDATA	RGNDATA**
 typedef PRGNDATAHEADER	RGNDATAHEADER**
 typedef PRID_DEVICE_INFO	RID_DEVICE_INFO**
+typedef PRLIST_ENTRY	LIST_ENTRY**
 typedef PROC	long long (**)()
 typedef PRTL_CONDITION_VARIABLE	RTL_CONDITION_VARIABLE**
 typedef PRTL_CRITICAL_SECTION	RTL_CRITICAL_SECTION**
+typedef PRTL_CRITICAL_SECTION_DEBUG	RTL_CRITICAL_SECTION_DEBUG**
+typedef PRTL_RESOURCE_DEBUG	RTL_CRITICAL_SECTION_DEBUG**
 typedef PRTL_RUN_ONCE	RTL_RUN_ONCE**
 typedef PRTL_SRWLOCK	RTL_SRWLOCK**
 typedef PRUNTIME_FUNCTION	IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY**
@@ -5613,6 +5631,7 @@ if_indextoname	char* (*)(unsigned long, char*)
 if_nametoindex	unsigned long (*)(const char*)
 member NET_LUID.Value	unsigned long long*
 typedef NET_IFINDEX	unsigned long*
+typedef PNET_LUID	NET_LUID**
 
 ws2bth.h p
 member SOCKADDR_BTH.addressFamily	unsigned short*

@@ -62,7 +62,7 @@
 #ifdef __BADC_WINDOWS__
 struct timespec {
     long long tv_sec;
-    long long tv_nsec;
+    long tv_nsec;
 };
 
 // The UCRT's <time.h> defines no `struct timeval`: the SDK's winsock.h and

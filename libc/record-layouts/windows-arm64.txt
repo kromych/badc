@@ -569,6 +569,18 @@ struct _RTL_CONDITION_VARIABLE 8 8
   Ptr 0
 struct _RTL_RUN_ONCE 8 8
   Ptr 0
+struct _LIST_ENTRY 16 8
+  Flink 0
+  Blink 8
+struct _RTL_CRITICAL_SECTION_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
 struct _RTL_CRITICAL_SECTION 40 8
   DebugInfo 0
   LockCount 8
@@ -2922,6 +2934,31 @@ typedef INIT_ONCE 8 8
   Ptr 0
 typedef PINIT_ONCE 8 8
 typedef LPINIT_ONCE 8 8
+typedef LIST_ENTRY 16 8
+  Flink 0
+  Blink 8
+typedef PLIST_ENTRY 8 8
+typedef PRLIST_ENTRY 8 8
+typedef RTL_CRITICAL_SECTION_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
+typedef PRTL_CRITICAL_SECTION_DEBUG 8 8
+typedef RTL_RESOURCE_DEBUG 48 8
+  Type 0
+  CreatorBackTraceIndex 2
+  CriticalSection 8
+  ProcessLocksList 16
+  EntryCount 32
+  ContentionCount 36
+  Flags 40
+  CreatorBackTraceIndexHigh 44
+typedef PRTL_RESOURCE_DEBUG 8 8
 typedef RTL_CRITICAL_SECTION 40 8
   DebugInfo 0
   LockCount 8
@@ -3152,6 +3189,8 @@ typedef MEMORY_BASIC_INFORMATION 48 8
   Protect 36
   Type 40
 typedef PMEMORY_BASIC_INFORMATION 8 8
+typedef COPYFILE2_MESSAGE_ACTION 4 4 unsigned
+typedef PCOPYFILE2_PROGRESS_ROUTINE 8 8
 typedef COPYFILE2_EXTENDED_PARAMETERS 32 8
   dwSize 0
   dwCopyFlags 4
@@ -6506,13 +6545,11 @@ typedef LPFN_TRANSMITFILE 8 8
 typedef LPFN_GETACCEPTEXSOCKADDRS 8 8
 
 iphlpapi.h y
-union _NET_LUID 8 8
-  Value 0
-  Info 0
 typedef NET_IFINDEX 4 4 unsigned
 typedef NET_LUID 8 8
   Value 0
   Info 0
+typedef PNET_LUID 8 8
 typedef IF_LUID 8 8
   Value 0
   Info 0

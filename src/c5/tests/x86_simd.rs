@@ -2184,6 +2184,46 @@ void add(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     assert!(!evex_paddd(&text(None)), "a zmm vpaddd without AVX-512F");
 }
 
+/// The 128-bit halves of the AVX vectors -- extract, insert, the casts
+/// between the widths and the float forms on them -- compute as the bytes
+/// they move, in the interpreter at -O0 and -O, and are one instruction
+/// each at -O: `vextracti128`, `vinserti128`, and for the casts a VEX
+/// `vmovdqa` of the xmm register, which clears the bits above it.
+#[test]
+fn avx_halves_are_their_instructions() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str = include_str!("../../../tests/fixtures/c/avx_halves_and_casts.c");
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+    #[cfg(feature = "full")]
+    {
+        use super::perf_codegen::x64_at;
+        const PARTS: &str = "#include <immintrin.h>\n\
+__m128i hi(const __m256i *p) { return _mm256_extracti128_si256(*p, 1); }\n\
+void put(__m256i *p, const __m128i *x) { *p = _mm256_inserti128_si256(*p, *x, 1); }\n\
+void widen(__m256i *p, const __m128i *x) { *p = _mm256_zextsi128_si256(*x); }\n";
+        // VEX 0F3A 39 and 38; `vmovdqa` (0F 6F) in its xmm form.
+        let hi = x64_at(PARTS, "hi", true);
+        assert!(hi.iter().any(|i| i.vex && i.op == 0x3A39), "hi: {hi:x?}");
+        let put = x64_at(PARTS, "put", true);
+        assert!(put.iter().any(|i| i.vex && i.op == 0x3A38), "put: {put:x?}");
+        let widen = x64_at(PARTS, "widen", true);
+        assert!(
+            widen.iter().all(|i| i.op != 0x3A38 && i.op != 0x3A39) && widen.len() <= 5,
+            "widen: {widen:x?}"
+        );
+    }
+}
+
 /// The <immintrin.h> AVX-512 intrinsics compute as the per-element C they
 /// stand for: an Adler-32 of 64-byte blocks by vpsadbw and vpdpbusd with a
 /// masked tail load against the bytewise sum, a compare into a mask and the

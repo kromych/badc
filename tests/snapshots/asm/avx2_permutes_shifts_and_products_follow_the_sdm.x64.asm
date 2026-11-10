@@ -262,13 +262,11 @@ Disassembly of section .text:
                	addq	$0x8, %rax
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movq	0x40(%rsp), %rax
-               	movq	0x48(%rsp), %rcx
+               	movups	0x40(%rsp), %xmm2
+               	vmovdqa	%xmm2, %xmm3
+               	vinserti128	$0x1, %xmm2, %ymm3, %ymm2
                	leaq	(%rsp), %rdx
-               	movq	%rax, (%rsp)
-               	movq	%rcx, 0x8(%rsp)
-               	movq	%rax, 0x10(%rsp)
-               	movq	%rcx, 0x18(%rsp)
+               	vmovups	%ymm2, (%rsp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
                	xorl	%eax, %eax
@@ -279,15 +277,12 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movq	0x40(%rsp), %rax
-               	movq	0x48(%rsp), %rcx
-               	movq	0x20(%rsp), %rsi
-               	movq	0x28(%rsp), %rdi
+               	movups	0x40(%rsp), %xmm2
+               	movups	0x20(%rsp), %xmm3
+               	vmovdqa	%xmm3, %xmm3
+               	vinserti128	$0x1, %xmm2, %ymm3, %ymm2
                	leaq	(%rsp), %rdx
-               	movq	%rsi, (%rsp)
-               	movq	%rdi, 0x8(%rsp)
-               	movq	%rax, 0x10(%rsp)
-               	movq	%rcx, 0x18(%rsp)
+               	vmovups	%ymm2, (%rsp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
                	xorl	%eax, %eax
@@ -298,16 +293,13 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movq	0x40(%rsp), %rcx
-               	movq	0x48(%rsp), %rsi
-               	xorl	%eax, %eax
+               	movups	0x40(%rsp), %xmm2
+               	vmovdqa	%xmm2, %xmm2
                	leaq	(%rsp), %rdx
-               	movq	%rcx, (%rsp)
-               	movq	%rsi, 0x8(%rsp)
-               	movq	%rax, 0x10(%rsp)
-               	movq	%rax, 0x18(%rsp)
+               	vmovups	%ymm2, (%rsp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
+               	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rdi
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx

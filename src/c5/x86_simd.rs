@@ -55,6 +55,13 @@ pub(crate) enum Form {
     RdRand,
     /// `int` or `long long` = the low lane of v128 converted.
     ToInt,
+    /// `part = op(v, imm8)`: part imm8 of `v`, `int_width` bytes each
+    /// (`vextracti128`); part 0 is the low bytes of the register.
+    Narrow,
+    /// `v = op(v, part, imm8)`: `v` with part imm8 replaced (`vinserti128`).
+    Widen,
+    /// `v = op(part)`: the part zero-extended (`vmovdqa` of the xmm form).
+    Zext,
 }
 
 /// Result type, as the builtin's prototype declares it: one of the headers'
@@ -317,7 +324,9 @@ pub(crate) struct SimdOp {
     pub ret: Ret,
     pub sem: Sem,
     /// Width in bytes of the integer operand or result of the forms that
-    /// have one (`Extract`, `Insert`, `Shift`, `RdRand`); 0 otherwise.
+    /// have one (`Extract`, `Insert`, `Shift`, `RdRand`), of the lane of a
+    /// masked form, and of the vector part of `Narrow`, `Widen` and `Zext`;
+    /// 0 otherwise.
     pub int_width: u8,
     /// Width in bytes of the vector operands and result: 16, or 8 for an
     /// MMX form, which runs as the SSE instruction on the low half of the
@@ -695,6 +704,10 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_permdi256", "vpermq", Form::VI, Ret::V4di, Sem::Perm4x64, 0),
     op256("__builtin_ia32_permvarsi256", "vpermd", Form::Vv, Ret::V8si, Sem::PermVar32, 0),
     op256("__builtin_ia32_permti256", "vperm2i128", Form::VvI, Ret::V4di, Sem::Perm2x128, 0),
+    // The 128-bit halves; a cast's upper half is zero.
+    op256("__builtin_ia32_extract128i256", "vextracti128", Form::Narrow, Ret::V2di, Sem::Move, 16),
+    op256("__builtin_ia32_insert128i256", "vinserti128", Form::Widen, Ret::V4di, Sem::Move, 16),
+    op256("__builtin_ia32_si256_si", "vmovdqa", Form::Zext, Ret::V8si, Sem::Move, 16),
     // The AVX-512 forms over 64-byte vectors: AVX512F and AVX512BW in-lane,
     // the permutations, VPCLMULQDQ, AVX512-VNNI and the ternary logic.
     op512("__builtin_ia32_pmullw512", "vpmullw", Form::Vv, Ret::V32hi, Sem::MulLo(2), 0),
@@ -874,9 +887,14 @@ impl Form {
     /// Number of source operands the builtin call takes.
     pub(crate) fn arity(self) -> usize {
         match self {
-            Form::V | Form::Load | Form::MoveMask | Form::RdRand | Form::ToInt => 1,
-            Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract => 2,
-            Form::VvI | Form::Insert | Form::Vvv | Form::CmpMask | Form::MaskBlend => 3,
+            Form::V | Form::Load | Form::MoveMask | Form::RdRand | Form::ToInt | Form::Zext => 1,
+            Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract | Form::Narrow => 2,
+            Form::VvI
+            | Form::Insert
+            | Form::Vvv
+            | Form::CmpMask
+            | Form::MaskBlend
+            | Form::Widen => 3,
             Form::MaskStore => 3,
             Form::MaskLoad => 2,
             Form::VvvI => 4,
@@ -897,11 +915,18 @@ impl Form {
     pub(crate) fn takes_imm(self) -> bool {
         matches!(
             self,
-            Form::VvI | Form::VI | Form::Extract | Form::Insert | Form::VvvI | Form::CmpMask
+            Form::VvI
+                | Form::VI
+                | Form::Extract
+                | Form::Insert
+                | Form::VvvI
+                | Form::CmpMask
+                | Form::Narrow
+                | Form::Widen
         )
     }
 
-    /// Whether the result is a 128-bit vector rather than an `int`.
+    /// Whether the result is a vector rather than an `int`.
     pub(crate) fn returns_vector(self) -> bool {
         matches!(
             self,
@@ -916,7 +941,31 @@ impl Form {
                 | Form::Shift
                 | Form::Load
                 | Form::Insert
+                | Form::Narrow
+                | Form::Widen
+                | Form::Zext
         )
+    }
+}
+
+impl SimdOp {
+    /// Width in bytes of vector source `i`, counted from 0 without the
+    /// destination: `bytes`, or `int_width` for a part.
+    pub(crate) fn arg_bytes(&self, i: usize) -> u8 {
+        match self.form {
+            Form::Widen if i == 1 => self.int_width,
+            Form::Zext => self.int_width,
+            _ => self.bytes,
+        }
+    }
+
+    /// Width in bytes of a vector result.
+    pub(crate) fn ret_bytes(&self) -> u8 {
+        if self.form == Form::Narrow {
+            self.int_width
+        } else {
+            self.bytes
+        }
     }
 }
 

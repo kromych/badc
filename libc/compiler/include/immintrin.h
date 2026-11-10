@@ -98,23 +98,20 @@ static inline __m256i _mm256_broadcastq_epi64(__m128i __X) {
 }
 
 static inline __m128i _mm256_castsi256_si128(__m256i __A) {
-    return (__m128i){__A[0], __A[1]};
+    return (__m128i)__builtin_ia32_extract128i256((__v4di)__A, 0);
 }
 
 /* The upper half is undefined in the SDM; this gives zero. */
 static inline __m256i _mm256_castsi128_si256(__m128i __A) {
-    return (__m256i){__A[0], __A[1], 0, 0};
+    return (__m256i)__builtin_ia32_si256_si((__v4si)__A);
 }
 
-static inline __m128i _mm256_extracti128_si256(__m256i __A, const int __N) {
-    return __N & 1 ? (__m128i){__A[2], __A[3]} : (__m128i){__A[0], __A[1]};
-}
+#define _mm256_extracti128_si256(A, N)                                                  \
+    ((__m128i)__builtin_ia32_extract128i256((__v4di)(__m256i)(A), (int)(N)))
 
-static inline __m256i _mm256_inserti128_si256(__m256i __A, __m128i __B, const int __N) {
-    __A[2 * (__N & 1)] = __B[0];
-    __A[2 * (__N & 1) + 1] = __B[1];
-    return __A;
-}
+#define _mm256_inserti128_si256(A, B, N)                                                \
+    ((__m256i)__builtin_ia32_insert128i256((__v4di)(__m256i)(A), (__v2di)(__m128i)(B),  \
+                                           (int)(N)))
 
 static inline __m256i _mm256_and_si256(__m256i __A, __m256i __B) {
     return __A & __B;
@@ -233,15 +230,15 @@ static inline __m256i _mm256_set_epi8(char __b31, char __b30, char __b29, char _
 }
 
 static inline __m256i _mm256_set_m128i(__m128i __H, __m128i __L) {
-    return (__m256i){__L[0], __L[1], __H[0], __H[1]};
+    return _mm256_inserti128_si256(_mm256_castsi128_si256(__L), __H, 1);
 }
 
 static inline __m256i _mm256_zextsi128_si256(__m128i __A) {
-    return (__m256i){__A[0], __A[1], 0, 0};
+    return _mm256_castsi128_si256(__A);
 }
 
 static inline __m256i _mm256_broadcastsi128_si256(__m128i __A) {
-    return (__m256i){__A[0], __A[1], __A[0], __A[1]};
+    return _mm256_inserti128_si256(_mm256_castsi128_si256(__A), __A, 1);
 }
 
 static inline __m256i _mm256_cmpgt_epi32(__m256i __A, __m256i __B) {
@@ -708,33 +705,27 @@ __BADC_GATHER(_mm256, i64gather_pd, __m256d, __v4di, long long, double, __m256i,
 ** lanes, which keeps every bit. No VEX instruction is emitted. */
 
 static inline __m128 __badc_lo_ps(__m256 __A) {
-    __v8si __a = (__v8si)__A;
-    return (__m128)(__v4si){__a[0], __a[1], __a[2], __a[3]};
+    return (__m128)_mm256_castsi256_si128((__m256i)__A);
 }
 
 static inline __m128 __badc_hi_ps(__m256 __A) {
-    __v8si __a = (__v8si)__A;
-    return (__m128)(__v4si){__a[4], __a[5], __a[6], __a[7]};
+    return (__m128)_mm256_extracti128_si256((__m256i)__A, 1);
 }
 
 static inline __m256 __badc_join_ps(__m128 __L, __m128 __H) {
-    __v4si __l = (__v4si)__L, __h = (__v4si)__H;
-    return (__m256)(__v8si){__l[0], __l[1], __l[2], __l[3], __h[0], __h[1], __h[2], __h[3]};
+    return (__m256)_mm256_inserti128_si256(_mm256_castsi128_si256((__m128i)__L), (__m128i)__H, 1);
 }
 
 static inline __m128d __badc_lo_pd(__m256d __A) {
-    __v4di __a = (__v4di)__A;
-    return (__m128d)(__v2di){__a[0], __a[1]};
+    return (__m128d)_mm256_castsi256_si128((__m256i)__A);
 }
 
 static inline __m128d __badc_hi_pd(__m256d __A) {
-    __v4di __a = (__v4di)__A;
-    return (__m128d)(__v2di){__a[2], __a[3]};
+    return (__m128d)_mm256_extracti128_si256((__m256i)__A, 1);
 }
 
 static inline __m256d __badc_join_pd(__m128d __L, __m128d __H) {
-    __v2di __l = (__v2di)__L, __h = (__v2di)__H;
-    return (__m256d)(__v4di){__l[0], __l[1], __h[0], __h[1]};
+    return (__m256d)_mm256_inserti128_si256(_mm256_castsi128_si256((__m128i)__L), (__m128i)__H, 1);
 }
 
 #define __BADC_AVX_BINARY(name)                                                         \
@@ -929,44 +920,31 @@ static inline __m128d _mm256_castpd256_pd128(__m256d __A) {
 
 /* The upper half is undefined in the SDM; this gives zero. */
 static inline __m256 _mm256_castps128_ps256(__m128 __A) {
-    return __badc_join_ps(__A, _mm_setzero_ps());
+    return (__m256)_mm256_castsi128_si256((__m128i)__A);
 }
 
 static inline __m256d _mm256_castpd128_pd256(__m128d __A) {
-    return __badc_join_pd(__A, _mm_setzero_pd());
+    return (__m256d)_mm256_castsi128_si256((__m128i)__A);
 }
 
 static inline __m256 _mm256_zextps128_ps256(__m128 __A) {
-    return __badc_join_ps(__A, _mm_setzero_ps());
+    return (__m256)_mm256_castsi128_si256((__m128i)__A);
 }
 
 static inline __m256d _mm256_zextpd128_pd256(__m128d __A) {
-    return __badc_join_pd(__A, _mm_setzero_pd());
+    return (__m256d)_mm256_castsi128_si256((__m128i)__A);
 }
 
-static inline __m128 _mm256_extractf128_ps(__m256 __A, const int __N) {
-    return __N & 1 ? __badc_hi_ps(__A) : __badc_lo_ps(__A);
-}
-
-static inline __m128d _mm256_extractf128_pd(__m256d __A, const int __N) {
-    return __N & 1 ? __badc_hi_pd(__A) : __badc_lo_pd(__A);
-}
-
-static inline __m128i _mm256_extractf128_si256(__m256i __A, const int __N) {
-    return _mm256_extracti128_si256(__A, __N);
-}
-
-static inline __m256 _mm256_insertf128_ps(__m256 __A, __m128 __B, const int __N) {
-    return __N & 1 ? __badc_join_ps(__badc_lo_ps(__A), __B) : __badc_join_ps(__B, __badc_hi_ps(__A));
-}
-
-static inline __m256d _mm256_insertf128_pd(__m256d __A, __m128d __B, const int __N) {
-    return __N & 1 ? __badc_join_pd(__badc_lo_pd(__A), __B) : __badc_join_pd(__B, __badc_hi_pd(__A));
-}
-
-static inline __m256i _mm256_insertf128_si256(__m256i __A, __m128i __B, const int __N) {
-    return _mm256_inserti128_si256(__A, __B, __N);
-}
+#define _mm256_extractf128_ps(A, N)                                                     \
+    ((__m128)_mm256_extracti128_si256((__m256i)(__m256)(A), N))
+#define _mm256_extractf128_pd(A, N)                                                     \
+    ((__m128d)_mm256_extracti128_si256((__m256i)(__m256d)(A), N))
+#define _mm256_extractf128_si256(A, N) _mm256_extracti128_si256(A, N)
+#define _mm256_insertf128_ps(A, B, N)                                                   \
+    ((__m256)_mm256_inserti128_si256((__m256i)(__m256)(A), (__m128i)(__m128)(B), N))
+#define _mm256_insertf128_pd(A, B, N)                                                   \
+    ((__m256d)_mm256_inserti128_si256((__m256i)(__m256d)(A), (__m128i)(__m128d)(B), N))
+#define _mm256_insertf128_si256(A, B, N) _mm256_inserti128_si256(A, B, N)
 
 #define _mm256_permute2f128_ps(A, B, M)                                           \
     ((__m256)_mm256_permute2x128_si256((__m256i)(A), (__m256i)(B), M))

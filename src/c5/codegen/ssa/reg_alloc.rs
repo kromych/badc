@@ -3445,7 +3445,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
             Inst::X86SimdVal { op, .. } => {
                 let row = crate::c5::x86_simd::get(*op);
                 if row.form.returns_vector() {
-                    VecWidth::of_bytes(row.bytes)
+                    VecWidth::of_bytes(row.ret_bytes())
                 } else {
                     VecWidth::Scalar
                 }

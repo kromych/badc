@@ -90,8 +90,11 @@ pub(super) fn emit_x86_simd(
         | Form::CmpMask
         | Form::MaskBlend
         | Form::MaskLoad
-        | Form::MaskStore => {
-            return fail("x86 simd: an EVEX form outside the wide lowering");
+        | Form::MaskStore
+        | Form::Narrow
+        | Form::Widen
+        | Form::Zext => {
+            return fail("x86 simd: a wide form outside the wide lowering");
         }
         Form::Vv | Form::VvI => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
@@ -534,8 +537,11 @@ pub(super) fn emit_x86_simd_val(
         | Form::CmpMask
         | Form::MaskBlend
         | Form::MaskLoad
-        | Form::MaskStore => {
-            return fail("x86 simd: an EVEX form outside the wide lowering");
+        | Form::MaskStore
+        | Form::Narrow
+        | Form::Widen
+        | Form::Zext => {
+            return fail("x86 simd: a wide form outside the wide lowering");
         }
         Form::Vv | Form::VvI => {
             let commutes = row.form == Form::Vv && row.sem.commutes();
@@ -2146,6 +2152,41 @@ fn emit_x86_simd_wide(
             };
             wide_shift(code, row, imm, count, (dst_x, dst_x, src_x))?;
         }
+        Form::Narrow => {
+            load(code, 1, src_x)?;
+            narrow(code, row, imm, src_x, dst_x)?;
+            let d = operand(code, 0, SCRATCH_R10)?;
+            return encode_wide(
+                code,
+                "vmovdqu",
+                &[wide_reg(row.int_width, dst_x), mem_at(d)],
+            );
+        }
+        Form::Widen => {
+            load(code, 1, dst_x)?;
+            let p = operand(code, 2, SCRATCH_R10)?;
+            encode_wide(
+                code,
+                "vmovdqu",
+                &[mem_at(p), wide_reg(row.int_width, src_x)],
+            )?;
+            let ops = [
+                super::asm::Concrete::Imm(i64::from(imm.unwrap_or(0))),
+                wide_reg(row.int_width, src_x),
+                wide_reg(row.bytes, dst_x),
+                wide_reg(row.bytes, dst_x),
+            ];
+            encode_wide(code, row.mnem, &ops)?;
+        }
+        // A VEX load clears the bits above the part.
+        Form::Zext => {
+            let p = operand(code, 1, SCRATCH_R10)?;
+            encode_wide(
+                code,
+                "vmovdqu",
+                &[mem_at(p), wide_reg(row.int_width, dst_x)],
+            )?;
+        }
         Form::Load => load(code, 1, dst_x)?,
         Form::Store => {
             load(code, 1, dst_x)?;
@@ -2211,6 +2252,30 @@ fn emit_x86_simd_wide(
     let d = operand(code, 0, SCRATCH_R10)?;
     emit_wide_store(code, w, d, 0, Reg(dst_x));
     Ok(())
+}
+
+/// Part `imm` of wide register `src` into xmm `dst`: the row's instruction,
+/// or a `vmovdqa` of the low part, which needs no lane crossing.
+fn narrow(
+    code: &mut Vec<u8>,
+    row: &crate::c5::x86_simd::SimdOp,
+    imm: Option<u8>,
+    src: u8,
+    dst: u8,
+) -> Emit {
+    let k = imm.unwrap_or(0) % (row.bytes / row.int_width);
+    if k != 0 {
+        let ops = [
+            super::asm::Concrete::Imm(i64::from(k)),
+            wide_reg(row.bytes, src),
+            wide_reg(row.int_width, dst),
+        ];
+        encode_wide(code, row.mnem, &ops)
+    } else if src != dst {
+        encode_wide(code, "vmovdqa", &[wide_reg(16, src), wide_reg(16, dst)])
+    } else {
+        Ok(())
+    }
 }
 
 /// [`emit_x86_simd_val`] for a 32- or 64-byte form: the instruction on the
@@ -2326,6 +2391,31 @@ fn emit_x86_simd_val_wide(
             kmov(code, m, true)?;
             let r = |n| wide_reg(row.bytes, n);
             encode_masked(code, row.mnem, &[r(a), r(src), r(rd)], false)?;
+        }
+        Form::Narrow => {
+            let a = vector(code, 0, sa)?;
+            narrow(code, row, imm, a, rd)?;
+            mirror_v128_dst(code, dst, Reg(rd), frame);
+            return Ok(());
+        }
+        Form::Widen | Form::Zext => {
+            let i = usize::from(row.form == Form::Widen);
+            let Some(b) = place(i).and_then(|p| materialize_v128(code, p, Reg(sb), frame)) else {
+                return fail(alloc::format!("x86 simd: operand {i} has no place"));
+            };
+            if row.form == Form::Widen {
+                let a = vector(code, 0, sa)?;
+                let ops = [
+                    super::asm::Concrete::Imm(i64::from(imm.unwrap_or(0))),
+                    wide_reg(16, b.0),
+                    wide_reg(row.bytes, a),
+                    wide_reg(row.bytes, rd),
+                ];
+                encode_wide(code, row.mnem, &ops)?;
+            } else {
+                // A VEX move clears the bits above the part.
+                encode_wide(code, row.mnem, &[wide_reg(16, b.0), wide_reg(16, rd)])?;
+            }
         }
         Form::MoveMask => {
             let a = vector(code, 0, sa)?;

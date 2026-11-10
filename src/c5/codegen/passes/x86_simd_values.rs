@@ -78,12 +78,13 @@ fn run_one(func: &mut FunctionSsa) {
             let row = x86_simd::get(op);
             let args = args.clone();
             // An MMX form's vectors are the 64 bits of their registers.
-            let (vload, vstore) = match row.bytes {
+            let kinds = |bytes: u8| match bytes {
                 8 => (LoadKind::F64, StoreKind::F64),
                 32 => (LoadKind::V256, StoreKind::V256),
                 64 => (LoadKind::V512, StoreKind::V512),
                 _ => (LoadKind::V128, StoreKind::V128),
             };
+            let (vload, vstore) = kinds(row.bytes);
             match row.form {
                 // The masked transfers stay in memory: a store and a load
                 // through a pointer are no values.
@@ -105,18 +106,24 @@ fn run_one(func: &mut FunctionSsa) {
                     let mut srcs = Vec::new();
                     for (k, &a) in args.iter().enumerate().skip(1) {
                         let vector = match row.form {
-                            Form::Vv | Form::VvI | Form::Vvv | Form::VvvI | Form::CmpMask => true,
+                            Form::Vv
+                            | Form::VvI
+                            | Form::Vvv
+                            | Form::VvvI
+                            | Form::CmpMask
+                            | Form::Widen => true,
                             Form::MaskBlend => k != 2,
                             _ => k == 1,
                         };
                         srcs.push(if vector {
-                            Src::Loaded(push(&mut ins, At::Before(v), load(a, vload, 0)))
+                            let kind = kinds(row.arg_bytes(k - 1)).0;
+                            Src::Loaded(push(&mut ins, At::Before(v), load(a, kind, 0)))
                         } else {
                             Src::Old(a)
                         });
                     }
                     let kind = match row.form {
-                        f if f.returns_vector() => vstore,
+                        f if f.returns_vector() => kinds(row.ret_bytes()).1,
                         Form::ToInt if row.int_width == 8 => StoreKind::I64,
                         Form::Extract | Form::MoveMask | Form::CmpMask if row.int_width == 8 => {
                             StoreKind::I64

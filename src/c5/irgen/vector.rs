@@ -286,7 +286,7 @@ impl<'a> Walker<'a> {
             return Ok(b.imm(0));
         }
         let result_bytes = if form.returns_vector() {
-            i64::from(row.bytes)
+            i64::from(row.ret_bytes())
         } else {
             8
         };

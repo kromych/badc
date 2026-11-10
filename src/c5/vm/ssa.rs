@@ -4041,7 +4041,10 @@ fn run_x86_simd(
         | Form::CmpMask
         | Form::MaskBlend
         | Form::MaskLoad
-        | Form::MaskStore => {
+        | Form::MaskStore
+        | Form::Narrow
+        | Form::Widen
+        | Form::Zext => {
             return Err(C5Error::Runtime(format!(
                 "vm_ssa: {} has no 16-byte form",
                 row.name
@@ -4159,6 +4162,22 @@ fn run_x86_simd_wide(
             eval(&read(mem, operand(1)?)?, &zero, &zero, count)
         }
         Form::Load | Form::Store => read(mem, operand(1)?)?,
+        Form::Narrow => {
+            let (a, p) = (read(mem, operand(1)?)?, usize::from(row.int_width));
+            let k = usize::from(imm8) % (n / p);
+            return mem.write_bytes(operand(0)?, &a[k * p..k * p + p]);
+        }
+        Form::Widen => {
+            let (mut out, p) = (read(mem, operand(1)?)?, usize::from(row.int_width));
+            let k = usize::from(imm8) % (n / p);
+            out[k * p..k * p + p].copy_from_slice(mem.read_bytes(operand(2)?, p)?);
+            out
+        }
+        Form::Zext => {
+            let (mut out, p) = ([0u8; 64], usize::from(row.int_width));
+            out[..p].copy_from_slice(mem.read_bytes(operand(1)?, p)?);
+            out
+        }
         Form::CmpMask => {
             let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
             let m = x86_simd::eval_cmp_mask(row.sem, &a, &b, imm8, n);

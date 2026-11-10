@@ -12,7 +12,7 @@ does not define is left out. A record is listed under the first header
 whose unit defines it: the base headers each unit includes, then the
 registry's order.
 
-TODO(#2018): the Windows targets.
+TODO(#2018): windows-arm64.
 
 Run on a machine of the target, against a built badc:
 
@@ -50,10 +50,12 @@ def shipped_headers(target: str) -> list[tuple[str, str]]:
     return [(h, cells[h]) for h in registry_names() if cells.get(h) in ("y", "p")]
 
 
-def prelude(header: str, cell: str) -> str:
-    """The unit measured for `header`: the feature-test macros, the base
-    headers when the header needs them (`p`), and the header."""
-    base = PREREQS["posix"] if cell == "p" else []
+def prelude(header: str, cell: str, target: str) -> str:
+    """The unit measured for `header`: the feature-test macros, the
+    platform's base headers when the header needs them (`p`), and the
+    header."""
+    platform = "windows" if target.startswith("windows") else "posix"
+    base = PREREQS[platform] if cell == "p" else []
     return FEATURES + "".join(f"#include <{h}>\n" for h in base + [header])
 
 
@@ -158,7 +160,7 @@ def main() -> int:
            "# `struct|union <tag>|typedef <name> <size> <align>` and per member",
            "# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`."]
     for header, cell in shipped_headers(args.target):
-        src = prelude(header, cell)
+        src = prelude(header, cell, args.target)
         records = badc_records(args.badc, args.target, src)
         if records is None:
             print(f"skip {header}: badc rejects the unit", file=sys.stderr)

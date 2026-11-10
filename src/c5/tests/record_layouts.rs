@@ -11,6 +11,8 @@ const FEATURES: &str =
     "#define _GNU_SOURCE 1\n#define _XOPEN_SOURCE 700\n#define _DARWIN_C_SOURCE 1\n";
 const BASE: &str = "#include <sys/types.h>\n#include <sys/socket.h>\n\
                     #include <netinet/in.h>\n#include <stdint.h>\n#include <stddef.h>\n";
+/// `PREREQS["windows"]`.
+const WINDOWS_BASE: &str = "#include <winsock2.h>\n#include <windows.h>\n";
 
 /// One measured member: its byte offset, or a bit-field's first bit and width.
 enum Member {
@@ -67,10 +69,54 @@ fn parse(table: &str) -> Vec<Header<'_>> {
     headers
 }
 
+const LONG_DOUBLE: &str = "long double is MSVC's 8-byte double, mingw-w64 gcc's the x87 type";
+const FAST16: &str = "the 16-bit fast types are MSVC's int";
+const PTHREAD: &str = "libc/lib/pthread_ext.c keeps the lock inline, winpthreads a handle";
+const NLS: &str = "the Windows SDK's since Windows 8; mingw-w64 has the three-member form";
+
+/// The entries badc lays out differently from the reference on purpose.
+/// Each must still differ, or the list is stale.
+const DEPARTURES: &[(Target, &str, &str)] = &[
+    (Target::WindowsX64, "typedef max_align_t", LONG_DOUBLE),
+    (Target::WindowsX64, "typedef _LONGDOUBLE", LONG_DOUBLE),
+    (Target::WindowsX64, "typedef int_fast16_t", FAST16),
+    (Target::WindowsX64, "typedef uint_fast16_t", FAST16),
+    (Target::WindowsX64, "typedef atomic_int_fast16_t", FAST16),
+    (Target::WindowsX64, "typedef atomic_uint_fast16_t", FAST16),
+    (
+        Target::WindowsX64,
+        "typedef mbstate_t",
+        "it carries the <uchar.h> conversion state msvcrt lacks",
+    ),
+    (
+        Target::WindowsX64,
+        "typedef off_t",
+        "64-bit, as mingw-w64 makes it under _FILE_OFFSET_BITS=64",
+    ),
+    (
+        Target::WindowsX64,
+        "typedef pid_t",
+        "msvcrt's _getpid returns int",
+    ),
+    (Target::WindowsX64, "typedef pthread_mutex_t", PTHREAD),
+    (Target::WindowsX64, "typedef pthread_cond_t", PTHREAD),
+    (Target::WindowsX64, "struct _nlsversioninfo", NLS),
+    (Target::WindowsX64, "typedef NLSVERSIONINFO", NLS),
+];
+
 fn check(target: Target, table: &str) {
     let mut failures = Vec::new();
+    let departs = |entry: &str| {
+        DEPARTURES
+            .iter()
+            .any(|&(t, e, _)| t == target && e == entry)
+    };
     for (header, base, records) in parse(table) {
-        let base = if base { BASE } else { "" };
+        let base = match (base, target.is_windows()) {
+            (false, _) => "",
+            (true, false) => BASE,
+            (true, true) => WINDOWS_BASE,
+        };
         let src = format!("{FEATURES}{base}#include <{header}>\n");
         let opts = CompileOptions::default().with_no_entry_point(true);
         let program = match Compiler::with_options(src, target, opts).compile() {
@@ -82,6 +128,8 @@ fn check(target: Target, table: &str) {
         };
         for r in records {
             let kind = r.kind;
+            let entry = format!("{kind} {}", r.tag);
+            let before = failures.len();
             // (size, align, the record's members if it names one)
             let found = if kind == "typedef" {
                 (program.typedefs.iter())
@@ -132,6 +180,12 @@ fn check(target: Target, table: &str) {
                     ));
                 }
             }
+            if departs(&entry) {
+                if failures.len() == before {
+                    failures.push(format!("{header}: {entry} is a departure that matches"));
+                }
+                failures.truncate(before);
+            }
         }
     }
     assert!(
@@ -163,5 +217,13 @@ fn macos_aarch64_records_are_the_sdks() {
     check(
         Target::MacOSAarch64,
         include_str!("../../../libc/record-layouts/macos-aarch64.txt"),
+    );
+}
+
+#[test]
+fn windows_x64_records_are_mingw_w64s() {
+    check(
+        Target::WindowsX64,
+        include_str!("../../../libc/record-layouts/windows-x64.txt"),
     );
 }

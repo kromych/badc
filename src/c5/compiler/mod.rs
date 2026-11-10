@@ -3521,11 +3521,11 @@ impl Compiler {
     /// typedef of a complete structure or union names.
     fn typedef_layouts(&self) -> Vec<crate::c5::program::TypedefLayout> {
         let mut out = Vec::new();
-        for s in self
-            .symbols
-            .iter()
-            .filter(|s| s.class == Token::Typedef as i64)
-        {
+        // A function type has no size (C17 6.5.3.4p1).
+        let named = |s: &&crate::c5::symbol::Symbol| {
+            s.class == Token::Typedef as i64 && !s.is_function_type
+        };
+        for s in self.symbols.iter().filter(named) {
             let ty = s.type_;
             let record = (types::is_struct_ty(ty) && types::struct_ptr_depth(ty) == 0)
                 .then(|| types::struct_id_of(ty));

@@ -3095,6 +3095,16 @@ __m64 addw(__m64 a, __m64 b) { return _mm_add_pi16(a, b); }\n",
         "addw",
     );
     m.expect(m64.len() == 2, || format!("x86-64 addw: {m64:x?}"));
+    // The SSE forms over __m64 are the instruction on the low halves:
+    // `pavgb`, `pmaxsw` and `pmuludq` and `ret`, from 78, 38 and 14.
+    const MMX: &str = "#include <emmintrin.h>\n\
+__m64 avg(__m64 a, __m64 b) { return _mm_avg_pu8(a, b); }\n\
+__m64 mx(__m64 a, __m64 b) { return _mm_max_pi16(a, b); }\n\
+__m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
+    for name in ["avg", "mx", "mu"] {
+        let insns = x64(MMX, name);
+        m.expect(insns.len() == 2, || format!("x86-64 {name}: {insns:x?}"));
+    }
     m.finish();
 }
 

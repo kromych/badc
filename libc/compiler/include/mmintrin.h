@@ -1,8 +1,10 @@
 /* MMX intrinsics: gcc's __m64 and the operations of its <mmintrin.h>, with
 ** the _m_ spellings. Each is written over the 8-byte vector extension, lane
-** by lane as the SDM defines the instruction, so no MMX register is used;
-** _mm_empty still executes EMMS. Shift counts past the lane width give the
-** instruction's result: zero, or the sign for an arithmetic shift. */
+** by lane as the SDM defines the instruction, or, where SSE2 has the
+** instruction for the low half of an xmm register, as gcc's builtin of it,
+** so no MMX register is used; _mm_empty still executes EMMS. Shift counts
+** past the lane width give the instruction's result: zero, or the sign for
+** an arithmetic shift. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
@@ -211,83 +213,50 @@ static inline __m64 _mm_sub_si64(__m64 __m1, __m64 __m2) {
 /* Saturating arithmetic: PADDS*, PADDUS*, PSUBS*, PSUBUS*. */
 
 static inline __m64 _mm_adds_pi8(__m64 __m1, __m64 __m2) {
-    __v8qs __a = (__v8qs)__m1, __b = (__v8qs)__m2, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (signed char)__mm_sat_signed(__a[__i] + __b[__i], 8);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_paddsb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_adds_pi16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (short)__mm_sat_signed(__a[__i] + __b[__i], 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_paddsw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_adds_pu8(__m64 __m1, __m64 __m2) {
-    __v8qu __a = (__v8qu)__m1, __b = (__v8qu)__m2, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (unsigned char)__mm_sat_unsigned(__a[__i] + __b[__i], 8);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_paddusb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_adds_pu16(__m64 __m1, __m64 __m2) {
-    __v4hu __a = (__v4hu)__m1, __b = (__v4hu)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)__mm_sat_unsigned(__a[__i] + __b[__i], 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_paddusw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_subs_pi8(__m64 __m1, __m64 __m2) {
-    __v8qs __a = (__v8qs)__m1, __b = (__v8qs)__m2, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (signed char)__mm_sat_signed(__a[__i] - __b[__i], 8);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_psubsb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_subs_pi16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (short)__mm_sat_signed(__a[__i] - __b[__i], 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_psubsw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_subs_pu8(__m64 __m1, __m64 __m2) {
-    __v8qu __a = (__v8qu)__m1, __b = (__v8qu)__m2, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (unsigned char)__mm_sat_unsigned(__a[__i] - __b[__i], 8);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_psubusb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_subs_pu16(__m64 __m1, __m64 __m2) {
-    __v4hu __a = (__v4hu)__m1, __b = (__v4hu)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)__mm_sat_unsigned(__a[__i] - __b[__i], 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_psubusw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 /* PMADDWD, PMULHW, PMULLW. The pair sum wraps where all four words are
 ** -32768, as the instruction does. */
 
 static inline __m64 _mm_madd_pi16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2;
-    unsigned __lo = (unsigned)(__a[0] * __b[0]) + (unsigned)(__a[1] * __b[1]);
-    unsigned __hi = (unsigned)(__a[2] * __b[2]) + (unsigned)(__a[3] * __b[3]);
-    return (__m64)(__v2su){__lo, __hi};
+    return (__m64)__builtin_ia32_pmaddwd((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_mulhi_pi16(__m64 __m1, __m64 __m2) {
-    __v4hi __a = (__v4hi)__m1, __b = (__v4hi)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (short)((__a[__i] * __b[__i]) >> 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pmulhw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_mullo_pi16(__m64 __m1, __m64 __m2) {
-    __v4hu __a = (__v4hu)__m1, __b = (__v4hu)__m2, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)((unsigned)__a[__i] * __b[__i]);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pmullw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 /* Shifts. The register forms take the whole 64-bit count, the immediate
@@ -387,27 +356,27 @@ static inline __m64 _mm_xor_si64(__m64 __m1, __m64 __m2) {
 ** lanes holds. */
 
 static inline __m64 _mm_cmpeq_pi8(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v8qs)__m1 == (__v8qs)__m2);
+    return (__m64)__builtin_ia32_pcmpeqb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_cmpeq_pi16(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v4hi)__m1 == (__v4hi)__m2);
+    return (__m64)__builtin_ia32_pcmpeqw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_cmpeq_pi32(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v2si)__m1 == (__v2si)__m2);
+    return (__m64)__builtin_ia32_pcmpeqd((__v2si)__m1, (__v2si)__m2);
 }
 
 static inline __m64 _mm_cmpgt_pi8(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v8qs)__m1 > (__v8qs)__m2);
+    return (__m64)__builtin_ia32_pcmpgtb((__v8qi)__m1, (__v8qi)__m2);
 }
 
 static inline __m64 _mm_cmpgt_pi16(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v4hi)__m1 > (__v4hi)__m2);
+    return (__m64)__builtin_ia32_pcmpgtw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 static inline __m64 _mm_cmpgt_pi32(__m64 __m1, __m64 __m2) {
-    return (__m64)((__v2si)__m1 > (__v2si)__m2);
+    return (__m64)__builtin_ia32_pcmpgtd((__v2si)__m1, (__v2si)__m2);
 }
 
 /* The instruction-named spellings. */

@@ -411,10 +411,12 @@ impl Compiler {
             };
             let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
                 || (row.form == Form::Store && i == 0);
-            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == 16) {
+            let bytes = usize::from(row.bytes);
+            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == bytes)
+            {
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
-                    format!("`{name}` argument {} must be a 16-byte vector", i + 1),
+                    format!("`{name}` argument {} must be a {bytes}-byte vector", i + 1),
                 ));
             }
             if wants_pointer && !is_pointer_ty(ty) {
@@ -475,9 +477,9 @@ impl Compiler {
             // The headers' `__v16qi` is a vector of plain `char`.
             Some(Ty::Char) => {
                 let lane = super::types::plain_char_ty(self.lex.char_signed);
-                self.make_vector_type(lane, 16)
+                self.make_vector_type(lane, i64::from(row.bytes))
             }
-            Some(lane) => self.make_vector_type(lane as i64, 16),
+            Some(lane) => self.make_vector_type(lane as i64, i64::from(row.bytes)),
             None if row.ret == Ret::Void => super::types::void_ty(),
             None if row.ret == Ret::Int64 => Ty::LongLong as i64,
             None => Ty::Int as i64,

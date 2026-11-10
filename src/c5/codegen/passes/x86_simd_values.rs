@@ -32,11 +32,11 @@ enum Src {
     Loaded(usize),
 }
 
-fn load(addr: ValueId, align: u8) -> Inst {
+fn load(addr: ValueId, kind: LoadKind, align: u8) -> Inst {
     Inst::Load {
         addr,
         disp: 0,
-        kind: LoadKind::V128,
+        kind,
         volatile: false,
         align,
         pc_rel: false,
@@ -77,22 +77,24 @@ fn run_one(func: &mut FunctionSsa) {
             };
             let row = x86_simd::get(op);
             let args = args.clone();
+            // An MMX form's vectors are the 64 bits of their registers.
+            let (vload, vstore) = if row.bytes == 8 {
+                (LoadKind::F64, StoreKind::F64)
+            } else {
+                (LoadKind::V128, StoreKind::V128)
+            };
             match row.form {
                 Form::RdRand => continue,
                 // A `loadu` is a 128-bit load from its pointer stored to the
                 // destination; a `storeu` the converse. The pointer bears
                 // no alignment.
                 Form::Load => {
-                    memory.push((v, load(args[1], 1)));
-                    push(
-                        &mut ins,
-                        At::After(v),
-                        store(args[0], v, StoreKind::V128, 0),
-                    );
+                    memory.push((v, load(args[1], vload, 1)));
+                    push(&mut ins, At::After(v), store(args[0], v, vstore, 0));
                 }
                 Form::Store => {
-                    let l = push(&mut ins, At::Before(v), load(args[1], 0));
-                    memory.push((v, store(args[0], (base + l) as ValueId, StoreKind::V128, 1)));
+                    let l = push(&mut ins, At::Before(v), load(args[1], vload, 0));
+                    memory.push((v, store(args[0], (base + l) as ValueId, vstore, 1)));
                 }
                 _ => {
                     // The address form's operands past the destination:
@@ -104,13 +106,13 @@ fn run_one(func: &mut FunctionSsa) {
                             _ => k == 1,
                         };
                         srcs.push(if vector {
-                            Src::Loaded(push(&mut ins, At::Before(v), load(a, 0)))
+                            Src::Loaded(push(&mut ins, At::Before(v), load(a, vload, 0)))
                         } else {
                             Src::Old(a)
                         });
                     }
                     let kind = match row.form {
-                        f if f.returns_vector() => StoreKind::V128,
+                        f if f.returns_vector() => vstore,
                         Form::ToInt if row.int_width == 8 => StoreKind::I64,
                         Form::Extract if row.int_width == 8 => StoreKind::I64,
                         _ => StoreKind::I32,

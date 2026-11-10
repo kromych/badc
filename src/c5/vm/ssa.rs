@@ -3988,9 +3988,11 @@ fn run_x86_simd(
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
+    // An MMX form reads and writes the low `row.bytes` of each image.
+    let n = usize::from(row.bytes);
     let read = |mem: &Memory, addr: usize| -> Result<[u8; 16], C5Error> {
         let mut v = [0u8; 16];
-        v.copy_from_slice(mem.read_bytes(addr, 16)?);
+        v[..n].copy_from_slice(mem.read_bytes(addr, n)?);
         Ok(v)
     };
     // The destination plus the sources, less what the node carries as an
@@ -4014,7 +4016,7 @@ fn run_x86_simd(
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
             let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
                 .unwrap_or_else(|| x86_simd::eval(row.sem, &a, &b, imm8, 0));
-            mem.write_bytes(reg(0), &out)?;
+            mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::V | Form::VI => {
             let a = read(mem, reg(1))?;

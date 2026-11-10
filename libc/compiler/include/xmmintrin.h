@@ -402,7 +402,8 @@ static inline int _mm_ucomineq_ss(__m128 __A, __m128 __B) {
 }
 
 /* The SSE operations on __m64, written lane by lane over the vector
-** extension as the SDM defines each instruction. A float converts to an
+** extension as the SDM defines each instruction, or as gcc's builtin of an
+** instruction SSE2 has for the low half of an xmm register. A float converts to an
 ** integer through CVTPS2DQ, which rounds by MXCSR, or CVTTPS2DQ: 0x80000000
 ** for a NaN or a value out of range. The two-lane forms convert their two
 ** lanes twice over, raising what CVTPS2PI raises. */
@@ -537,31 +538,19 @@ static inline __m64 _mm_shuffle_pi16(__m64 __A, int __N) {
 }
 
 static inline __m64 _mm_max_pi16(__m64 __A, __m64 __B) {
-    __v4hi __a = (__v4hi)__A, __b = (__v4hi)__B, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = __a[__i] > __b[__i] ? __a[__i] : __b[__i];
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pmaxsw((__v4hi)__A, (__v4hi)__B);
 }
 
 static inline __m64 _mm_max_pu8(__m64 __A, __m64 __B) {
-    __v8qu __a = (__v8qu)__A, __b = (__v8qu)__B, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = __a[__i] > __b[__i] ? __a[__i] : __b[__i];
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pmaxub((__v8qi)__A, (__v8qi)__B);
 }
 
 static inline __m64 _mm_min_pi16(__m64 __A, __m64 __B) {
-    __v4hi __a = (__v4hi)__A, __b = (__v4hi)__B, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = __a[__i] < __b[__i] ? __a[__i] : __b[__i];
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pminsw((__v4hi)__A, (__v4hi)__B);
 }
 
 static inline __m64 _mm_min_pu8(__m64 __A, __m64 __B) {
-    __v8qu __a = (__v8qu)__A, __b = (__v8qu)__B, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = __a[__i] < __b[__i] ? __a[__i] : __b[__i];
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pminub((__v8qi)__A, (__v8qi)__B);
 }
 
 static inline int _mm_movemask_pi8(__m64 __A) {
@@ -573,10 +562,7 @@ static inline int _mm_movemask_pi8(__m64 __A) {
 }
 
 static inline __m64 _mm_mulhi_pu16(__m64 __A, __m64 __B) {
-    __v4hu __a = (__v4hu)__A, __b = (__v4hu)__B, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)(((unsigned)__a[__i] * __b[__i]) >> 16);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pmulhuw((__v4hi)__A, (__v4hi)__B);
 }
 
 /* MASKMOVQ writes the bytes whose selector byte has its top bit set and
@@ -590,27 +576,17 @@ static inline void _mm_maskmove_si64(__m64 __A, __m64 __N, char *__P) {
 }
 
 static inline __m64 _mm_avg_pu8(__m64 __A, __m64 __B) {
-    __v8qu __a = (__v8qu)__A, __b = (__v8qu)__B, __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = (unsigned char)((__a[__i] + __b[__i] + 1) >> 1);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pavgb((__v8qi)__A, (__v8qi)__B);
 }
 
 static inline __m64 _mm_avg_pu16(__m64 __A, __m64 __B) {
-    __v4hu __a = (__v4hu)__A, __b = (__v4hu)__B, __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = (unsigned short)(((unsigned)__a[__i] + __b[__i] + 1) >> 1);
-    return (__m64)__r;
+    return (__m64)__builtin_ia32_pavgw((__v4hi)__A, (__v4hi)__B);
 }
 
 /* PSADBW: the sum of the absolute byte differences in the low word, the
 ** other words zero. */
 static inline __m64 _mm_sad_pu8(__m64 __A, __m64 __B) {
-    __v8qu __a = (__v8qu)__A, __b = (__v8qu)__B;
-    unsigned long long __s = 0;
-    for (int __i = 0; __i < 8; __i++)
-        __s += __a[__i] > __b[__i] ? __a[__i] - __b[__i] : __b[__i] - __a[__i];
-    return (__m64)__s;
+    return (__m64)__builtin_ia32_psadbw((__v8qi)__A, (__v8qi)__B);
 }
 
 /* The non-temporal store, through a general register as on x86-64. */

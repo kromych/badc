@@ -264,7 +264,8 @@ impl<'a> Walker<'a> {
         imm: Option<u8>,
     ) -> Result<ValueId, WalkError> {
         use crate::c5::x86_simd::{self, Form, Ret};
-        let form = x86_simd::get(op).form;
+        let row = x86_simd::get(op);
+        let form = row.form;
         let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
         for &a in args {
             let v = if self.expr_is_vector(a) {
@@ -278,7 +279,11 @@ impl<'a> Walker<'a> {
             b.x86_simd(op, imm, ops);
             return Ok(b.imm(0));
         }
-        let result_bytes = if form.returns_vector() { 16 } else { 8 };
+        let result_bytes = if form.returns_vector() {
+            i64::from(row.bytes)
+        } else {
+            8
+        };
         let slot = b.alloc_synthetic_struct(result_bytes, result_bytes);
         let dst = b.local_addr(slot);
         ops.insert(0, dst);

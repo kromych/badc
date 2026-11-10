@@ -3376,7 +3376,10 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
                 .iter()
                 .find(|o| o.value && o.is_output)
                 .is_some_and(|o| o.width == 16),
-            Inst::X86SimdVal { op, .. } => crate::c5::x86_simd::get(*op).form.returns_vector(),
+            Inst::X86SimdVal { op, .. } => {
+                let row = crate::c5::x86_simd::get(*op);
+                row.form.returns_vector() && row.bytes == 16
+            }
             Inst::VecBinop { bytes, .. } => *bytes == 16,
             _ => false,
         })

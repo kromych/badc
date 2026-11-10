@@ -3,10 +3,10 @@
 ** which take the unaligned move: a vector operand here is memory-resident
 ** at 8-byte alignment, so no aligned form is emitted. The non-temporal
 ** stores are ordinary stores and MASKMOVDQU's is written byte by byte. The
-** operations on __m64 are written lane by lane, as <mmintrin.h>'s are. The
-** forms whose last operand the instruction encodes as an immediate are
-** macros, as gcc's are without -O: a function parameter is not an integer
-** constant expression. */
+** operations on __m64 are written as <mmintrin.h>'s are. The forms whose
+** last operand the instruction encodes as an immediate are macros, as gcc's
+** are without -O: a function parameter is not an integer constant
+** expression. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
@@ -149,10 +149,9 @@ static inline __m128d _mm_castps_pd(__m128 __A) {
     return (__m128d)__A;
 }
 
-/* The operations on __m64, lane by lane over the vector extension as
-** <mmintrin.h>'s are. A double converts to an integer through CVTSD2SI,
-** which rounds by MXCSR, or CVTTSD2SI; both give 0x80000000 for a NaN or a
-** value out of range. */
+/* The operations on __m64, written as <mmintrin.h>'s are. A double
+** converts to an integer through CVTSD2SI, which rounds by MXCSR, or
+** CVTTSD2SI; both give 0x80000000 for a NaN or a value out of range. */
 
 static inline __m64 _mm_movepi64_pi64(__m128i __A) {
     return (__m64)__A[0];
@@ -175,7 +174,7 @@ static inline __m128i _mm_set1_epi64(__m64 __q) {
 }
 
 static inline __m64 _mm_mul_su32(__m64 __A, __m64 __B) {
-    return (__m64)((unsigned long long)((__v2su)__A)[0] * ((__v2su)__B)[0]);
+    return (__m64)__builtin_ia32_pmuludq((__v2si)__A, (__v2si)__B);
 }
 
 static inline __m64 _mm_cvtpd_pi32(__m128d __A) {

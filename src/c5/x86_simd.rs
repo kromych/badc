@@ -50,6 +50,11 @@ pub(crate) enum Ret {
     V2di,
     V2df,
     V4sf,
+    /// The 8-byte vectors of the MMX forms.
+    V8qi,
+    V4hi,
+    V2si,
+    V1di,
     Int,
     Int64,
     Void,
@@ -65,6 +70,10 @@ impl Ret {
             Ret::V2di => Some(Ty::LongLong),
             Ret::V2df => Some(Ty::Double),
             Ret::V4sf => Some(Ty::Float),
+            Ret::V8qi => Some(Ty::Char),
+            Ret::V4hi => Some(Ty::Short),
+            Ret::V2si => Some(Ty::Int),
+            Ret::V1di => Some(Ty::LongLong),
             Ret::Int | Ret::Int64 | Ret::Void => None,
         }
     }
@@ -250,6 +259,10 @@ pub(crate) struct SimdOp {
     /// Width in bytes of the integer operand or result of the forms that
     /// have one (`Extract`, `Insert`, `Shift`, `RdRand`); 0 otherwise.
     pub int_width: u8,
+    /// Width in bytes of the vector operands and result: 16, or 8 for an
+    /// MMX form, which runs as the SSE instruction on the low half of the
+    /// xmm registers, every lane of its result within that half.
+    pub bytes: u8,
 }
 
 const fn op(
@@ -267,6 +280,20 @@ const fn op(
         ret,
         sem,
         int_width,
+        bytes: 16,
+    }
+}
+
+/// An MMX form of a two-operand row: gcc's builtin over 8-byte vectors.
+const fn op64(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem) -> SimdOp {
+    SimdOp {
+        name,
+        mnem,
+        form: Form::Vv,
+        ret,
+        sem,
+        int_width: 0,
+        bytes: 8,
     }
 }
 
@@ -476,6 +503,33 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_rdseed16_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 2),
     op("__builtin_ia32_rdseed32_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 4),
     op("__builtin_ia32_rdseed64_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 8),
+    // The MMX forms over 8-byte vectors, as gcc names their builtins.
+    op64("__builtin_ia32_paddsb", "paddsb", Ret::V8qi, Sem::AddSat(1, true)),
+    op64("__builtin_ia32_paddsw", "paddsw", Ret::V4hi, Sem::AddSat(2, true)),
+    op64("__builtin_ia32_paddusb", "paddusb", Ret::V8qi, Sem::AddSat(1, false)),
+    op64("__builtin_ia32_paddusw", "paddusw", Ret::V4hi, Sem::AddSat(2, false)),
+    op64("__builtin_ia32_psubsb", "psubsb", Ret::V8qi, Sem::SubSat(1, true)),
+    op64("__builtin_ia32_psubsw", "psubsw", Ret::V4hi, Sem::SubSat(2, true)),
+    op64("__builtin_ia32_psubusb", "psubusb", Ret::V8qi, Sem::SubSat(1, false)),
+    op64("__builtin_ia32_psubusw", "psubusw", Ret::V4hi, Sem::SubSat(2, false)),
+    op64("__builtin_ia32_pmullw", "pmullw", Ret::V4hi, Sem::MulLo(2)),
+    op64("__builtin_ia32_pmulhw", "pmulhw", Ret::V4hi, Sem::MulHi(2, true)),
+    op64("__builtin_ia32_pmulhuw", "pmulhuw", Ret::V4hi, Sem::MulHi(2, false)),
+    op64("__builtin_ia32_pmaddwd", "pmaddwd", Ret::V2si, Sem::MulAddWords),
+    op64("__builtin_ia32_pmuludq", "pmuludq", Ret::V1di, Sem::MulEven(false)),
+    op64("__builtin_ia32_pcmpeqb", "pcmpeqb", Ret::V8qi, Sem::CmpEq(1)),
+    op64("__builtin_ia32_pcmpeqw", "pcmpeqw", Ret::V4hi, Sem::CmpEq(2)),
+    op64("__builtin_ia32_pcmpeqd", "pcmpeqd", Ret::V2si, Sem::CmpEq(4)),
+    op64("__builtin_ia32_pcmpgtb", "pcmpgtb", Ret::V8qi, Sem::CmpGt(1)),
+    op64("__builtin_ia32_pcmpgtw", "pcmpgtw", Ret::V4hi, Sem::CmpGt(2)),
+    op64("__builtin_ia32_pcmpgtd", "pcmpgtd", Ret::V2si, Sem::CmpGt(4)),
+    op64("__builtin_ia32_psadbw", "psadbw", Ret::V1di, Sem::SadBytes),
+    op64("__builtin_ia32_pavgb", "pavgb", Ret::V8qi, Sem::Avg(1)),
+    op64("__builtin_ia32_pavgw", "pavgw", Ret::V4hi, Sem::Avg(2)),
+    op64("__builtin_ia32_pminsw", "pminsw", Ret::V4hi, Sem::Min(2, true)),
+    op64("__builtin_ia32_pmaxsw", "pmaxsw", Ret::V4hi, Sem::Max(2, true)),
+    op64("__builtin_ia32_pminub", "pminub", Ret::V8qi, Sem::Min(1, false)),
+    op64("__builtin_ia32_pmaxub", "pmaxub", Ret::V8qi, Sem::Max(1, false)),
 ];
 
 /// The table index of `name`, or `None` when it is not a SIMD builtin.
@@ -496,7 +550,7 @@ impl SimdOp {
     /// its own; its 16 bytes go through the pointer operand, its first.
     pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
         let width = if self.form.returns_vector() || self.form == Form::Store {
-            16
+            self.bytes
         } else if self.form == Form::ToInt || (self.form == Form::Extract && self.int_width == 8) {
             self.int_width
         } else {

@@ -45,11 +45,20 @@ pub(super) fn emit_x86_simd(
         }
         Ok(())
     };
-    // 128-bit transfers between an address in `addr` and xmm `n`.
+    // Vector transfers between an address in `addr` and xmm `n`: 128 bits,
+    // or the low 64 of an MMX form, the upper half zeroed on a load.
     let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> Emit {
+        if row.bytes == 8 {
+            emit_movsd_xmm_mem(code, Reg(n), addr, 0);
+            return Ok(());
+        }
         insn(code, "movdqu", &[at(addr, AsmRegSize::Quad), xmm(n)])
     };
     let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> Emit {
+        if row.bytes == 8 {
+            emit_movsd_mem_xmm(code, addr, 0, Reg(n));
+            return Ok(());
+        }
         insn(code, "movdqu", &[xmm(n), at(addr, AsmRegSize::Quad)])
     };
     let int_size = |w: u8| match w {
@@ -462,7 +471,7 @@ pub(super) fn emit_x86_simd_val(
                 row.mnem,
                 imm,
                 commutes,
-                true,
+                row.bytes == 16,
                 dst,
                 (place(0), place(1)),
                 frame,

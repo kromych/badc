@@ -9,7 +9,7 @@
 struct sched_param {
     int sched_priority;
 #ifdef __APPLE__
-    unsigned char __opaque[4];
+    char __opaque[4];
 #endif
 };
 

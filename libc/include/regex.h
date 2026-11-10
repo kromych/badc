@@ -26,7 +26,7 @@ typedef struct {
     int re_magic;
     size_t re_nsub;
     const char *re_endp;
-    void *re_g;
+    struct re_guts *re_g;
 } regex_t;
 
 #define REG_BASIC    0000

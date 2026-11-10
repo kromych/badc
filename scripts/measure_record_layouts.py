@@ -100,8 +100,8 @@ def placed(obj: str, cross: bool) -> str:
     return f' __attribute__((section("{SECTIONS[obj]}")))' if cross else ""
 
 
-def probe_bytes(cc: list[str], objcopy: str | None, text: str,
-                objects: list[str]) -> tuple[bytes, ...] | str:
+def probe_bytes(cc: list[str], objcopy: str | None, text: str, objects: list[str],
+                flags: tuple[str, ...] = ("-w",)) -> tuple[bytes, ...] | str:
     """The bytes of `objects` in the probe `text`, or the compiler's errors.
     With `objcopy`, the probe is compiled only and the objects' sections
     are read from the object file; otherwise it is run, printing them."""
@@ -110,7 +110,7 @@ def probe_bytes(cc: list[str], objcopy: str | None, text: str,
         if objcopy:
             Path(c).write_text(text)
             obj = os.path.join(tmp, "probe.o")
-            r = subprocess.run(cc + ["-w", "-c", "-o", obj, c], capture_output=True, text=True)
+            r = subprocess.run(cc + [*flags, "-c", "-o", obj, c], capture_output=True, text=True)
             if r.returncode != 0:
                 return r.stderr
             dumps = [os.path.join(tmp, f"{k}.bin") for k in range(len(objects))]
@@ -122,7 +122,7 @@ def probe_bytes(cc: list[str], objcopy: str | None, text: str,
                        for o in objects)
         Path(c).write_text(f"{text}int main(void) {{\n{main}  return 0;\n}}\n")
         exe = os.path.join(tmp, "probe")
-        r = subprocess.run(cc + ["-w", "-o", exe, c], capture_output=True, text=True)
+        r = subprocess.run(cc + [*flags, "-o", exe, c], capture_output=True, text=True)
         if r.returncode != 0:
             return r.stderr
         out = subprocess.run([exe], capture_output=True, text=True, check=True).stdout

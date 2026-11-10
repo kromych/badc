@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=my_init
-fn ent_pc=1 n_params=4 variadic=false locals=0
+fn ent_pc=0 n_params=4 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -25,9 +25,9 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v19  Store { addr=v1, disp=8, value=v17, kind=I32 }   -> -
     v20  Imm(0)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=my_generate
-fn ent_pc=2 n_params=3 variadic=false locals=0
+fn ent_pc=1 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -45,9 +45,9 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v12  Imm(0)                                           -> x1
     v13  Extend { value=v5, kind=I32 }                    -> x1
     terminator Return(v5)   (exit_acc=v5)
-; --- SSA dump (ok=true) ent_pc=3 ---
+; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=3
+fn ent_pc=2 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

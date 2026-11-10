@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=0
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -139,7 +139,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v111 Imm(3)                                           -> x0
     terminator Return(v111)   (exit_acc=v111)
   block 12  start_pc=0
-    v112 ImmData(12)                                      -> x7
+    v112 ImmData(8)                                       -> x7
     v113 CallExt { binding_idx=0, args=[v112], fp_arg_mask=0x0 } -> x0
     v114 Imm(42)                                          -> x0
     terminator Return(v114)   (exit_acc=v114)

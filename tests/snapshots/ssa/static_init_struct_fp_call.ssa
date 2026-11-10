@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=do_add
-fn ent_pc=1 n_params=2 variadic=false locals=0
+fn ent_pc=0 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -14,9 +14,9 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=do_sub
-fn ent_pc=2 n_params=2 variadic=false locals=0
+fn ent_pc=1 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -30,9 +30,9 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
-; --- SSA dump (ok=true) ent_pc=3 ---
+; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=0
+fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

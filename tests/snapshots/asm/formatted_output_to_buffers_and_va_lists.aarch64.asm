@@ -108,10 +108,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x40
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0x8]
-               	cbz	x1, <addr>
-               	ldr	x0, [x0, #0x8]
+               	ldr	x0, [x0, <lo12>]
+               	ldr	x0, [x0]
                	ldr	x1, [x29, #0x10]
                	sub	x2, x29, #0x20
                	bl	<addr>
@@ -121,19 +119,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	bl	<addr>
-               	cbz	x0, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x0]
-               	str	x0, [x1, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0, #0x8]
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -131,8 +131,7 @@ struct Memory {
     /// `run_program_with_args_tracked` (or the
     /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
-    /// Base of the stdio block ([`STDIO_ERRNO`]), the first heap
-    /// allocation.
+    /// Base of the stdio block ([`STDIO_ERRNO`]) in the data image.
     stdio: usize,
     /// The interpreted target, whose `long` and `long double` formats and
     /// libc conventions the library shims follow.
@@ -182,7 +181,8 @@ impl AccessKind {
 }
 
 impl Memory {
-    fn new(data: &[u8], target: crate::c5::codegen::Target) -> Self {
+    /// `data` holds the stdio block's [`STDIO_BYTES`] at `stdio`.
+    fn new(data: &[u8], stdio: usize, target: crate::c5::codegen::Target) -> Self {
         // Reserve a fixed 256 KiB stack region + 256 KiB heap.
         // C99 doesn't pin either limit; this sizing fits every
         // cargo fixture today.
@@ -213,9 +213,7 @@ impl Memory {
             rand: system::Rand::new(Libc::of(target)),
             messages: alloc::collections::BTreeMap::new(),
         };
-        // Allocated up front, inside the reserved heap, so `errno` stays
-        // reachable after the heap is exhausted.
-        let base = mem.heap_alloc(STDIO_BYTES as u64);
+        let base = stdio;
         for i in 0..3 {
             let file = (base + i * STDIO_FILE_BYTES) as u64;
             let slot = base + STDIO_SLOTS + i * 8;
@@ -227,9 +225,24 @@ impl Memory {
         mem
     }
 
+    /// Memory over `data` with a stdio block appended.
+    #[cfg(test)]
+    fn with_stdio(data: &[u8], target: crate::c5::codegen::Target) -> Self {
+        let mut data = data.to_vec();
+        let stdio = reserve_stdio(&mut data);
+        Self::new(&data, stdio, target)
+    }
+
     /// The stdio block.
     fn stdio(&self) -> usize {
         self.stdio
+    }
+
+    /// The `FILE *` standard stream `i` (0, 1, 2) names: a program may
+    /// assign another stream to it.
+    fn std_stream(&self, i: usize) -> i64 {
+        let at = self.stdio + STDIO_SLOTS + i * 8;
+        i64::from_le_bytes(self.bytes[at..at + 8].try_into().unwrap())
     }
 
     /// Store `ENOMEM` in `errno`, as a failed allocation function does.
@@ -685,9 +698,11 @@ pub(super) fn run_program_with_args<H: Host>(
     args: &[alloc::string::String],
     target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
+    let mut data = data.to_vec();
+    let stdio = reserve_stdio(&mut data);
     run_program_with_args_tracked(
         funcs,
-        data,
+        (&data, stdio),
         binding_names,
         tls_base,
         entry_pc,
@@ -708,7 +723,7 @@ pub(super) fn run_program_with_args<H: Host>(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args_tracked<H: Host>(
     funcs: &[FunctionSsa],
-    data: &[u8],
+    (data, stdio): (&[u8], usize),
     binding_names: &[alloc::string::String],
     tls_base: usize,
     entry_pc: usize,
@@ -737,7 +752,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         .with_tls_base(tls_base)
         .with_trace(trace);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
-    let mut mem = Memory::new(&data_with_argv, target).with_track_pointers(track_pointers);
+    let mut mem = Memory::new(&data_with_argv, stdio, target).with_track_pointers(track_pointers);
     // `__attribute__((constructor))` functions run before the entry, in
     // the native `.init_array` order the caller already sorted. An
     // `exit()` from a constructor short-circuits to the exit status.
@@ -1772,6 +1787,19 @@ const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
 const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
 const STDIO_RETURN: usize = STDIO_ERRNO + 8;
 const STDIO_BYTES: usize = STDIO_RETURN + 16;
+
+/// Append a stdio block to the data image `data`; its offset.
+pub(super) fn reserve_stdio(data: &mut Vec<u8>) -> usize {
+    let at = data.len().next_multiple_of(16);
+    data.resize(at + STDIO_BYTES, 0);
+    at
+}
+
+/// The `FILE *` object of the standard stream a data symbol names, in the
+/// stdio block at `stdio`: the cell `dlsym` gives for the name as well.
+pub(super) fn std_stream_object(stdio: usize, sym: &str) -> Option<usize> {
+    std_stream_index(sym).map(|i| stdio + STDIO_SLOTS + i * 8)
+}
 /// `ENOMEM` as the bundled `<errno.h>` numbers it on every target.
 const ENOMEM: i32 = 12;
 
@@ -1782,6 +1810,11 @@ fn std_stream_index(sym: &str) -> Option<usize> {
         "stderr" | "__stderrp" => Some(2),
         _ => None,
     }
+}
+
+/// The descriptor of the stream that standard stream `i` names.
+fn std_stream_fd(name: &str, i: usize, mem: &Memory) -> Result<i64, C5Error> {
+    stream_fd(name, &[mem.std_stream(i)], 0, mem)
 }
 
 /// The descriptor of the open stream argument `idx` of `name` names.
@@ -2281,7 +2314,7 @@ fn dispatch_callext<H: Host>(
         "puts" => {
             let mut line = cstring_arg(name, args, 0, mem)?;
             line.push(b'\n');
-            let _ = host.write(1, &line);
+            let _ = host.write(std_stream_fd(name, 1, mem)?, &line);
             Ok(0)
         }
         "fputc" | "putc" => {
@@ -2304,7 +2337,7 @@ fn dispatch_callext<H: Host>(
         "putchar" => {
             let c = args.first().copied().unwrap_or(-1);
             let byte = c as u8;
-            let _ = host.write(1, &[byte]);
+            let _ = host.write(std_stream_fd(name, 1, mem)?, &[byte]);
             Ok(c)
         }
         // `int open(const char *path, int flags)` -- routes through
@@ -2429,8 +2462,8 @@ fn dispatch_callext<H: Host>(
                 )));
             }
             let sym = read_cstring(mem, name_addr as usize)?;
-            if let Some(i) = std_stream_index(&sym) {
-                return Ok((mem.stdio() + STDIO_SLOTS + i * 8) as i64);
+            if let Some(at) = std_stream_object(mem.stdio(), &sym) {
+                return Ok(at as i64);
             }
             Ok(host.dlsym(handle, &sym))
         }
@@ -4593,20 +4626,20 @@ mod tests {
         // 0xC3 0xA9 (the UTF-8 encoding of U+00E9) must reach stdout as
         // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
         // the old path produced.
-        let mut mem = Memory::new(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"%s", Varargs::values(&[0]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
     }
 
     #[test]
     fn printf_char_preserves_high_byte() {
-        let mut mem = Memory::new(b"\x00", crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(b"\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"%c", Varargs::values(&[0x80]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0x80u8]);
     }
 
     fn fmt1(fmt: &[u8], args: &[i64]) -> alloc::string::String {
-        let mut mem = Memory::new(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         alloc::string::String::from_utf8(out).expect("utf8")
     }
@@ -4668,7 +4701,7 @@ mod tests {
     }
 
     fn fmt_on(target: crate::c5::codegen::Target, data: &[u8], fmt: &[u8], args: &[i64]) -> String {
-        let mut mem = Memory::new(data, target);
+        let mut mem = Memory::with_stdio(data, target);
         let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         String::from_utf8(out).expect("utf8")
     }
@@ -4751,7 +4784,7 @@ mod tests {
     #[test]
     fn printf_percent_n_stores_count() {
         // C99 7.19.6.1p8: %n stores the bytes written so far.
-        let mut mem = Memory::new(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"abc%nd", Varargs::values(&[8]), &mut mem).expect("format");
         assert_eq!(out, b"abcd".to_vec());
         assert_eq!(load_from_memory(&mem, 8, LoadKind::I32).unwrap(), 3);
@@ -4820,7 +4853,7 @@ mod tests {
     fn frame_allocation_is_bounded_by_the_stack_region() {
         // A frame past `heap_base` would zero live heap
         // allocations; exhaustion must be a hard error instead.
-        let mut mem = Memory::new(&[], crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(&[], crate::c5::codegen::Target::LinuxX64);
         let heap = mem.heap_alloc(16);
         mem.bytes[heap] = 7;
         let stack_bytes = mem.heap_base - mem.stack_base;
@@ -4904,7 +4937,7 @@ mod tests {
 
     #[test]
     fn every_function_the_interpreter_supplies_has_a_definition() {
-        let mut mem = Memory::new(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
+        let mut mem = Memory::with_stdio(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
         let names = [
             "exit",
             "memcpy",

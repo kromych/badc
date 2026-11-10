@@ -150,7 +150,9 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::renameat,  "_renameat")
-#pragma binding(libc::dlsym,     "_dlsym")
+#pragma binding(data libc::__stdinp,  "___stdinp")
+#pragma binding(data libc::__stdoutp, "___stdoutp")
+#pragma binding(data libc::__stderrp, "___stderrp")
 // POSIX.1-2008 `open_memstream` -- creates a FILE * backed
 // by a heap buffer the libc grows as the program writes
 // through it. The caller passes (char **buf, size_t *sz)
@@ -241,8 +243,6 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "remove")
 #pragma binding(libc::rename,    "rename")
 #pragma binding(libc::renameat,  "renameat")
-#pragma dylib(libdl_for_stdio, "libdl.so.2")
-#pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
@@ -271,9 +271,6 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::getdelim,  "getdelim")
 #pragma binding(libc::dprintf,   "dprintf")
 #pragma binding(libc::vdprintf,  "vdprintf")
-// The standard streams are C library data objects (C99 7.19.1). This
-// header reads them through `__c5_lazy_stream` below; the bindings state
-// them for an object from another compiler, which reads them directly.
 #pragma binding(data libc::stdin,  "stdin")
 #pragma binding(data libc::stdout, "stdout")
 #pragma binding(data libc::stderr, "stderr")
@@ -713,45 +710,29 @@ errno_t fopen_s(FILE **_File, const char *_Filename, const char *_Mode);
 #pragma binding(msvcrt::tmpnam_s, "tmpnam_s")
 errno_t tmpnam_s(char *_Buf, rsize_t _Size);
 #endif
-void *dlsym(void *__restrict handle, const char *__restrict name);
-
-// `stdin`, `stdout` and `stderr` (index 0, 1, 2) are the C library's
-// streams, found on first use and cached per unit: through dlsym of the
-// library's stream objects (libSystem's `__stdinp` family, whose `___`
-// symbols dlsym takes without the Mach-O underscore and finds from
-// RTLD_DEFAULT, `(void *)-2`; glibc's `stdin` family), and on Windows in
-// msvcrt's `_iob` array. A call reaches them under the SSA interpreter,
-// which cannot read host data objects. The macros are not lvalues.
-// TODO(#2021): the library's objects through data bindings.
-static char *__c5_lazy_stream(int idx) {
-    static char *__c5_stream_cache[3];
-    if (__c5_stream_cache[idx]) return __c5_stream_cache[idx];
-#ifdef __APPLE__
-    char *names[3];
-    names[0] = "__stdinp";
-    names[1] = "__stdoutp";
-    names[2] = "__stderrp";
-    char **slot = (char **)dlsym((char *)-2, names[idx]);
-    if (slot) __c5_stream_cache[idx] = *slot;
+// The standard streams (C17 7.21.1): the C library's objects -- libSystem's
+// `__stdinp` family, as the SDK names them, glibc's `stdin` family -- and on
+// Windows the first three FILEs of msvcrt's `_iob` array, which it exports
+// through `__iob_func()` alone.
+#if defined(__APPLE__)
+extern FILE *__stdinp;
+extern FILE *__stdoutp;
+extern FILE *__stderrp;
+#define stdin  __stdinp
+#define stdout __stdoutp
+#define stderr __stderrp
+#elif defined(__linux__)
+extern FILE *stdin;
+extern FILE *stdout;
+extern FILE *stderr;
+#define stdin  stdin
+#define stdout stdout
+#define stderr stderr
+#elif defined(_WIN32)
+#define stdin  (&__iob_func()[0])
+#define stdout (&__iob_func()[1])
+#define stderr (&__iob_func()[2])
 #endif
-#ifdef __linux__
-    char *names[3];
-    names[0] = "stdin";
-    names[1] = "stdout";
-    names[2] = "stderr";
-    char **slot = (char **)dlsym((char *)0, names[idx]);
-    if (slot) __c5_stream_cache[idx] = *slot;
-#endif
-#ifdef _WIN32
-    FILE *iob = __iob_func();
-    if (iob) __c5_stream_cache[idx] = (char *)(iob + idx);
-#endif
-    return __c5_stream_cache[idx];
-}
-
-#define stdin   ((FILE *)__c5_lazy_stream(0))
-#define stdout  ((FILE *)__c5_lazy_stream(1))
-#define stderr  ((FILE *)__c5_lazy_stream(2))
 
 // vfprintf / vprintf / vsprintf / vsnprintf bind directly to the
 // platform C library. c5's <stdarg.h> va_list is the host's own

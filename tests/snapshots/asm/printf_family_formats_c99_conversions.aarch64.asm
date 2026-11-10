@@ -236,7 +236,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x560]
+               	ldr	d1, [x16, #0x558]
                	fmov	d2, d1
                	fmov	d1, d0
                	bl	<addr>
@@ -261,7 +261,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x560]
+               	ldr	d1, [x16, #0x558]
                	fmov	d2, d1
                	fmov	d1, d0
                	bl	<addr>
@@ -331,7 +331,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x568]
+               	ldr	d0, [x16, #0x560]
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0x16
@@ -353,7 +353,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x568]
+               	ldr	d0, [x16, #0x560]
                	bl	<addr>
                	cmp	w0, w20
                	b.ne	<addr>
@@ -375,11 +375,11 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x570]
+               	ldr	d1, [x16, #0x568]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x578]
+               	ldr	d2, [x16, #0x570]
                	adrp	x16, <page>
-               	ldr	d3, [x16, #0x580]
+               	ldr	d3, [x16, #0x578]
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0x27
@@ -402,11 +402,11 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	fmov	d0, #1.50000000
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x570]
+               	ldr	d1, [x16, #0x568]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x578]
+               	ldr	d2, [x16, #0x570]
                	adrp	x16, <page>
-               	ldr	d3, [x16, #0x580]
+               	ldr	d3, [x16, #0x578]
                	bl	<addr>
                	cmp	w0, w20
                	b.ne	<addr>
@@ -476,7 +476,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x588]
+               	ldr	d0, [x16, #0x580]
                	fmov	d1, #2.50000000
                	mov	x3, #0x5                // =5
                	mov	x4, #0x6                // =6
@@ -501,7 +501,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x588]
+               	ldr	d0, [x16, #0x580]
                	fmov	d1, #2.50000000
                	mov	x3, #0x5                // =5
                	mov	x4, #0x6                // =6
@@ -664,11 +664,11 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x590]
+               	ldr	d0, [x16, #0x588]
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x598]
+               	ldr	d1, [x16, #0x590]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x568]
+               	ldr	d2, [x16, #0x560]
                	bl	<addr>
                	mov	x20, x0
                	cmp	w20, #0x31
@@ -690,11 +690,11 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x590]
+               	ldr	d0, [x16, #0x588]
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x598]
+               	ldr	d1, [x16, #0x590]
                	adrp	x16, <page>
-               	ldr	d2, [x16, #0x568]
+               	ldr	d2, [x16, #0x560]
                	bl	<addr>
                	cmp	w0, w20
                	b.ne	<addr>

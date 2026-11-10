@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=7 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=child_exec
-fn ent_pc=7 n_params=20 variadic=false locals=0
+fn ent_pc=6 n_params=20 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -77,9 +77,9 @@ fn ent_pc=7 n_params=20 variadic=false locals=0
     v71  BinopI { op=and, lhs=v69, rhs_imm=127 }          -> x0
     v72  Extend { value=v71, kind=I32 }                   -> x1
     terminator Return(v71)   (exit_acc=v71)
-; --- SSA dump (ok=true) ent_pc=8 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=8 n_params=0 variadic=false locals=1
+fn ent_pc=7 n_params=0 variadic=false locals=1
   spill_count=100 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

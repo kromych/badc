@@ -1810,6 +1810,27 @@ fn interp_writes_to_the_standard_streams() {
     assert_eq!(out.status.code(), Some(0));
 }
 
+// A data binding to a standard stream reaches the interpreter's own object:
+// `&stdout` forms, and the stream assigned to `stdout` takes `printf`,
+// `putchar` and `puts`.
+#[test]
+fn interp_binds_the_standard_streams_as_objects() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("standard_streams_are_objects.c");
+    let out = Command::new(badc)
+        .arg("--interp")
+        .arg(&src)
+        .output()
+        .expect("run badc --interp");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty() && out.stderr.is_empty());
+}
+
 // `--interp` exits with the program's status, as `--jit` and the native
 // image do, and appends nothing to what the program wrote, a last line it
 // left unterminated included.

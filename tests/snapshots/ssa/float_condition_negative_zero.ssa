@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=0
+fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -121,13 +121,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v92  Extend { value=v91, kind=I32 }                   -> x0
     terminator Bz { cond=v91, target=b21, fall=b20 }   (exit_acc=v91)
   block 20  start_pc=0
-    v93  ImmData(12)                                      -> x7
+    v93  ImmData(8)                                       -> x7
     v94  Extend { value=v91, kind=I32 }                   -> x0
     v95  CallExt { binding_idx=0, args=[v93, v91], fp_arg_mask=0x0 } -> x0
     v96  Imm(1)                                           -> x0
     terminator Return(v96)   (exit_acc=v96)
   block 21  start_pc=0
-    v97  ImmData(26)                                      -> x7
+    v97  ImmData(22)                                      -> x7
     v98  CallExt { binding_idx=0, args=[v97], fp_arg_mask=0x0 } -> x0
     v99  Imm(0)                                           -> x0
     terminator Return(v99)   (exit_acc=v99)

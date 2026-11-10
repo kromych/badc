@@ -221,7 +221,7 @@ fn run<H: Host>(name: &str, args: &[i64], mem: &mut Memory, host: &mut H) -> Res
         }
         "fgetc" | "getc" | "getc_unlocked" | "getchar" | "getchar_unlocked" => {
             let file = if name.starts_with("getchar") {
-                mem.stdio() as i64
+                mem.std_stream(0)
             } else {
                 arg(name, args, 0)?
             };

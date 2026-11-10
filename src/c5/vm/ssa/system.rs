@@ -366,7 +366,7 @@ pub(super) fn call<H: Host>(
             }
             line.extend_from_slice(message(Libc::of(mem.target), errno).as_bytes());
             line.push(b'\n');
-            host.write(2, &line);
+            host.write(super::std_stream_fd(name, 2, mem)?, &line);
             Ok(0)
         }
     })())

@@ -507,7 +507,7 @@ pub(super) fn call<H: Host>(
             return scan(&fmt, &mut StrInput { bytes, at: 0 }, varargs, mem);
         }
         let file = if at == 0 {
-            mem.stdio() as i64
+            mem.std_stream(0)
         } else {
             arg(name, args, 0)?
         };
@@ -523,7 +523,7 @@ mod tests {
     /// `sscanf(input, fmt, ...)` into one 16-byte cell per conversion: the
     /// count and the cells.
     fn sscanf(target: Target, input: &str, fmt: &str, cells: usize) -> (i64, Vec<[u8; 16]>) {
-        let mut mem = Memory::new(&[0u8; 256], target);
+        let mut mem = Memory::with_stdio(&[0u8; 256], target);
         let ptrs: Vec<i64> = (0..cells).map(|k| 16 * k as i64).collect();
         let mut input = StrInput {
             bytes: input.as_bytes().to_vec(),

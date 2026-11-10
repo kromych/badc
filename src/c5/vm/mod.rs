@@ -32,6 +32,8 @@ pub enum Trace {
 /// libdl through the [`Host`] trait.
 pub struct Vm<H: Host> {
     pub(crate) data: Vec<u8>,
+    /// The stdio block in `data`.
+    stdio: usize,
     entry_pc: usize,
     host: H,
     #[cfg_attr(not(feature = "std"), allow(dead_code))]
@@ -203,6 +205,7 @@ impl<H: Host> Vm<H> {
         };
         Self {
             data: linked.data,
+            stdio: linked.stdio,
             entry_pc: linked.entry_pc,
             host,
             trace: Trace::Off,
@@ -265,7 +268,7 @@ impl<H: Host> Vm<H> {
         }
         ssa::run_program_with_args_tracked(
             funcs,
-            &self.data,
+            (&self.data, self.stdio),
             &self.binding_names,
             self.tls_base,
             self.entry_pc,

@@ -16,13 +16,13 @@ Disassembly of section .text:
 <main>:
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0x48]
+               	str	w0, [x1, #0x30]
                	mov	x2, #0x7                // =7
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x30]
                	mov	x2, #0x1                // =1
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x30]
                	mov	x2, #0xb                // =11
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x30]
                	mov	x2, #0xd                // =13
-               	str	w2, [x1, #0x48]
+               	str	w2, [x1, #0x30]
                	ret

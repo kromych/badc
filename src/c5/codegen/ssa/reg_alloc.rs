@@ -3453,6 +3453,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
             Inst::VecBinop { bytes, .. } | Inst::VecInsert { bytes, .. } => {
                 VecWidth::of_bytes(*bytes)
             }
+            Inst::VecExtract { kind, .. } => VecWidth::of_load(*kind),
             _ => VecWidth::Scalar,
         })
         .collect();
@@ -3566,7 +3567,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         X86Simd { .. } => ResultKind::None,
         VecBinop { .. } | VecInsert { .. } => ResultKind::Fp,
         VecExtract { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::V128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         X86SimdVal { op, .. } => {

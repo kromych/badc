@@ -600,9 +600,10 @@ pub(crate) enum Inst {
     },
     /// The vector value `vec` of `bytes` bytes with the lane at byte `off`
     /// replaced by `value` stored as `kind` (an integer or `F32` / `F64`
-    /// kind, `off` a multiple of its width); `vec` an `Undef` leaves the
-    /// other lanes unspecified. `vector_slots` makes a lane store into a
-    /// promoted vector object one.
+    /// kind, or `V128` for a 128-bit part of a wider vector; `off` a
+    /// multiple of its width); `vec` an `Undef` leaves the other lanes
+    /// unspecified. `vector_slots` makes a lane store into a promoted
+    /// vector object one.
     VecInsert {
         vec: ValueId,
         value: ValueId,
@@ -611,7 +612,8 @@ pub(crate) enum Inst {
         bytes: u8,
     },
     /// The lane at byte `off` of the vector value `vec` of `bytes` bytes,
-    /// read as `kind` would read it from memory.
+    /// read as `kind` would read it from memory; `V128` reads a 128-bit
+    /// part of a wider vector.
     VecExtract {
         vec: ValueId,
         off: u8,

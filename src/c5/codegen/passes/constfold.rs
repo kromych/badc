@@ -69,16 +69,51 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
     }
 }
 
+/// Bytes a lane insert of `kind` writes.
+fn store_width(kind: StoreKind) -> u8 {
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
+        _ => 8,
+    }
+}
+
 /// Inserts `fold_lane_reads` looks through for the lane it reads.
 const LANE_DEPTH: u32 = 64;
 
 /// Rewrite each `VecExtract` whose lane the vector's inserts determine:
 /// the value an insert of the same lane and width wrote, read back as the
 /// extract's kind reads it from memory (a sign or zero extension of its low
-/// bytes, or the value itself), looking past inserts of disjoint lanes; and
-/// a lane of a zero vector, zero. Returns whether any extract was rewritten.
+/// bytes, or the value itself), looking past inserts of disjoint lanes; a
+/// lane inside a 128-bit part written whole, that lane of the part; and a
+/// lane of a zero vector, zero. A lane insert over an insert of the same
+/// lane takes that insert's vector. Returns whether anything was rewritten.
 fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
     let mut changed = false;
+    // A lane written over the same lane of an insert writes over that
+    // insert's vector.
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert { vec, off, kind, .. } = func.insts[i] else {
+            continue;
+        };
+        if let Inst::VecInsert {
+            vec: base,
+            off: at,
+            kind: under,
+            ..
+        } = func.insts[vec as usize]
+            && at == off
+            && store_width(under) == store_width(kind)
+            && let Inst::VecInsert { vec, .. } = &mut func.insts[i]
+        {
+            *vec = base;
+            changed = true;
+        }
+    }
     for i in 0..func.insts.len() {
         let Inst::VecExtract {
             mut vec, off, kind, ..
@@ -89,6 +124,7 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
         let width = match kind {
             LoadKind::F32 => 4,
             LoadKind::F64 => 8,
+            LoadKind::V128 => 16,
             k => match k.int_bytes() {
                 Some(n) => n,
                 None => continue,
@@ -104,12 +140,7 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     kind: stored,
                     ..
                 } => {
-                    let n = match stored {
-                        StoreKind::I8 => 1,
-                        StoreKind::I16 => 2,
-                        StoreKind::I32 | StoreKind::F32 => 4,
-                        _ => 8,
-                    };
+                    let n = store_width(stored);
                     if at == off && n == width {
                         found = Some((value, stored));
                         break;
@@ -117,6 +148,16 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     if at + n <= off || off + width <= at {
                         vec = base;
                         continue;
+                    }
+                    // A lane of a part written whole is that lane of the part.
+                    if stored == StoreKind::V128 && at <= off && off + width <= at + 16 {
+                        func.insts[i] = Inst::VecExtract {
+                            vec: value,
+                            off: off - at,
+                            kind,
+                            bytes: 16,
+                        };
+                        changed = true;
                     }
                     break;
                 }
@@ -134,6 +175,7 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
         let float = matches!(stored, StoreKind::F32 | StoreKind::F64);
         func.insts[i] = match kind {
             LoadKind::F32 | LoadKind::F64 if float => Inst::Copy { value, is_fp: true },
+            LoadKind::V128 if stored == StoreKind::V128 => Inst::Copy { value, is_fp: true },
             LoadKind::I64 if !float => Inst::Copy {
                 value,
                 is_fp: false,

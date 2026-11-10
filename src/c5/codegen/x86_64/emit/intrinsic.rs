@@ -2483,6 +2483,22 @@ pub(super) fn emit_vec_extract(
     let Some(src) = src else {
         return fail("VecExtract: vector has no place");
     };
+    if kind == LoadKind::V128 {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("VecExtract: dst not fp reg / spill");
+        };
+        // The low part is the register's xmm view.
+        let x = if off < 16 {
+            src.0
+        } else {
+            lane_part(code, bytes, src.0, off, dd.0)?.0
+        };
+        if x != dd.0 {
+            encode_wide(code, "vmovdqa", &[wide_reg(16, x), wide_reg(16, dd.0)])?;
+        }
+        mirror_v128_dst(code, dst, dd, frame);
+        return Ok(());
+    }
     let (x, loff) = lane_part(code, bytes, src.0, off, sb)?;
     let imm = |k: u8| Concrete::Imm(i64::from(k));
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
@@ -2553,6 +2569,43 @@ pub(super) fn emit_vec_insert(
             mirror_v128_dst(code, dst, Reg(rd), frame);
         }
     };
+    if kind == StoreKind::V128 {
+        let Some(p) = materialize_v128(code, place_of(alloc, value), Reg(sb), frame) else {
+            return fail("VecInsert: value has no place");
+        };
+        let rd = match dst {
+            Place::FpReg(r) => r,
+            _ => sa,
+        };
+        // The low part over a zero or undefined vector: a VEX move clears
+        // the bits above it.
+        if blank && off == 0 {
+            encode_wide(code, "vmovdqa", &[wide_reg(16, p.0), wide_reg(16, rd)])?;
+            mirror(code, rd);
+            return Ok(());
+        }
+        let base = match place_of(alloc, vec) {
+            Place::None => rd,
+            b => match materialize_wide(code, w, b, Reg(sa), frame) {
+                Some(r) => r.0,
+                None => return fail("VecInsert: vector has no place"),
+            },
+        };
+        let mnem = if bytes == 64 {
+            "vinserti32x4"
+        } else {
+            "vinserti128"
+        };
+        let ops = [
+            Concrete::Imm(i64::from(off / 16)),
+            wide_reg(16, p.0),
+            wide_reg(bytes, base),
+            wide_reg(bytes, rd),
+        ];
+        encode_wide(code, mnem, &ops)?;
+        mirror(code, rd);
+        return Ok(());
+    }
     // The value into a general register first, as the result may take a
     // float value's register.
     let gpr = match kind {

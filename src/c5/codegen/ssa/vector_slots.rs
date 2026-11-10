@@ -143,7 +143,98 @@ pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
         rewrite(func, &cells, DOUBLE);
         slots.extend(cells);
     }
+    split_wide_inserts(func);
     slots
+}
+
+/// Each lane write into a vector wider than 16 bytes as a write into its
+/// 128-bit part: the part read out (a `V128` `VecExtract`), the lane
+/// inserted into it and the part inserted back. constfold then reads each
+/// part through the writes before it, so lane writes into one part chain
+/// on that part alone and the vector takes the part once.
+fn split_wide_inserts(func: &mut FunctionSsa) {
+    let sites: Vec<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.inst_range.clone())
+        .filter(|&v| {
+            matches!(func.insts[v as usize], Inst::VecInsert { bytes, kind, .. }
+                if bytes > 16 && kind != StoreKind::V128)
+        })
+        .collect();
+    if sites.is_empty() {
+        return;
+    }
+    let mut ins: Vec<Insertion> = Vec::with_capacity(2 * sites.len());
+    for &v in &sites {
+        let Inst::VecInsert {
+            vec, off, bytes, ..
+        } = func.insts[v as usize]
+        else {
+            continue;
+        };
+        let part = off & !15;
+        let mut put = |at: At, inst: Inst| {
+            ins.push(Insertion {
+                at,
+                inst,
+                is_f32: false,
+            })
+        };
+        put(
+            At::Before(v),
+            Inst::VecExtract {
+                vec,
+                off: part,
+                kind: LoadKind::V128,
+                bytes,
+            },
+        );
+        put(
+            At::After(v),
+            Inst::VecInsert {
+                vec,
+                value: v,
+                off: part,
+                kind: StoreKind::V128,
+                bytes,
+            },
+        );
+    }
+    let rw = insert(func, &ins);
+    // A reader of a split write reads the vector with the part back in.
+    let mut whole: BTreeMap<ValueId, ValueId> = BTreeMap::new();
+    for (k, &v) in sites.iter().enumerate() {
+        let n = rw.remap[v as usize];
+        if let Inst::VecInsert {
+            vec, off, bytes, ..
+        } = &mut func.insts[n as usize]
+        {
+            *vec = rw.ids[2 * k];
+            *off &= 15;
+            *bytes = 16;
+        }
+        whole.insert(n, rw.ids[2 * k + 1]);
+    }
+    let back: BTreeSet<ValueId> = whole.values().copied().collect();
+    let to = |v: &mut ValueId| {
+        if let Some(&w) = whole.get(v) {
+            *v = w;
+        }
+    };
+    for (i, inst) in func.insts.iter_mut().enumerate() {
+        match inst {
+            // The part goes back into the vector the write read.
+            Inst::VecInsert { vec, .. } if back.contains(&(i as ValueId)) => to(vec),
+            _ => inst.for_each_operand_mut(to),
+        }
+    }
+    for b in func.blocks.iter_mut() {
+        b.terminator.for_each_operand_mut(to);
+        if b.exit_acc != NO_VALUE {
+            to(&mut b.exit_acc);
+        }
+    }
 }
 
 pub(crate) fn applies(func: &FunctionSsa) -> bool {

@@ -39,3 +39,4 @@ pub(crate) mod tailrec;
 pub(crate) mod thread_phi_branches;
 pub(crate) mod unroll;
 pub(crate) mod value_range;
+pub(crate) mod x86_simd_values;

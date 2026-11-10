@@ -3054,6 +3054,33 @@ uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n)
     );
 }
 
+/// SSE intrinsics keep their vectors in xmm registers (`X86SimdVal`): a
+/// round loop over four `__m128i` parameters makes no memory access, as
+/// with gcc 16. Each intrinsic read its operands from the frame and wrote
+/// its result back, 85 instructions where it is now 19.
+#[test]
+fn sse_intrinsic_values_stay_in_registers() {
+    const SRC: &str = "#include <emmintrin.h>\n\
+__m128i round4(__m128i a, __m128i b, __m128i c, __m128i d, int n) {\n\
+    for (int i = 0; i < n; i++) {\n\
+        a = _mm_add_epi32(a, b); d = _mm_xor_si128(d, a);\n\
+        d = _mm_or_si128(_mm_slli_epi32(d, 16), _mm_srli_epi32(d, 16));\n\
+        c = _mm_add_epi32(c, d); b = _mm_xor_si128(b, c);\n\
+    }\n\
+    return _mm_add_epi32(_mm_add_epi32(a, b), _mm_add_epi32(c, d));\n\
+}\n";
+    let insns = x64(SRC, "round4");
+    assert!(
+        insns.iter().all(|i| i.modrm.is_none() || i.reg_form()),
+        "x86-64 round4: a memory operand: {insns:x?}"
+    );
+    assert!(
+        insns.len() <= 20,
+        "x86-64 round4: {} instructions: {insns:x?}",
+        insns.len()
+    );
+}
+
 /// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
 /// values in SIMD registers, as gcc 16 and clang do: each function is its
 /// instructions and `ret`, with no frame.

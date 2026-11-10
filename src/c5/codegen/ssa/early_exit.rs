@@ -95,7 +95,8 @@ fn pure(inst: &Inst) -> bool {
         | Inst::ParentLocalAddr { .. }
         | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. }
-        | Inst::BitField { .. } => true,
+        | Inst::BitField { .. }
+        | Inst::X86SimdVal { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }

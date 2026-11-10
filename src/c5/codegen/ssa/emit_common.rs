@@ -2589,6 +2589,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // A function with a `__try` region keeps its locals in their slots,
         // where the handler, entered with no edge from the region, reads
         // the last value the region stored.
+        if target.is_x86_64() {
+            pipeline.run("passes::x86_simd_values::run", &mut ssa_funcs, |funcs| {
+                super::super::passes::x86_simd_values::run(funcs);
+            });
+        }
         pipeline.run("ssa::vector_slots::run", &mut ssa_funcs, |funcs| {
             for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 super::vector_slots::run(f);

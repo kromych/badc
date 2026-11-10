@@ -478,6 +478,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
+                | Inst::X86SimdVal { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)
@@ -882,6 +883,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
+                | Inst::X86SimdVal { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)

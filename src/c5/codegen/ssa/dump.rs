@@ -358,6 +358,11 @@ fn fmt_inst(inst: &Inst) -> String {
             crate::c5::x86_simd::get(*op).name,
             fmt_value_list(args),
         ),
+        X86SimdVal { op, imm, args } => format!(
+            "X86SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
+            crate::c5::x86_simd::get(*op).name,
+            fmt_value_list(args),
+        ),
         Intrinsic { kind, args } => format!(
             "Intrinsic {{ kind={}, args=[{}] }}",
             super::super::op::Intrinsic::from_i64(*kind)

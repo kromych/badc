@@ -584,6 +584,16 @@ pub(crate) enum Inst {
         imm: Option<u8>,
         args: Vec<ValueId>,
     },
+    /// [`Inst::X86Simd`] on values, as `passes::x86_simd_values` rewrites
+    /// it under `-O`: `args` are the sources, a 128-bit operand as a `V128`
+    /// value and an integer one as itself, and the instruction defines its
+    /// result, a `V128` value for a row returning a vector and an integer
+    /// otherwise. Never a load, a store or `rdrand`.
+    X86SimdVal {
+        op: u32,
+        imm: Option<u8>,
+        args: Vec<ValueId>,
+    },
     /// GCC extended inline asm with operands (`asm(template : outputs :
     /// inputs : clobbers)`). `asm` carries the template, per-operand
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
@@ -732,6 +742,7 @@ impl Inst {
                 | Inst::ParamPart { .. }
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
+                | Inst::X86SimdVal { .. }
         )
     }
 
@@ -803,6 +814,7 @@ impl Inst {
             Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
             Inst::X86Simd { .. } => "X86Simd",
+            Inst::X86SimdVal { .. } => "X86SimdVal",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
@@ -887,7 +899,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. } => {
+            | Inst::X86Simd { args, .. }
+            | Inst::X86SimdVal { args, .. } => {
                 for &a in args {
                     f(a);
                 }
@@ -1008,7 +1021,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. } => {
+            | Inst::X86Simd { args, .. }
+            | Inst::X86SimdVal { args, .. } => {
                 for a in args {
                     f(a);
                 }
@@ -2834,6 +2848,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::X86Simd { .. }
+            | Inst::X86SimdVal { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }

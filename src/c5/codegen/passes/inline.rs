@@ -1223,6 +1223,7 @@ fn is_inline_candidate(
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. }
             // Travels with its statement, admitted below on the reloc path.
+            | Inst::X86SimdVal { .. }
             | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
@@ -2216,6 +2217,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Bswap { .. }
         | Inst::BitCount { .. }
         | Inst::FpCast { .. }
+        | Inst::X86SimdVal { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }

@@ -170,6 +170,29 @@ pub(crate) enum Sem {
     ToInt(u8, bool),
 }
 
+impl Sem {
+    /// Whether the integer operation gives the same result with its two
+    /// operands swapped, so a lowering may name either first.
+    pub(crate) fn commutes(self) -> bool {
+        matches!(
+            self,
+            Sem::Add(_)
+                | Sem::MulLo(_)
+                | Sem::MulHi(..)
+                | Sem::Avg(_)
+                | Sem::Min(..)
+                | Sem::Max(..)
+                | Sem::MulAddWords
+                | Sem::AddSat(..)
+                | Sem::SadBytes
+                | Sem::And
+                | Sem::Or
+                | Sem::Xor
+                | Sem::CmpEq(_)
+        )
+    }
+}
+
 /// A floating-point lane operation. MIN and MAX give the second operand
 /// unless the first is strictly less (greater), a NaN or two zeros included.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

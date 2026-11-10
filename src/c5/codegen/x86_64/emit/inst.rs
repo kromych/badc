@@ -478,6 +478,9 @@ pub(super) fn emit_inst(
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
         Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
+        Inst::X86SimdVal { op, imm, args } => {
+            emit_x86_simd_val(code, *op, *imm, args, dst, alloc, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),

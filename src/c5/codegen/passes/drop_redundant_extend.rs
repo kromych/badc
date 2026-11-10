@@ -286,6 +286,7 @@ fn compute_high_observed_through(
             }
             Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
+            | Inst::X86SimdVal { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
@@ -531,6 +532,7 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
+            | Inst::X86SimdVal { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     mark(&mut placed, *a);

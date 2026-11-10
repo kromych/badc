@@ -1000,8 +1000,9 @@ int ksimd(int c) {
 /// The SIMD intrinsic wrappers are `static inline` bodies of one
 /// instruction over a pair of by-value vector parameters and a vector
 /// return. At -O each splices into its caller on the flat path: the
-/// caller holds the instruction and no call, and no wrapper body is
-/// emitted, so the frame report names the unit's own functions only.
+/// caller holds the instruction on its values and no call, and no wrapper
+/// body is emitted: the SSA dump and the frame reports name the unit's own
+/// functions only.
 #[test]
 fn simd_wrappers_inline_at_opt() {
     let dir = tempdir("simd-inline");
@@ -1035,20 +1036,24 @@ fn simd_wrappers_inline_at_opt() {
     assert!(!chain.contains(" Call {"), "chain keeps a call:\n{chain}");
     for op in ["paddd128", "pxor128", "pshufb128", "psubd128"] {
         assert!(
-            chain.contains(&format!("X86Simd {{ op=__builtin_ia32_{op},")),
+            chain.contains(&format!("X86SimdVal {{ op=__builtin_ia32_{op},")),
             "chain lacks {op}:\n{chain}"
         );
     }
+    let mut dumped: Vec<&str> = stderr
+        .split("; name=")
+        .skip(1)
+        .filter_map(|s| s.lines().next())
+        .collect();
+    dumped.sort_unstable();
+    assert_eq!(dumped, ["chain", "t"], "{stderr}");
     let reports: Vec<&str> = stderr.lines().filter(|l| l.contains("B4005")).collect();
-    assert_eq!(reports.len(), 2, "{reports:?}");
-    for name in ["t", "chain"] {
-        assert!(
-            reports
-                .iter()
-                .any(|l| l.contains(&format!("function `{name}`"))),
-            "{name} has no frame report: {reports:?}"
-        );
-    }
+    assert!(
+        reports
+            .iter()
+            .all(|l| l.contains("function `t`") || l.contains("function `chain`")),
+        "{reports:?}"
+    );
 }
 
 /// Compile `source` at -O for `target` with the SSA dump and a frame report

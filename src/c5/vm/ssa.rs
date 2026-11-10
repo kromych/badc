@@ -1713,6 +1713,8 @@ fn run_inst<H: Host>(
             run_x86_simd(mem, frame, *op, *imm, args)?;
             return Ok(());
         }
+        // The -O rewrite producing it never reaches the VM.
+        Inst::X86SimdVal { .. } => "X86SimdVal",
         Inst::InlineAsm { asm, args } => {
             if prog.aarch64 {
                 asm_a64::run(mem, frame, asm, args, v)?;

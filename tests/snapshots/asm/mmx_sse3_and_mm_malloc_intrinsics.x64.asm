@@ -1104,10 +1104,8 @@ Disassembly of section .text:
                	cmpl	$0x11, %eax
                	jl	<addr>
                	leaq	-0x20(%rbp), %rax
-               	incq	%rax
-               	leaq	-0x50(%rbp), %rcx
-               	movdqu	(%rax), %xmm15
-               	movdqu	%xmm15, (%rcx)
+               	movups	0x1(%rax), %xmm0
+               	movups	%xmm0, -0x50(%rbp)
                	movl	-0x50(%rbp), %eax
                	cmpl	$0x4030201, %eax        # imm = 0x4030201
                	je	<addr>

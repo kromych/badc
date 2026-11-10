@@ -234,6 +234,176 @@ pub(super) fn emit_x86_simd(
     }
 }
 
+/// `Inst::X86SimdVal`: the instruction on the operands' registers, a
+/// spilled operand loaded into an FP scratch. A vector result is formed in
+/// its own register unless that holds the second source, then in a scratch
+/// it is copied from; an integer result goes to its register or through
+/// r11 to its spill slot.
+pub(super) fn emit_x86_simd_val(
+    code: &mut Vec<u8>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[super::super::ir::ValueId],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::asm::{Concrete, XMM_BASE};
+    use crate::c5::ir::AsmRegSize;
+    use crate::c5::x86_simd::{self, Form};
+    let row = x86_simd::get(op);
+    let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let xmm = |n: u8| Concrete::Reg {
+        reg: XMM_BASE + n,
+        size: AsmRegSize::Quad,
+    };
+    let gpr = |r: Reg, size: AsmRegSize| Concrete::Reg { reg: r.0, size };
+    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> Emit {
+        let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+            return fail(alloc::format!("x86 simd: {e}"));
+        }
+        Ok(())
+    };
+    let place = |i: usize| {
+        alloc
+            .places
+            .get(args[i] as usize)
+            .copied()
+            .unwrap_or(Place::None)
+    };
+    let vector = |code: &mut Vec<u8>, i: usize, scratch: u8| -> Emit<u8> {
+        match materialize_v128(code, place(i), Reg(scratch), frame) {
+            Some(r) => Ok(r.0),
+            None => fail(alloc::format!("x86 simd: operand {i} has no place")),
+        }
+    };
+    // The register the result is formed in: its own, unless that is
+    // `avoid`, a source still to be read.
+    let work = |avoid: Option<u8>| match dst {
+        Place::FpReg(r) if Some(r) != avoid => r,
+        _ => dst_x,
+    };
+    // Copy operand `i` into `w`.
+    let into = |code: &mut Vec<u8>, i: usize, w: u8| -> Emit {
+        match place(i) {
+            Place::FpReg(r) if r == w => {}
+            Place::FpReg(r) => emit_movapd_xmm_xmm(code, Reg(w), Reg(r)),
+            p => {
+                if materialize_v128(code, p, Reg(w), frame).is_none_or(|r| r.0 != w) {
+                    return fail(alloc::format!("x86 simd: operand {i} has no place"));
+                }
+            }
+        }
+        Ok(())
+    };
+    let imm8 = Concrete::Imm(imm.unwrap_or(0) as i64);
+    let int_size = |w: u8| match w {
+        1 => AsmRegSize::Byte,
+        2 => AsmRegSize::Word,
+        8 => AsmRegSize::Quad,
+        _ => AsmRegSize::Long,
+    };
+    // An integer result: formed in its register, or in r11 and spilled.
+    let int_result = |code: &mut Vec<u8>, form: &dyn Fn(&mut Vec<u8>, Reg) -> Emit| match dst {
+        Place::IntReg(r) => form(code, Reg(r)),
+        Place::Spill(slot) => {
+            form(code, SCRATCH_R11)?;
+            let (sb, off) = spill_slot_addr(frame, slot);
+            emit_mov_mem_r(code, sb, off, SCRATCH_R11);
+            Ok(())
+        }
+        _ => fail("x86 simd: integer result not int reg / spill"),
+    };
+    let w = match row.form {
+        // A commutative operation whose result takes the second source's
+        // register reads the first into it instead.
+        Form::Vv
+            if row.sem.commutes()
+                && matches!(dst, Place::FpReg(_))
+                && dst == place(1)
+                && dst != place(0) =>
+        {
+            let Place::FpReg(w) = dst else {
+                unreachable!("the guard names an fp register")
+            };
+            let a = vector(code, 0, src_x)?;
+            insn(code, row.mnem, &[xmm(a), xmm(w)])?;
+            w
+        }
+        Form::Vv | Form::VvI => {
+            let b = vector(code, 1, src_x)?;
+            let w = work(Some(b));
+            into(code, 0, w)?;
+            if row.form == Form::Vv {
+                insn(code, row.mnem, &[xmm(b), xmm(w)])?;
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(b), xmm(w)])?;
+            }
+            w
+        }
+        Form::V | Form::VI => {
+            let a = vector(code, 0, src_x)?;
+            let w = work(None);
+            // A scalar form keeps the operand's other lanes.
+            if matches!(row.sem, x86_simd::Sem::Float(_, _, true)) {
+                into(code, 0, w)?;
+            }
+            if row.form == Form::V {
+                insn(code, row.mnem, &[xmm(a), xmm(w)])?;
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(a), xmm(w)])?;
+            }
+            w
+        }
+        Form::Shift => {
+            let w = work(None);
+            into(code, 0, w)?;
+            match imm {
+                Some(_) => insn(code, row.mnem, &[imm8, xmm(w)])?,
+                None => {
+                    let Some(c) = materialize_int(code, place(1), SCRATCH_R10, frame) else {
+                        return fail("x86 simd: shift count has no place");
+                    };
+                    super::encode::emit_movq_xmm_r(code, Reg(src_x), c);
+                    insn(code, row.mnem, &[xmm(src_x), xmm(w)])?;
+                }
+            }
+            w
+        }
+        Form::Insert => {
+            let w = work(None);
+            into(code, 0, w)?;
+            let Some(x) = materialize_int(code, place(1), SCRATCH_R10, frame) else {
+                return fail("x86 simd: value operand has no place");
+            };
+            // Every `pinsr` narrower than a quadword reads a 32-bit
+            // register and uses the low lanes of it.
+            let size = int_size(row.int_width.max(4));
+            insn(code, row.mnem, &[imm8, gpr(x, size), xmm(w)])?;
+            w
+        }
+        Form::ToInt | Form::Extract | Form::MoveMask => {
+            let a = vector(code, 0, src_x)?;
+            let size = match row.form {
+                Form::ToInt if row.int_width == 8 => AsmRegSize::Quad,
+                // `pextrb` and `pextrw` zero-extend into the 32-bit register.
+                Form::Extract => int_size(row.int_width.max(4)),
+                _ => AsmRegSize::Long,
+            };
+            return int_result(code, &|code: &mut Vec<u8>, r: Reg| match row.form {
+                Form::Extract => insn(code, row.mnem, &[imm8, xmm(a), gpr(r, size)]),
+                _ => insn(code, row.mnem, &[xmm(a), gpr(r, size)]),
+            });
+        }
+        Form::Load | Form::Store | Form::RdRand => {
+            return fail("x86 simd: a memory form has no value form");
+        }
+    };
+    mirror_v128_dst(code, dst, Reg(w), frame);
+    Ok(())
+}
+
 /// Byte stride between adjacent variadic arguments in the cursor `va_list`
 /// of Win64, the only x86_64 target on the cursor forms (System V uses the
 /// register save area).

@@ -5749,8 +5749,15 @@ int main(void) { return 0; }
                 // is unread -- the allocator nulls those out so
                 // the emit pass skips the dst-propagate step --
                 // and a phi nothing reads, whose edge moves are
-                // dropped.
+                // dropped. A constant or a local a stack argument reads in
+                // place takes none either: the call's marshaling reads it.
                 let kind = result_kind(&f.insts[i]);
+                let read_by_call = alloc.stack_imm.contains_key(&(i as u32))
+                    || alloc.stack_load.contains_key(&(i as u32));
+                if read_by_call {
+                    assert_eq!(*p, Place::None, "inst {i} is read by its call");
+                    continue;
+                }
                 let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
                     && matches!(
                         f.insts[i],

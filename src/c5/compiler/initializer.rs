@@ -3799,6 +3799,22 @@ impl Compiler {
         } else {
             None
         };
+        // A parenthesized type name opens a compound literal only when `{`
+        // follows its `)`; before anything else it is a cast (C99 6.5.4),
+        // which a vector type admits.
+        let mut depth = 1u32;
+        while sid.is_some() && depth > 0 && self.lex.tk != 0 {
+            self.next()?;
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+            }
+        }
+        if sid.is_some() {
+            self.next()?;
+        }
+        let sid = sid.filter(|_| self.lex.tk == '{');
         self.restore_lex(snap);
         Ok(sid)
     }
@@ -3855,14 +3871,8 @@ impl Compiler {
         if !starts {
             return Ok(false);
         }
-        if self.lex.tk == '(' {
-            let snap = self.lex.snapshot();
-            self.next()?;
-            let type_name = self.lex_is_type_start();
-            self.restore_lex(snap);
-            if type_name {
-                return Ok(false);
-            }
+        if self.lex.tk == '(' && self.peek_element_compound_literal_sid()?.is_some() {
+            return Ok(false);
         }
         let ty = self.peek_expr_type().unwrap_or(0);
         Ok(is_struct_value_ty(ty) && struct_id_of(ty) == sid)

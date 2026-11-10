@@ -452,6 +452,35 @@ fn block_scope_array_and_vector_typedef_keep_dimension() {
     .expect("block-scope array / vector typedefs must keep their dimension across decls");
 }
 
+/// An element or member of vector type takes one whole-vector expression,
+/// a cast to the vector type among them: `(v2)a` is a cast (C99 6.5.4),
+/// not a compound literal, since no `{` follows its `)`, and the value
+/// fills the vector rather than eliding into its lanes; `(v2){...}` stays
+/// a compound literal.
+#[test]
+fn a_cast_initializes_a_vector_element_or_member_whole() {
+    let src = "typedef long long v2 __attribute__((vector_size(16)));\n\
+        int main(void) {\n\
+            v2 a = {3, -4};\n\
+            v2 b[2] = {(v2)a, ((v2){5, 6})};\n\
+            struct { int k; v2 x; } s = {7, (v2)a};\n\
+            struct { v2 x; } t = {(v2)(a + a)};\n\
+            return b[0][1] == -4 && b[1][0] == 5 && s.k == 7 && s.x[0] == 3\n\
+                && t.x[1] == -8 ? 0 : 1;\n\
+        }\n";
+    for optimize in [false, true] {
+        let opts = crate::CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(src.to_string(), crate::Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            crate::Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+}
+
 /// Prefix declaring the vector typedefs the operand-rule tests operate on.
 const VEC_DECLS: &str = "typedef __attribute__((vector_size(16))) unsigned char u8x16; \
      typedef __attribute__((vector_size(8))) unsigned char u8x8; \

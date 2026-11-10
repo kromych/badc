@@ -155,8 +155,12 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
 # skipped rather than counted as a build failure. The vendored tcc does not
 # implement the AArch64 `yield` instruction quickjs uses in a spin loop;
 # quickjs includes <sys/time.h> and <unistd.h>, which MSVC does not ship.
+# tcc and ccc ship no <immintrin.h> for the x86 vector kernels.
 FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"tcc", "cl"},
+    "blake2b.c": {"tcc", "ccc"},
+    "adler32.c": {"tcc", "ccc"},
+    "crc32.c": {"tcc", "ccc"},
 }
 
 
@@ -748,6 +752,7 @@ def self_test() -> int:
         # quickjs sits out every cl and tcc leg; nothing else does.
         assert skips("quickjs_bench.c", "cl /O2 /arch:AVX2")
         assert skips("quickjs_bench.c", "tcc")
+        assert skips("blake2b.c", "ccc -O2") and not skips("blake2b.c", "badc -O")
         assert not skips("quickjs_bench.c", "clang -O2")
         assert not skips("quickjs_bench.c", "badc -O")
         assert not skips("fib.c", "cl /O2")
@@ -864,6 +869,11 @@ def main() -> int:
         # constant, a table load, and an early-exit compare.
         "munchausen.c",
         "crypto.c",
+        # Vector kernels: AVX2 and PCLMULQDQ intrinsics on x86-64, the
+        # portable loops elsewhere.
+        "blake2b.c",
+        "adler32.c",
+        "crc32.c",
         "compress.c",
         "stb.c",
         "sqlite.c",

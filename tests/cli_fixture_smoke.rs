@@ -54,6 +54,9 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // neither, so the include fails with B1010 on both swept targets.
     "syslimits_path_max.c",
     "xlocale_extended_functions_take_a_locale.c",
+    // <winsock2.h> is the Windows SDK's; the Linux targets serve none, so
+    // the include fails with B1010 on both swept targets.
+    "winsock_servent_and_hostent.c",
 ];
 
 /// Each calls a declared-but-undefined function from a statically dead

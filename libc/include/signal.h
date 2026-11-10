@@ -283,13 +283,17 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 // pair at offset 16, which glibc reaches through its
 // `sigev_notify_function` / `sigev_notify_attributes` macros. On macOS
 // the SDK's 32-byte record, which only the AIO calls take.
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX: <signal.h> defines pthread_attr_t as <sys/types.h> does.
+typedef struct __c5_pthread_attr pthread_attr_t;
+#endif
 #ifdef __APPLE__
 struct sigevent {
     int sigev_notify;
     int sigev_signo;
     union sigval sigev_value;
     void (*sigev_notify_function)(union sigval);
-    struct __c5_pthread_attr *sigev_notify_attributes;
+    pthread_attr_t *sigev_notify_attributes;
 };
 
 #define SIGEV_NONE   0
@@ -303,7 +307,7 @@ struct sigevent {
     int          sigev_signo;                     /* offset  8 */
     int          sigev_notify;                    /* offset 12 */
     void       (*sigev_notify_function)(union sigval); /* offset 16 */
-    void        *sigev_notify_attributes;         /* offset 24 */
+    pthread_attr_t *sigev_notify_attributes;      /* offset 24 */
     unsigned char __pad[64 - 32];
 };
 

@@ -172,7 +172,11 @@ struct sockaddr_in {
     unsigned short sin_family;
     unsigned short sin_port;
     struct in_addr sin_addr;
+#ifdef __linux__
+    unsigned char sin_zero[8];
+#else
     char sin_zero[8];
+#endif
 };
 #endif
 

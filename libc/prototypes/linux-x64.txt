@@ -214,6 +214,7 @@ typedef time_t	long*
 unshare	int (*)(int)
 
 spawn.h y
+member fd_set.fds_bits	long (*)[16]
 member sigset_t.__val	unsigned long (*)[16]
 member struct timeval.tv_sec	long*
 member struct timeval.tv_usec	long*
@@ -659,6 +660,7 @@ member struct sigaction.sa_mask	sigset_t*
 member struct sigaction.sa_restorer	void (**)(void)
 member struct sigaction.sa_sigaction	void (**)(int, siginfo_t*, void*)
 member struct sigevent.sigev_notify	int*
+member struct sigevent.sigev_notify_attributes	pthread_attr_t**
 member struct sigevent.sigev_notify_function	void (**)(union sigval)
 member struct sigevent.sigev_signo	int*
 member struct sigevent.sigev_value	union sigval*
@@ -722,6 +724,7 @@ member struct tm.tm_sec	int*
 member struct tm.tm_wday	int*
 member struct tm.tm_yday	int*
 member struct tm.tm_year	int*
+member struct tm.tm_zone	const char**
 mktime	long (*)(struct tm*)
 nanosleep	int (*)(const struct timespec*, struct timespec*)
 strftime	unsigned long (*)(char*, unsigned long, const char*, const struct tm*)
@@ -868,6 +871,8 @@ member struct _libc_fpstate.fop	unsigned short*
 member struct _libc_fpstate.ftw	unsigned short*
 member struct _libc_fpstate.mxcr_mask	unsigned int*
 member struct _libc_fpstate.mxcsr	unsigned int*
+member struct _libc_fpstate.rdp	unsigned long*
+member struct _libc_fpstate.rip	unsigned long*
 member struct _libc_fpstate.swd	unsigned short*
 member struct _libc_fpxreg.__glibc_reserved1	unsigned short (*)[3]
 member struct _libc_fpxreg.exponent	unsigned short*
@@ -1055,6 +1060,7 @@ member struct ipv6_mreq.ipv6mr_multiaddr	struct in6_addr*
 member struct sockaddr_in.sin_addr	struct in_addr*
 member struct sockaddr_in.sin_family	unsigned short*
 member struct sockaddr_in.sin_port	unsigned short*
+member struct sockaddr_in.sin_zero	unsigned char (*)[8]
 member struct sockaddr_in6.sin6_addr	struct in6_addr*
 member struct sockaddr_in6.sin6_family	unsigned short*
 member struct sockaddr_in6.sin6_flowinfo	unsigned int*
@@ -1692,9 +1698,16 @@ typedef Elf64_Xword	unsigned long*
 
 link.h y
 member struct link_map.l_addr	unsigned long*
+member struct link_map.l_ld	Elf64_Dyn**
 member struct link_map.l_name	char**
 member struct link_map.l_next	struct link_map**
 member struct link_map.l_prev	struct link_map**
+
+linux/fs.h y
+member struct file_clone_range.dest_offset	unsigned long long*
+member struct file_clone_range.src_fd	long long*
+member struct file_clone_range.src_length	unsigned long long*
+member struct file_clone_range.src_offset	unsigned long long*
 
 linux/mman.h y
 member struct cachestat.nr_cache	unsigned long long*

@@ -580,6 +580,7 @@ member struct sigaction.sa_handler	void (**)(int)
 member struct sigaction.sa_mask	unsigned int*
 member struct sigaction.sa_sigaction	void (**)(int, siginfo_t*, void*)
 member struct sigevent.sigev_notify	int*
+member struct sigevent.sigev_notify_attributes	pthread_attr_t**
 member struct sigevent.sigev_notify_function	void (**)(union sigval)
 member struct sigevent.sigev_signo	int*
 member struct sigevent.sigev_value	union sigval*

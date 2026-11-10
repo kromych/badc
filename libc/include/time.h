@@ -96,7 +96,10 @@ struct tm {
     int tm_wday;
     int tm_yday;
     int tm_isdst;
-#ifndef _WIN32
+#ifdef __linux__
+    long tm_gmtoff;
+    const char *tm_zone;
+#elif !defined(_WIN32)
     long tm_gmtoff;
     char *tm_zone;
 #endif

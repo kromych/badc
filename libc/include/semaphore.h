@@ -62,7 +62,11 @@ int sem_unlink(const char *name);
 #ifdef __APPLE__
 typedef int sem_t;
 #else
+#ifdef __x86_64__
 struct __c5_sem { long __align; char __opaque[24]; };
+#else
+struct __c5_sem { long long __align; char __opaque[24]; };
+#endif
 typedef struct __c5_sem sem_t;
 #endif
 

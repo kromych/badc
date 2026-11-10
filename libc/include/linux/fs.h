@@ -6,15 +6,15 @@
 #pragma once
 
 #ifdef __linux__
-#include <stdint.h>
 #include <stddef.h>
 #include <linux/ioctl.h>
+#include <linux/types.h>
 
 struct file_clone_range {
-    int64_t src_fd;
-    uint64_t src_offset;
-    uint64_t src_length;
-    uint64_t dest_offset;
+    __s64 src_fd;
+    __u64 src_offset;
+    __u64 src_length;
+    __u64 dest_offset;
 };
 
 // _IOW(0x94, 9, int)

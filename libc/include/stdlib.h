@@ -408,7 +408,7 @@ void *bsearch_s(const void *key, const void *base, rsize_t num, rsize_t size,
 // `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
 // which returns a pointer to the thread's OS error code.
 #pragma binding(msvcrt::__doserrno, "__doserrno")
-int *__doserrno(void);
+unsigned long *__doserrno(void);
 #define _doserrno (*__doserrno())
 extern int _sys_nerr;
 extern char *_sys_errlist[];
@@ -593,7 +593,7 @@ unsigned long long _strtoui64(const char *s, char **endp, int base);
 // Resolves a relative path against the current directory and
 // writes the canonical absolute form into `absPath`.
 #pragma binding(msvcrt::_fullpath, "_fullpath")
-char *_fullpath(char *absPath, const char *relPath, int maxLength);
+char *_fullpath(char *absPath, const char *relPath, size_t maxLength);
 #endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);

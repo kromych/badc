@@ -622,7 +622,7 @@ int setuid(uid_t uid);
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
 #ifdef _WIN32
-mode_t umask(mode_t mode);
+int umask(int mode);
 #else
 int fchown(int fd, uid_t uid, gid_t gid);
 int chown(const char *path, uid_t uid, gid_t gid);

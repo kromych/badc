@@ -426,8 +426,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
 #ifdef _WIN32
-int _snprintf(char *buf, int size, const char *fmt, ...);
-int _vsnprintf(char *buf, int size, const char *fmt, char *ap);
+int _snprintf(char *buf, size_t size, const char *fmt, ...);
+int _vsnprintf(char *buf, size_t size, const char *fmt, char *ap);
 #endif
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.

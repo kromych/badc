@@ -294,4 +294,8 @@ int sync_file_range(int fd, off64_t offset, off64_t nbytes, unsigned int flags);
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::creat, "_creat")
 #endif
+#ifdef _WIN32
+int creat(const char *path, int mode);
+#else
 int creat(const char *path, mode_t mode);
+#endif

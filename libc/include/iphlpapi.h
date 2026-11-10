@@ -14,7 +14,7 @@
 
 // NET_IFINDEX is the 32-bit interface index; NET_LUID is the 64-bit
 // locally unique identifier (ifdef.h).
-typedef unsigned int NET_IFINDEX;
+typedef unsigned long NET_IFINDEX;
 typedef union _NET_LUID {
     ULONG64 Value;
     ULONG64 Info;

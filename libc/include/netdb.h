@@ -195,8 +195,14 @@ struct hostent {
 int getaddrinfo(const char *node, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res);
 void freeaddrinfo(struct addrinfo *res);
+#ifdef _WIN32
+// Winsock's: the buffer lengths are DWORDs.
+int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
+                unsigned long hostlen, char *serv, unsigned long servlen, int flags);
+#else
 int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
                 socklen_t hostlen, char *serv, socklen_t servlen, int flags);
+#endif
 #ifndef _WIN32
 const char *gai_strerror(int errcode);
 // Error string for an h_errno value (the network database).
@@ -218,7 +224,11 @@ struct servent *getservbyport(int port, const char *proto);
 struct protoent *getprotobyname(const char *name);
 struct protoent *getprotobynumber(int proto);
 struct hostent *gethostbyname(const char *name);
-struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);
+#ifdef _WIN32
+struct hostent *gethostbyaddr(const char *addr, int len, int type);
+#else
+struct hostent *gethostbyaddr(const void *addr, socklen_t len, int type);
+#endif
 #ifdef __linux__
 // Linux 6-argument / 8-argument reentrant resolver forms: fill the
 // caller's `struct hostent` + scratch buffer, set `*result` and return

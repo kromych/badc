@@ -172,8 +172,9 @@ typedef struct { int __state; unsigned char __opaque[124]; } mbstate_t;
 #pragma binding(libc::vwscanf,   "__isoc99_vwscanf")
 #endif
 
-// <stdio.h>'s FILE; the prototypes below need only its tag.
+// <stdio.h>'s FILE, which glibc's <wchar.h> also defines.
 struct __c5_FILE;
+typedef struct __c5_FILE FILE;
 
 #ifdef _WIN32
 // The UCRT's corecrt_w*.h sets, which its <wchar.h> includes, and the

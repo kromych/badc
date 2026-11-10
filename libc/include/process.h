@@ -10,10 +10,10 @@
 #pragma binding(msvcrt::_endthread,     "_endthread")
 
 unsigned long long _beginthreadex(void *security, unsigned stack_size,
-                                  void *start, void *arglist,
+                                  unsigned (*start)(void *), void *arglist,
                                   unsigned initflag, unsigned *thrdaddr);
 void _endthreadex(unsigned retval);
-unsigned long long _beginthread(void *start, unsigned stack_size, void *arglist);
+unsigned long long _beginthread(void (*start)(void *), unsigned stack_size, void *arglist);
 void _endthread(void);
 
 // msvcrt's `_spawn*` family takes a mode argument up front. `_P_NOWAIT`

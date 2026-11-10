@@ -90,20 +90,6 @@ typedef long long fpos_t;
 #endif
 typedef struct __c5_FILE FILE;
 
-// Standard streams. These are real libc globals exported by the
-// platform's C runtime. c5 has no GOT-style data-symbol
-// trampoline, so reading `extern FILE *stdout;` directly would
-// give us an uninitialised c5-side shadow. Instead we resolve
-// each stream lazily via `dlsym` on first use -- the helper
-// below caches the result so repeated reads stay cheap. The
-// macros wrap the lookup so user code can keep writing
-// `printf` / `fprintf(stderr, ...)` / `setvbuf(stdout, ...)`
-// without any extra ceremony.
-//
-// `&stdout` / `&stderr` won't typecheck through this path;
-// callers that need an addressable `FILE *` lvalue have to
-// fall back to `fdopen(...)`.
-//
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::printf,    "_printf")
@@ -409,15 +395,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(ucrtbase::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(ucrtbase::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(ucrtbase::_byteswap_ushort, "_byteswap_ushort")
-// `__acrt_iob_func(int)` is the CRT helper that returns a
-// FILE * to the requested standard stream (0=stdin, 1=stdout,
-// 2=stderr). Used by `__c5_lazy_stream` above to back the
-// `stdin` / `stdout` / `stderr` macros on Windows -- msvcrt
-// doesn't export those as data symbols.
-// `__iob_func()` is the pre-UCRT spelling msvcrt.dll exports;
-// `__acrt_iob_func(int)` is the UCRT replacement. Wine's bundled
-// msvcrt is the legacy flavor, so bind the legacy spelling and
-// teach `__c5_lazy_stream` to walk the returned FILE-array slot.
+// msvcrt exports no stream objects: `__iob_func()` returns its `_iob` array,
+// whose first three FILEs are the standard streams.
 #pragma binding(msvcrt::__iob_func, "__iob_func")
 #endif
 
@@ -714,35 +693,14 @@ errno_t tmpnam_s(char *_Buf, rsize_t _Size);
 #endif
 void *dlsym(void *__restrict handle, const char *__restrict name);
 
-// Lazy resolver for `stdin` / `stdout` / `stderr`. Index
-// 0 = stdin, 1 = stdout, 2 = stderr.
-//
-// macOS exports `___stdinp` / `___stdoutp` / `___stderrp` --
-// each is a `FILE *` (one indirection through the libc data
-// section). dlsym hands back the address of those slots, so we
-// dereference once to get the FILE* the caller actually wants.
-// Note: dlsym strips one leading underscore, so pass the
-// standard C name with two underscores -- not three even
-// though `nm /usr/lib/libSystem.B.dylib` shows `___stdoutp`.
-// macOS's RTLD_DEFAULT is `(void*)-2`, not `NULL` -- pass that
-// in as the handle so dyld uses its fast cross-image search
-// instead of the NULL-handle slow path that misses libc.
-//
-// Linux's symbols are spelled `stdin` / `stdout` / `stderr`
-// without underscores; same shape otherwise.  RTLD_DEFAULT is
-// the conventional NULL there.
-//
-// Windows msvcrt has `__iob_func()` returning an array of FILE
-// structs -- left as a TODO for the Windows port.
-//
-// `&stdout` / `&stderr` won't typecheck through the macros
-// below; callers that need an addressable `FILE *` lvalue
-// have to fall back to `fdopen(...)`.
-// Lazy resolver. char* return (rather than FILE*) keeps c5's
-// type system from tangling on a struct-pointer return value
-// inside a header. The macros below cast to `FILE *` at the
-// call site; users' code reads `stdout` as `FILE *` exactly
-// as on every other platform.
+// `stdin`, `stdout` and `stderr` (index 0, 1, 2) are the C library's
+// streams, found on first use and cached per unit: through dlsym of the
+// library's stream objects (libSystem's `__stdinp` family, whose `___`
+// symbols dlsym takes without the Mach-O underscore and finds from
+// RTLD_DEFAULT, `(void *)-2`; glibc's `stdin` family), and on Windows in
+// msvcrt's `_iob` array. A call reaches them under the SSA interpreter,
+// which cannot read host data objects. The macros are not lvalues.
+// TODO(#2021): the library's objects through data bindings.
 static char *__c5_lazy_stream(int idx) {
     static char *__c5_stream_cache[3];
     if (__c5_stream_cache[idx]) return __c5_stream_cache[idx];
@@ -763,22 +721,8 @@ static char *__c5_lazy_stream(int idx) {
     if (slot) __c5_stream_cache[idx] = *slot;
 #endif
 #ifdef _WIN32
-    // Windows msvcrt doesn't expose `stdin` / `stdout` / `stderr`
-    // as exported data symbols. Programs reach the underlying
-    // FILE * through the helper `__acrt_iob_func(int)`, which
-    // returns a pointer into the CRT's per-process `_iob` array.
-    // Older msvcrt (pre-UCRT) called the same helper `__iob_func`
-    // -- bind both spellings and let the CRT pick whichever it
-    // exports.
-    // msvcrt's `__iob_func()` returns a pointer to its 3-entry
-    // `_iob` array (stdin / stdout / stderr). On the legacy
-    // (pre-UCRT) wine / Windows msvcrt, `sizeof(_iobuf)` is 48
-    // bytes -- 8B _ptr + 4B _cnt (+4B padding) + 8B _base + 4B
-    // _flag + 4B _file + 4B _charbuf + 4B _bufsiz + 8B _tmpfname.
-    // We need the address of the requested entry, so cast the
-    // base to a byte pointer and step by 48 bytes per slot.
-    char *iob = (char *)__iob_func();
-    if (iob) __c5_stream_cache[idx] = iob + idx * 48;
+    FILE *iob = __iob_func();
+    if (iob) __c5_stream_cache[idx] = (char *)(iob + idx);
 #endif
     return __c5_stream_cache[idx];
 }

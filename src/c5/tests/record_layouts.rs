@@ -77,39 +77,37 @@ const FAST16: &str = "the 16-bit fast types are MSVC's int";
 const PTHREAD: &str = "libc/lib/pthread_ext.c keeps the lock inline, winpthreads a handle";
 const NLS: &str = "the Windows SDK's since Windows 8; mingw-w64 has the three-member form";
 
+const WINDOWS: &[Target] = &[Target::WindowsX64, Target::WindowsAarch64];
+
 /// The entries badc lays out differently from the reference on purpose.
 /// Each must still differ, or the list is stale.
-const DEPARTURES: &[(Target, &str, &str)] = &[
-    (Target::WindowsX64, "typedef max_align_t", LONG_DOUBLE),
-    (Target::WindowsX64, "typedef _LONGDOUBLE", LONG_DOUBLE),
-    (Target::WindowsX64, "typedef int_fast16_t", FAST16),
-    (Target::WindowsX64, "typedef uint_fast16_t", FAST16),
-    (Target::WindowsX64, "typedef atomic_int_fast16_t", FAST16),
-    (Target::WindowsX64, "typedef atomic_uint_fast16_t", FAST16),
+const DEPARTURES: &[(&[Target], &str, &str)] = &[
+    (&[Target::WindowsX64], "typedef max_align_t", LONG_DOUBLE),
+    (&[Target::WindowsX64], "typedef _LONGDOUBLE", LONG_DOUBLE),
+    (WINDOWS, "typedef int_fast16_t", FAST16),
+    (WINDOWS, "typedef uint_fast16_t", FAST16),
+    (WINDOWS, "typedef atomic_int_fast16_t", FAST16),
+    (WINDOWS, "typedef atomic_uint_fast16_t", FAST16),
     (
-        Target::WindowsX64,
+        WINDOWS,
         "typedef mbstate_t",
         "it carries the <uchar.h> conversion state msvcrt lacks",
     ),
     (
-        Target::WindowsX64,
+        WINDOWS,
         "typedef off_t",
         "64-bit, as mingw-w64 makes it under _FILE_OFFSET_BITS=64",
     ),
+    (WINDOWS, "typedef pid_t", "msvcrt's _getpid returns int"),
+    (WINDOWS, "typedef pthread_mutex_t", PTHREAD),
+    (WINDOWS, "typedef pthread_cond_t", PTHREAD),
     (
-        Target::WindowsX64,
-        "typedef pid_t",
-        "msvcrt's _getpid returns int",
-    ),
-    (Target::WindowsX64, "typedef pthread_mutex_t", PTHREAD),
-    (Target::WindowsX64, "typedef pthread_cond_t", PTHREAD),
-    (
-        Target::WindowsX64,
+        WINDOWS,
         "typedef EXCEPTION_DISPOSITION",
         "the SDK's enum, where mingw-w64 spells it as int",
     ),
-    (Target::WindowsX64, "struct _nlsversioninfo", NLS),
-    (Target::WindowsX64, "typedef NLSVERSIONINFO", NLS),
+    (WINDOWS, "struct _nlsversioninfo", NLS),
+    (WINDOWS, "typedef NLSVERSIONINFO", NLS),
 ];
 
 fn check(target: Target, table: &str) {
@@ -117,7 +115,7 @@ fn check(target: Target, table: &str) {
     let departs = |entry: &str| {
         DEPARTURES
             .iter()
-            .any(|&(t, e, _)| t == target && e == entry)
+            .any(|&(t, e, _)| t.contains(&target) && e == entry)
     };
     for (header, base, records) in parse(table) {
         let base = match (base, target.is_windows()) {
@@ -249,5 +247,13 @@ fn windows_x64_records_are_mingw_w64s() {
     check(
         Target::WindowsX64,
         include_str!("../../../libc/record-layouts/windows-x64.txt"),
+    );
+}
+
+#[test]
+fn windows_arm64_records_are_mingw_w64s() {
+    check(
+        Target::WindowsAarch64,
+        include_str!("../../../libc/record-layouts/windows-arm64.txt"),
     );
 }

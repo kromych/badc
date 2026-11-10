@@ -12,8 +12,6 @@ and width. A record or member the reference does not define is left out.
 A record is listed under the first header whose unit defines it: the base
 headers each unit includes, then the registry's order.
 
-TODO(#2018): windows-arm64.
-
 Run against a built badc, on a machine of the target, or elsewhere with a
 cross reference compiler, the probes compiled only and their values read
 from the object file:

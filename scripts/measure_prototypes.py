@@ -16,12 +16,14 @@ the initialization only drops, so gcc serves as well as clang. A function
 is listed under the first header, in registry order, whose unit the
 reference declares it in.
 
-TODO(#2024): windows-arm64.
-
-Run on a machine of the target, against a built badc:
+Run against a built badc, with the target's reference compiler or a cross
+compiler for it, as the probes are only compiled:
 
     scripts/measure_prototypes.py --target linux-x64 --cc clang
     scripts/measure_prototypes.py --target macos-aarch64 --cc /usr/bin/clang
+    scripts/measure_prototypes.py --target windows-arm64 \
+        --cc "clang --target=aarch64-w64-mingw32 -nostdinc -isystem <clang's include> \
+              -isystem <mingw-w64's include>"
 """
 
 from __future__ import annotations
@@ -109,7 +111,7 @@ def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], l
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--target", required=True, choices=TARGETS)
-    ap.add_argument("--cc", required=True, help="the reference compiler, run on this machine")
+    ap.add_argument("--cc", required=True, help="the reference compiler")
     ap.add_argument("--badc", default=str(REPO / "target" / "release" / "badc"))
     args = ap.parse_args()
     cc = args.cc.split()

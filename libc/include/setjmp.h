@@ -76,14 +76,14 @@ void *__c5_establisher_frame(void);
 _Noreturn void __c5_msvcrt_longjmp(long long *env, int val);
 
 #if defined(__aarch64__)
-// The 192-byte `_JUMP_BUFFER`, with slack. The arm64 msvcrt.dll exports
+// The SDK's 192-byte `_JUMP_BUFFER`. The arm64 msvcrt.dll exports
 // `_setjmpex` and no `_setjmp`.
-typedef long long jmp_buf[32];
+typedef unsigned long long jmp_buf[24];
 #pragma binding(msvcrt::__c5_msvcrt_setjmp, "_setjmpex")
 #pragma binding(msvcrt::setjmp, "_setjmpex")
 int __c5_msvcrt_setjmp(long long *env, void *frame);
-int setjmp(long long *env);
-_Noreturn void longjmp(long long *env, int val);
+int setjmp(jmp_buf env);
+_Noreturn void longjmp(jmp_buf env, int val);
 #define setjmp(env) __c5_msvcrt_setjmp((long long *)(env), __c5_establisher_frame())
 #define longjmp(env, val) __c5_msvcrt_longjmp((long long *)(env), (val))
 #else

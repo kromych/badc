@@ -364,8 +364,8 @@ int wcstombs_s(size_t *pconverted, char *dst, size_t dstsz, const wchar_t *src,
 // initialize-on-demand behavior.
 #pragma binding(msvcrt::_get_environ,  "_get_environ")
 #pragma binding(msvcrt::_get_wenviron, "_get_wenviron")
-int _get_environ(char ***out);
-int _get_wenviron(unsigned short ***out);
+void _get_environ(char ***out);
+void _get_wenviron(unsigned short ***out);
 static inline char **__badc_environ(void) {
     char **v = 0;
     _get_environ(&v);

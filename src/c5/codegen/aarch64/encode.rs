@@ -2673,9 +2673,8 @@ fn apply_plt_call_fixups(
 
 /// jmp_buf field offsets for the AArch64 setjmp / longjmp
 /// intrinsics. Lays out 10 callee-saved x-regs, FP (x29), the
-/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
-/// the `<setjmp.h>` typedef reserves 256 to leave slack for
-/// future additions.
+/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes,
+/// within the 192-byte `jmp_buf`, the SDK's `_JUMP_BUFFER`.
 pub(crate) const JB_X19_OFF: u32 = 0;
 pub(crate) const JB_X29_OFF: u32 = 80;
 pub(crate) const JB_PC_OFF: u32 = 88;

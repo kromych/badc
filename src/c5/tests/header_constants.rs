@@ -37,38 +37,40 @@ fn parse(table: &str) -> Vec<Header<'_>> {
 
 const MACOS_11: &str = "the images load on macOS 11; the measuring SDK targets itself";
 
+const WINDOWS: &[Target] = &[Target::WindowsX64, Target::WindowsAarch64];
+
 /// The constants badc gives another value than the reference on purpose.
 /// Each must still differ, or the list is stale.
-const DEPARTURES: &[(Target, &str, &str)] = &[
+const DEPARTURES: &[(&[Target], &str, &str)] = &[
     (
-        Target::MacOSAarch64,
+        &[Target::MacOSAarch64],
         "MAC_OS_X_VERSION_MIN_REQUIRED",
         MACOS_11,
     ),
     (
-        Target::MacOSAarch64,
+        &[Target::MacOSAarch64],
         "MAC_OS_X_VERSION_MAX_ALLOWED",
         MACOS_11,
     ),
-    (Target::MacOSAarch64, "AIO_LISTIO_MAX", MACOS_11),
-    (Target::WindowsX64, "INT_FAST16_MIN", FAST16),
-    (Target::WindowsX64, "INT_FAST16_MAX", FAST16),
-    (Target::WindowsX64, "UINT_FAST16_MAX", FAST16),
-    (Target::WindowsX64, "DECIMAL_DIG", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_DECIMAL_DIG", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_DIG", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_MANT_DIG", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_MAX_10_EXP", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_MAX_EXP", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_MIN_10_EXP", LONG_DOUBLE),
-    (Target::WindowsX64, "LDBL_MIN_EXP", LONG_DOUBLE),
-    (Target::WindowsX64, "WINVER", WINDOWS_10),
-    (Target::WindowsX64, "NTDDI_VERSION", WINDOWS_10),
-    (Target::WindowsX64, "WINAPI_PARTITION_APP", WINDOWS_10),
-    (Target::WindowsX64, "WINAPI_PARTITION_PC_APP", WINDOWS_10),
-    (Target::WindowsX64, "WINAPI_PARTITION_PHONE_APP", WINDOWS_10),
-    (Target::WindowsX64, "WINAPI_PARTITION_SYSTEM", WINDOWS_10),
-    (Target::WindowsX64, "REG_LEGAL_OPTION", CURRENT_SDK),
+    (&[Target::MacOSAarch64], "AIO_LISTIO_MAX", MACOS_11),
+    (WINDOWS, "INT_FAST16_MIN", FAST16),
+    (WINDOWS, "INT_FAST16_MAX", FAST16),
+    (WINDOWS, "UINT_FAST16_MAX", FAST16),
+    (&[Target::WindowsX64], "DECIMAL_DIG", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_DECIMAL_DIG", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_DIG", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_MANT_DIG", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_MAX_10_EXP", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_MAX_EXP", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_MIN_10_EXP", LONG_DOUBLE),
+    (&[Target::WindowsX64], "LDBL_MIN_EXP", LONG_DOUBLE),
+    (WINDOWS, "WINVER", WINDOWS_10),
+    (WINDOWS, "NTDDI_VERSION", WINDOWS_10),
+    (WINDOWS, "WINAPI_PARTITION_APP", WINDOWS_10),
+    (WINDOWS, "WINAPI_PARTITION_PC_APP", WINDOWS_10),
+    (WINDOWS, "WINAPI_PARTITION_PHONE_APP", WINDOWS_10),
+    (WINDOWS, "WINAPI_PARTITION_SYSTEM", WINDOWS_10),
+    (WINDOWS, "REG_LEGAL_OPTION", CURRENT_SDK),
 ];
 
 const FAST16: &str = "the 16-bit fast types are MSVC's int";
@@ -78,19 +80,11 @@ const CURRENT_SDK: &str = "the current SDK's value, which mingw-w64 lags";
 
 /// Constants badc defines as something other than an integer on purpose,
 /// left out of the unit that evaluates the rest.
-const NOT_INTEGERS: &[(Target, &str, &str)] = &[
-    (Target::WindowsX64, "PTHREAD_MUTEX_INITIALIZER", PTHREAD),
-    (
-        Target::WindowsX64,
-        "PTHREAD_RECURSIVE_MUTEX_INITIALIZER",
-        PTHREAD,
-    ),
-    (
-        Target::WindowsX64,
-        "PTHREAD_ERRORCHECK_MUTEX_INITIALIZER",
-        PTHREAD,
-    ),
-    (Target::WindowsX64, "PTHREAD_COND_INITIALIZER", PTHREAD),
+const NOT_INTEGERS: &[(&[Target], &str, &str)] = &[
+    (WINDOWS, "PTHREAD_MUTEX_INITIALIZER", PTHREAD),
+    (WINDOWS, "PTHREAD_RECURSIVE_MUTEX_INITIALIZER", PTHREAD),
+    (WINDOWS, "PTHREAD_ERRORCHECK_MUTEX_INITIALIZER", PTHREAD),
+    (WINDOWS, "PTHREAD_COND_INITIALIZER", PTHREAD),
 ];
 
 const PTHREAD: &str = "libc/lib/pthread_ext.c keeps the lock inline, winpthreads a handle";
@@ -108,11 +102,15 @@ fn termios_speed(target: Target, name: &str) -> bool {
 
 fn check(target: Target, table: &str) {
     let mut failures = Vec::new();
-    let departs = |name: &str| DEPARTURES.iter().any(|&(t, n, _)| t == target && n == name);
+    let departs = |name: &str| {
+        DEPARTURES
+            .iter()
+            .any(|&(t, n, _)| t.contains(&target) && n == name)
+    };
     let evaluated = |&&(name, _): &&(&str, i64)| {
         !NOT_INTEGERS
             .iter()
-            .any(|&(t, n, _)| t == target && n == name)
+            .any(|&(t, n, _)| t.contains(&target) && n == name)
     };
     for (header, base, constants) in parse(table) {
         let constants: Vec<(&str, i64)> = constants.iter().filter(evaluated).copied().collect();
@@ -193,5 +191,13 @@ fn windows_x64_constants_are_mingw_w64s() {
     check(
         Target::WindowsX64,
         include_str!("../../../libc/header-constants/windows-x64.txt"),
+    );
+}
+
+#[test]
+fn windows_arm64_constants_are_mingw_w64s() {
+    check(
+        Target::WindowsAarch64,
+        include_str!("../../../libc/header-constants/windows-arm64.txt"),
     );
 }

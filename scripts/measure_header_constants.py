@@ -12,8 +12,6 @@ expressions there and stores each one's value as a `long long`. A constant
 is listed under the first header, in registry order, whose unit the
 reference measures it in.
 
-TODO(#2023): windows-arm64.
-
 Run against a built badc, on a machine of the target, or elsewhere with a
 cross reference compiler, the probes compiled only and their values read
 from the object file:

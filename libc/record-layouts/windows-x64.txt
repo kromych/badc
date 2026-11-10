@@ -201,7 +201,7 @@ typedef clock_t 4 4 signed
 typedef clockid_t 4 4 signed
 
 uchar.h y
-struct _wfinddata_t 560 8
+struct _wfinddata64i32_t 560 8
   attrib 0
   time_create 8
   time_access 16

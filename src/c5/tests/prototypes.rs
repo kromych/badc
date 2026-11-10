@@ -102,3 +102,11 @@ fn windows_x64_declarations_are_mingw_w64s() {
         include_str!("../../../libc/prototypes/windows-x64.txt"),
     );
 }
+
+#[test]
+fn windows_arm64_declarations_are_mingw_w64s() {
+    check(
+        Target::WindowsAarch64,
+        include_str!("../../../libc/prototypes/windows-arm64.txt"),
+    );
+}

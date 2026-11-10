@@ -557,13 +557,33 @@ void WSASetLastError(int err);
 #define SOCKADDR_IN_SIZE 16
 #define FIONBIO 0x8004667e          // ioctlsocket cmd: set non-blocking
 
-int WSAStartup(int version_word, char *wsadata);
+struct WSAData;
+int WSAStartup(unsigned short version, struct WSAData *data);
 int WSACleanup(void);
-int closesocket(int fd);
-int ioctlsocket(int fd, int cmd, int *arg);
+int closesocket(unsigned long long s);
+int ioctlsocket(unsigned long long s, long cmd, unsigned long *arg);
 #endif
 
-// Common prototypes -- portable across the three platforms.
+#ifdef _WIN32
+// Winsock's declarations: a socket is the pointer-sized SOCKET handle, and
+// buffers are char.
+unsigned long long socket(int af, int type, int protocol);
+int bind(unsigned long long s, const struct sockaddr *name, int namelen);
+int listen(unsigned long long s, int backlog);
+unsigned long long accept(unsigned long long s, struct sockaddr *addr, int *addrlen);
+int connect(unsigned long long s, const struct sockaddr *name, int namelen);
+int setsockopt(unsigned long long s, int level, int optname, const char *optval, int optlen);
+int getsockopt(unsigned long long s, int level, int optname, char *optval, int *optlen);
+int recv(unsigned long long s, char *buf, int len, int flags);
+int send(unsigned long long s, const char *buf, int len, int flags);
+int shutdown(unsigned long long s, int how);
+int getpeername(unsigned long long s, struct sockaddr *name, int *namelen);
+int getsockname(unsigned long long s, struct sockaddr *name, int *namelen);
+int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockaddr *from,
+             int *fromlen);
+int sendto(unsigned long long s, const char *buf, int len, int flags,
+           const struct sockaddr *to, int tolen);
+#else
 int socket(int domain, int type, int protocol);
 int bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int fd, int backlog);
@@ -575,29 +595,15 @@ int connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int getsockopt(int fd, int level, int optname, void *restrict optval,
                socklen_t *restrict optlen);
-#ifdef _WIN32
-int recv(int fd, void *buf, int n, int flags);
-int send(int fd, const void *buf, int n, int flags);
-#else
 ssize_t recv(int fd, void *buf, size_t n, int flags);
 ssize_t send(int fd, const void *buf, size_t n, int flags);
-#endif
 int shutdown(int fd, int how);
-#ifndef _WIN32
 int socketpair(int domain, int type, int protocol, int *sv);
 ssize_t sendmsg(int fd, const struct msghdr *msg, int flags);
 ssize_t recvmsg(int fd, struct msghdr *msg, int flags);
 int sockatmark(int fd);
-#endif
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
-#ifdef _WIN32
-// Winsock's types, as <winsock2.h> declares them.
-int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockaddr *from,
-             int *fromlen);
-int sendto(unsigned long long s, const char *buf, int len, int flags,
-           const struct sockaddr *to, int tolen);
-#else
 ssize_t recvfrom(int fd, void *restrict buf, size_t n, int flags,
                  struct sockaddr *restrict addr, socklen_t *restrict addrlen);
 ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr *addr,

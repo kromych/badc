@@ -108,23 +108,25 @@ mod jit_lane {
     /// store in its stride.
     #[test]
     fn zero_leaves_every_fixture_result_unchanged() {
-        let failures = crate::c5::tests::parity_failures(
-            crate::c5::tests::fixture_tables::JIT_FIXTURES,
-            |name, expected| {
-                let program = program_for(&crate::c5::tests::load_fixture(name), AutoVarInit::Zero);
-                let opts = NativeOptions::new().with_optimize();
-                match jit_run_with_options(&program, &[name.to_string()], opts, &mut |_| {}) {
-                    Ok(code) if code == *expected => None,
-                    Ok(code) => Some(alloc::format!("{name}: exit {code}, expected {expected}")),
-                    Err(e) => Some(alloc::format!("{name}: {e}")),
-                }
-            },
-        );
+        let table: alloc::vec::Vec<(&str, i32)> = (crate::c5::tests::fixture_tables::JIT_FIXTURES)
+            .iter()
+            .filter(|(name, _)| crate::c5::tests::jit::runs_without_linker(name))
+            .copied()
+            .collect();
+        let failures = crate::c5::tests::parity_failures(&table, |name, expected| {
+            let program = program_for(&crate::c5::tests::load_fixture(name), AutoVarInit::Zero);
+            let opts = NativeOptions::new().with_optimize();
+            match jit_run_with_options(&program, &[name.to_string()], opts, &mut |_| {}) {
+                Ok(code) if code == *expected => None,
+                Ok(code) => Some(alloc::format!("{name}: exit {code}, expected {expected}")),
+                Err(e) => Some(alloc::format!("{name}: {e}")),
+            }
+        });
         assert!(
             failures.is_empty(),
             "{} of {} fixtures moved under =zero:\n  {}",
             failures.len(),
-            crate::c5::tests::fixture_tables::JIT_FIXTURES.len(),
+            table.len(),
             failures.join("\n  ")
         );
     }

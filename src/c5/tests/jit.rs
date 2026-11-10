@@ -99,8 +99,26 @@ const WINDOWS_GAPS: &[(&str, &str)] = &[];
 fn parity() -> Vec<(&'static str, i32)> {
     (PARITY.iter())
         .filter(|(name, _)| !WINDOWS_GAPS.iter().any(|(gap, _)| gap == name))
+        .filter(|(name, _)| runs_without_linker(name))
         .copied()
         .collect()
+}
+
+/// The fixtures calling a name that only the embedded C library defines on
+/// the host. The JIT joins that library through the linker, which is built
+/// only under `full`.
+#[cfg(all(target_os = "macos", not(feature = "full")))]
+const EMBEDDED_LIBC_FIXTURES: &[&str] = &[
+    "string_gnu_ext.c",
+    "copy_file_range_posix.c",
+    "c17_library_interfaces.c",
+];
+#[cfg(not(all(target_os = "macos", not(feature = "full"))))]
+const EMBEDDED_LIBC_FIXTURES: &[&str] = &[];
+
+/// Whether the JIT of this build can run fixture `name`.
+pub(super) fn runs_without_linker(name: &str) -> bool {
+    !EMBEDDED_LIBC_FIXTURES.contains(&name)
 }
 
 /// The locale (C17 7.11.1.1) and the working directory are the program's,

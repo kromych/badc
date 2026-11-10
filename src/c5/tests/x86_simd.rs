@@ -1784,7 +1784,10 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::AesImc
         | Sem::AesKeygen
         | Sem::Move
-        | Sem::Rand => false,
+        | Sem::Rand
+        | Sem::Perm4x64
+        | Sem::PermVar32
+        | Sem::Perm2x128 => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

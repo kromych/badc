@@ -3134,6 +3134,35 @@ v8i acc(const v8i *p, int n) { v8i s = {0}; for (int i = 0; i < n; i++) s = s + 
     m.finish();
 }
 
+/// The AVX2 intrinsics are their VEX instructions on ymm registers, as with
+/// gcc 16: `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the
+/// two loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of
+/// `_mm256_adds_epu8` over an array keeps its accumulator in a register,
+/// with no store in the loop. Each was the SSE instruction on each half,
+/// its operands split and joined through memory.
+#[test]
+fn avx2_intrinsics_are_ymm_instructions() {
+    const SRC: &str = "#include <immintrin.h>\n\
+__m256i sum(const __m256i *p, int n) {\n\
+    __m256i s = _mm256_setzero_si256();\n\
+    for (int i = 0; i < n; i++) s = _mm256_adds_epu8(s, _mm256_loadu_si256(p + i));\n\
+    return s;\n\
+}\n\
+int mask(const __m256i *p) { return _mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1])); }\n";
+    let mut m = Misses::default();
+    let mask = x64(SRC, "mask");
+    m.expect(mask.len() == 6 && mask[..4].iter().all(|i| i.vex), || {
+        format!("x86-64 mask: {mask:x?}")
+    });
+    let sum = x64(SRC, "sum");
+    let stores = sum
+        .iter()
+        .filter(|i| i.op == 0x0F11 || (i.op == 0x89 && !i.reg_form()))
+        .count();
+    m.expect(stores <= 2, || format!("x86-64 sum: {sum:x?}"));
+    m.finish();
+}
+
 /// SSE intrinsics keep their vectors in xmm registers (`X86SimdVal`): a
 /// round loop over four `__m128i` parameters makes no memory access, as
 /// with gcc 16. Each intrinsic read its operands from the frame and wrote

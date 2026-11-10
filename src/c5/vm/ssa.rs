@@ -4006,6 +4006,9 @@ fn run_x86_simd(
 ) -> Result<(), C5Error> {
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
+    if row.bytes == 32 {
+        return run_x86_simd_wide(mem, frame, row, imm, args);
+    }
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
     // An MMX form reads and writes the low `row.bytes` of each image.
     let n = usize::from(row.bytes);
@@ -4094,6 +4097,58 @@ fn run_x86_simd(
         }
     }
     Ok(())
+}
+
+/// [`run_x86_simd`] for an AVX2 form over 32-byte vectors
+/// ([`crate::c5::x86_simd::eval_wide`]).
+fn run_x86_simd_wide(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    row: &crate::c5::x86_simd::SimdOp,
+    imm: Option<u8>,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::x86_simd::{self, Form};
+    let operand = |i: usize| -> Result<usize, C5Error> {
+        args.get(i)
+            .map(|&a| frame.regs[a as usize] as usize)
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {} lacks operand {i}", row.name)))
+    };
+    let read = |mem: &Memory, addr: usize| -> Result<[u8; 32], C5Error> {
+        Ok(mem.read_bytes(addr, 32)?.try_into().unwrap())
+    };
+    let (imm8, zero) = (imm.unwrap_or(0), [0u8; 32]);
+    let out = match row.form {
+        Form::Vv | Form::VvI => {
+            let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
+            x86_simd::eval_wide(row.sem, &a, &b, imm8, 0)
+        }
+        Form::V | Form::VI => {
+            x86_simd::eval_wide(row.sem, &read(mem, operand(1)?)?, &zero, imm8, 0)
+        }
+        Form::Shift => {
+            let count = match imm {
+                Some(n) => u64::from(n),
+                None => frame.regs[args[2] as usize] as u64,
+            };
+            x86_simd::eval_wide(row.sem, &read(mem, operand(1)?)?, &zero, 0, count)
+        }
+        Form::Load | Form::Store => read(mem, operand(1)?)?,
+        Form::MoveMask => {
+            let a = read(mem, operand(1)?)?;
+            let lo = x86_simd::eval_movemask(a[..16].try_into().unwrap());
+            let hi = x86_simd::eval_movemask(a[16..].try_into().unwrap());
+            mem.write_bytes(operand(0)?, &((lo | hi << 16) as i64).to_le_bytes())?;
+            return Ok(());
+        }
+        _ => {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: {} has no 32-byte form",
+                row.name
+            )));
+        }
+    };
+    mem.write_bytes(operand(0)?, &out)
 }
 
 fn run_intrinsic(

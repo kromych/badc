@@ -78,10 +78,10 @@ fn run_one(func: &mut FunctionSsa) {
             let row = x86_simd::get(op);
             let args = args.clone();
             // An MMX form's vectors are the 64 bits of their registers.
-            let (vload, vstore) = if row.bytes == 8 {
-                (LoadKind::F64, StoreKind::F64)
-            } else {
-                (LoadKind::V128, StoreKind::V128)
+            let (vload, vstore) = match row.bytes {
+                8 => (LoadKind::F64, StoreKind::F64),
+                32 => (LoadKind::V256, StoreKind::V256),
+                _ => (LoadKind::V128, StoreKind::V128),
             };
             match row.form {
                 Form::RdRand => continue,

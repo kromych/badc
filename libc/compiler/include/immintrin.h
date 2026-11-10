@@ -8,11 +8,11 @@
 #include <smmintrin.h>
 #include <wmmintrin.h>
 
-/* The 256-bit types and the integer operations of AVX and AVX2, written
-** lane by lane over the vector extension as the SDM defines each
-** instruction or, below, as the SSE instruction on each 128-bit half; no
-** VEX instruction is emitted, so a unit may call them behind a CPUID check
-** as with cl, which needs no /arch option for them. */
+/* The 256-bit types and the integer operations of AVX and AVX2. x86-64
+** code assumes x86-64-v3, so an operation AVX2 has an instruction for is
+** gcc's builtin of it, the VEX instruction on ymm registers, and the rest
+** are written over the vector extension as the SDM defines them or as the
+** SSE instruction on each 128-bit half. */
 #pragma push_macro("__attribute__")
 #undef __attribute__
 typedef long long __m256i __attribute__((__vector_size__(32)));
@@ -36,9 +36,7 @@ typedef unsigned int __v4su __attribute__((__vector_size__(16)));
 #pragma pop_macro("__attribute__")
 
 static inline __m256i _mm256_loadu_si256(__m256i_u const *__P) {
-    __m256i __r;
-    __builtin_memcpy(&__r, __P, sizeof __r);
-    return __r;
+    return (__m256i)__builtin_ia32_loaddqu256((char const *)__P);
 }
 
 static inline __m256i _mm256_load_si256(__m256i const *__P) {
@@ -46,7 +44,7 @@ static inline __m256i _mm256_load_si256(__m256i const *__P) {
 }
 
 static inline void _mm256_storeu_si256(__m256i_u *__P, __m256i __A) {
-    __builtin_memcpy(__P, &__A, sizeof __A);
+    __builtin_ia32_storedqu256((char *)__P, __A);
 }
 
 static inline void _mm256_store_si256(__m256i *__P, __m256i __A) {
@@ -123,7 +121,7 @@ static inline __m256i _mm256_and_si256(__m256i __A, __m256i __B) {
 }
 
 static inline __m256i _mm256_andnot_si256(__m256i __A, __m256i __B) {
-    return ~__A & __B;
+    return (__m256i)__builtin_ia32_andnotsi256(__A, __B);
 }
 
 static inline __m256i _mm256_or_si256(__m256i __A, __m256i __B) {
@@ -174,22 +172,21 @@ static inline __m256i _mm256_sub_epi64(__m256i __A, __m256i __B) {
     return (__m256i)((__v4du)__A - (__v4du)__B);
 }
 
-/* VPCMPEQB/W/D/Q: all ones in a lane where the operands are equal, as a
-** vector comparison gives. */
+/* VPCMPEQB/W/D/Q: all ones in a lane where the operands are equal. */
 static inline __m256i _mm256_cmpeq_epi8(__m256i __A, __m256i __B) {
-    return (__m256i)((__v32qs)__A == (__v32qs)__B);
+    return (__m256i)__builtin_ia32_pcmpeqb256(__A, __B);
 }
 
 static inline __m256i _mm256_cmpeq_epi16(__m256i __A, __m256i __B) {
-    return (__m256i)((__v16hi)__A == (__v16hi)__B);
+    return (__m256i)__builtin_ia32_pcmpeqw256(__A, __B);
 }
 
 static inline __m256i _mm256_cmpeq_epi32(__m256i __A, __m256i __B) {
-    return (__m256i)((__v8si)__A == (__v8si)__B);
+    return (__m256i)__builtin_ia32_pcmpeqd256(__A, __B);
 }
 
 static inline __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
-    return (__m256i)(__A == __B);
+    return (__m256i)__builtin_ia32_pcmpeqq256(__A, __B);
 }
 
 static inline __m256i _mm256_set_epi64x(long long __D, long long __C, long long __B,
@@ -248,11 +245,11 @@ static inline __m256i _mm256_broadcastsi128_si256(__m128i __A) {
 }
 
 static inline __m256i _mm256_cmpgt_epi32(__m256i __A, __m256i __B) {
-    return (__m256i)((__v8si)__A > (__v8si)__B);
+    return (__m256i)__builtin_ia32_pcmpgtd256(__A, __B);
 }
 
 static inline __m256i _mm256_cmpgt_epi64(__m256i __A, __m256i __B) {
-    return (__m256i)(__A > __B);
+    return (__m256i)__builtin_ia32_pcmpgtq256(__A, __B);
 }
 
 /* An extract zero-extends its byte, as gcc's and clang's do. */
@@ -293,31 +290,28 @@ static inline __m256i _mm256_mullo_epi32(__m256i __A, __m256i __B) {
 
 /* VPMULUDQ: the low doubleword of each quadword, multiplied unsigned. */
 static inline __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
-    __v4du __a = (__v4du)__A, __b = (__v4du)__B;
-    return (__m256i)((__a & 0xFFFFFFFFu) * (__b & 0xFFFFFFFFu));
+    return (__m256i)__builtin_ia32_pmuludq256(__A, __B);
 }
 
-/* The shifts by a count: one past the lane width clears the lane. */
-static inline __m256i _mm256_slli_epi32(__m256i __A, int __N) {
-    return (unsigned)__N > 31 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v8su)__A << __N);
-}
+/* The shifts by a count: one past the lane width clears the lane, or fills
+** it with the sign. */
+#define __BADC_AVX2_SHIFTI(name, row)                                             \
+    static inline __m256i _mm256_##name(__m256i __A, int __N) {                   \
+        return (__m256i)__builtin_ia32_##row(__A, __N);                           \
+    }
+__BADC_AVX2_SHIFTI(slli_epi16, psllwi256)
+__BADC_AVX2_SHIFTI(slli_epi32, pslldi256)
+__BADC_AVX2_SHIFTI(slli_epi64, psllqi256)
+__BADC_AVX2_SHIFTI(srli_epi16, psrlwi256)
+__BADC_AVX2_SHIFTI(srli_epi32, psrldi256)
+__BADC_AVX2_SHIFTI(srli_epi64, psrlqi256)
+__BADC_AVX2_SHIFTI(srai_epi16, psrawi256)
+__BADC_AVX2_SHIFTI(srai_epi32, psradi256)
+#undef __BADC_AVX2_SHIFTI
 
-static inline __m256i _mm256_srli_epi32(__m256i __A, int __N) {
-    return (unsigned)__N > 31 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v8su)__A >> __N);
-}
-
-static inline __m256i _mm256_slli_epi64(__m256i __A, int __N) {
-    return (unsigned)__N > 63 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v4du)__A << __N);
-}
-
-static inline __m256i _mm256_srli_epi64(__m256i __A, int __N) {
-    return (unsigned)__N > 63 ? (__m256i){0, 0, 0, 0} : (__m256i)((__v4du)__A >> __N);
-}
-
-/* The forms of an imm8 the instruction applies to each 128-bit lane (VPSLLDQ,
-** VPSRLDQ, VPSHUFD, VPSHUFHW, VPSHUFLW, VPALIGNR, VPBLENDW) are the SSE form
-** on each half; VPBLENDD gives each half four of its bits. Macros keep the
-** imm8 a literal, and each operand is evaluated once. */
+/* The forms of an imm8 are macros, which keep it a literal. VPBLENDD gives
+** each half four of its bits, and VPCLMULQDQ, an extension beyond
+** x86-64-v3, is PCLMULQDQ on each half; each operand is evaluated once. */
 #define __BADC_AVX2_IMM1(op, A, N)                                                \
     __extension__({                                                               \
         __m256i __badc_a = (A);                                                   \
@@ -329,13 +323,19 @@ static inline __m256i _mm256_srli_epi64(__m256i __A, int __N) {
         __badc_join_si(op(__badc_lo_si(__badc_a), __badc_lo_si(__badc_b), N),     \
                        op(__badc_hi_si(__badc_a), __badc_hi_si(__badc_b), N));    \
     })
-#define _mm256_slli_si256(A, N) __BADC_AVX2_IMM1(_mm_slli_si128, A, N)
-#define _mm256_srli_si256(A, N) __BADC_AVX2_IMM1(_mm_srli_si128, A, N)
-#define _mm256_shuffle_epi32(A, M) __BADC_AVX2_IMM1(_mm_shuffle_epi32, A, M)
-#define _mm256_shufflehi_epi16(A, M) __BADC_AVX2_IMM1(_mm_shufflehi_epi16, A, M)
-#define _mm256_shufflelo_epi16(A, M) __BADC_AVX2_IMM1(_mm_shufflelo_epi16, A, M)
-#define _mm256_alignr_epi8(A, B, N) __BADC_AVX2_IMM2(_mm_alignr_epi8, A, B, N)
-#define _mm256_blend_epi16(A, B, M) __BADC_AVX2_IMM2(_mm_blend_epi16, A, B, M)
+#define _mm256_slli_si256(A, N)                                                   \
+    ((__m256i)__builtin_ia32_pslldqi256((__m256i)(A), (int)(N) * 8))
+#define _mm256_srli_si256(A, N)                                                   \
+    ((__m256i)__builtin_ia32_psrldqi256((__m256i)(A), (int)(N) * 8))
+#define _mm256_shuffle_epi32(A, M) ((__m256i)__builtin_ia32_pshufd256((__m256i)(A), (int)(M)))
+#define _mm256_shufflehi_epi16(A, M)                                              \
+    ((__m256i)__builtin_ia32_pshufhw256((__m256i)(A), (int)(M)))
+#define _mm256_shufflelo_epi16(A, M)                                              \
+    ((__m256i)__builtin_ia32_pshuflw256((__m256i)(A), (int)(M)))
+#define _mm256_alignr_epi8(A, B, N)                                               \
+    ((__m256i)__builtin_ia32_palignr256((__m256i)(A), (__m256i)(B), (int)(N) * 8))
+#define _mm256_blend_epi16(A, B, M)                                               \
+    ((__m256i)__builtin_ia32_pblendw256((__m256i)(A), (__m256i)(B), (int)(M)))
 #define __badc_blend_epi32(X, Y, M)                                               \
     _mm_castps_si128(_mm_blend_ps(_mm_castsi128_ps(X), _mm_castsi128_ps(Y), (M) & 15))
 #define _mm_blend_epi32(A, B, M) __badc_blend_epi32(A, B, M)
@@ -347,48 +347,12 @@ static inline __m256i _mm256_srli_epi64(__m256i __A, int __N) {
     })
 
 static inline __m256i _mm256_permutevar8x32_epi32(__m256i __A, __m256i __I) {
-    __v8si __a = (__v8si)__A, __i = (__v8si)__I, __r;
-    for (int __k = 0; __k < 8; __k++)
-        __r[__k] = __a[__i[__k] & 7];
-    return (__m256i)__r;
+    return (__m256i)__builtin_ia32_permvarsi256(__A, __I);
 }
 
-static inline __m256i _mm256_permute4x64_epi64(__m256i __A, const int __M) {
-    return (__m256i){__A[__M & 3], __A[(__M >> 2) & 3], __A[(__M >> 4) & 3],
-                     __A[(__M >> 6) & 3]};
-}
-
-/* VPERM2I128: each half of the result is a half of either operand, or
-** zero, as its nibble of the control selects. */
-static inline __m256i _mm256_permute2x128_si256(__m256i __A, __m256i __B, const int __M) {
-    __m256i __r;
-    for (int __h = 0; __h < 2; __h++) {
-        int __c = __M >> (4 * __h);
-        __m256i __s = __c & 2 ? __B : __A;
-        __r[2 * __h] = __c & 8 ? 0 : __s[2 * (__c & 1)];
-        __r[2 * __h + 1] = __c & 8 ? 0 : __s[2 * (__c & 1) + 1];
-    }
-    return __r;
-}
-
-/* The unpacks interleave within each 128-bit lane. */
-static inline __m256i _mm256_unpacklo_epi32(__m256i __A, __m256i __B) {
-    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
-    return (__m256i)(__v8si){__a[0], __b[0], __a[1], __b[1], __a[4], __b[4], __a[5], __b[5]};
-}
-
-static inline __m256i _mm256_unpackhi_epi32(__m256i __A, __m256i __B) {
-    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
-    return (__m256i)(__v8si){__a[2], __b[2], __a[3], __b[3], __a[6], __b[6], __a[7], __b[7]};
-}
-
-static inline __m256i _mm256_unpacklo_epi64(__m256i __A, __m256i __B) {
-    return (__m256i){__A[0], __B[0], __A[2], __B[2]};
-}
-
-static inline __m256i _mm256_unpackhi_epi64(__m256i __A, __m256i __B) {
-    return (__m256i){__A[1], __B[1], __A[3], __B[3]};
-}
+#define _mm256_permute4x64_epi64(A, M) ((__m256i)__builtin_ia32_permdi256((__m256i)(A), (int)(M)))
+#define _mm256_permute2x128_si256(A, B, M)                                        \
+    ((__m256i)__builtin_ia32_permti256((__m256i)(A), (__m256i)(B), (int)(M)))
 
 /* The rest of AVX2's integer operations, and AVX's on __m256i. Each one an
 ** SSE instruction applies to a 128-bit half applies to the two halves, so
@@ -408,61 +372,64 @@ static inline __m256i __badc_join_si(__m128i __L, __m128i __H) {
     return (__m256i){__L[0], __L[1], __H[0], __H[1]};
 }
 
-#define __BADC_AVX2_BINARY(name)                                                  \
+#define __BADC_AVX2_BINARY(name, row)                                             \
     static inline __m256i _mm256_##name(__m256i __A, __m256i __B) {               \
-        return __badc_join_si(_mm_##name(__badc_lo_si(__A), __badc_lo_si(__B)),   \
-                              _mm_##name(__badc_hi_si(__A), __badc_hi_si(__B)));  \
+        return (__m256i)__builtin_ia32_##row(__A, __B);                           \
     }
-__BADC_AVX2_BINARY(adds_epi8)
-__BADC_AVX2_BINARY(adds_epi16)
-__BADC_AVX2_BINARY(adds_epu8)
-__BADC_AVX2_BINARY(adds_epu16)
-__BADC_AVX2_BINARY(subs_epi8)
-__BADC_AVX2_BINARY(subs_epi16)
-__BADC_AVX2_BINARY(subs_epu8)
-__BADC_AVX2_BINARY(avg_epu8)
-__BADC_AVX2_BINARY(avg_epu16)
-__BADC_AVX2_BINARY(min_epi8)
-__BADC_AVX2_BINARY(min_epi16)
-__BADC_AVX2_BINARY(min_epi32)
-__BADC_AVX2_BINARY(min_epu8)
-__BADC_AVX2_BINARY(min_epu16)
-__BADC_AVX2_BINARY(min_epu32)
-__BADC_AVX2_BINARY(max_epi8)
-__BADC_AVX2_BINARY(max_epi16)
-__BADC_AVX2_BINARY(max_epi32)
-__BADC_AVX2_BINARY(max_epu8)
-__BADC_AVX2_BINARY(max_epu16)
-__BADC_AVX2_BINARY(max_epu32)
-__BADC_AVX2_BINARY(mulhi_epi16)
-__BADC_AVX2_BINARY(mulhi_epu16)
-__BADC_AVX2_BINARY(mulhrs_epi16)
-__BADC_AVX2_BINARY(mullo_epi16)
-__BADC_AVX2_BINARY(mul_epi32)
-__BADC_AVX2_BINARY(sign_epi8)
-__BADC_AVX2_BINARY(sign_epi16)
-__BADC_AVX2_BINARY(sign_epi32)
-__BADC_AVX2_BINARY(hadd_epi16)
-__BADC_AVX2_BINARY(hadd_epi32)
-__BADC_AVX2_BINARY(hadds_epi16)
-__BADC_AVX2_BINARY(hsub_epi16)
-__BADC_AVX2_BINARY(hsub_epi32)
-__BADC_AVX2_BINARY(hsubs_epi16)
-__BADC_AVX2_BINARY(cmpgt_epi8)
-__BADC_AVX2_BINARY(cmpgt_epi16)
-__BADC_AVX2_BINARY(packs_epi16)
-__BADC_AVX2_BINARY(packs_epi32)
-__BADC_AVX2_BINARY(packus_epi16)
-__BADC_AVX2_BINARY(packus_epi32)
-__BADC_AVX2_BINARY(unpacklo_epi8)
-__BADC_AVX2_BINARY(unpacklo_epi16)
-__BADC_AVX2_BINARY(unpackhi_epi8)
-__BADC_AVX2_BINARY(unpackhi_epi16)
-__BADC_AVX2_BINARY(madd_epi16)
-__BADC_AVX2_BINARY(maddubs_epi16)
-__BADC_AVX2_BINARY(sad_epu8)
-__BADC_AVX2_BINARY(subs_epu16)
-__BADC_AVX2_BINARY(shuffle_epi8)
+__BADC_AVX2_BINARY(adds_epi8, paddsb256)
+__BADC_AVX2_BINARY(adds_epi16, paddsw256)
+__BADC_AVX2_BINARY(adds_epu8, paddusb256)
+__BADC_AVX2_BINARY(adds_epu16, paddusw256)
+__BADC_AVX2_BINARY(subs_epi8, psubsb256)
+__BADC_AVX2_BINARY(subs_epi16, psubsw256)
+__BADC_AVX2_BINARY(subs_epu8, psubusb256)
+__BADC_AVX2_BINARY(subs_epu16, psubusw256)
+__BADC_AVX2_BINARY(avg_epu8, pavgb256)
+__BADC_AVX2_BINARY(avg_epu16, pavgw256)
+__BADC_AVX2_BINARY(min_epi8, pminsb256)
+__BADC_AVX2_BINARY(min_epi16, pminsw256)
+__BADC_AVX2_BINARY(min_epi32, pminsd256)
+__BADC_AVX2_BINARY(min_epu8, pminub256)
+__BADC_AVX2_BINARY(min_epu16, pminuw256)
+__BADC_AVX2_BINARY(min_epu32, pminud256)
+__BADC_AVX2_BINARY(max_epi8, pmaxsb256)
+__BADC_AVX2_BINARY(max_epi16, pmaxsw256)
+__BADC_AVX2_BINARY(max_epi32, pmaxsd256)
+__BADC_AVX2_BINARY(max_epu8, pmaxub256)
+__BADC_AVX2_BINARY(max_epu16, pmaxuw256)
+__BADC_AVX2_BINARY(max_epu32, pmaxud256)
+__BADC_AVX2_BINARY(mulhi_epi16, pmulhw256)
+__BADC_AVX2_BINARY(mulhi_epu16, pmulhuw256)
+__BADC_AVX2_BINARY(mulhrs_epi16, pmulhrsw256)
+__BADC_AVX2_BINARY(mullo_epi16, pmullw256)
+__BADC_AVX2_BINARY(mul_epi32, pmuldq256)
+__BADC_AVX2_BINARY(sign_epi8, psignb256)
+__BADC_AVX2_BINARY(sign_epi16, psignw256)
+__BADC_AVX2_BINARY(sign_epi32, psignd256)
+__BADC_AVX2_BINARY(hadd_epi16, phaddw256)
+__BADC_AVX2_BINARY(hadd_epi32, phaddd256)
+__BADC_AVX2_BINARY(hadds_epi16, phaddsw256)
+__BADC_AVX2_BINARY(hsub_epi16, phsubw256)
+__BADC_AVX2_BINARY(hsub_epi32, phsubd256)
+__BADC_AVX2_BINARY(hsubs_epi16, phsubsw256)
+__BADC_AVX2_BINARY(cmpgt_epi8, pcmpgtb256)
+__BADC_AVX2_BINARY(cmpgt_epi16, pcmpgtw256)
+__BADC_AVX2_BINARY(packs_epi16, packsswb256)
+__BADC_AVX2_BINARY(packs_epi32, packssdw256)
+__BADC_AVX2_BINARY(packus_epi16, packuswb256)
+__BADC_AVX2_BINARY(packus_epi32, packusdw256)
+__BADC_AVX2_BINARY(unpacklo_epi8, punpcklbw256)
+__BADC_AVX2_BINARY(unpacklo_epi16, punpcklwd256)
+__BADC_AVX2_BINARY(unpacklo_epi32, punpckldq256)
+__BADC_AVX2_BINARY(unpacklo_epi64, punpcklqdq256)
+__BADC_AVX2_BINARY(unpackhi_epi8, punpckhbw256)
+__BADC_AVX2_BINARY(unpackhi_epi16, punpckhwd256)
+__BADC_AVX2_BINARY(unpackhi_epi32, punpckhdq256)
+__BADC_AVX2_BINARY(unpackhi_epi64, punpckhqdq256)
+__BADC_AVX2_BINARY(madd_epi16, pmaddwd256)
+__BADC_AVX2_BINARY(maddubs_epi16, pmaddubsw256)
+__BADC_AVX2_BINARY(sad_epu8, psadbw256)
+__BADC_AVX2_BINARY(shuffle_epi8, pshufb256)
 #undef __BADC_AVX2_BINARY
 
 /* VAES and VPCLMULQDQ: the AES-NI and PCLMULQDQ instruction on each 128-bit
@@ -480,28 +447,26 @@ __BADC_LANES(_mm256_aesdeclast_epi128, _mm_aesdeclast_si128)
 #define _mm256_clmulepi64_epi128(A, B, I) __BADC_AVX2_IMM2(_mm_clmulepi64_si128, A, B, I)
 
 static inline int _mm256_movemask_epi8(__m256i __A) {
-    return (int)((unsigned)_mm_movemask_epi8(__badc_lo_si(__A)) |
-                 (unsigned)_mm_movemask_epi8(__badc_hi_si(__A)) << 16);
+    return __builtin_ia32_pmovmskb256(__A);
 }
 
-#define __BADC_AVX2_UNARY(name)                                                   \
-    static inline __m256i _mm256_##name(__m256i __A) {                            \
-        return __badc_join_si(_mm_##name(__badc_lo_si(__A)), _mm_##name(__badc_hi_si(__A))); \
-    }
-__BADC_AVX2_UNARY(abs_epi8)
-__BADC_AVX2_UNARY(abs_epi16)
-__BADC_AVX2_UNARY(abs_epi32)
-#undef __BADC_AVX2_UNARY
+static inline __m256i _mm256_abs_epi8(__m256i __A) {
+    return (__m256i)__builtin_ia32_pabsb256(__A);
+}
 
-/* The shifts by a count, an int or a vector's low quadword, per half. */
+static inline __m256i _mm256_abs_epi16(__m256i __A) {
+    return (__m256i)__builtin_ia32_pabsw256(__A);
+}
+
+static inline __m256i _mm256_abs_epi32(__m256i __A) {
+    return (__m256i)__builtin_ia32_pabsd256(__A);
+}
+
+/* The shifts by a vector's low quadword, per half. */
 #define __BADC_AVX2_SHIFT(name, count)                                            \
     static inline __m256i _mm256_##name(__m256i __A, count __C) {                 \
         return __badc_join_si(_mm_##name(__badc_lo_si(__A), __C), _mm_##name(__badc_hi_si(__A), __C)); \
     }
-__BADC_AVX2_SHIFT(slli_epi16, int)
-__BADC_AVX2_SHIFT(srli_epi16, int)
-__BADC_AVX2_SHIFT(srai_epi16, int)
-__BADC_AVX2_SHIFT(srai_epi32, int)
 __BADC_AVX2_SHIFT(sll_epi16, __m128i)
 __BADC_AVX2_SHIFT(sll_epi32, __m128i)
 __BADC_AVX2_SHIFT(sll_epi64, __m128i)
@@ -1008,17 +973,11 @@ static inline __m256i _mm256_insertf128_si256(__m256i __A, __m128i __B, const in
     return _mm256_inserti128_si256(__A, __B, __N);
 }
 
-static inline __m256 _mm256_permute2f128_ps(__m256 __A, __m256 __B, const int __M) {
-    return (__m256)_mm256_permute2x128_si256((__m256i)__A, (__m256i)__B, __M);
-}
-
-static inline __m256d _mm256_permute2f128_pd(__m256d __A, __m256d __B, const int __M) {
-    return (__m256d)_mm256_permute2x128_si256((__m256i)__A, (__m256i)__B, __M);
-}
-
-static inline __m256i _mm256_permute2f128_si256(__m256i __A, __m256i __B, const int __M) {
-    return _mm256_permute2x128_si256(__A, __B, __M);
-}
+#define _mm256_permute2f128_ps(A, B, M)                                           \
+    ((__m256)_mm256_permute2x128_si256((__m256i)(A), (__m256i)(B), M))
+#define _mm256_permute2f128_pd(A, B, M)                                           \
+    ((__m256d)_mm256_permute2x128_si256((__m256i)(A), (__m256i)(B), M))
+#define _mm256_permute2f128_si256(A, B, M) _mm256_permute2x128_si256(A, B, M)
 
 /* VPERMILPS / VSHUFPS select within each 128-bit lane by the same imm8. */
 static inline __m256 _mm256_permute_ps(__m256 __A, const int __M) {
@@ -1324,9 +1283,7 @@ static inline __m256d _mm256_permutevar_pd(__m256d __A, __m256i __C) {
     return (__m256d)__r;
 }
 
-static inline __m256d _mm256_permute4x64_pd(__m256d __A, const int __M) {
-    return (__m256d)_mm256_permute4x64_epi64((__m256i)__A, __M);
-}
+#define _mm256_permute4x64_pd(A, M) ((__m256d)_mm256_permute4x64_epi64((__m256i)(A), M))
 
 static inline __m256 _mm256_permutevar8x32_ps(__m256 __A, __m256i __I) {
     return (__m256)_mm256_permutevar8x32_epi32((__m256i)__A, __I);

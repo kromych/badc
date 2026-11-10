@@ -55,6 +55,11 @@ pub(crate) enum Ret {
     V4hi,
     V2si,
     V1di,
+    /// The 32-byte vectors of the AVX2 forms.
+    V32qi,
+    V16hi,
+    V8si,
+    V4di,
     Int,
     Int64,
     Void,
@@ -74,6 +79,10 @@ impl Ret {
             Ret::V4hi => Some(Ty::Short),
             Ret::V2si => Some(Ty::Int),
             Ret::V1di => Some(Ty::LongLong),
+            Ret::V32qi => Some(Ty::Char),
+            Ret::V16hi => Some(Ty::Short),
+            Ret::V8si => Some(Ty::Int),
+            Ret::V4di => Some(Ty::LongLong),
             Ret::Int | Ret::Int64 | Ret::Void => None,
         }
     }
@@ -177,6 +186,15 @@ pub(crate) enum Sem {
     /// The low lane of the width converted to an integer of the row's
     /// `int_width`, by the rounding direction or truncating.
     ToInt(u8, bool),
+    /// The 32-byte forms that cross the 128-bit lanes: quadword `i` of the
+    /// result is quadword `imm[2i+1:2i]` of the source (`vpermq`).
+    Perm4x64,
+    /// Doubleword `i` is the source's doubleword the low three bits of the
+    /// first operand's doubleword `i` select (`vpermd`).
+    PermVar32,
+    /// Each 128-bit half is the half of either source, or zero, that the
+    /// immediate's nibble selects (`vperm2i128`).
+    Perm2x128,
 }
 
 impl Sem {
@@ -281,6 +299,28 @@ const fn op(
         sem,
         int_width,
         bytes: 16,
+    }
+}
+
+/// An AVX2 form over 32-byte vectors: the VEX instruction on ymm registers.
+/// One that does not cross the 128-bit lanes is its 128-bit row's
+/// operation on each half.
+const fn op256(
+    name: &'static str,
+    mnem: &'static str,
+    form: Form,
+    ret: Ret,
+    sem: Sem,
+    int_width: u8,
+) -> SimdOp {
+    SimdOp {
+        name,
+        mnem,
+        form,
+        ret,
+        sem,
+        int_width,
+        bytes: 32,
     }
 }
 
@@ -503,6 +543,95 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_rdseed16_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 2),
     op("__builtin_ia32_rdseed32_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 4),
     op("__builtin_ia32_rdseed64_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 8),
+    // The AVX2 forms over 32-byte vectors, as gcc names their builtins;
+    // the cross-lane permutations last.
+    op256("__builtin_ia32_pmullw256", "vpmullw", Form::Vv, Ret::V16hi, Sem::MulLo(2), 0),
+    op256("__builtin_ia32_pmulld256", "vpmulld", Form::Vv, Ret::V8si, Sem::MulLo(4), 0),
+    op256("__builtin_ia32_pmulhw256", "vpmulhw", Form::Vv, Ret::V16hi, Sem::MulHi(2, true), 0),
+    op256("__builtin_ia32_pmulhuw256", "vpmulhuw", Form::Vv, Ret::V16hi, Sem::MulHi(2, false), 0),
+    op256("__builtin_ia32_pmuldq256", "vpmuldq", Form::Vv, Ret::V4di, Sem::MulEven(true), 0),
+    op256("__builtin_ia32_pmuludq256", "vpmuludq", Form::Vv, Ret::V4di, Sem::MulEven(false), 0),
+    op256("__builtin_ia32_pmulhrsw256", "vpmulhrsw", Form::Vv, Ret::V16hi, Sem::MulHrs, 0),
+    op256("__builtin_ia32_pmaddwd256", "vpmaddwd", Form::Vv, Ret::V8si, Sem::MulAddWords, 0),
+    op256("__builtin_ia32_pmaddubsw256", "vpmaddubsw", Form::Vv, Ret::V16hi, Sem::MulAddBytes, 0),
+    op256("__builtin_ia32_psadbw256", "vpsadbw", Form::Vv, Ret::V4di, Sem::SadBytes, 0),
+    op256("__builtin_ia32_andnotsi256", "vpandn", Form::Vv, Ret::V4di, Sem::AndNot, 0),
+    op256("__builtin_ia32_pcmpeqb256", "vpcmpeqb", Form::Vv, Ret::V32qi, Sem::CmpEq(1), 0),
+    op256("__builtin_ia32_pcmpeqw256", "vpcmpeqw", Form::Vv, Ret::V16hi, Sem::CmpEq(2), 0),
+    op256("__builtin_ia32_pcmpeqd256", "vpcmpeqd", Form::Vv, Ret::V8si, Sem::CmpEq(4), 0),
+    op256("__builtin_ia32_pcmpeqq256", "vpcmpeqq", Form::Vv, Ret::V4di, Sem::CmpEq(8), 0),
+    op256("__builtin_ia32_pcmpgtb256", "vpcmpgtb", Form::Vv, Ret::V32qi, Sem::CmpGt(1), 0),
+    op256("__builtin_ia32_pcmpgtw256", "vpcmpgtw", Form::Vv, Ret::V16hi, Sem::CmpGt(2), 0),
+    op256("__builtin_ia32_pcmpgtd256", "vpcmpgtd", Form::Vv, Ret::V8si, Sem::CmpGt(4), 0),
+    op256("__builtin_ia32_pcmpgtq256", "vpcmpgtq", Form::Vv, Ret::V4di, Sem::CmpGt(8), 0),
+    op256("__builtin_ia32_paddsb256", "vpaddsb", Form::Vv, Ret::V32qi, Sem::AddSat(1, true), 0),
+    op256("__builtin_ia32_paddsw256", "vpaddsw", Form::Vv, Ret::V16hi, Sem::AddSat(2, true), 0),
+    op256("__builtin_ia32_paddusb256", "vpaddusb", Form::Vv, Ret::V32qi, Sem::AddSat(1, false), 0),
+    op256("__builtin_ia32_paddusw256", "vpaddusw", Form::Vv, Ret::V16hi, Sem::AddSat(2, false), 0),
+    op256("__builtin_ia32_psubsb256", "vpsubsb", Form::Vv, Ret::V32qi, Sem::SubSat(1, true), 0),
+    op256("__builtin_ia32_psubsw256", "vpsubsw", Form::Vv, Ret::V16hi, Sem::SubSat(2, true), 0),
+    op256("__builtin_ia32_psubusb256", "vpsubusb", Form::Vv, Ret::V32qi, Sem::SubSat(1, false), 0),
+    op256("__builtin_ia32_psubusw256", "vpsubusw", Form::Vv, Ret::V16hi, Sem::SubSat(2, false), 0),
+    op256("__builtin_ia32_pavgb256", "vpavgb", Form::Vv, Ret::V32qi, Sem::Avg(1), 0),
+    op256("__builtin_ia32_pavgw256", "vpavgw", Form::Vv, Ret::V16hi, Sem::Avg(2), 0),
+    op256("__builtin_ia32_pminsb256", "vpminsb", Form::Vv, Ret::V32qi, Sem::Min(1, true), 0),
+    op256("__builtin_ia32_pminsw256", "vpminsw", Form::Vv, Ret::V16hi, Sem::Min(2, true), 0),
+    op256("__builtin_ia32_pminsd256", "vpminsd", Form::Vv, Ret::V8si, Sem::Min(4, true), 0),
+    op256("__builtin_ia32_pminub256", "vpminub", Form::Vv, Ret::V32qi, Sem::Min(1, false), 0),
+    op256("__builtin_ia32_pminuw256", "vpminuw", Form::Vv, Ret::V16hi, Sem::Min(2, false), 0),
+    op256("__builtin_ia32_pminud256", "vpminud", Form::Vv, Ret::V8si, Sem::Min(4, false), 0),
+    op256("__builtin_ia32_pmaxsb256", "vpmaxsb", Form::Vv, Ret::V32qi, Sem::Max(1, true), 0),
+    op256("__builtin_ia32_pmaxsw256", "vpmaxsw", Form::Vv, Ret::V16hi, Sem::Max(2, true), 0),
+    op256("__builtin_ia32_pmaxsd256", "vpmaxsd", Form::Vv, Ret::V8si, Sem::Max(4, true), 0),
+    op256("__builtin_ia32_pmaxub256", "vpmaxub", Form::Vv, Ret::V32qi, Sem::Max(1, false), 0),
+    op256("__builtin_ia32_pmaxuw256", "vpmaxuw", Form::Vv, Ret::V16hi, Sem::Max(2, false), 0),
+    op256("__builtin_ia32_pmaxud256", "vpmaxud", Form::Vv, Ret::V8si, Sem::Max(4, false), 0),
+    op256("__builtin_ia32_packsswb256", "vpacksswb", Form::Vv, Ret::V32qi, Sem::PackSigned(2), 0),
+    op256("__builtin_ia32_packssdw256", "vpackssdw", Form::Vv, Ret::V16hi, Sem::PackSigned(4), 0),
+    op256("__builtin_ia32_packuswb256", "vpackuswb", Form::Vv, Ret::V32qi, Sem::PackUnsigned(2), 0),
+    op256("__builtin_ia32_packusdw256", "vpackusdw", Form::Vv, Ret::V16hi, Sem::PackUnsigned(4), 0),
+    op256("__builtin_ia32_punpcklbw256", "vpunpcklbw", Form::Vv, Ret::V32qi, Sem::UnpackLo(1), 0),
+    op256("__builtin_ia32_punpcklwd256", "vpunpcklwd", Form::Vv, Ret::V16hi, Sem::UnpackLo(2), 0),
+    op256("__builtin_ia32_punpckldq256", "vpunpckldq", Form::Vv, Ret::V8si, Sem::UnpackLo(4), 0),
+    op256("__builtin_ia32_punpcklqdq256", "vpunpcklqdq", Form::Vv, Ret::V4di, Sem::UnpackLo(8), 0),
+    op256("__builtin_ia32_punpckhbw256", "vpunpckhbw", Form::Vv, Ret::V32qi, Sem::UnpackHi(1), 0),
+    op256("__builtin_ia32_punpckhwd256", "vpunpckhwd", Form::Vv, Ret::V16hi, Sem::UnpackHi(2), 0),
+    op256("__builtin_ia32_punpckhdq256", "vpunpckhdq", Form::Vv, Ret::V8si, Sem::UnpackHi(4), 0),
+    op256("__builtin_ia32_punpckhqdq256", "vpunpckhqdq", Form::Vv, Ret::V4di, Sem::UnpackHi(8), 0),
+    op256("__builtin_ia32_pshufb256", "vpshufb", Form::Vv, Ret::V32qi, Sem::ShufB, 0),
+    op256("__builtin_ia32_psignb256", "vpsignb", Form::Vv, Ret::V32qi, Sem::Sign(1), 0),
+    op256("__builtin_ia32_psignw256", "vpsignw", Form::Vv, Ret::V16hi, Sem::Sign(2), 0),
+    op256("__builtin_ia32_psignd256", "vpsignd", Form::Vv, Ret::V8si, Sem::Sign(4), 0),
+    op256("__builtin_ia32_phaddw256", "vphaddw", Form::Vv, Ret::V16hi, Sem::HAdd(2, false), 0),
+    op256("__builtin_ia32_phaddd256", "vphaddd", Form::Vv, Ret::V8si, Sem::HAdd(4, false), 0),
+    op256("__builtin_ia32_phaddsw256", "vphaddsw", Form::Vv, Ret::V16hi, Sem::HAdd(2, true), 0),
+    op256("__builtin_ia32_phsubw256", "vphsubw", Form::Vv, Ret::V16hi, Sem::HSub(2, false), 0),
+    op256("__builtin_ia32_phsubd256", "vphsubd", Form::Vv, Ret::V8si, Sem::HSub(4, false), 0),
+    op256("__builtin_ia32_phsubsw256", "vphsubsw", Form::Vv, Ret::V16hi, Sem::HSub(2, true), 0),
+    op256("__builtin_ia32_palignr256", "vpalignr", Form::VvI, Ret::V4di, Sem::AlignR, 0),
+    op256("__builtin_ia32_pblendw256", "vpblendw", Form::VvI, Ret::V16hi, Sem::Blend(2), 0),
+    op256("__builtin_ia32_pshufd256", "vpshufd", Form::VI, Ret::V8si, Sem::ShufD, 0),
+    op256("__builtin_ia32_pshufhw256", "vpshufhw", Form::VI, Ret::V16hi, Sem::ShufHi, 0),
+    op256("__builtin_ia32_pshuflw256", "vpshuflw", Form::VI, Ret::V16hi, Sem::ShufLo, 0),
+    op256("__builtin_ia32_psllwi256", "vpsllw", Form::Shift, Ret::V16hi, Sem::Shl(2), 4),
+    op256("__builtin_ia32_pslldi256", "vpslld", Form::Shift, Ret::V8si, Sem::Shl(4), 4),
+    op256("__builtin_ia32_psllqi256", "vpsllq", Form::Shift, Ret::V4di, Sem::Shl(8), 4),
+    op256("__builtin_ia32_psrlwi256", "vpsrlw", Form::Shift, Ret::V16hi, Sem::Shr(2), 4),
+    op256("__builtin_ia32_psrldi256", "vpsrld", Form::Shift, Ret::V8si, Sem::Shr(4), 4),
+    op256("__builtin_ia32_psrlqi256", "vpsrlq", Form::Shift, Ret::V4di, Sem::Shr(8), 4),
+    op256("__builtin_ia32_psrawi256", "vpsraw", Form::Shift, Ret::V16hi, Sem::Sar(2), 4),
+    op256("__builtin_ia32_psradi256", "vpsrad", Form::Shift, Ret::V8si, Sem::Sar(4), 4),
+    op256("__builtin_ia32_pslldqi256", "vpslldq", Form::Shift, Ret::V4di, Sem::ShlBytes, 4),
+    op256("__builtin_ia32_psrldqi256", "vpsrldq", Form::Shift, Ret::V4di, Sem::ShrBytes, 4),
+    op256("__builtin_ia32_pabsb256", "vpabsb", Form::V, Ret::V32qi, Sem::Abs(1), 0),
+    op256("__builtin_ia32_pabsw256", "vpabsw", Form::V, Ret::V16hi, Sem::Abs(2), 0),
+    op256("__builtin_ia32_pabsd256", "vpabsd", Form::V, Ret::V8si, Sem::Abs(4), 0),
+    op256("__builtin_ia32_pmovmskb256", "vpmovmskb", Form::MoveMask, Ret::Int, Sem::Move, 4),
+    op256("__builtin_ia32_loaddqu256", "vmovdqu", Form::Load, Ret::V32qi, Sem::Move, 0),
+    op256("__builtin_ia32_storedqu256", "vmovdqu", Form::Store, Ret::Void, Sem::Move, 0),
+    op256("__builtin_ia32_permdi256", "vpermq", Form::VI, Ret::V4di, Sem::Perm4x64, 0),
+    op256("__builtin_ia32_permvarsi256", "vpermd", Form::Vv, Ret::V8si, Sem::PermVar32, 0),
+    op256("__builtin_ia32_permti256", "vperm2i128", Form::VvI, Ret::V4di, Sem::Perm2x128, 0),
     // The MMX forms over 8-byte vectors, as gcc names their builtins.
     op64("__builtin_ia32_paddsb", "paddsb", Ret::V8qi, Sem::AddSat(1, true)),
     op64("__builtin_ia32_paddsw", "paddsw", Ret::V4hi, Sem::AddSat(2, true)),
@@ -1100,8 +1229,54 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             }
         }
         Sem::Move | Sem::Rand => o = *a,
-        // `eval_float` computes these in a floating-point environment.
+        // `eval_float` computes these in a floating-point environment, and
+        // `eval_wide` the permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
+        Sem::Perm4x64 | Sem::PermVar32 | Sem::Perm2x128 => {}
+    }
+    o
+}
+
+/// A 32-byte form: a permutation across its 128-bit lanes over the whole
+/// vectors, any other operation on each half; `a` is the first operand
+/// (the data of `vpermd`, whose indices are `b`).
+pub(crate) fn eval_wide(sem: Sem, a: &[u8; 32], b: &[u8; 32], imm: u8, count: u64) -> [u8; 32] {
+    let mut o = [0u8; 32];
+    let half = |v: &[u8; 32], h: usize| -> [u8; 16] { v[16 * h..16 * h + 16].try_into().unwrap() };
+    match sem {
+        Sem::Perm4x64 => {
+            for i in 0..4 {
+                let s = usize::from(imm >> (2 * i) & 3);
+                o[8 * i..8 * i + 8].copy_from_slice(&a[8 * s..8 * s + 8]);
+            }
+        }
+        Sem::PermVar32 => {
+            for i in 0..8 {
+                let s = usize::from(b[4 * i] & 7);
+                o[4 * i..4 * i + 4].copy_from_slice(&a[4 * s..4 * s + 4]);
+            }
+        }
+        Sem::Perm2x128 => {
+            for h in 0..2 {
+                let sel = imm >> (4 * h) & 0xF;
+                if sel & 8 == 0 {
+                    let src = if sel & 2 == 0 { a } else { b };
+                    let k = usize::from(sel & 1);
+                    o[16 * h..16 * h + 16].copy_from_slice(&src[16 * k..16 * k + 16]);
+                }
+            }
+        }
+        _ => {
+            for h in 0..2 {
+                o[16 * h..16 * h + 16].copy_from_slice(&eval(
+                    sem,
+                    &half(a, h),
+                    &half(b, h),
+                    imm,
+                    count,
+                ));
+            }
+        }
     }
     o
 }

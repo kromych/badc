@@ -181,7 +181,13 @@ pub(crate) fn compute_frame(
         wide_regs: alloc
             .wide
             .iter()
-            .any(|&w| w >= super::ssa::reg_alloc::VecWidth::V256),
+            .any(|&w| w >= super::ssa::reg_alloc::VecWidth::V256)
+            || func.insts.iter().any(|i| match i {
+                Inst::X86Simd { op, .. } | Inst::X86SimdVal { op, .. } => {
+                    crate::c5::x86_simd::get(*op).bytes >= 32
+                }
+                _ => false,
+            }),
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,

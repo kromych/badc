@@ -15,6 +15,9 @@ pub(super) fn emit_x86_simd(
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
+    if x86_simd::get(op).bytes == 32 {
+        return emit_x86_simd_ymm(code, op, imm, args, alloc, frame);
+    }
     let dst_x: u8 = frame.fp_scratch[1];
     let src_x: u8 = frame.fp_scratch[0];
     let row = x86_simd::get(op);
@@ -454,6 +457,9 @@ pub(super) fn emit_x86_simd_val(
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
+    if row.bytes == 32 {
+        return emit_x86_simd_val_ymm(code, op, imm, args, dst, alloc, frame);
+    }
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let xmm = |n: u8| Concrete::Reg {
         reg: XMM_BASE + n,
@@ -1862,5 +1868,230 @@ pub(super) fn emit_atomic_cas(
     }
     emit_lock_cmpxchg_mem_r(code, a, 0, d, width);
     finish_atomic(code, &[&acc], dst, Reg::RAX, frame);
+    Ok(())
+}
+
+/// The operands of an AVX2 form in AT&T order for its VEX instruction:
+/// `[imm8,] src2, src1, dst` with `a` the first source; `vpermd` reads its
+/// indices from VEX.vvvv, its second operand, and a one-source form names
+/// no `b`.
+fn ymm_operands(
+    row: &crate::c5::x86_simd::SimdOp,
+    imm: Option<u8>,
+    a: u8,
+    b: Option<u8>,
+    d: u8,
+) -> alloc::vec::Vec<super::asm::Concrete> {
+    use super::asm::{Concrete, YMM_BASE};
+    use crate::c5::x86_simd::{Form, Sem};
+    let ymm = |n: u8| Concrete::Reg {
+        reg: YMM_BASE + n,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    };
+    let mut ops = alloc::vec::Vec::with_capacity(4);
+    if matches!(row.form, Form::VvI | Form::VI) {
+        ops.push(Concrete::Imm(i64::from(imm.unwrap_or(0))));
+    }
+    match (b, row.sem) {
+        (Some(b), Sem::PermVar32) => ops.extend([ymm(a), ymm(b)]),
+        (Some(b), _) => ops.extend([ymm(b), ymm(a)]),
+        (None, _) => ops.push(ymm(a)),
+    }
+    ops.push(ymm(d));
+    ops
+}
+
+fn encode_ymm(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) -> Emit {
+    let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+    super::asm::encode(code, 8, m, None, ops).or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+}
+
+/// `vpsll*` / `vpsrl*` / `vpsra*` of ymm `a` into `d` by an immediate, or by
+/// the count operand moved into the low quadword of xmm `scratch`.
+fn ymm_shift(
+    code: &mut Vec<u8>,
+    mnem: &'static str,
+    imm: Option<u8>,
+    count: Option<Reg>,
+    (a, d, scratch): (u8, u8, u8),
+) -> Emit {
+    use super::asm::{Concrete, XMM_BASE, YMM_BASE};
+    let reg = |base: u8, n: u8| Concrete::Reg {
+        reg: base + n,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    };
+    let by = match (imm, count) {
+        (Some(i), _) => Concrete::Imm(i64::from(i)),
+        (None, Some(c)) => {
+            emit_vmovq_xmm_r(code, Reg(scratch), c);
+            reg(XMM_BASE, scratch)
+        }
+        (None, None) => return fail("x86 simd: shift count has no place"),
+    };
+    encode_ymm(code, mnem, &[by, reg(YMM_BASE, a), reg(YMM_BASE, d)])
+}
+
+/// [`emit_x86_simd`] for an AVX2 form: the 32-byte operands load into the
+/// FP scratch ymm registers through their addresses, and the result
+/// stores through the destination's.
+fn emit_x86_simd_ymm(
+    code: &mut Vec<u8>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[super::super::ir::ValueId],
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use crate::c5::x86_simd::{self, Form};
+    let row = x86_simd::get(op);
+    let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Emit<Reg> {
+        let place = args
+            .get(i)
+            .and_then(|&a| alloc.places.get(a as usize).copied());
+        match place.and_then(|p| materialize_int(code, p, scratch, frame)) {
+            Some(r) => Ok(r),
+            None => fail(alloc::format!("x86 simd: operand {i} has no place")),
+        }
+    };
+    let load = |code: &mut Vec<u8>, i: usize, n: u8| -> Emit {
+        let a = operand(code, i, SCRATCH_R10)?;
+        emit_vmovups_ymm_mem(code, Reg(n), a, 0);
+        Ok(())
+    };
+    let store_dst = |code: &mut Vec<u8>, n: u8| -> Emit {
+        let d = operand(code, 0, SCRATCH_R10)?;
+        emit_vmovups_mem_ymm(code, d, 0, Reg(n));
+        Ok(())
+    };
+    match row.form {
+        Form::Vv | Form::VvI => {
+            load(code, 1, dst_x)?;
+            load(code, 2, src_x)?;
+            encode_ymm(
+                code,
+                row.mnem,
+                &ymm_operands(row, imm, dst_x, Some(src_x), dst_x),
+            )?;
+        }
+        Form::V | Form::VI => {
+            load(code, 1, src_x)?;
+            encode_ymm(code, row.mnem, &ymm_operands(row, imm, src_x, None, dst_x))?;
+        }
+        Form::Shift => {
+            load(code, 1, dst_x)?;
+            let count = match imm {
+                Some(_) => None,
+                None => Some(operand(code, 2, SCRATCH_R10)?),
+            };
+            ymm_shift(code, row.mnem, imm, count, (dst_x, dst_x, src_x))?;
+        }
+        Form::Load => load(code, 1, dst_x)?,
+        Form::Store => {
+            load(code, 1, dst_x)?;
+            let p = operand(code, 0, SCRATCH_R10)?;
+            emit_vmovups_mem_ymm(code, p, 0, Reg(dst_x));
+            return Ok(());
+        }
+        Form::MoveMask => {
+            load(code, 1, src_x)?;
+            let r11 = super::asm::Concrete::Reg {
+                reg: SCRATCH_R11.0,
+                size: crate::c5::ir::AsmRegSize::Long,
+            };
+            encode_ymm(
+                code,
+                row.mnem,
+                &[ymm_operands(row, None, src_x, None, 0)[0], r11],
+            )?;
+            let d = operand(code, 0, SCRATCH_R10)?;
+            emit_mov_mem32_r(code, d, 0, SCRATCH_R11);
+            return Ok(());
+        }
+        _ => return fail(alloc::format!("x86 simd: {} has no 32-byte form", row.name)),
+    }
+    store_dst(code, dst_x)
+}
+
+/// [`emit_x86_simd_val`] for an AVX2 form: the VEX instruction on the
+/// operands' ymm registers, a spilled one loaded into an FP scratch, and
+/// the result formed in its register or in a scratch it is stored from.
+fn emit_x86_simd_val_ymm(
+    code: &mut Vec<u8>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[super::super::ir::ValueId],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use crate::c5::x86_simd::{self, Form};
+    let row = x86_simd::get(op);
+    let w = VecWidth::V256;
+    let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let place = |i: usize| {
+        args.get(i)
+            .and_then(|&a| alloc.places.get(a as usize).copied())
+    };
+    let vector = |code: &mut Vec<u8>, i: usize, scratch: u8| -> Emit<u8> {
+        match place(i).and_then(|p| materialize_wide(code, w, p, Reg(scratch), frame)) {
+            Some(r) => Ok(r.0),
+            None => fail(alloc::format!("x86 simd: operand {i} has no place")),
+        }
+    };
+    let rd = match dst {
+        Place::FpReg(r) => r,
+        _ => sa,
+    };
+    match row.form {
+        Form::Vv | Form::VvI => {
+            let a = vector(code, 0, sa)?;
+            let b = vector(code, 1, sb)?;
+            encode_ymm(code, row.mnem, &ymm_operands(row, imm, a, Some(b), rd))?;
+        }
+        Form::V | Form::VI => {
+            let a = vector(code, 0, sa)?;
+            encode_ymm(code, row.mnem, &ymm_operands(row, imm, a, None, rd))?;
+        }
+        Form::Shift => {
+            let a = vector(code, 0, sa)?;
+            let count = match imm {
+                Some(_) => None,
+                None => match place(1).and_then(|p| materialize_int(code, p, SCRATCH_R10, frame)) {
+                    Some(c) => Some(c),
+                    None => return fail("x86 simd: shift count has no place"),
+                },
+            };
+            ymm_shift(code, row.mnem, imm, count, (a, rd, sb))?;
+        }
+        Form::MoveMask => {
+            let a = vector(code, 0, sa)?;
+            let ymm_a = ymm_operands(row, None, a, None, 0)[0];
+            let form = |code: &mut Vec<u8>, r: Reg| {
+                let gpr = super::asm::Concrete::Reg {
+                    reg: r.0,
+                    size: crate::c5::ir::AsmRegSize::Long,
+                };
+                encode_ymm(code, row.mnem, &[ymm_a, gpr])
+            };
+            return match dst {
+                Place::IntReg(r) => form(code, Reg(r)),
+                Place::Spill(slot) => {
+                    form(code, SCRATCH_R11)?;
+                    let (sbase, off) = spill_slot_addr(frame, slot);
+                    emit_mov_mem_r(code, sbase, off, SCRATCH_R11);
+                    Ok(())
+                }
+                _ => fail("x86 simd: integer result not int reg / spill"),
+            };
+        }
+        _ => {
+            return fail(alloc::format!(
+                "x86 simd: {} has no 32-byte value form",
+                row.name
+            ));
+        }
+    }
+    mirror_wide_dst(code, w, dst, Reg(rd), frame);
     Ok(())
 }

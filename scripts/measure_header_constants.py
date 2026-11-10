@@ -35,7 +35,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from measure_header_targets import TARGETS  # noqa: E402
+from measure_header_targets import TARGETS, require_current_badc  # noqa: E402
 from measure_record_layouts import int64s, placed, prelude, probe_bytes, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "header-constants"
@@ -96,6 +96,7 @@ def main() -> int:
                     "llvm-objcopy, for a reference compiler of another machine")
     ap.add_argument("--badc", default=str(REPO / "target" / "release" / "badc"))
     args = ap.parse_args()
+    require_current_badc(args.badc)
     cc = args.cc.split()
     predefined = badc_macros(args.badc, args.target, "") or {}
     seen: set[str] = set(predefined)

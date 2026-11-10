@@ -36,6 +36,22 @@ PREREQS = {
 }
 
 
+def require_current_badc(badc: str) -> None:
+    """Stop unless `badc` embeds this tree's headers, which the tables
+    measure: a release build without the `full` feature leaves an older
+    `target/release/badc` in place."""
+    out = subprocess.run([badc, "--dump-headers"], capture_output=True, check=True).stdout
+    parts = re.split(rb"^// ===== (.+) =====\n", out, flags=re.M)
+    embedded = {n.decode(): t.rstrip(b"\n") for n, t in zip(parts[1::2], parts[2::2])}
+    stale = [f.relative_to(root).as_posix()
+             for root in (REPO / "libc" / "include", REPO / "libc" / "compiler" / "include")
+             for f in sorted(root.rglob("*.h"))
+             if embedded.get(f.relative_to(root).as_posix()) != f.read_bytes().rstrip(b"\n")]
+    if stale:
+        sys.exit(f"{badc} embeds other headers than libc/ has ({', '.join(stale[:4])}); "
+                 "rebuild it: cargo build --release --features full")
+
+
 def registry_names() -> list[str]:
     text = REGISTRY.read_text()
     start = text.index("static EMBEDDED_HEADERS")

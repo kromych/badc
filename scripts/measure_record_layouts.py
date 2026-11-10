@@ -35,7 +35,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from measure_header_targets import FEATURES, PREREQS, TABLE, TARGETS, registry_names  # noqa: E402
+from measure_header_targets import (  # noqa: E402
+    FEATURES, PREREQS, TABLE, TARGETS, registry_names, require_current_badc)
 
 OUT_DIR = REPO / "libc" / "record-layouts"
 
@@ -229,6 +230,7 @@ def main() -> int:
                     "llvm-objcopy, for a reference compiler of another machine")
     ap.add_argument("--badc", default=str(REPO / "target" / "release" / "badc"))
     args = ap.parse_args()
+    require_current_badc(args.badc)
     cc = args.cc.split()
     seen: set[str] = set()
     out = [f"# Reference record layouts for {args.target}, written by "

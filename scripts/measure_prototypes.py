@@ -38,7 +38,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from measure_header_targets import TARGETS  # noqa: E402
+from measure_header_targets import TARGETS, require_current_badc  # noqa: E402
 from measure_record_layouts import prelude, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "prototypes"
@@ -114,6 +114,7 @@ def main() -> int:
     ap.add_argument("--cc", required=True, help="the reference compiler")
     ap.add_argument("--badc", default=str(REPO / "target" / "release" / "badc"))
     args = ap.parse_args()
+    require_current_badc(args.badc)
     cc = args.cc.split()
     seen: set[str] = set()
     out = [f"# Function declarations the reference finds compatible on {args.target},",

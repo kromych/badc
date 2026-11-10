@@ -708,7 +708,7 @@ mach_absolute_time	unsigned long long (*)(void)
 mach_approximate_time	unsigned long long (*)(void)
 mach_continuous_approximate_time	unsigned long long (*)(void)
 mach_continuous_time	unsigned long long (*)(void)
-mach_timebase_info	int (*)(struct mach_timebase_info*)
+mach_timebase_info	int (*)(mach_timebase_info_data_t*)
 mach_wait_until	int (*)(unsigned long long)
 
 mach/mach.h y
@@ -995,7 +995,7 @@ fmtmsg	int (*)(long, const char*, int, const char*, const char*, const char*)
 search.h y
 hcreate	int (*)(unsigned long)
 hdestroy	void (*)(void)
-hsearch	struct entry* (*)(struct entry, ACTION)
+hsearch	ENTRY* (*)(ENTRY, ACTION)
 insque	void (*)(void*, void*)
 lfind	void* (*)(const void*, const void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
 lsearch	void* (*)(const void*, void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
@@ -1061,9 +1061,9 @@ _os_log_internal	void (*)(void*, struct os_log_s*, unsigned char, const char*, .
 os_log_create	struct os_log_s* (*)(const char*, const char*)
 
 os/lock.h y
-os_unfair_lock_lock	void (*)(struct os_unfair_lock_s*)
-os_unfair_lock_trylock	_Bool (*)(struct os_unfair_lock_s*)
-os_unfair_lock_unlock	void (*)(struct os_unfair_lock_s*)
+os_unfair_lock_lock	void (*)(os_unfair_lock*)
+os_unfair_lock_trylock	_Bool (*)(os_unfair_lock*)
+os_unfair_lock_unlock	void (*)(os_unfair_lock*)
 
 crt_externs.h y
 _NSGetArgc	int* (*)(void)

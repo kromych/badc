@@ -6,19 +6,19 @@ with, which a unit test holds badc's declarations against.
 For each header `libc/header-targets.txt` marks as shipped by the target's
 reference toolchain, badc lists the functions a unit including it declares,
 each with its type as a pointer to the function (`--dump-prototypes`). A
-probe built with the reference compiler checks
-`__builtin_types_compatible_p(__typeof__(&name), <badc's type>)` for each:
-a failed check is a declaration that differs from the C library's, which
-the run reports and leaves out; a function the reference does not declare
-is left out. A function is listed under the first header, in registry
-order, whose unit declares it.
+probe built with the reference compiler initializes a pointer of badc's
+type with each, `static __typeof__(<badc's type>) p = &name;`, incompatible
+pointer types an error: a failed initialization is a declaration that
+differs from the C library's, which the run reports and leaves out; a
+function the reference does not declare is left out. gcc records a
+`noreturn` or `const` attribute as a qualifier of the function type, which
+the initialization only drops, so gcc serves as well as clang. A function
+is listed under the first header, in registry order, whose unit declares
+it.
 
-TODO(#2024): the Windows targets.
+TODO(#2024): windows-arm64.
 
-Run on a machine of the target, against a built badc, with clang: gcc's
-`__builtin_types_compatible_p` counts a `noreturn` or `const` function
-attribute as a qualifier of the function type, so it rejects the matching
-declaration of `exit` or `cos`.
+Run on a machine of the target, against a built badc:
 
     scripts/measure_prototypes.py --target linux-x64 --cc clang
     scripts/measure_prototypes.py --target macos-aarch64 --cc /usr/bin/clang
@@ -40,14 +40,22 @@ from measure_header_targets import TARGETS  # noqa: E402
 from measure_record_layouts import prelude, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "prototypes"
+# Incompatible pointer types are the one diagnostic that fails a check.
+FLAGS = ["-fsyntax-only", "-w", "-Werror=incompatible-pointer-types"]
 # Declarations badc keeps different on purpose, reported as departures.
 GNU_ENUM = ("glibc's _GNU_SOURCE declaration takes the resource, priority or "
             "timer selector as an enum compatible with unsigned int; badc keeps "
             "POSIX's int")
+SDK = "the Windows SDK's declaration, which mingw-w64 departs from"
+OFF_T = "off_t is 64-bit, as mingw-w64 makes it under _FILE_OFFSET_BITS=64"
 DEPARTURES = {
-    ("linux", n): GNU_ENUM
-    for n in ("getrlimit", "setrlimit", "prlimit", "getpriority", "setpriority",
-              "getitimer", "setitimer")
+    **{("linux", n): GNU_ENUM
+       for n in ("getrlimit", "setrlimit", "prlimit", "getpriority", "setpriority",
+                 "getitimer", "setitimer")},
+    **{("windows", n): SDK
+       for n in ("_atoflt", "_atoflt_l", "RtlAddFunctionTable", "RtlDeleteFunctionTable",
+                 "RtlLookupFunctionEntry", "RtlVirtualUnwind")},
+    **{("windows", n): OFF_T for n in ("ftruncate", "truncate")},
 }
 # The compilers' intrinsic headers: their vector types are each compiler's
 # own, which no declaration of the other's is compatible with.
@@ -73,20 +81,20 @@ def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], l
     for _ in range(256):
         head = "#include <stdarg.h>\n" + src
         first = head.count("\n") + 1
-        lines = [f"_Static_assert(__builtin_types_compatible_p(__typeof__(&{n}), {protos[n]}), "
-                 f"\"{n}\");" for n in kept]
+        lines = [f"static __typeof__({protos[n]}) __badc_p{i} = &{n};"
+                 for i, n in enumerate(kept)]
         text = head + "\n".join(lines) + "\n"
         with tempfile.TemporaryDirectory() as tmp:
             c = os.path.join(tmp, "probe.c")
             Path(c).write_text(text)
-            r = subprocess.run(cc + ["-w", "-fsyntax-only", c], capture_output=True, text=True)
+            r = subprocess.run(cc + FLAGS + [c], capture_output=True, text=True)
         if r.returncode == 0:
             return kept, differ
         failed, other = set(), set()
         for m in re.finditer(r"probe\.c:(\d+):\d+: error: (.*)", r.stderr):
             i = int(m.group(1)) - first
             if 0 <= i < len(kept):
-                (failed if "static assert" in m.group(2) else other).add(kept[i])
+                (failed if "incompatible" in m.group(2) else other).add(kept[i])
         # A line with any other error names a function the reference does
         # not declare, or a type it cannot spell: not comparable.
         failed -= other

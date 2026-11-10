@@ -94,3 +94,11 @@ fn linux_aarch64_declarations_are_glibcs() {
         include_str!("../../../libc/prototypes/linux-aarch64.txt"),
     );
 }
+
+#[test]
+fn windows_x64_declarations_are_mingw_w64s() {
+    check(
+        Target::WindowsX64,
+        include_str!("../../../libc/prototypes/windows-x64.txt"),
+    );
+}

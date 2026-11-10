@@ -3568,10 +3568,10 @@ impl Compiler {
     }
 
     /// Each file-scope function declaration with a prototype, and its type
-    /// as a pointer to it, spelled in C. A record or enum whose tag is the
-    /// implementation's own (a leading underscore) or absent is spelled by
-    /// the typedef name that reaches it, and a `va_list` parameter by that
-    /// name.
+    /// as a pointer to it, spelled in C. A record or enum a typedef names is
+    /// spelled by the first such name, as the tag may be the implementation's
+    /// own or absent where the C library's typedef is the interface, and a
+    /// `va_list` parameter by that name.
     fn function_prototypes(&self) -> Vec<(String, String)> {
         // A copy of the registry whose entries to rename carry a placeholder
         // tag, replaced in the spelling by the typedef name.
@@ -3579,8 +3579,7 @@ impl Compiler {
         let mut names: Vec<(String, &str)> = Vec::new();
         let rename = |structs: &mut Vec<StructDef>, id: usize| -> Option<String> {
             let d = &mut structs[id];
-            let implementation = d.name.is_empty() || d.is_anonymous || d.name.starts_with('_');
-            if d.name.starts_with("__badc_typedef_") || !implementation {
+            if d.name.starts_with("__badc_typedef_") {
                 return None;
             }
             let kind = match (d.enum_underlying.is_some(), d.is_union) {

@@ -810,6 +810,7 @@ srandom                                  GLIBC_2.17
 stat                                     GLIBC_2.33
 statfs                                   GLIBC_2.17
 statvfs                                  GLIBC_2.17
+statx                                    GLIBC_2.28
 stderr                                   GLIBC_2.17
 stdin                                    GLIBC_2.17
 stdout                                   GLIBC_2.17

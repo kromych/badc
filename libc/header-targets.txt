@@ -140,6 +140,7 @@ sys/mman.h	y	y	y	-	-
 sys/random.h	y	y	y	-	-
 sys/syscall.h	y	y	y	-	-
 asm/unistd.h	-	y	y	-	-
+asm/types.h	-	y	y	-	-
 linux/unistd.h	-	y	y	-	-
 libintl.h	-	y	y	o	o
 elf.h	-	y	y	-	-
@@ -284,5 +285,15 @@ linux/fd.h	-	y	y	-	-
 linux/can.h	-	y	y	-	-
 linux/can/raw.h	-	y	y	-	-
 linux/can/j1939.h	-	y	y	-	-
+netpacket/packet.h	-	y	y	-	-
+linux/if_alg.h	-	y	y	-	-
+linux/netlink.h	-	y	y	-	-
+linux/tipc.h	-	y	y	-	-
+linux/qrtr.h	-	y	y	-	-
+linux/netfilter.h	-	y	y	-	-
+linux/netfilter_ipv4.h	-	y	y	-	-
+linux/can/bcm.h	-	y	y	-	-
+linux/can/isotp.h	-	y	y	-	-
+linux/prctl.h	-	y	y	-	-
 msvc_compat.h	-	-	-	-	-
 memory.h	y	y	y	y	y

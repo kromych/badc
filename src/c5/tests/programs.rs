@@ -4602,6 +4602,39 @@ fn lockf_commands_nodev_and_j1939_header() {
 }
 
 #[test]
+fn linux_socket_family_prctl_and_statx_headers() {
+    use crate::{CompileOptions, Compiler, Target};
+    // glibc's AF_*/SOL_* set, the AF_PACKET, AF_ALG, AF_NETLINK, AF_TIPC and
+    // AF_QIPCRTR address headers, netfilter, CAN BCM and ISO-TP, the uapi
+    // <linux/prctl.h>, and statx() under _GNU_SOURCE; sizes match gcc's.
+    let src = "#define _GNU_SOURCE\n#include <fcntl.h>\n#include <sys/stat.h>\n\
+               #include <sys/socket.h>\n#include <sys/prctl.h>\n\
+               #include <asm/types.h>\n#include <netpacket/packet.h>\n#include <linux/if_alg.h>\n\
+               #include <linux/netlink.h>\n#include <linux/tipc.h>\n#include <linux/qrtr.h>\n\
+               #include <linux/netfilter_ipv4.h>\n#include <linux/can/bcm.h>\n\
+               #include <linux/can/isotp.h>\n\
+               int ck[(AF_NETLINK==16 && AF_PACKET==17 && AF_TIPC==30 && AF_ALG==38 \
+               && AF_QIPCRTR==42 && AF_MAX==46 && PF_PACKET==AF_PACKET && SOL_PACKET==263 \
+               && SOL_NETLINK==270 && SOL_TIPC==271 && SOL_ALG==279 && SOL_VSOCK==287 \
+               && sizeof(struct sockaddr_ll)==20 && sizeof(struct sockaddr_alg)==88 \
+               && sizeof(struct sockaddr_nl)==12 && NLMSG_HDRLEN==16 && NLMSG_SPACE(1)==20 \
+               && sizeof(struct sockaddr_tipc)==16 && SIOCGETNODEID==0x89E1 \
+               && sizeof(struct sockaddr_qrtr)==12 && sizeof(struct qrtr_ctrl_pkt)==20 \
+               && SO_ORIGINAL_DST==80 && sizeof(union nf_inet_addr)==16 \
+               && sizeof(struct bcm_msg_head)==56 && SOL_CAN_ISOTP==106 \
+               && sizeof(struct can_isotp_options)==12 && PR_SET_VMA==0x53564d41 \
+               && PR_SET_VMA_ANON_NAME==0 && sizeof(struct statx)==256 \
+               && STATX_BTIME==0x800 && AT_STATX_DONT_SYNC==0x4000)?1:-1];\n\
+               int use(struct statx *b){ return statx(AT_FDCWD, \".\", 0, \
+               STATX_BASIC_STATS, b) + (int)tipc_addr(1, 2, 3); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = Compiler::with_options(src.to_string(), target, opts).compile();
+        assert!(compiled.is_ok(), "{target:?}: {:?}", compiled.err());
+    }
+}
+
+#[test]
 fn linux_block_device_and_file_headers() {
     use crate::{CompileOptions, Compiler, Target};
     // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /

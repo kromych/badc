@@ -1,9 +1,7 @@
-// linux/types.h -- the kernel fixed-width and endian-annotated types used by
-// the uapi headers (real linux/types.h pulls these from
-// <asm-generic/int-ll64.h> plus the __bitwise aliases). `__bitwise` is a
-// sparse-only annotation, empty in a normal build. Self-contained, matching
-// the bundled linux/ shims. (__u128/__s128 carry aligned(16) and are unused
-// here, so omitted.)
+// linux/types.h -- the kernel fixed-width types (<asm/types.h>) and the
+// endian-annotated aliases used by the uapi headers. `__bitwise` is a
+// sparse-only annotation, empty in a normal build. (__u128/__s128 carry
+// aligned(16) and are unused here, so omitted.)
 
 #pragma once
 
@@ -12,14 +10,7 @@
 #define __bitwise
 #endif
 
-typedef signed char __s8;
-typedef unsigned char __u8;
-typedef signed short __s16;
-typedef unsigned short __u16;
-typedef signed int __s32;
-typedef unsigned int __u32;
-typedef signed long long __s64;
-typedef unsigned long long __u64;
+#include <asm/types.h>
 
 typedef __u16 __bitwise __le16;
 typedef __u16 __bitwise __be16;

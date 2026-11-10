@@ -81,18 +81,6 @@ POSIX_INCLUDES = ["Include", "Include/internal", "."]
 _POSIX_UNDEF = ["_Py_HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR"]
 # Linux modules badc cannot yet build: ELF/process introspection.
 _LINUX_EXCLUDE = [("Modules/_remote_debugging/", "_remote_debugging")]
-# pyconfig advertises headers badc's bundled set does not provide; undefining the
-# HAVE_ macros makes the module take a supported path: socket builds the common
-# families, VSOCK, raw CAN and J1939 without the AF_PACKET/NETLINK/TIPC/QRTR/ALG,
-# CAN BCM/ISOTP and netfilter address handling, the allocators do not name
-# their mappings (<linux/prctl.h>), and os.stat does not offer statx.
-_LINUX_UNDEF = [
-    "HAVE_NETPACKET_PACKET_H", "HAVE_SOCKADDR_ALG",
-    "HAVE_LINUX_NETLINK_H", "HAVE_LINUX_TIPC_H",
-    "HAVE_LINUX_QRTR_H", "HAVE_LINUX_NETFILTER_IPV4_H",
-    "HAVE_LINUX_CAN_BCM_H", "HAVE_LINUX_CAN_ISOTP_H",
-    "_Py_HAVE_PR_SET_VMA_ANON_NAME", "HAVE_STATX",
-]
 
 # --- Windows targets -------------------------------------------------------
 
@@ -181,7 +169,7 @@ TARGETS = {
         "asm_trampoline": True,
         # badc has no x86 SSE/AVX intrinsics; build HACL's scalar BLAKE2 and drop
         # the vectorized variants (the runtime dispatch checks these macros).
-        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF
+        "undef_haves": _POSIX_UNDEF
         + ["_Py_HACL_CAN_COMPILE_VEC128", "_Py_HACL_CAN_COMPILE_VEC256"],
         "exclude": _LINUX_EXCLUDE + [
             ("Hacl_Hash_Blake2s_Simd128.c", "_blake2_simd128"),
@@ -190,7 +178,7 @@ TARGETS = {
     },
     "linux-aarch64": {
         "asm_trampoline": True,
-        "undef_haves": _POSIX_UNDEF + _LINUX_UNDEF,
+        "undef_haves": _POSIX_UNDEF,
         "exclude": _LINUX_EXCLUDE,
     },
     # The Windows interpreter links the legacy msvcrt.dll CRT, several of whose

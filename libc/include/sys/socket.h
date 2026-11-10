@@ -42,9 +42,52 @@
 #elif defined(_WIN32)
 #define AF_INET6    23
 #elif defined(__linux__)
-#define AF_INET6    10
-#define AF_CAN      29
-#define AF_VSOCK    40
+#define AF_FILE       AF_UNIX
+#define AF_AX25       3
+#define AF_IPX        4
+#define AF_APPLETALK  5
+#define AF_NETROM     6
+#define AF_BRIDGE     7
+#define AF_ATMPVC     8
+#define AF_X25        9
+#define AF_INET6      10
+#define AF_ROSE       11
+#define AF_DECnet     12
+#define AF_NETBEUI    13
+#define AF_SECURITY   14
+#define AF_KEY        15
+#define AF_NETLINK    16
+#define AF_ROUTE      AF_NETLINK
+#define AF_PACKET     17
+#define AF_ASH        18
+#define AF_ECONET     19
+#define AF_ATMSVC     20
+#define AF_RDS        21
+#define AF_SNA        22
+#define AF_IRDA       23
+#define AF_PPPOX      24
+#define AF_WANPIPE    25
+#define AF_LLC        26
+#define AF_IB         27
+#define AF_MPLS       28
+#define AF_CAN        29
+#define AF_TIPC       30
+#define AF_BLUETOOTH  31
+#define AF_IUCV       32
+#define AF_RXRPC      33
+#define AF_ISDN       34
+#define AF_PHONET     35
+#define AF_IEEE802154 36
+#define AF_CAIF       37
+#define AF_ALG        38
+#define AF_NFC        39
+#define AF_VSOCK      40
+#define AF_KCM        41
+#define AF_QIPCRTR    42
+#define AF_SMC        43
+#define AF_XDP        44
+#define AF_MCTP       45
+#define AF_MAX        46
 #endif
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
@@ -67,8 +110,51 @@
 #define PF_INET   AF_INET
 #define PF_INET6  AF_INET6
 #ifdef __linux__
-#define PF_CAN    AF_CAN
-#define PF_VSOCK  AF_VSOCK
+#define PF_FILE       AF_UNIX
+#define PF_AX25       AF_AX25
+#define PF_IPX        AF_IPX
+#define PF_APPLETALK  AF_APPLETALK
+#define PF_NETROM     AF_NETROM
+#define PF_BRIDGE     AF_BRIDGE
+#define PF_ATMPVC     AF_ATMPVC
+#define PF_X25        AF_X25
+#define PF_ROSE       AF_ROSE
+#define PF_DECnet     AF_DECnet
+#define PF_NETBEUI    AF_NETBEUI
+#define PF_SECURITY   AF_SECURITY
+#define PF_KEY        AF_KEY
+#define PF_NETLINK    AF_NETLINK
+#define PF_ROUTE      AF_NETLINK
+#define PF_PACKET     AF_PACKET
+#define PF_ASH        AF_ASH
+#define PF_ECONET     AF_ECONET
+#define PF_ATMSVC     AF_ATMSVC
+#define PF_RDS        AF_RDS
+#define PF_SNA        AF_SNA
+#define PF_IRDA       AF_IRDA
+#define PF_PPPOX      AF_PPPOX
+#define PF_WANPIPE    AF_WANPIPE
+#define PF_LLC        AF_LLC
+#define PF_IB         AF_IB
+#define PF_MPLS       AF_MPLS
+#define PF_CAN        AF_CAN
+#define PF_TIPC       AF_TIPC
+#define PF_BLUETOOTH  AF_BLUETOOTH
+#define PF_IUCV       AF_IUCV
+#define PF_RXRPC      AF_RXRPC
+#define PF_ISDN       AF_ISDN
+#define PF_PHONET     AF_PHONET
+#define PF_IEEE802154 AF_IEEE802154
+#define PF_CAIF       AF_CAIF
+#define PF_ALG        AF_ALG
+#define PF_NFC        AF_NFC
+#define PF_VSOCK      AF_VSOCK
+#define PF_KCM        AF_KCM
+#define PF_QIPCRTR    AF_QIPCRTR
+#define PF_SMC        AF_SMC
+#define PF_XDP        AF_XDP
+#define PF_MCTP       AF_MCTP
+#define PF_MAX        AF_MAX
 #endif
 
 // Address-family field type. macOS holds it in one byte (sin_len precedes
@@ -328,6 +414,36 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2
+
+// Protocol-family option levels (bits/socket.h).
+#define SOL_RAW       255
+#define SOL_DECNET    261
+#define SOL_X25       262
+#define SOL_PACKET    263
+#define SOL_ATM       264
+#define SOL_AAL       265
+#define SOL_IRDA      266
+#define SOL_NETBEUI   267
+#define SOL_LLC       268
+#define SOL_DCCP      269
+#define SOL_NETLINK   270
+#define SOL_TIPC      271
+#define SOL_RXRPC     272
+#define SOL_PPPOL2TP  273
+#define SOL_BLUETOOTH 274
+#define SOL_PNPIPE    275
+#define SOL_RDS       276
+#define SOL_IUCV      277
+#define SOL_CAIF      278
+#define SOL_ALG       279
+#define SOL_NFC       280
+#define SOL_KCM       281
+#define SOL_TLS       282
+#define SOL_XDP       283
+#define SOL_MPTCP     284
+#define SOL_MCTP      285
+#define SOL_SMC       286
+#define SOL_VSOCK     287
 
 // send()/recv() flag bits (bits/socket.h).
 #define MSG_OOB          0x01

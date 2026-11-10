@@ -43,6 +43,7 @@ mod dwarf;
 mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
+mod header_constants;
 mod inline_asm;
 #[cfg(feature = "full")]
 mod inline_linkage;

@@ -18,8 +18,8 @@ The outputs follow PCbuild's layout: ``PCbuild/<arch>/python315.dll``,
 ``.pyd`` per extension module, each importing from the core DLL, with the
 external libraries (bzip2, xz, zlib-ng, zstd, mpdecimal, sqlite, libffi)
 built from source at get_externals.bat's versions. Resource scripts go
-through the SDK's rc.exe and libffi's assembly through ml64 / armasm64,
-the tools MSBuild runs for them. C++ projects (_wmi, pyshellext) are not a C
+through the SDK's rc.exe and libffi's arm64 assembly through armasm64, the
+tools MSBuild runs for them; badc assembles libffi's x64 win64.S. C++ projects (_wmi, pyshellext) are not a C
 compiler's input.
 TODO: OpenSSL (_ssl, _hashlib) and Tcl/Tk (_tkinter) from source.
 
@@ -79,10 +79,10 @@ EXTERNALS = {
         "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c",
         "mpdecimal-4.0.0",
     ),
-    "xz-5.2.5": (
-        "https://downloads.sourceforge.net/project/lzmautils/xz-5.2.5.tar.gz",
-        "f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10",
-        "xz-5.2.5",
+    "xz-5.8.1.1": (
+        "https://github.com/python/cpython-source-deps/archive/refs/tags/xz-5.8.1.1.tar.gz",
+        "1bfaba0ccacc6681d3ba85335cc7f49c24cf6f9d16f848cbd153b896d8a7d631",
+        "cpython-source-deps-xz-5.8.1.1",
     ),
     "zlib-ng-2.2.4": (
         "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.2.4.tar.gz",
@@ -99,10 +99,10 @@ EXTERNALS = {
         "d66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676",
         "libffi-3.4.4",
     ),
-    "sqlite-3.50.4.0": (
-        "https://www.sqlite.org/2025/sqlite-amalgamation-3500400.zip",
-        None,
-        "sqlite-amalgamation-3500400",
+    "sqlite-3.53.4.0": (
+        "https://github.com/python/cpython-source-deps/archive/refs/tags/sqlite-3.53.4.0.tar.gz",
+        "acc27a72ca7745781bb902269370303e778736a090585cc13acd2ea9ab785666",
+        "cpython-source-deps-sqlite-3.53.4.0",
     ),
 }
 
@@ -519,15 +519,15 @@ def global_props(target: str, tc: Toolchain) -> dict[str, str]:
         "PyVPath": "..\\\\..", "PyDebugExt": "", "PyTestExt": "",
         "PyArchExt": "-arm64" if arch == "arm64" else "",
         "ExternalsDir": ext,
-        "sqlite3Dir": ext + "sqlite-3.50.4.0" + sep, "bz2Dir": ext + "bzip2-1.0.8" + sep,
-        "lzmaDir": ext + "xz-5.2.5" + sep, "mpdecimalDir": ext + "mpdecimal-4.0.0" + sep,
+        "sqlite3Dir": ext + "sqlite-3.53.4.0" + sep, "bz2Dir": ext + "bzip2-1.0.8" + sep,
+        "lzmaDir": ext + "xz-5.8.1.1" + sep, "mpdecimalDir": ext + "mpdecimal-4.0.0" + sep,
         "zlibNgDir": ext + "zlib-ng-2.2.4" + sep, "zstdDir": ext + "zstd-1.5.7" + sep,
         "libffiDir": ext + "libffi-3.4.4" + sep,
         "libffiOutDir": ext + "libffi-3.4.4" + sep + arch + sep,
         "libffiIncludeDir": ext + "libffi-3.4.4" + sep + arch + sep + "include",
-        "opensslDir": ext + "openssl-3.5.7" + sep,
-        "opensslOutDir": ext + "openssl-bin-3.5.7" + sep + arch + sep,
-        "opensslIncludeDir": ext + "openssl-bin-3.5.7" + sep + arch + sep + "include",
+        "opensslDir": ext + "openssl-3.5.9" + sep,
+        "opensslOutDir": ext + "openssl-bin-3.5.9" + sep + arch + sep,
+        "opensslIncludeDir": ext + "openssl-bin-3.5.9" + sep + arch + sep + "include",
         "GeneratedFrozenModulesDir": str(PCBUILD / "obj" / f"{xy}_frozen") + sep,
         "GeneratedZlibNgDir": str(PCBUILD / "obj" / f"{xy}{arch}_Release" / "zlib-ng") + sep,
         "GeneratedJitStencilsDir": str(PCBUILD / "obj" / f"{xy}_Release"),
@@ -926,8 +926,8 @@ def main(argv: list[str] | None = None) -> int:
         # of an earlier run stands in for one this run did not produce.
         shutil.rmtree(PCBUILD / ARCHNAME[args.target], ignore_errors=True)
     b = Build(args.target, tc, args.jobs, log)
-    for ext in ("zlib-ng-2.2.4", "mpdecimal-4.0.0", "bzip2-1.0.8", "xz-5.2.5", "zstd-1.5.7",
-                "sqlite-3.50.4.0"):
+    for ext in ("zlib-ng-2.2.4", "mpdecimal-4.0.0", "bzip2-1.0.8", "xz-5.8.1.1", "zstd-1.5.7",
+                "sqlite-3.53.4.0"):
         fetch_external(ext, log)
     place_frozen(b)
     place_zlib_header(b)

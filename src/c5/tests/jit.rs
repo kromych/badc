@@ -121,9 +121,10 @@ pub(super) fn runs_without_linker(name: &str) -> bool {
     !EMBEDDED_LIBC_FIXTURES.contains(&name)
 }
 
-/// The locale (C17 7.11.1.1) and the working directory are the program's,
-/// and the programs the JIT runs share one process: a program that sets
-/// either runs with no other beside it.
+/// The locale (C17 7.11.1.1), the working directory, the signal actions and,
+/// on macOS, where `sigprocmask` applies to the process, the signal mask are
+/// the program's, and the programs the JIT runs share one process: a program
+/// that sets any of them runs with no other beside it.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 /// The sources running now. A fixture names its files by process, and the
@@ -159,9 +160,16 @@ impl Drop for Turn {
 
 fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
     let _turn = Turn::take(src);
-    if ["setlocale(", "chdir(", "SetCurrentDirectory"]
-        .iter()
-        .any(|call| src.contains(call))
+    if [
+        "setlocale(",
+        "chdir(",
+        "SetCurrentDirectory",
+        "sigprocmask(",
+        "sigaction(",
+        "signal(",
+    ]
+    .iter()
+    .any(|call| src.contains(call))
     {
         let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
         run()

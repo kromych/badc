@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Write `libc/prototypes/<target>.txt`, the function declarations of the
-bundled headers that the reference toolchain's declarations are compatible
-with, which a unit test holds badc's declarations against.
+"""Write `libc/prototypes/<target>.txt`, the function and object declarations
+of the bundled headers that the reference toolchain's declarations are
+compatible with, which a unit test holds badc's declarations against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
-reference toolchain, badc lists the functions a unit including it declares,
-each with its type as a pointer to the function (`--dump-prototypes`). A
+reference toolchain, badc lists the functions and objects a unit including
+it declares, each with the type of its address (`--dump-prototypes`). A
 probe built with the reference compiler initializes a pointer of badc's
-type with each, `static __typeof__(<badc's type>) p = &name;`, incompatible
+type with each, `__typeof__(<badc's type>) p = &name;`, incompatible
 pointer types an error: a failed initialization is a declaration that
 differs from the C library's, which the run reports and leaves out; a
-function the reference does not declare is left out. gcc records a
+name the reference does not declare is left out. gcc records a
 `noreturn` or `const` attribute as a qualifier of the function type, which
 the initialization only drops, so gcc serves as well as clang. A function
 is listed under the first header, in registry order, whose unit the
@@ -81,11 +81,14 @@ def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], l
     kept = sorted(protos)
     differ: list[str] = []
     for _ in range(256):
-        head = "#include <stdarg.h>\n" + src
+        # In a function, where an initializer need not be constant: a C
+        # library may reach an object through a function, as mingw-w64 does
+        # `timezone`.
+        head = "#include <stdarg.h>\n" + src + "void __badc_probe(void) {\n"
         first = head.count("\n") + 1
-        lines = [f"static __typeof__({protos[n]}) __badc_p{i} = &{n};"
+        lines = [f"  __typeof__({protos[n]}) __badc_p{i} = &{n};"
                  for i, n in enumerate(kept)]
-        text = head + "\n".join(lines) + "\n"
+        text = head + "\n".join(lines) + "\n}\n"
         with tempfile.TemporaryDirectory() as tmp:
             c = os.path.join(tmp, "probe.c")
             Path(c).write_text(text)

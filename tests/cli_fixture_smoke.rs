@@ -693,7 +693,8 @@ fn dump_prototypes_spells_the_declared_types() {
         &unit,
         "typedef struct _impl Impl;\ntypedef enum { A, B } Mode;\nstruct stat;\n\
          Impl *open_it(const char *path, Mode m, struct stat *st, ...);\n\
-         void (*handler(int sig, void (*fn)(int)))(int);\nint no_prototype();\n",
+         void (*handler(int sig, void (*fn)(int)))(int);\nint no_prototype();\n\
+         extern char *names[2];\nextern Impl *current;\nint defined_here;\n",
     )
     .expect("write unit");
     let out = Command::new(badc)
@@ -713,6 +714,12 @@ fn dump_prototypes_spells_the_declared_types() {
         "{text}"
     );
     assert!(lines.iter().any(|l| l.starts_with("handler\t")), "{text}");
+    assert!(lines.contains(&"names\tchar* (*)[2]"), "{text}");
+    assert!(lines.contains(&"current\tImpl**"), "{text}");
+    assert!(
+        !lines.iter().any(|l| l.starts_with("defined_here\t")),
+        "{text}"
+    );
     assert!(
         !lines.iter().any(|l| l.starts_with("no_prototype\t")),
         "{text}"

@@ -59,6 +59,7 @@ _strtol_l	long (*)(const char*, char**, int, _locale_tstruct*)
 _strtoui64	unsigned long long (*)(const char*, char**, int)
 _strtoui64_l	unsigned long long (*)(const char*, char**, int, _locale_tstruct*)
 _strtoul_l	unsigned long (*)(const char*, char**, int, _locale_tstruct*)
+_sys_nerr	int*
 _ui64toa	char* (*)(unsigned long long, char*, int)
 _ui64toa_s	int (*)(unsigned long long, char*, unsigned long long, int)
 _ui64tow	unsigned short* (*)(unsigned long long, unsigned short*, int)
@@ -735,6 +736,7 @@ clock_gettime	int (*)(int, struct timespec*)
 clock_nanosleep	int (*)(int, int, const struct timespec*, struct timespec*)
 clock_settime	int (*)(int, const struct timespec*)
 ctime	char* (*)(const long long*)
+daylight	int*
 difftime	double (*)(long long, long long)
 gmtime	struct tm* (*)(const long long*)
 localtime	struct tm* (*)(const long long*)
@@ -742,6 +744,8 @@ mktime	long long (*)(struct tm*)
 nanosleep	int (*)(const struct timespec*, struct timespec*)
 strftime	unsigned long long (*)(char*, unsigned long long, const char*, const struct tm*)
 time	long long (*)(long long*)
+timezone	long*
+tzname	char* (*)[2]
 tzset	void (*)(void)
 wcsftime	unsigned long long (*)(unsigned short*, unsigned long long, const unsigned short*, const struct tm*)
 
@@ -881,6 +885,10 @@ lseek	long (*)(int, long, int)
 mkdir	int (*)(const char*)
 mktemp	char* (*)(char*)
 open	int (*)(const char*, int, ...)
+optarg	char**
+opterr	int*
+optind	int*
+optopt	int*
 read	int (*)(int, void*, unsigned int)
 rmdir	int (*)(const char*)
 sleep	unsigned int (*)(unsigned int)

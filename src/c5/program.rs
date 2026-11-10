@@ -485,8 +485,9 @@ pub struct Program {
     pub structs: Vec<crate::c5::compiler::StructDef>,
     /// The file-scope typedef names and the layouts of the types they name.
     pub typedefs: Vec<TypedefLayout>,
-    /// Each file-scope function declaration and its type as a pointer to
-    /// it, spelled in C; recorded under `CompileOptions::prototypes`.
+    /// Each file-scope function declaration and extern object declaration
+    /// with the type of its address, spelled in C; recorded under
+    /// `CompileOptions::prototypes`.
     pub prototypes: Vec<(String, String)>,
     /// Captured enum definitions. Sourced from
     /// `Compiler::enums` at `compile()`; the DWARF emitter walks

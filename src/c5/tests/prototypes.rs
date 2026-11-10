@@ -1,8 +1,8 @@
-//! The function declarations of the bundled headers against those the
-//! reference toolchains found compatible with their own:
+//! The function and object declarations of the bundled headers against
+//! those the reference toolchains found compatible with their own:
 //! `libc/prototypes/<target>.txt`, written by `scripts/measure_prototypes.py`.
-//! Each listed function must keep the type the measurement checked; a
-//! change is remeasured against the reference.
+//! Each listed name must keep the type the measurement checked; a change is
+//! remeasured against the reference.
 
 use crate::{CompileOptions, Compiler, Target};
 

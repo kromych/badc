@@ -151,6 +151,9 @@ posix_spawnattr_setsigmask	int (*)(void**, const unsigned int*)
 posix_spawnp	int (*)(int*, const char*, void* const *, void* const *, char* const *, char* const *)
 
 stdio.h y
+__stderrp	FILE**
+__stdinp	FILE**
+__stdoutp	FILE**
 clearerr	void (*)(FILE*)
 dprintf	int (*)(int, const char*, ...)
 fclose	int (*)(FILE*)
@@ -458,8 +461,10 @@ clock_gettime	int (*)(unsigned int, struct timespec*)
 clock_settime	int (*)(unsigned int, const struct timespec*)
 ctime	char* (*)(const long*)
 ctime_r	char* (*)(const long*, char*)
+daylight	int*
 difftime	double (*)(long, long)
 getdate	struct tm* (*)(const char*)
+getdate_err	int*
 gmtime	struct tm* (*)(const long*)
 gmtime_r	struct tm* (*)(const long*, struct tm*)
 localtime	struct tm* (*)(const long*)
@@ -470,6 +475,8 @@ strftime	unsigned long (*)(char*, unsigned long, const char*, const struct tm*)
 strptime	char* (*)(const char*, const char*, struct tm*)
 time	long (*)(long*)
 timespec_get	int (*)(struct timespec*, int)
+timezone	long*
+tzname	char* (*)[2]
 tzset	void (*)(void)
 
 utime.h y
@@ -492,6 +499,7 @@ getservbyname	struct servent* (*)(const char*, const char*)
 getservbyport	struct servent* (*)(int, const char*)
 getsockname	int (*)(int, struct sockaddr*, unsigned int*)
 getsockopt	int (*)(int, int, int, void*, unsigned int*)
+h_errno	int*
 hstrerror	const char* (*)(int)
 listen	int (*)(int, int)
 recv	long (*)(int, void*, unsigned long, int)
@@ -648,6 +656,10 @@ linkat	int (*)(int, const char*, int, const char*, int)
 lockf	int (*)(int, int, long long)
 lseek	long long (*)(int, long long, int)
 nice	int (*)(int)
+optarg	char**
+opterr	int*
+optind	int*
+optopt	int*
 pathconf	long (*)(const char*, int)
 pause	int (*)(void)
 pipe	int (*)(int*)
@@ -690,6 +702,7 @@ write	long (*)(int, const void*, unsigned long)
 getopt.h y
 getopt_long	int (*)(int, char* const *, const char*, const struct option*, int*)
 getopt_long_only	int (*)(int, char* const *, const char*, const struct option*, int*)
+optreset	int*
 
 fcntl.h y
 creat	int (*)(const char*, unsigned short)
@@ -1125,6 +1138,7 @@ fetestexcept	int (*)(int)
 feupdateenv	int (*)(const fenv_t*)
 
 os/log.h y
+_os_log_default	struct os_log_s*
 _os_log_internal	void (*)(void*, struct os_log_s*, unsigned char, const char*, ...)
 os_log_create	struct os_log_s* (*)(const char*, const char*)
 
@@ -1140,6 +1154,7 @@ _NSGetEnviron	char*** (*)(void)
 _NSGetProgname	char** (*)(void)
 
 xlocale.h y
+_c_locale	struct _xlocale* const*
 localeconv_l	struct lconv* (*)(struct _xlocale*)
 querylocale	const char* (*)(int, struct _xlocale*)
 

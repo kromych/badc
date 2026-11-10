@@ -3567,8 +3567,8 @@ impl Compiler {
         out
     }
 
-    /// Each file-scope function declaration with a prototype, and its type
-    /// as a pointer to it, spelled in C. A record or enum a typedef names is
+    /// Each file-scope function declaration with a prototype and each object
+    /// declared and not defined, with the type of its address, spelled in C. A record or enum a typedef names is
     /// spelled by the first such name, as the tag may be the implementation's
     /// own or absent where the C library's typedef is the interface, and a
     /// `va_list` parameter by that name.
@@ -3624,6 +3624,30 @@ impl Compiler {
                 text = replace_word(&text, spelled, name);
             }
             text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+            out.push((s.name.clone(), text));
+        }
+        // An object declared and not defined, as the type of its address:
+        // `char**` for `char *optarg`, `char* (*)[2]` for `char *tzname[2]`.
+        let objects = (self.symbols.iter()).filter(|s| {
+            s.class == Token::Glo as i64
+                && s.linkage == crate::c5::symbol::Linkage::External
+                && !s.defined_here
+                && !s.is_thread_local
+                && !s.name.is_empty()
+                && !s.fn_type.params.prototyped
+                && s.fn_type.ret.is_none()
+        });
+        for s in objects {
+            let elem = types::format_type(s.type_, &structs);
+            let mut text = match (s.array_size, s.array_dims.len()) {
+                (0, _) => alloc::format!("{elem}*"),
+                (n, _) if n < 0 => alloc::format!("{elem} (*)[]"),
+                (n, 0 | 1) => alloc::format!("{elem} (*)[{n}]"),
+                (_, _) => continue,
+            };
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
             out.push((s.name.clone(), text));
         }
         out

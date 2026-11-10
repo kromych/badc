@@ -37,6 +37,7 @@ pub(crate) fn dump_dependencies(
             .with_track_includes(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_no_fp_regs(cli.codegen.no_fp_regs)
+            .with_x86_features(cli.codegen.x86_features)
             .with_code_model(cli.codegen.code_model);
         let compiler = badc::Compiler::with_options(contents, cli.target, copts);
         let mut log = TuLog::default();
@@ -156,6 +157,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             .with_keep_pragmas(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_no_fp_regs(cli.codegen.no_fp_regs)
+            .with_x86_features(cli.codegen.x86_features)
             .with_code_model(cli.codegen.code_model);
         let dump_macros = cli.front.dump_macros;
         let preprocessed = Compiler::preprocess_unit(contents, cli.target, opts, dump_macros);

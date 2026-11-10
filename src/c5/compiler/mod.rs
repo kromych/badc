@@ -706,6 +706,9 @@ pub struct CompileOptions {
     /// `-mno-sse` / `-mgeneral-regs-only`: the unit keeps off the SIMD
     /// register file, so the preprocessor drops the SSE feature macros.
     pub no_fp_regs: bool,
+    /// The x86 extensions `-m<ext>` and `-march=` select: their feature
+    /// macros, and under AVX the 32-byte bare `aligned`.
+    pub x86_features: crate::c5::X86Features,
     /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
@@ -875,6 +878,11 @@ impl CompileOptions {
 
     pub fn with_no_fp_regs(mut self, on: bool) -> Self {
         self.no_fp_regs = on;
+        self
+    }
+
+    pub fn with_x86_features(mut self, features: crate::c5::X86Features) -> Self {
+        self.x86_features = features;
         self
     }
     /// Initialize the automatic objects the program leaves
@@ -2562,6 +2570,9 @@ pub struct Compiler {
     /// `load_op_for`) can pick the right width without threading the
     /// target through every call site.
     target: Target,
+    /// What a bare `__attribute__((aligned))` resolves to:
+    /// `__BIGGEST_ALIGNMENT__`, 32 under AVX as gcc has it.
+    biggest_align: i64,
 
     /// Side-channel state shared between parser layers -- the
     /// transient flags / decay records / chain-depth counters
@@ -2998,6 +3009,9 @@ impl Compiler {
         if opts.no_fp_regs {
             pp.drop_simd_macros();
         }
+        if target.is_x86_64() {
+            pp.set_x86_features(opts.x86_features);
+        }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
@@ -3276,6 +3290,11 @@ impl Compiler {
             measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
             target,
+            biggest_align: if target.is_x86_64() && opts.x86_features.avx() {
+                32
+            } else {
+                16
+            },
             next_ent_pc: 0,
             data,
             data_object_starts: Vec::new(),

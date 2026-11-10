@@ -577,6 +577,20 @@ fn lp64_predefined_for_lp64_targets_only() {
     }
 }
 
+/// `-mavx2`'s predefines are gcc 16's: the extension, those it implies,
+/// and `__BIGGEST_ALIGNMENT__` 32.
+#[test]
+fn x86_extensions_predefine_their_macros() {
+    let mut f = crate::c5::X86Features::NONE;
+    f.enable("avx2");
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_x86_features(f);
+    let out = pp
+        .process("__AVX2__ __AVX__ __SSE4_2__ __POPCNT__ __XSAVE__ __BIGGEST_ALIGNMENT__ __FMA__\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("1 1 1 1 1 32 __FMA__"), "{out}");
+}
+
 /// `set_unit_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
 /// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`, the

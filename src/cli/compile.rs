@@ -244,6 +244,7 @@ pub(crate) fn tu_compile_options(
         .with_no_entry_point(true)
         .with_elf_class(cfg.reloc_opts.elf_class)
         .with_no_fp_regs(cfg.reloc_opts.no_fp_regs)
+        .with_x86_features(cfg.reloc_opts.x86_features)
         .with_code_model(cfg.reloc_opts.code_model);
     if let Some(r) = recompile {
         opts.force_includes.extend(r.auto_headers.iter().cloned());

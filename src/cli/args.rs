@@ -164,6 +164,7 @@ pub(crate) struct Codegen {
     pub(crate) dump_ssa: bool,
     pub(crate) verify_ssa: bool,
     pub(crate) no_fp_regs: bool,
+    pub(crate) x86_features: badc::X86Features,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
     pub(crate) conserve_stack: bool,
@@ -204,6 +205,7 @@ impl Default for Codegen {
             dump_ssa: false,
             verify_ssa: false,
             no_fp_regs: false,
+            x86_features: badc::X86Features::NONE,
             strict_align: false,
             jump_tables: true,
             conserve_stack: false,
@@ -687,6 +689,9 @@ struct Parser {
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
     mcpu: Option<String>,
+    /// The x86 `-m<ext>`, `-mno-<ext>`, `-march=` and `-mtune=` options
+    /// in command-line order, resolved once the target is known.
+    x86_isa: Vec<String>,
     dep: DepFlags,
     /// `-mcmodel=tiny`, which lowers as `small` and is checked against
     /// the target below.
@@ -807,6 +812,51 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
         p.positional.push(arg);
     }
     p.finish()
+}
+
+/// `-march=<cpu>`'s extensions; `native` reads the host's.
+fn march(cpu: &str) -> Result<badc::X86Features, ParseError> {
+    if cpu == "native" {
+        return native_x86_features().ok_or_else(|| {
+            ParseError::diag("badc: error: `-march=native` names the host CPU, which is not x86")
+        });
+    }
+    badc::X86Features::for_cpu(cpu)
+        .ok_or_else(|| ParseError::diag(format!("badc: error: unknown CPU `{cpu}` (-march=)")))
+}
+
+#[cfg(target_arch = "x86_64")]
+fn native_x86_features() -> Option<badc::X86Features> {
+    use std::arch::is_x86_feature_detected as has;
+    Some(badc::X86Features::for_host(|ext| match ext {
+        "sse3" => has!("sse3"),
+        "ssse3" => has!("ssse3"),
+        "sse4.1" => has!("sse4.1"),
+        "sse4.2" | "crc32" => has!("sse4.2"),
+        "popcnt" => has!("popcnt"),
+        "avx" => has!("avx"),
+        "avx2" => has!("avx2"),
+        "fma" => has!("fma"),
+        "f16c" => has!("f16c"),
+        "aes" => has!("aes"),
+        "pclmul" => has!("pclmulqdq"),
+        "sha" => has!("sha"),
+        "vaes" => has!("vaes"),
+        "vpclmulqdq" => has!("vpclmulqdq"),
+        "rdrnd" => has!("rdrand"),
+        "rdseed" => has!("rdseed"),
+        "bmi" => has!("bmi1"),
+        "bmi2" => has!("bmi2"),
+        "lzcnt" => has!("lzcnt"),
+        "adx" => has!("adx"),
+        "xsave" => has!("xsave"),
+        _ => false,
+    }))
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn native_x86_features() -> Option<badc::X86Features> {
+    None
 }
 
 /// The part names `-mcpu=` takes. Each selects the single scheduling
@@ -1674,6 +1724,20 @@ impl Parser {
             // an alignment fault instead of being fixed up.
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
+            // The x86 baseline, which every x86-64 unit already targets.
+            "-mmmx" | "-msse" | "-msse2" => self.x86_isa.push(arg.to_string()),
+            s if s.starts_with("-march=") || s.starts_with("-mtune=") => {
+                self.x86_isa.push(arg.to_string())
+            }
+            s if s
+                .strip_prefix("-mno-")
+                .or(s.strip_prefix("-m"))
+                .is_some_and(|e| {
+                    !matches!(badc::X86Features::classify(e), badc::X86ExtOption::Unknown)
+                }) =>
+            {
+                self.x86_isa.push(arg.to_string())
+            }
             // Position-independent relocatable output: no absolute
             // relocation reaches the object, so a consumer that relocates
             // it wholesale at load can take it. The flags choose
@@ -2426,6 +2490,7 @@ impl Parser {
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
+        self.apply_x86_isa(target)?;
         self.define_pic_macros(target);
         self.check_code_model(mode, target)?;
         self.check_exec_form(mode, target)?;
@@ -2816,6 +2881,73 @@ impl Parser {
         Ok(())
     }
 
+    /// The x86 extension options, as gcc combines them: the last
+    /// `-march=` gives the base set, and each `-m<ext>` / `-mno-<ext>`
+    /// adds or removes on top in order. `-mtune=` changes nothing. An
+    /// extension outside [`badc::X86Features`] is refused when enabled.
+    /// x86-64 code assumes x86-64-v3, so a CPU without it is refused, and
+    /// so is `-mno-<ext>` of an extension of it the code generator emits,
+    /// unless `-mno-sse` keeps the code off the vector registers it uses.
+    fn apply_x86_isa(&mut self, target: Target) -> Result<(), ParseError> {
+        let Some(first) = self.x86_isa.first() else {
+            return Ok(());
+        };
+        if !target.is_x86_64() {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{first}` names an x86 extension or CPU; the AArch64 \
+                 targets take `-mcpu=`"
+            )));
+        }
+        let mut features = badc::X86Features::NONE;
+        for arg in self.x86_isa.iter().rev() {
+            if let Some(cpu) = arg.strip_prefix("-march=") {
+                features = march(cpu)?;
+                if !features.covers_baseline() {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{arg}`: x86-64 code assumes x86-64-v3, which the \
+                         CPU lacks"
+                    )));
+                }
+                break;
+            }
+        }
+        for arg in &self.x86_isa {
+            if let Some(cpu) = arg.strip_prefix("-mtune=") {
+                if !(badc::X86Features::is_cpu(cpu)
+                    || matches!(cpu, "generic" | "intel" | "native"))
+                {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: unknown CPU `{cpu}` (-mtune=)"
+                    )));
+                }
+            } else if let Some(ext) = arg.strip_prefix("-mno-") {
+                match badc::X86Features::baseline_ext(ext) {
+                    Some(true) if self.codegen.no_fp_regs => {}
+                    Some(_) => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: `{arg}`: x86-64 code assumes x86-64-v3, which \
+                             includes the extension"
+                        )));
+                    }
+                    None => {}
+                }
+                features.disable(ext);
+            } else if arg.starts_with("-march=") || matches!(&arg[..], "-mmmx" | "-msse" | "-msse2")
+            {
+            } else if let Some(ext) = arg.strip_prefix("-m") {
+                if matches!(badc::X86Features::classify(ext), badc::X86ExtOption::Absent) {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{arg}`: badc does not implement the extension's \
+                         intrinsics"
+                    )));
+                }
+                features.enable(ext);
+            }
+        }
+        self.codegen.x86_features = features;
+        Ok(())
+    }
+
     /// gcc's `__pic__` / `__PIC__` and, for the PIE flags, `__pie__` /
     /// `__PIE__` on an ELF target, valued by the last PIC flag; the
     /// Mach-O and PE targets predefine `__PIC__` whatever the flags.
@@ -2987,6 +3119,7 @@ impl Codegen {
             .with_inline_cap(self.inline_cap)
             .with_diag(diag.clone());
         opts.no_fp_regs = self.no_fp_regs;
+        opts.x86_features = self.x86_features;
         opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
@@ -4056,6 +4189,65 @@ mod tests {
                 "badc: error: `-ffixed-` requires a register name".to_string(),
                 1
             )
+        );
+    }
+
+    /// The x86 extension options combine as gcc 16's: the last `-march=`
+    /// is the base, each `-m<ext>` / `-mno-<ext>` applies on top in order,
+    /// and `-mno-` drops the extensions implying the one named.
+    #[test]
+    fn x86_extension_options_combine_as_gccs() {
+        let features = |args: &[&str]| {
+            let mut all = vec![X64];
+            all.extend_from_slice(args);
+            all.extend_from_slice(&["-c", "a.c"]);
+            parse(&all).codegen.x86_features
+        };
+        let haswell = badc::X86Features::for_cpu("haswell").unwrap();
+        assert!(haswell.avx2());
+        assert!(features(&["-march=x86-64-v4", "-march=haswell"]).avx2());
+        assert!(features(&["-mno-aes", "-march=haswell", "-maes"]).avx2());
+        assert!(!features(&["-mno-sse", "-march=haswell", "-mno-avx"]).avx());
+        assert!(!features(&["-mavx2", "-mgeneral-regs-only", "-mno-sse4.2"]).avx());
+        assert_eq!(
+            features(&["-msse", "-msse2", "-mmmx", "-mtune=nehalem"]),
+            badc::X86Features::NONE
+        );
+        assert_eq!(
+            features(&["-mno-avx512f", "-mno-sse4a"]),
+            badc::X86Features::NONE
+        );
+        // x86-64 code assumes x86-64-v3: a CPU below it, and the removal of
+        // an extension of it the code generator emits, are refused.
+        assert_eq!(
+            reject(&[X64, "-march=haswell", "-march=nehalem", "-c", "a.c"]).0,
+            "badc: error: `-march=nehalem`: x86-64 code assumes x86-64-v3, which the CPU lacks"
+        );
+        for arg in ["-mno-avx", "-mno-bmi2"] {
+            assert_eq!(
+                reject(&[X64, arg, "-c", "a.c"]).0,
+                format!(
+                    "badc: error: `{arg}`: x86-64 code assumes x86-64-v3, which includes the \
+                     extension"
+                )
+            );
+        }
+        assert_eq!(
+            reject(&[X64, "-mavx512f", "-c", "a.c"]).0,
+            "badc: error: `-mavx512f`: badc does not implement the extension's intrinsics"
+        );
+        assert_eq!(
+            reject(&[X64, "-march=pentium9", "-c", "a.c"]).0,
+            "badc: error: unknown CPU `pentium9` (-march=)"
+        );
+        assert_eq!(
+            reject(&[X64, "-mtune=pentium9", "-c", "a.c"]).0,
+            "badc: error: unknown CPU `pentium9` (-mtune=)"
+        );
+        assert_eq!(
+            reject(&[A64, "-mavx2", "-c", "a.c"]).0,
+            "badc: error: `-mavx2` names an x86 extension or CPU; the AArch64 targets take \
+             `-mcpu=`"
         );
     }
 

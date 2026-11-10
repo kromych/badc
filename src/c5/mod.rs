@@ -30,6 +30,7 @@ mod softfp;
 mod symbol;
 mod token;
 mod vm;
+mod x86_isa;
 mod x86_simd;
 
 #[cfg(test)]
@@ -70,6 +71,7 @@ pub use {
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
     program::{AutoInclude, Program, SymVisibility, VariableInfo},
     vm::{Trace, Vm},
+    x86_isa::{X86ExtOption, X86Features},
 };
 
 #[cfg(feature = "std")]

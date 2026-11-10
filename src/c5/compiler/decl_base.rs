@@ -1304,9 +1304,8 @@ impl Compiler {
                                 self.next()?;
                             } else {
                                 // Bare `aligned`: the target's largest
-                                // fundamental alignment (16 on the
-                                // supported targets).
-                                align = align.max(16);
+                                // alignment, `__BIGGEST_ALIGNMENT__`.
+                                align = align.max(self.biggest_align);
                             }
                         } else if seen.constructor || seen.destructor {
                             attrs.constructor |= seen.constructor;

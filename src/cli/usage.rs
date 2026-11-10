@@ -588,6 +588,23 @@ Compile knobs:
                            the crypto encodings always
                            available to inline asm. Another extension is
                            refused by name.
+  -march=CPU               x86 CPU selection: gcc's CPU names and
+                           x86-64-v3/v4 predefine the feature macros of
+                           the extensions below that the CPU has;
+                           `native` reads the host's. x86-64 code
+                           assumes x86-64-v3, so a CPU without it is
+                           refused.
+  -mEXT / -mno-EXT         An x86 extension and those it implies: sse3,
+                           ssse3, sse4.1, sse4.2, popcnt, crc32, avx,
+                           avx2, fma, f16c, aes, pclmul, sha, vaes,
+                           vpclmulqdq, rdrnd, rdseed, bmi, bmi2, lzcnt,
+                           adx, xsave, clflushopt, clwb, prfchw, sahf.
+                           `-mno-` also drops the ones implying it, and
+                           is refused for an x86-64-v3 extension the
+                           code generator emits unless -mno-sse keeps
+                           the code off the vector registers. Any other
+                           gcc extension is refused when enabled.
+  -mtune=CPU               Accepted; badc has one scheduling model.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on

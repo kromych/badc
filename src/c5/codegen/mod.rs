@@ -4539,6 +4539,9 @@ pub struct NativeOptions {
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
     /// aarch64). See [`Abi::no_fp_regs`], which this sets.
     pub no_fp_regs: bool,
+    /// The x86 extensions `-m<ext>` and `-march=` select; under AVX the
+    /// 32-byte vectors are values in ymm registers.
+    pub x86_features: crate::c5::X86Features,
     /// Keep every compiler-generated memory access naturally aligned for
     /// its width (`-mstrict-align`). Code that runs with the MMU off maps
     /// memory as Device type, where an unaligned access raises an
@@ -5030,6 +5033,7 @@ impl NativeOptions {
             bss_segregate: true,
             zero_init_in_bss: true,
             no_fp_regs: false,
+            x86_features: crate::c5::X86Features::NONE,
             strict_align: false,
             jump_tables: true,
             conserve_stack: false,

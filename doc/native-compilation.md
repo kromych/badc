@@ -81,15 +81,22 @@ that lacks one is not a target.
 
 `-mno-sse` and `-mgeneral-regs-only` take the floating-point and vector
 registers out of the set ([Hardening and code-model
-knobs](#hardening-and-code-model-knobs)). Nothing else narrows it. The driver
-refuses `-march=` and `-mtune=`.
+knobs](#hardening-and-code-model-knobs)). Nothing else narrows it: the driver
+refuses an x86 `-march=` CPU without x86-64-v3, and `-mno-<ext>` for an
+extension of x86-64-v3 the code generator emits, except a vector extension
+under `-mno-sse`. `-mtune=` is accepted and changes nothing.
 
 Feature macros:
 
 - x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
-  `__SSE2_MATH__`, and `__FXSR__`. None of the x86-64-v3 macros (`__AVX2__`,
-  `__FMA__`, ...) is predefined. `-mno-sse` and `-mgeneral-regs-only` leave the
-  set unchanged.
+  `__SSE2_MATH__`, and `__FXSR__`. The x86-64-v3 macros (`__AVX2__`, `__FMA__`,
+  ...) are predefined only for the extensions `-march=` and `-m<ext>` select,
+  combined as gcc combines them; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
+  `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
+  intrinsics the headers carry, from SSE3 to AVX2, FMA, F16C, the AES, SHA,
+  VAES and carry-less multiply instructions, RDRAND, RDSEED, and BMI, and
+  refuses any other. `-mno-sse` and `-mgeneral-regs-only` leave the set
+  unchanged.
 - AArch64 predefines no feature macro, `__ARM_NEON` included. `-mcpu=`'s
   `+aes`, `+sha2`, and `+crypto` modifiers define `__ARM_FEATURE_AES`,
   `__ARM_FEATURE_SHA2`, and `__ARM_FEATURE_CRYPTO`.

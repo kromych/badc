@@ -6892,3 +6892,28 @@ fn lax_vector_conversions_admit_vectors_of_one_size() {
         .expect("compiles");
     assert_eq!(super::Vm::new(program).run().expect("run"), 0);
 }
+
+/// A bare `__attribute__((aligned))` takes `__BIGGEST_ALIGNMENT__`: 16 on
+/// the x86-64 baseline and 32 under AVX, as gcc lays it out for `-mavx`.
+#[test]
+fn bare_aligned_follows_the_biggest_alignment() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target, X86Features};
+    let src = "struct s { char c __attribute__((aligned)); };\n\
+               _Static_assert(_Alignof(struct s) == __BIGGEST_ALIGNMENT__, \"\");\n\
+               int main(void) { return _Alignof(struct s); }";
+    let run = |ext: Option<&str>| -> i64 {
+        let mut f = X86Features::NONE;
+        if let Some(ext) = ext {
+            f.enable(ext);
+        }
+        let opts = CompileOptions::default().with_x86_features(f);
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap();
+        Vm::new(program).run().unwrap()
+    };
+    assert_eq!(run(None), 16);
+    assert_eq!(run(Some("sse4.2")), 16);
+    assert_eq!(run(Some("avx")), 32);
+}

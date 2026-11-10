@@ -1398,6 +1398,18 @@ impl Preprocessor {
         }
     }
 
+    /// The x86 extensions' feature macros, and `__BIGGEST_ALIGNMENT__`
+    /// 32 under AVX, as gcc predefines them for `-m<ext>` and `-march=`.
+    pub fn set_x86_features(&mut self, features: crate::c5::X86Features) {
+        for name in features.macros() {
+            self.macros.insert(name.into(), "1".into());
+        }
+        if features.avx() {
+            self.macros
+                .insert("__BIGGEST_ALIGNMENT__".into(), "32".into());
+        }
+    }
+
     /// Select plain `char`'s signedness for this unit (`-fsigned-char` /
     /// `-funsigned-char`), moving `__CHAR_UNSIGNED__` with it so a
     /// header cannot read one answer while the front end uses another.

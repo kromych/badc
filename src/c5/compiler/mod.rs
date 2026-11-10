@@ -3567,8 +3567,9 @@ impl Compiler {
         out
     }
 
-    /// Each file-scope function declaration with a prototype and each object
-    /// declared and not defined, with the type of its address, spelled in C. A record or enum a typedef names is
+    /// Each file-scope function declaration with a prototype, each object
+    /// declared and not defined, and each named record's member, with the
+    /// type of its address, and each typedef name, spelled in C. A record or enum a typedef names is
     /// spelled by the first such name, as the tag may be the implementation's
     /// own or absent where the C library's typedef is the interface, and a
     /// `va_list` parameter by that name.
@@ -3678,6 +3679,47 @@ impl Compiler {
             }
             text = replace_word(&text, "struct __builtin_va_list*", "va_list");
             out.push((alloc::format!("typedef {}", s.name), text));
+        }
+        // Each member of a named record, as `member <record>.<member>`, with
+        // the type of its address; a bit-field has none.
+        for d in &structs {
+            if !d.is_complete || d.is_vector || d.is_array || d.enum_underlying.is_some() {
+                continue;
+            }
+            let kind = if d.is_union { "union" } else { "struct" };
+            let spelled = alloc::format!("{kind} {}", d.name);
+            let record = match names.iter().find(|(s, _)| *s == spelled) {
+                Some((_, name)) => (*name).to_string(),
+                None if d.name.starts_with("__anon_") => continue,
+                None => spelled,
+            };
+            for f in &d.fields {
+                if f.bit_width > 0 || f.name.is_empty() || f.array_dims.len() > 1 {
+                    continue;
+                }
+                let elem = types::format_type(f.ty, &structs);
+                let mut text = match (f.fn_ptr_indirection, f.array_size) {
+                    (0, 0) => alloc::format!("{elem}*"),
+                    (0, n) if n < 0 => alloc::format!("{elem} (*)[]"),
+                    (0, n) => alloc::format!("{elem} (*)[{n}]"),
+                    (k, 0) => types::fn_type_spelling(
+                        types::add_ptr_level(f.ty),
+                        &f.fn_type,
+                        k + 1,
+                        &structs,
+                    ),
+                    _ => continue,
+                };
+                for (spelled, name) in &names {
+                    text = replace_word(&text, spelled, name);
+                }
+                text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+                // A member of an unnamed record type has no spelling.
+                if text.contains("__anon_") {
+                    continue;
+                }
+                out.push((alloc::format!("member {record}.{}", f.name), text));
+            }
         }
         out
     }

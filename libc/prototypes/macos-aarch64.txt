@@ -39,6 +39,12 @@ malloc	void* (*)(unsigned long)
 mblen	int (*)(const char*, unsigned long)
 mbstowcs	unsigned long (*)(int*, const char*, unsigned long)
 mbtowc	int (*)(int*, const char*, unsigned long)
+member div_t.quot	int*
+member div_t.rem	int*
+member ldiv_t.quot	long*
+member ldiv_t.rem	long*
+member lldiv_t.quot	long long*
+member lldiv_t.rem	long long*
 mergesort	int (*)(void*, unsigned long, unsigned long, int (*)(const void*, const void*))
 mkstemp	int (*)(char*)
 mktemp	char* (*)(char*)
@@ -115,6 +121,8 @@ typedef uintptr_t	unsigned long*
 inttypes.h y
 imaxabs	long (*)(long)
 imaxdiv	imaxdiv_t (*)(long, long)
+member imaxdiv_t.quot	long*
+member imaxdiv_t.rem	long*
 strtoimax	long (*)(const char*, char**, int)
 strtoumax	unsigned long (*)(const char*, char**, int)
 
@@ -174,6 +182,7 @@ strtok_r	char* (*)(char*, const char*, char**)
 strxfrm	unsigned long (*)(char*, const char*, unsigned long)
 
 sched.h y
+member struct sched_param.sched_priority	int*
 sched_get_priority_max	int (*)(int)
 sched_get_priority_min	int (*)(int)
 sched_yield	int (*)(void)
@@ -281,6 +290,7 @@ stdarg.h y
 typedef va_list	char**
 
 stdatomic.h y
+member atomic_flag._Value	_Atomic _Bool*
 typedef atomic_bool	_Atomic _Bool*
 typedef atomic_char	_Atomic char*
 typedef atomic_char16_t	_Atomic unsigned short*
@@ -520,6 +530,30 @@ locale.h y
 duplocale	struct _xlocale* (*)(struct _xlocale*)
 freelocale	int (*)(struct _xlocale*)
 localeconv	struct lconv* (*)(void)
+member struct lconv.currency_symbol	char**
+member struct lconv.decimal_point	char**
+member struct lconv.frac_digits	char*
+member struct lconv.grouping	char**
+member struct lconv.int_curr_symbol	char**
+member struct lconv.int_frac_digits	char*
+member struct lconv.int_n_cs_precedes	char*
+member struct lconv.int_n_sep_by_space	char*
+member struct lconv.int_n_sign_posn	char*
+member struct lconv.int_p_cs_precedes	char*
+member struct lconv.int_p_sep_by_space	char*
+member struct lconv.int_p_sign_posn	char*
+member struct lconv.mon_decimal_point	char**
+member struct lconv.mon_grouping	char**
+member struct lconv.mon_thousands_sep	char**
+member struct lconv.n_cs_precedes	char*
+member struct lconv.n_sep_by_space	char*
+member struct lconv.n_sign_posn	char*
+member struct lconv.negative_sign	char**
+member struct lconv.p_cs_precedes	char*
+member struct lconv.p_sep_by_space	char*
+member struct lconv.p_sign_posn	char*
+member struct lconv.positive_sign	char**
+member struct lconv.thousands_sep	char**
 newlocale	struct _xlocale* (*)(int, const char*, struct _xlocale*)
 setlocale	char* (*)(int, const char*)
 typedef locale_t	struct _xlocale**
@@ -528,6 +562,29 @@ uselocale	struct _xlocale* (*)(struct _xlocale*)
 signal.h y
 kill	int (*)(int, int)
 killpg	int (*)(int, int)
+member siginfo_t.__pad	unsigned long (*)[7]
+member siginfo_t.si_addr	void**
+member siginfo_t.si_band	long*
+member siginfo_t.si_code	int*
+member siginfo_t.si_errno	int*
+member siginfo_t.si_pid	int*
+member siginfo_t.si_signo	int*
+member siginfo_t.si_status	int*
+member siginfo_t.si_uid	unsigned int*
+member siginfo_t.si_value	union sigval*
+member stack_t.ss_flags	int*
+member stack_t.ss_size	unsigned long*
+member stack_t.ss_sp	void**
+member struct sigaction.sa_flags	int*
+member struct sigaction.sa_handler	void (**)(int)
+member struct sigaction.sa_mask	unsigned int*
+member struct sigaction.sa_sigaction	void (**)(int, siginfo_t*, void*)
+member struct sigevent.sigev_notify	int*
+member struct sigevent.sigev_notify_function	void (**)(union sigval)
+member struct sigevent.sigev_signo	int*
+member struct sigevent.sigev_value	union sigval*
+member union sigval.sival_int	int*
+member union sigval.sival_ptr	void**
 pthread_sigmask	int (*)(int, const unsigned int*, unsigned int*)
 raise	int (*)(int)
 sigaction	int (*)(int, const struct sigaction*, struct sigaction*)
@@ -568,6 +625,19 @@ gmtime	struct tm* (*)(const long*)
 gmtime_r	struct tm* (*)(const long*, struct tm*)
 localtime	struct tm* (*)(const long*)
 localtime_r	struct tm* (*)(const long*, struct tm*)
+member struct timespec.tv_nsec	long*
+member struct timespec.tv_sec	long*
+member struct tm.tm_gmtoff	long*
+member struct tm.tm_hour	int*
+member struct tm.tm_isdst	int*
+member struct tm.tm_mday	int*
+member struct tm.tm_min	int*
+member struct tm.tm_mon	int*
+member struct tm.tm_sec	int*
+member struct tm.tm_wday	int*
+member struct tm.tm_yday	int*
+member struct tm.tm_year	int*
+member struct tm.tm_zone	char**
 mktime	long (*)(struct tm*)
 nanosleep	int (*)(const struct timespec*, struct timespec*)
 strftime	unsigned long (*)(char*, unsigned long, const char*, const struct tm*)
@@ -582,6 +652,8 @@ tzname	char* (*)[2]
 tzset	void (*)(void)
 
 utime.h y
+member struct utimbuf.actime	long*
+member struct utimbuf.modtime	long*
 utime	int (*)(const char*, const struct utimbuf*)
 
 netdb.h y
@@ -604,6 +676,53 @@ getsockopt	int (*)(int, int, int, void*, unsigned int*)
 h_errno	int*
 hstrerror	const char* (*)(int)
 listen	int (*)(int, int)
+member fd_set.fds_bits	int (*)[32]
+member struct addrinfo.ai_addr	struct sockaddr**
+member struct addrinfo.ai_addrlen	unsigned int*
+member struct addrinfo.ai_canonname	char**
+member struct addrinfo.ai_family	int*
+member struct addrinfo.ai_flags	int*
+member struct addrinfo.ai_next	struct addrinfo**
+member struct addrinfo.ai_protocol	int*
+member struct addrinfo.ai_socktype	int*
+member struct cmsghdr.cmsg_len	unsigned int*
+member struct cmsghdr.cmsg_level	int*
+member struct cmsghdr.cmsg_type	int*
+member struct hostent.h_addr_list	char***
+member struct hostent.h_addrtype	int*
+member struct hostent.h_aliases	char***
+member struct hostent.h_length	int*
+member struct hostent.h_name	char**
+member struct iovec.iov_base	void**
+member struct iovec.iov_len	unsigned long*
+member struct linger.l_linger	int*
+member struct linger.l_onoff	int*
+member struct msghdr.msg_control	void**
+member struct msghdr.msg_controllen	unsigned int*
+member struct msghdr.msg_flags	int*
+member struct msghdr.msg_iov	struct iovec**
+member struct msghdr.msg_iovlen	int*
+member struct msghdr.msg_name	void**
+member struct msghdr.msg_namelen	unsigned int*
+member struct protoent.p_aliases	char***
+member struct protoent.p_name	char**
+member struct protoent.p_proto	int*
+member struct servent.s_aliases	char***
+member struct servent.s_name	char**
+member struct servent.s_port	int*
+member struct servent.s_proto	char**
+member struct sf_hdtr.hdr_cnt	int*
+member struct sf_hdtr.headers	struct iovec**
+member struct sf_hdtr.trailers	struct iovec**
+member struct sf_hdtr.trl_cnt	int*
+member struct sockaddr.sa_data	char (*)[14]
+member struct sockaddr.sa_family	unsigned char*
+member struct sockaddr.sa_len	unsigned char*
+member struct sockaddr_storage.__ss_align	long long*
+member struct sockaddr_storage.__ss_pad1	char (*)[6]
+member struct sockaddr_storage.__ss_pad2	char (*)[112]
+member struct sockaddr_storage.ss_family	unsigned char*
+member struct sockaddr_storage.ss_len	unsigned char*
 recv	long (*)(int, void*, unsigned long, int)
 recvfrom	long (*)(int, void*, unsigned long, int, struct sockaddr*, unsigned int*)
 recvmsg	long (*)(int, struct msghdr*, int)
@@ -652,6 +771,53 @@ warnx	void (*)(const char*, ...)
 ucontext.h p
 getcontext	int (*)(ucontext_t*)
 makecontext	void (*)(ucontext_t*, void (*)(void), int, ...)
+member struct __darwin_arm_exception_state64.__esr	unsigned int*
+member struct __darwin_arm_exception_state64.__exception	unsigned int*
+member struct __darwin_arm_exception_state64.__far	unsigned long long*
+member struct __darwin_arm_neon_state64.__fpcr	unsigned int*
+member struct __darwin_arm_neon_state64.__fpsr	unsigned int*
+member struct __darwin_arm_thread_state64.__cpsr	unsigned int*
+member struct __darwin_arm_thread_state64.__fp	unsigned long long*
+member struct __darwin_arm_thread_state64.__lr	unsigned long long*
+member struct __darwin_arm_thread_state64.__pad	unsigned int*
+member struct __darwin_arm_thread_state64.__pc	unsigned long long*
+member struct __darwin_arm_thread_state64.__sp	unsigned long long*
+member struct __darwin_arm_thread_state64.__x	unsigned long long (*)[29]
+member struct __darwin_mcontext64.__es	struct __darwin_arm_exception_state64*
+member struct __darwin_mcontext64.__ns	struct __darwin_arm_neon_state64*
+member struct __darwin_mcontext64.__ss	struct __darwin_arm_thread_state64*
+member struct in6_addr.s6_addr	unsigned char (*)[16]
+member struct in6_pktinfo.ipi6_addr	struct in6_addr*
+member struct in6_pktinfo.ipi6_ifindex	unsigned int*
+member struct in_addr.s_addr	unsigned int*
+member struct in_pktinfo.ipi_addr	struct in_addr*
+member struct in_pktinfo.ipi_ifindex	unsigned int*
+member struct in_pktinfo.ipi_spec_dst	struct in_addr*
+member struct ip_mreq.imr_interface	struct in_addr*
+member struct ip_mreq.imr_multiaddr	struct in_addr*
+member struct ip_mreqn.imr_address	struct in_addr*
+member struct ip_mreqn.imr_ifindex	int*
+member struct ip_mreqn.imr_multiaddr	struct in_addr*
+member struct ipv6_mreq.ipv6mr_interface	unsigned int*
+member struct ipv6_mreq.ipv6mr_multiaddr	struct in6_addr*
+member struct sockaddr_in.sin_addr	struct in_addr*
+member struct sockaddr_in.sin_family	unsigned char*
+member struct sockaddr_in.sin_len	unsigned char*
+member struct sockaddr_in.sin_port	unsigned short*
+member struct sockaddr_in.sin_zero	char (*)[8]
+member struct sockaddr_in6.sin6_addr	struct in6_addr*
+member struct sockaddr_in6.sin6_family	unsigned char*
+member struct sockaddr_in6.sin6_flowinfo	unsigned int*
+member struct sockaddr_in6.sin6_len	unsigned char*
+member struct sockaddr_in6.sin6_port	unsigned short*
+member struct sockaddr_in6.sin6_scope_id	unsigned int*
+member ucontext_t.__mcontext_data	struct __darwin_mcontext64*
+member ucontext_t.uc_link	ucontext_t**
+member ucontext_t.uc_mcontext	struct __darwin_mcontext64**
+member ucontext_t.uc_mcsize	unsigned long*
+member ucontext_t.uc_onstack	int*
+member ucontext_t.uc_sigmask	unsigned int*
+member ucontext_t.uc_stack	stack_t*
 setcontext	int (*)(const ucontext_t*)
 swapcontext	int (*)(ucontext_t*, const ucontext_t*)
 typedef in_addr_t	unsigned int*
@@ -659,6 +825,11 @@ typedef in_port_t	unsigned short*
 typedef mcontext_t	struct __darwin_mcontext64**
 
 sys/utsname.h y
+member struct utsname.machine	char (*)[256]
+member struct utsname.nodename	char (*)[256]
+member struct utsname.release	char (*)[256]
+member struct utsname.sysname	char (*)[256]
+member struct utsname.version	char (*)[256]
 uname	int (*)(struct utsname*)
 
 grp.h y
@@ -668,6 +839,10 @@ getgrgid	struct group* (*)(unsigned int)
 getgrgid_r	int (*)(unsigned int, struct group*, char*, unsigned long, struct group**)
 getgrnam	struct group* (*)(const char*)
 getgrnam_r	int (*)(const char*, struct group*, char*, unsigned long, struct group**)
+member struct group.gr_gid	unsigned int*
+member struct group.gr_mem	char***
+member struct group.gr_name	char**
+member struct group.gr_passwd	char**
 setgrent	void (*)(void)
 
 langinfo.h y
@@ -691,6 +866,10 @@ dirent.h y
 closedir	int (*)(DIR*)
 dirfd	int (*)(DIR*)
 fdopendir	DIR* (*)(int)
+member struct dirent.d_name	char (*)[1024]
+member struct dirent.d_namlen	unsigned short*
+member struct dirent.d_reclen	unsigned short*
+member struct dirent.d_type	unsigned char*
 opendir	DIR* (*)(const char*)
 readdir	struct dirent* (*)(DIR*)
 readdir_r	int (*)(DIR*, struct dirent*, struct dirent**)
@@ -710,6 +889,25 @@ ftw	int (*)(const char*, int (*)(const char*, const struct stat*, int), int)
 futimens	int (*)(int, const struct timespec*)
 lchflags	int (*)(const char*, unsigned int)
 lstat	int (*)(const char*, struct stat*)
+member struct FTW.base	int*
+member struct FTW.level	int*
+member struct stat.st_atime	long*
+member struct stat.st_atimespec	struct timespec*
+member struct stat.st_birthtime	long*
+member struct stat.st_birthtimespec	struct timespec*
+member struct stat.st_blksize	int*
+member struct stat.st_ctime	long*
+member struct stat.st_ctimespec	struct timespec*
+member struct stat.st_dev	int*
+member struct stat.st_flags	unsigned int*
+member struct stat.st_gid	unsigned int*
+member struct stat.st_lspare	int*
+member struct stat.st_mode	unsigned short*
+member struct stat.st_mtime	long*
+member struct stat.st_mtimespec	struct timespec*
+member struct stat.st_nlink	unsigned short*
+member struct stat.st_rdev	int*
+member struct stat.st_uid	unsigned int*
 mkdir	int (*)(const char*, unsigned short)
 mkdirat	int (*)(int, const char*, unsigned short)
 mkfifo	int (*)(const char*, unsigned short)
@@ -725,6 +923,10 @@ fts.h y
 fts_close	int (*)(FTS*)
 fts_open	FTS* (*)(char* const *, int, int (*)(const FTSENT**, const FTSENT**))
 fts_read	FTSENT* (*)(FTS*)
+member FTSENT.fts_info	unsigned short*
+member FTSENT.fts_path	char**
+member FTSENT.fts_pathlen	unsigned short*
+member FTSENT.fts_statp	struct stat**
 
 pwd.h y
 endpwent	void (*)(void)
@@ -733,6 +935,16 @@ getpwnam	struct passwd* (*)(const char*)
 getpwnam_r	int (*)(const char*, struct passwd*, char*, unsigned long, struct passwd**)
 getpwuid	struct passwd* (*)(unsigned int)
 getpwuid_r	int (*)(unsigned int, struct passwd*, char*, unsigned long, struct passwd**)
+member struct passwd.pw_change	long*
+member struct passwd.pw_class	char**
+member struct passwd.pw_dir	char**
+member struct passwd.pw_expire	long*
+member struct passwd.pw_gecos	char**
+member struct passwd.pw_gid	unsigned int*
+member struct passwd.pw_name	char**
+member struct passwd.pw_passwd	char**
+member struct passwd.pw_shell	char**
+member struct passwd.pw_uid	unsigned int*
 setpwent	void (*)(void)
 
 unistd.h y
@@ -785,6 +997,8 @@ link	int (*)(const char*, const char*)
 linkat	int (*)(int, const char*, int, const char*, int)
 lockf	int (*)(int, int, long long)
 lseek	long long (*)(int, long long, int)
+member struct timeval.tv_sec	long*
+member struct timeval.tv_usec	int*
 nice	int (*)(int)
 optarg	char**
 opterr	int*
@@ -832,11 +1046,18 @@ write	long (*)(int, const void*, unsigned long)
 getopt.h y
 getopt_long	int (*)(int, char* const *, const char*, const struct option*, int*)
 getopt_long_only	int (*)(int, char* const *, const char*, const struct option*, int*)
+member struct option.flag	int**
+member struct option.has_arg	int*
+member struct option.name	const char**
+member struct option.val	int*
 optreset	int*
 
 fcntl.h y
 creat	int (*)(const char*, unsigned short)
 fcntl	int (*)(int, int, ...)
+member struct flock.l_pid	int*
+member struct flock.l_type	short*
+member struct flock.l_whence	short*
 openat	int (*)(int, const char*, int, ...)
 
 syslog.h y
@@ -858,8 +1079,24 @@ writev	long (*)(int, const struct iovec*, int)
 
 sys/ipc.h y
 ftok	int (*)(const char*, int)
+member struct ipc_perm._key	int*
+member struct ipc_perm._seq	unsigned short*
+member struct ipc_perm.cgid	unsigned int*
+member struct ipc_perm.cuid	unsigned int*
+member struct ipc_perm.gid	unsigned int*
+member struct ipc_perm.mode	unsigned short*
+member struct ipc_perm.uid	unsigned int*
 
 sys/shm.h y
+member struct shmid_ds.shm_atime	long*
+member struct shmid_ds.shm_cpid	int*
+member struct shmid_ds.shm_ctime	long*
+member struct shmid_ds.shm_dtime	long*
+member struct shmid_ds.shm_internal	void**
+member struct shmid_ds.shm_lpid	int*
+member struct shmid_ds.shm_nattch	unsigned short*
+member struct shmid_ds.shm_perm	struct ipc_perm*
+member struct shmid_ds.shm_segsz	unsigned long*
 shmat	void* (*)(int, const void*, int)
 shmctl	int (*)(int, int, struct shmid_ds*)
 shmdt	int (*)(const void*)
@@ -867,11 +1104,40 @@ shmget	int (*)(int, unsigned long, int)
 typedef shmatt_t	unsigned short*
 
 sys/sem.h y
+member semun_t.array	unsigned short**
+member semun_t.buf	struct semid_ds**
+member semun_t.val	int*
+member struct sembuf.sem_flg	short*
+member struct sembuf.sem_num	unsigned short*
+member struct sembuf.sem_op	short*
+member struct semid_ds.sem_base	int*
+member struct semid_ds.sem_ctime	long*
+member struct semid_ds.sem_nsems	unsigned short*
+member struct semid_ds.sem_otime	long*
+member struct semid_ds.sem_pad1	int*
+member struct semid_ds.sem_pad2	int*
+member struct semid_ds.sem_pad3	int (*)[4]
+member struct semid_ds.sem_perm	struct ipc_perm*
 semctl	int (*)(int, int, int, ...)
 semget	int (*)(int, int, int)
 semop	int (*)(int, struct sembuf*, unsigned long)
 
 sys/msg.h y
+member struct msqid_ds.msg_cbytes	unsigned long*
+member struct msqid_ds.msg_ctime	long*
+member struct msqid_ds.msg_first	int*
+member struct msqid_ds.msg_last	int*
+member struct msqid_ds.msg_lrpid	int*
+member struct msqid_ds.msg_lspid	int*
+member struct msqid_ds.msg_pad1	int*
+member struct msqid_ds.msg_pad2	int*
+member struct msqid_ds.msg_pad3	int*
+member struct msqid_ds.msg_pad4	int (*)[4]
+member struct msqid_ds.msg_perm	struct ipc_perm*
+member struct msqid_ds.msg_qbytes	unsigned long*
+member struct msqid_ds.msg_qnum	unsigned long*
+member struct msqid_ds.msg_rtime	long*
+member struct msqid_ds.msg_stime	long*
 msgctl	int (*)(int, int, struct msqid_ds*)
 msgget	int (*)(int, int)
 msgrcv	long (*)(int, void*, unsigned long, long, int)
@@ -879,11 +1145,24 @@ msgsnd	int (*)(int, const void*, unsigned long, int)
 typedef msglen_t	unsigned long*
 typedef msgqnum_t	unsigned long*
 
+sys/un.h y
+member struct sockaddr_un.sun_family	unsigned char*
+member struct sockaddr_un.sun_len	unsigned char*
+member struct sockaddr_un.sun_path	char (*)[104]
+
 net/if.h y
 if_freenameindex	void (*)(struct if_nameindex*)
 if_indextoname	char* (*)(unsigned int, char*)
 if_nameindex	struct if_nameindex* (*)(void)
 if_nametoindex	unsigned int (*)(const char*)
+member struct if_nameindex.if_index	unsigned int*
+member struct if_nameindex.if_name	char**
+
+net/ethernet.h y
+member struct ether_addr.ether_addr_octet	unsigned char (*)[6]
+member struct ether_header.ether_dhost	unsigned char (*)[6]
+member struct ether_header.ether_shost	unsigned char (*)[6]
+member struct ether_header.ether_type	unsigned short*
 
 sys/file.h y
 flock	int (*)(int, int)
@@ -911,6 +1190,27 @@ CoreVideo/CoreVideo.h y
 CVGetCurrentHostTime	unsigned long long (*)(void)
 CVGetHostClockFrequency	double (*)(void)
 CVGetHostClockMinimumTimeDelta	unsigned int (*)(void)
+member CVSMPTETime.counter	unsigned int*
+member CVSMPTETime.flags	unsigned int*
+member CVSMPTETime.frames	short*
+member CVSMPTETime.hours	short*
+member CVSMPTETime.minutes	short*
+member CVSMPTETime.seconds	short*
+member CVSMPTETime.subframeDivisor	short*
+member CVSMPTETime.subframes	short*
+member CVSMPTETime.type	unsigned int*
+member CVTime.flags	int*
+member CVTime.timeScale	int*
+member CVTime.timeValue	long long*
+member CVTimeStamp.flags	unsigned long long*
+member CVTimeStamp.hostTime	unsigned long long*
+member CVTimeStamp.rateScalar	double*
+member CVTimeStamp.reserved	unsigned long long*
+member CVTimeStamp.smpteTime	CVSMPTETime*
+member CVTimeStamp.version	unsigned int*
+member CVTimeStamp.videoRefreshPeriod	long long*
+member CVTimeStamp.videoTime	long long*
+member CVTimeStamp.videoTimeScale	int*
 typedef CVOptionFlags	unsigned long long*
 typedef CVReturn	int*
 typedef CVSMPTETimeFlags	unsigned int*
@@ -923,6 +1223,22 @@ SCDynamicStoreCopyProxies	const struct __CFDictionary* (*)(const struct __SCDyna
 typedef SCDynamicStoreRef	const struct __SCDynamicStore**
 
 sys/attr.h y
+member attribute_set_t.commonattr	unsigned int*
+member attribute_set_t.dirattr	unsigned int*
+member attribute_set_t.fileattr	unsigned int*
+member attribute_set_t.forkattr	unsigned int*
+member attribute_set_t.volattr	unsigned int*
+member attrreference_t.attr_dataoffset	int*
+member attrreference_t.attr_length	unsigned int*
+member fsobj_id_t.fid_generation	unsigned int*
+member fsobj_id_t.fid_objno	unsigned int*
+member struct attrlist.bitmapcount	unsigned short*
+member struct attrlist.commonattr	unsigned int*
+member struct attrlist.dirattr	unsigned int*
+member struct attrlist.fileattr	unsigned int*
+member struct attrlist.forkattr	unsigned int*
+member struct attrlist.reserved	unsigned short*
+member struct attrlist.volattr	unsigned int*
 typedef attrgroup_t	unsigned int*
 typedef fsfile_type_t	unsigned int*
 typedef fsobj_tag_t	unsigned int*
@@ -943,6 +1259,8 @@ mach_continuous_approximate_time	unsigned long long (*)(void)
 mach_continuous_time	unsigned long long (*)(void)
 mach_timebase_info	int (*)(mach_timebase_info_data_t*)
 mach_wait_until	int (*)(unsigned long long)
+member mach_timebase_info_data_t.denom	unsigned int*
+member mach_timebase_info_data_t.numer	unsigned int*
 typedef mach_timebase_info_t	mach_timebase_info_data_t**
 
 mach/mach.h y
@@ -960,6 +1278,54 @@ typedef thread_array_t	unsigned int**
 typedef thread_t	unsigned int*
 
 mach/task.h y
+member task_vm_info_data_t.compressed	unsigned long long*
+member task_vm_info_data_t.compressed_lifetime	unsigned long long*
+member task_vm_info_data_t.compressed_peak	unsigned long long*
+member task_vm_info_data_t.decompressions	int*
+member task_vm_info_data_t.device	unsigned long long*
+member task_vm_info_data_t.device_peak	unsigned long long*
+member task_vm_info_data_t.external	unsigned long long*
+member task_vm_info_data_t.external_peak	unsigned long long*
+member task_vm_info_data_t.internal	unsigned long long*
+member task_vm_info_data_t.internal_peak	unsigned long long*
+member task_vm_info_data_t.ledger_phys_footprint_peak	long long*
+member task_vm_info_data_t.ledger_purgeable_nonvolatile	long long*
+member task_vm_info_data_t.ledger_purgeable_novolatile_compressed	long long*
+member task_vm_info_data_t.ledger_purgeable_volatile	long long*
+member task_vm_info_data_t.ledger_purgeable_volatile_compressed	long long*
+member task_vm_info_data_t.ledger_swapins	long long*
+member task_vm_info_data_t.ledger_tag_graphics_footprint	long long*
+member task_vm_info_data_t.ledger_tag_graphics_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_graphics_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_graphics_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_media_footprint	long long*
+member task_vm_info_data_t.ledger_tag_media_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_media_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_media_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_network_nonvolatile	long long*
+member task_vm_info_data_t.ledger_tag_network_nonvolatile_compressed	long long*
+member task_vm_info_data_t.ledger_tag_network_volatile	long long*
+member task_vm_info_data_t.ledger_tag_network_volatile_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_footprint	long long*
+member task_vm_info_data_t.ledger_tag_neural_footprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_compressed	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_peak	long long*
+member task_vm_info_data_t.ledger_tag_neural_nofootprint_total	long long*
+member task_vm_info_data_t.limit_bytes_remaining	unsigned long long*
+member task_vm_info_data_t.max_address	unsigned long long*
+member task_vm_info_data_t.min_address	unsigned long long*
+member task_vm_info_data_t.page_size	int*
+member task_vm_info_data_t.phys_footprint	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_pmap	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_resident	unsigned long long*
+member task_vm_info_data_t.purgeable_volatile_virtual	unsigned long long*
+member task_vm_info_data_t.region_count	int*
+member task_vm_info_data_t.resident_size	unsigned long long*
+member task_vm_info_data_t.resident_size_peak	unsigned long long*
+member task_vm_info_data_t.reusable	unsigned long long*
+member task_vm_info_data_t.reusable_peak	unsigned long long*
+member task_vm_info_data_t.virtual_size	unsigned long long*
 task_info	int (*)(unsigned int, unsigned int, int*, unsigned int*)
 typedef task_flavor_t	unsigned int*
 typedef task_info_t	int**
@@ -974,6 +1340,22 @@ mach/vm_prot.h y
 typedef vm_prot_t	int*
 
 mach/vm_region.h y
+member vm_region_basic_info_data_64_t.behavior	int*
+member vm_region_basic_info_data_64_t.inheritance	unsigned int*
+member vm_region_basic_info_data_64_t.max_protection	int*
+member vm_region_basic_info_data_64_t.offset	unsigned long long*
+member vm_region_basic_info_data_64_t.protection	int*
+member vm_region_basic_info_data_64_t.reserved	int*
+member vm_region_basic_info_data_64_t.shared	int*
+member vm_region_basic_info_data_64_t.user_wired_count	unsigned short*
+member vm_region_basic_info_data_t.behavior	int*
+member vm_region_basic_info_data_t.inheritance	unsigned int*
+member vm_region_basic_info_data_t.max_protection	int*
+member vm_region_basic_info_data_t.offset	unsigned int*
+member vm_region_basic_info_data_t.protection	int*
+member vm_region_basic_info_data_t.reserved	int*
+member vm_region_basic_info_data_t.shared	int*
+member vm_region_basic_info_data_t.user_wired_count	unsigned short*
 typedef boolean_t	int*
 typedef memory_object_offset_t	unsigned long long*
 typedef vm_behavior_t	int*
@@ -1021,6 +1403,12 @@ proc_setpcontrol	int (*)(const int)
 proc_terminate	int (*)(int, int*)
 proc_track_dirty	int (*)(int, unsigned int)
 
+sys/sys_domain.h y
+member struct sockaddr_sys.ss_family	unsigned char*
+member struct sockaddr_sys.ss_len	unsigned char*
+member struct sockaddr_sys.ss_reserved	unsigned int (*)[7]
+member struct sockaddr_sys.ss_sysaddr	unsigned short*
+
 sys/sysctl.h y
 sysctl	int (*)(int*, unsigned int, void*, unsigned long*, void*, unsigned long)
 sysctlbyname	int (*)(const char*, void*, unsigned long*, void*, unsigned long)
@@ -1028,6 +1416,101 @@ sysctlnametomib	int (*)(const char*, int*, unsigned long*)
 
 mach-o/dyld.h y
 _NSGetExecutablePath	int (*)(char*, unsigned int*)
+
+mach-o/loader.h y
+member struct load_command.cmd	unsigned int*
+member struct load_command.cmdsize	unsigned int*
+member struct mach_header.cpusubtype	int*
+member struct mach_header.cputype	int*
+member struct mach_header.filetype	unsigned int*
+member struct mach_header.flags	unsigned int*
+member struct mach_header.magic	unsigned int*
+member struct mach_header.ncmds	unsigned int*
+member struct mach_header.sizeofcmds	unsigned int*
+member struct mach_header_64.cpusubtype	int*
+member struct mach_header_64.cputype	int*
+member struct mach_header_64.filetype	unsigned int*
+member struct mach_header_64.flags	unsigned int*
+member struct mach_header_64.magic	unsigned int*
+member struct mach_header_64.ncmds	unsigned int*
+member struct mach_header_64.reserved	unsigned int*
+member struct mach_header_64.sizeofcmds	unsigned int*
+member struct section.addr	unsigned int*
+member struct section.align	unsigned int*
+member struct section.flags	unsigned int*
+member struct section.nreloc	unsigned int*
+member struct section.offset	unsigned int*
+member struct section.reloff	unsigned int*
+member struct section.reserved1	unsigned int*
+member struct section.reserved2	unsigned int*
+member struct section.sectname	char (*)[16]
+member struct section.segname	char (*)[16]
+member struct section.size	unsigned int*
+member struct section_64.addr	unsigned long long*
+member struct section_64.align	unsigned int*
+member struct section_64.flags	unsigned int*
+member struct section_64.nreloc	unsigned int*
+member struct section_64.offset	unsigned int*
+member struct section_64.reloff	unsigned int*
+member struct section_64.reserved1	unsigned int*
+member struct section_64.reserved2	unsigned int*
+member struct section_64.reserved3	unsigned int*
+member struct section_64.sectname	char (*)[16]
+member struct section_64.segname	char (*)[16]
+member struct section_64.size	unsigned long long*
+member struct segment_command.cmd	unsigned int*
+member struct segment_command.cmdsize	unsigned int*
+member struct segment_command.fileoff	unsigned int*
+member struct segment_command.filesize	unsigned int*
+member struct segment_command.flags	unsigned int*
+member struct segment_command.initprot	int*
+member struct segment_command.maxprot	int*
+member struct segment_command.nsects	unsigned int*
+member struct segment_command.segname	char (*)[16]
+member struct segment_command.vmaddr	unsigned int*
+member struct segment_command.vmsize	unsigned int*
+member struct segment_command_64.cmd	unsigned int*
+member struct segment_command_64.cmdsize	unsigned int*
+member struct segment_command_64.fileoff	unsigned long long*
+member struct segment_command_64.filesize	unsigned long long*
+member struct segment_command_64.flags	unsigned int*
+member struct segment_command_64.initprot	int*
+member struct segment_command_64.maxprot	int*
+member struct segment_command_64.nsects	unsigned int*
+member struct segment_command_64.segname	char (*)[16]
+member struct segment_command_64.vmaddr	unsigned long long*
+member struct segment_command_64.vmsize	unsigned long long*
+member struct symtab_command.cmd	unsigned int*
+member struct symtab_command.cmdsize	unsigned int*
+member struct symtab_command.nsyms	unsigned int*
+member struct symtab_command.stroff	unsigned int*
+member struct symtab_command.strsize	unsigned int*
+member struct symtab_command.symoff	unsigned int*
+
+mach-o/fat.h y
+member struct fat_arch.align	unsigned int*
+member struct fat_arch.cpusubtype	int*
+member struct fat_arch.cputype	int*
+member struct fat_arch.offset	unsigned int*
+member struct fat_arch.size	unsigned int*
+member struct fat_arch_64.align	unsigned int*
+member struct fat_arch_64.cpusubtype	int*
+member struct fat_arch_64.cputype	int*
+member struct fat_arch_64.offset	unsigned long long*
+member struct fat_arch_64.reserved	unsigned int*
+member struct fat_arch_64.size	unsigned long long*
+member struct fat_header.magic	unsigned int*
+member struct fat_header.nfat_arch	unsigned int*
+
+mach-o/nlist.h y
+member struct nlist.n_desc	short*
+member struct nlist.n_sect	unsigned char*
+member struct nlist.n_type	unsigned char*
+member struct nlist.n_value	unsigned int*
+member struct nlist_64.n_desc	unsigned short*
+member struct nlist_64.n_sect	unsigned char*
+member struct nlist_64.n_type	unsigned char*
+member struct nlist_64.n_value	unsigned long long*
 
 sys/mman.h y
 madvise	int (*)(void*, unsigned long, int)
@@ -1059,6 +1542,17 @@ setxattr	int (*)(const char*, const char*, const void*, unsigned long, unsigned 
 
 sys/statvfs.h y
 fstatvfs	int (*)(int, struct statvfs*)
+member struct statvfs.f_bavail	unsigned int*
+member struct statvfs.f_bfree	unsigned int*
+member struct statvfs.f_blocks	unsigned int*
+member struct statvfs.f_bsize	unsigned long*
+member struct statvfs.f_favail	unsigned int*
+member struct statvfs.f_ffree	unsigned int*
+member struct statvfs.f_files	unsigned int*
+member struct statvfs.f_flag	unsigned long*
+member struct statvfs.f_frsize	unsigned long*
+member struct statvfs.f_fsid	unsigned long*
+member struct statvfs.f_namemax	unsigned long*
 statvfs	int (*)(const char*, struct statvfs*)
 
 sys/wait.h y
@@ -1072,6 +1566,24 @@ sys/resource.h y
 getpriority	int (*)(int, unsigned int)
 getrlimit	int (*)(int, struct rlimit*)
 getrusage	int (*)(int, struct rusage*)
+member struct rlimit.rlim_cur	unsigned long long*
+member struct rlimit.rlim_max	unsigned long long*
+member struct rusage.ru_idrss	long*
+member struct rusage.ru_inblock	long*
+member struct rusage.ru_isrss	long*
+member struct rusage.ru_ixrss	long*
+member struct rusage.ru_majflt	long*
+member struct rusage.ru_maxrss	long*
+member struct rusage.ru_minflt	long*
+member struct rusage.ru_msgrcv	long*
+member struct rusage.ru_msgsnd	long*
+member struct rusage.ru_nivcsw	long*
+member struct rusage.ru_nsignals	long*
+member struct rusage.ru_nswap	long*
+member struct rusage.ru_nvcsw	long*
+member struct rusage.ru_oublock	long*
+member struct rusage.ru_stime	struct timeval*
+member struct rusage.ru_utime	struct timeval*
 setpriority	int (*)(int, unsigned int, int)
 setrlimit	int (*)(int, const struct rlimit*)
 typedef rlim_t	unsigned long long*
@@ -1101,16 +1613,32 @@ wctype	unsigned int (*)(const char*)
 
 sys/ioctl.h y
 ioctl	int (*)(int, unsigned long, ...)
+member struct ttysize.ts_cols	unsigned short*
+member struct ttysize.ts_lines	unsigned short*
+member struct ttysize.ts_xxx	unsigned short*
+member struct ttysize.ts_yyy	unsigned short*
+member struct winsize.ws_col	unsigned short*
+member struct winsize.ws_row	unsigned short*
+member struct winsize.ws_xpixel	unsigned short*
+member struct winsize.ws_ypixel	unsigned short*
 
 sys/time.h y
 futimes	int (*)(int, const struct timeval*)
 getitimer	int (*)(int, struct itimerval*)
 gettimeofday	int (*)(struct timeval*, void*)
 lutimes	int (*)(const char*, const struct timeval*)
+member struct itimerval.it_interval	struct timeval*
+member struct itimerval.it_value	struct timeval*
+member struct timezone.tz_dsttime	int*
+member struct timezone.tz_minuteswest	int*
 setitimer	int (*)(int, const struct itimerval*, struct itimerval*)
 utimes	int (*)(const char*, const struct timeval*)
 
 sys/times.h y
+member struct tms.tms_cstime	unsigned long*
+member struct tms.tms_cutime	unsigned long*
+member struct tms.tms_stime	unsigned long*
+member struct tms.tms_utime	unsigned long*
 times	unsigned long (*)(struct tms*)
 
 termios.h y
@@ -1119,6 +1647,13 @@ cfgetospeed	unsigned long (*)(const struct termios*)
 cfmakeraw	void (*)(struct termios*)
 cfsetispeed	int (*)(struct termios*, unsigned long)
 cfsetospeed	int (*)(struct termios*, unsigned long)
+member struct termios.c_cc	unsigned char (*)[20]
+member struct termios.c_cflag	unsigned long*
+member struct termios.c_iflag	unsigned long*
+member struct termios.c_ispeed	unsigned long*
+member struct termios.c_lflag	unsigned long*
+member struct termios.c_oflag	unsigned long*
+member struct termios.c_ospeed	unsigned long*
 tcdrain	int (*)(int)
 tcflow	int (*)(int, int)
 tcflush	int (*)(int, int)
@@ -1131,6 +1666,9 @@ typedef speed_t	unsigned long*
 typedef tcflag_t	unsigned long*
 
 poll.h y
+member struct pollfd.events	short*
+member struct pollfd.fd	int*
+member struct pollfd.revents	short*
 poll	int (*)(struct pollfd*, unsigned int, int)
 typedef nfds_t	unsigned int*
 
@@ -1149,11 +1687,27 @@ openpty	int (*)(int*, int*, char*, struct termios*, struct winsize*)
 glob.h y
 glob	int (*)(const char*, int, int (*)(const char*, int), glob_t*)
 globfree	void (*)(glob_t*)
+member glob_t.gl_closedir	void (**)(void*)
+member glob_t.gl_errfunc	int (**)(const char*, int)
+member glob_t.gl_flags	int*
+member glob_t.gl_lstat	int (**)(const char*, struct stat*)
+member glob_t.gl_matchc	int*
+member glob_t.gl_offs	unsigned long*
+member glob_t.gl_opendir	void* (**)(const char*)
+member glob_t.gl_pathc	unsigned long*
+member glob_t.gl_pathv	char***
+member glob_t.gl_readdir	struct dirent* (**)(void*)
+member glob_t.gl_stat	int (**)(const char*, struct stat*)
 
 fnmatch.h y
 fnmatch	int (*)(const char*, const char*, int)
 
 regex.h y
+member regex_t.re_endp	const char**
+member regex_t.re_magic	int*
+member regex_t.re_nsub	unsigned long*
+member regmatch_t.rm_eo	long long*
+member regmatch_t.rm_so	long long*
 regcomp	int (*)(regex_t*, const char*, int)
 regerror	unsigned long (*)(int, const regex_t*, char*, unsigned long)
 regexec	int (*)(const regex_t*, const char*, unsigned long, regmatch_t*, int)
@@ -1161,6 +1715,22 @@ regfree	void (*)(regex_t*)
 typedef regoff_t	long long*
 
 pthread.h y
+member pthread_attr_t.__opaque	char (*)[56]
+member pthread_attr_t.__sig	long*
+member pthread_cond_t.__opaque	char (*)[40]
+member pthread_cond_t.__sig	long*
+member pthread_condattr_t.__opaque	char (*)[8]
+member pthread_condattr_t.__sig	long*
+member pthread_mutex_t.__opaque	char (*)[56]
+member pthread_mutex_t.__sig	long*
+member pthread_mutexattr_t.__opaque	char (*)[8]
+member pthread_mutexattr_t.__sig	long*
+member pthread_once_t.__opaque	char (*)[8]
+member pthread_once_t.__sig	long*
+member pthread_rwlock_t.__opaque	char (*)[192]
+member pthread_rwlock_t.__sig	long*
+member pthread_rwlockattr_t.__opaque	char (*)[16]
+member pthread_rwlockattr_t.__sig	long*
 pthread_atfork	int (*)(void (*)(void), void (*)(void), void (*)(void))
 pthread_attr_destroy	int (*)(pthread_attr_t*)
 pthread_attr_getdetachstate	int (*)(const pthread_attr_t*, int*)
@@ -1269,17 +1839,29 @@ aio_return	long (*)(struct aiocb*)
 aio_suspend	int (*)(const struct aiocb* const *, int, const struct timespec*)
 aio_write	int (*)(struct aiocb*)
 lio_listio	int (*)(int, struct aiocb* const *, int, struct sigevent*)
+member struct aiocb.aio_buf	volatile void**
+member struct aiocb.aio_fildes	int*
+member struct aiocb.aio_lio_opcode	int*
+member struct aiocb.aio_nbytes	unsigned long*
+member struct aiocb.aio_offset	long long*
+member struct aiocb.aio_reqprio	int*
+member struct aiocb.aio_sigevent	struct sigevent*
 
 nl_types.h y
 catclose	int (*)(struct __nl_cat_d*)
 catgets	char* (*)(struct __nl_cat_d*, int, int, const char*)
 catopen	struct __nl_cat_d* (*)(const char*, int)
+member struct __nl_cat_d.__data	void**
+member struct __nl_cat_d.__size	int*
 typedef nl_catd	struct __nl_cat_d**
 
 monetary.h y
 strfmon	long (*)(char*, unsigned long, const char*, ...)
 
 wordexp.h y
+member wordexp_t.we_offs	unsigned long*
+member wordexp_t.we_wordc	unsigned long*
+member wordexp_t.we_wordv	char***
 wordexp	int (*)(const char*, wordexp_t*, int)
 wordfree	void (*)(wordexp_t*)
 
@@ -1293,6 +1875,8 @@ hsearch	ENTRY* (*)(ENTRY, ACTION)
 insque	void (*)(void*, void*)
 lfind	void* (*)(const void*, const void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
 lsearch	void* (*)(const void*, void*, unsigned long*, unsigned long, int (*)(const void*, const void*))
+member ENTRY.data	void**
+member ENTRY.key	char**
 remque	void (*)(void*)
 tdelete	void* (*)(const void*, void**, int (*)(const void*, const void*))
 tfind	void* (*)(const void*, void* const *, int (*)(const void*, const void*))
@@ -1313,6 +1897,17 @@ getutxent	struct utmpx* (*)(void)
 getutxent_wtmp	struct utmpx* (*)(void)
 getutxid	struct utmpx* (*)(const struct utmpx*)
 getutxline	struct utmpx* (*)(const struct utmpx*)
+member struct lastlogx.ll_host	char (*)[256]
+member struct lastlogx.ll_line	char (*)[32]
+member struct lastlogx.ll_tv	struct timeval*
+member struct utmpx.ut_host	char (*)[256]
+member struct utmpx.ut_id	char (*)[4]
+member struct utmpx.ut_line	char (*)[32]
+member struct utmpx.ut_pad	unsigned int (*)[16]
+member struct utmpx.ut_pid	int*
+member struct utmpx.ut_tv	struct timeval*
+member struct utmpx.ut_type	short*
+member struct utmpx.ut_user	char (*)[256]
 pututxline	struct utmpx* (*)(const struct utmpx*)
 setutxent	void (*)(void)
 setutxent_wtmp	void (*)(int)
@@ -1330,6 +1925,9 @@ dbm_firstkey	datum (*)(DBM*)
 dbm_nextkey	datum (*)(DBM*)
 dbm_open	DBM* (*)(const char*, int, unsigned short)
 dbm_store	int (*)(DBM*, datum, datum, int)
+member DBM.__opaque	char (*)[68]
+member datum.dptr	void**
+member datum.dsize	unsigned long*
 
 dlfcn.h y
 dladdr	int (*)(const void*, Dl_info*)
@@ -1337,6 +1935,10 @@ dlclose	int (*)(void*)
 dlerror	char* (*)(void)
 dlopen	void* (*)(const char*, int)
 dlsym	void* (*)(void*, const char*)
+member Dl_info.dli_fbase	void**
+member Dl_info.dli_fname	const char**
+member Dl_info.dli_saddr	void**
+member Dl_info.dli_sname	const char**
 
 fenv.h y
 feclearexcept	int (*)(int)
@@ -1350,6 +1952,8 @@ fesetexceptflag	int (*)(const unsigned short*, int)
 fesetround	int (*)(int)
 fetestexcept	int (*)(int)
 feupdateenv	int (*)(const fenv_t*)
+member fenv_t.__fpcr	unsigned long long*
+member fenv_t.__fpsr	unsigned long long*
 typedef fexcept_t	unsigned short*
 
 os/log.h y
@@ -1360,6 +1964,7 @@ typedef os_log_t	struct os_log_s**
 typedef os_log_type_t	unsigned char*
 
 os/lock.h y
+member os_unfair_lock._os_unfair_lock_opaque	unsigned int*
 os_unfair_lock_lock	void (*)(os_unfair_lock*)
 os_unfair_lock_trylock	_Bool (*)(os_unfair_lock*)
 os_unfair_lock_unlock	void (*)(os_unfair_lock*)
@@ -1399,6 +2004,8 @@ mbrlen	unsigned long (*)(const char*, unsigned long, mbstate_t*)
 mbrtowc	unsigned long (*)(int*, const char*, unsigned long, mbstate_t*)
 mbsinit	int (*)(const mbstate_t*)
 mbsrtowcs	unsigned long (*)(int*, const char**, unsigned long, mbstate_t*)
+member mbstate_t.__mbstate8	char (*)[128]
+member mbstate_t._mbstateL	long long*
 putwc	int (*)(int, FILE*)
 putwchar	int (*)(int)
 swprintf	int (*)(int*, unsigned long, const int*, ...)

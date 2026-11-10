@@ -125,6 +125,19 @@ mblen	int (*)(const char*, unsigned long long)
 mbstowcs	unsigned long long (*)(unsigned short*, const char*, unsigned long long)
 mbstowcs_s	int (*)(unsigned long long*, unsigned short*, unsigned long long, const char*, unsigned long long)
 mbtowc	int (*)(unsigned short*, const char*, unsigned long long)
+member _CRT_DOUBLE.x	double*
+member _CRT_FLOAT.f	float*
+member _LDBL12.ld12	unsigned char (*)[12]
+member _LDOUBLE.ld	unsigned char (*)[10]
+member _LONGDOUBLE.x	long double*
+member _locale_tstruct.locinfo	struct threadlocaleinfostruct**
+member _locale_tstruct.mbcinfo	struct threadmbcinfostruct**
+member div_t.quot	int*
+member div_t.rem	int*
+member ldiv_t.quot	long*
+member ldiv_t.rem	long*
+member lldiv_t.quot	long long*
+member lldiv_t.rem	long long*
 mkdtemp	char* (*)(char*)
 mkstemp	int (*)(char*)
 putenv	int (*)(const char*)
@@ -192,6 +205,8 @@ typedef uintmax_t	unsigned long long*
 inttypes.h y
 imaxabs	long long (*)(long long)
 imaxdiv	imaxdiv_t (*)(long long, long long)
+member imaxdiv_t.quot	long long*
+member imaxdiv_t.rem	long long*
 strtoimax	long long (*)(const char*, char**, int)
 strtoumax	unsigned long long (*)(const char*, char**, int)
 
@@ -317,6 +332,8 @@ wcsupr	unsigned short* (*)(unsigned short*)
 wcsxfrm	unsigned long long (*)(unsigned short*, const unsigned short*, unsigned long long)
 
 sched.h y
+member struct sched_param.sched_priority	int*
+member struct timespec.tv_sec	long long*
 sched_get_priority_max	int (*)(int)
 sched_get_priority_min	int (*)(int)
 sched_yield	int (*)(void)
@@ -468,6 +485,14 @@ getc	int (*)(FILE*)
 getchar	int (*)(void)
 getwc	unsigned short (*)(FILE*)
 getwchar	unsigned short (*)(void)
+member FILE._base	char**
+member FILE._bufsiz	int*
+member FILE._charbuf	int*
+member FILE._cnt	int*
+member FILE._file	int*
+member FILE._flag	int*
+member FILE._ptr	char**
+member FILE._tmpfname	char**
 pclose	int (*)(FILE*)
 perror	void (*)(const char*)
 popen	FILE* (*)(const char*, const char*)
@@ -529,6 +554,7 @@ stdarg.h y
 typedef va_list	char**
 
 stdatomic.h y
+member atomic_flag._Value	_Atomic _Bool*
 typedef atomic_bool	_Atomic _Bool*
 typedef atomic_char	_Atomic char*
 typedef atomic_char16_t	_Atomic unsigned short*
@@ -800,6 +826,32 @@ _free_locale	void (*)(_locale_tstruct*)
 _get_current_locale	_locale_tstruct* (*)(void)
 _wsetlocale	unsigned short* (*)(int, const unsigned short*)
 localeconv	struct lconv* (*)(void)
+member struct lconv._W_currency_symbol	unsigned short**
+member struct lconv._W_decimal_point	unsigned short**
+member struct lconv._W_int_curr_symbol	unsigned short**
+member struct lconv._W_mon_decimal_point	unsigned short**
+member struct lconv._W_mon_thousands_sep	unsigned short**
+member struct lconv._W_negative_sign	unsigned short**
+member struct lconv._W_positive_sign	unsigned short**
+member struct lconv._W_thousands_sep	unsigned short**
+member struct lconv.currency_symbol	char**
+member struct lconv.decimal_point	char**
+member struct lconv.frac_digits	char*
+member struct lconv.grouping	char**
+member struct lconv.int_curr_symbol	char**
+member struct lconv.int_frac_digits	char*
+member struct lconv.mon_decimal_point	char**
+member struct lconv.mon_grouping	char**
+member struct lconv.mon_thousands_sep	char**
+member struct lconv.n_cs_precedes	char*
+member struct lconv.n_sep_by_space	char*
+member struct lconv.n_sign_posn	char*
+member struct lconv.negative_sign	char**
+member struct lconv.p_cs_precedes	char*
+member struct lconv.p_sep_by_space	char*
+member struct lconv.p_sign_posn	char*
+member struct lconv.positive_sign	char**
+member struct lconv.thousands_sep	char**
 setlocale	char* (*)(int, const char*)
 
 signal.h y
@@ -836,6 +888,15 @@ daylight	int*
 difftime	double (*)(long long, long long)
 gmtime	struct tm* (*)(const long long*)
 localtime	struct tm* (*)(const long long*)
+member struct tm.tm_hour	int*
+member struct tm.tm_isdst	int*
+member struct tm.tm_mday	int*
+member struct tm.tm_min	int*
+member struct tm.tm_mon	int*
+member struct tm.tm_sec	int*
+member struct tm.tm_wday	int*
+member struct tm.tm_yday	int*
+member struct tm.tm_year	int*
 mktime	long long (*)(struct tm*)
 nanosleep	int (*)(const struct timespec*, struct timespec*)
 strftime	unsigned long long (*)(char*, unsigned long long, const char*, const struct tm*)
@@ -904,6 +965,18 @@ mbrlen	unsigned long long (*)(const char*, unsigned long long, mbstate_t*)
 mbrtowc	unsigned long long (*)(unsigned short*, const char*, unsigned long long, mbstate_t*)
 mbsinit	int (*)(const mbstate_t*)
 mbsrtowcs	unsigned long long (*)(unsigned short*, const char**, unsigned long long, mbstate_t*)
+member struct _wfinddata64_t.attrib	unsigned int*
+member struct _wfinddata64_t.name	unsigned short (*)[260]
+member struct _wfinddata64_t.size	long long*
+member struct _wfinddata64_t.time_access	long long*
+member struct _wfinddata64_t.time_create	long long*
+member struct _wfinddata64_t.time_write	long long*
+member struct _wfinddata64i32_t.attrib	unsigned int*
+member struct _wfinddata64i32_t.name	unsigned short (*)[260]
+member struct _wfinddata64i32_t.size	unsigned long*
+member struct _wfinddata64i32_t.time_access	long long*
+member struct _wfinddata64i32_t.time_create	long long*
+member struct _wfinddata64i32_t.time_write	long long*
 typedef char16_t	unsigned short*
 typedef char32_t	unsigned int*
 wcrtomb	unsigned long long (*)(char*, unsigned short, mbstate_t*)
@@ -921,10 +994,18 @@ utime.h y
 _futime	int (*)(int, struct _utimbuf*)
 _utime	int (*)(const char*, struct _utimbuf*)
 _wutime	int (*)(const unsigned short*, struct _utimbuf*)
+member struct _utimbuf.actime	long long*
+member struct _utimbuf.modtime	long long*
+member struct utimbuf.actime	long long*
+member struct utimbuf.modtime	long long*
 utime	int (*)(const char*, struct utimbuf*)
 
 dirent.h y
 closedir	int (*)(DIR*)
+member struct dirent.d_ino	long*
+member struct dirent.d_name	char (*)[260]
+member struct dirent.d_namlen	unsigned short*
+member struct dirent.d_reclen	unsigned short*
 opendir	DIR* (*)(const char*)
 readdir	struct dirent* (*)(DIR*)
 rewinddir	void (*)(DIR*)
@@ -941,6 +1022,52 @@ _wstat64i32	int (*)(const unsigned short*, struct _stat64i32*)
 fstat	int (*)(int, struct stat*)
 fstat64	int (*)(int, struct stat64*)
 ftw	int (*)(const char*, int (*)(const char*, const struct stat*, int), int)
+member struct FTW.base	int*
+member struct FTW.level	int*
+member struct _stat64.st_atime	long long*
+member struct _stat64.st_ctime	long long*
+member struct _stat64.st_dev	unsigned int*
+member struct _stat64.st_gid	short*
+member struct _stat64.st_ino	unsigned short*
+member struct _stat64.st_mode	unsigned short*
+member struct _stat64.st_mtime	long long*
+member struct _stat64.st_nlink	short*
+member struct _stat64.st_rdev	unsigned int*
+member struct _stat64.st_size	long long*
+member struct _stat64.st_uid	short*
+member struct _stat64i32.st_atime	long long*
+member struct _stat64i32.st_ctime	long long*
+member struct _stat64i32.st_dev	unsigned int*
+member struct _stat64i32.st_gid	short*
+member struct _stat64i32.st_ino	unsigned short*
+member struct _stat64i32.st_mode	unsigned short*
+member struct _stat64i32.st_mtime	long long*
+member struct _stat64i32.st_nlink	short*
+member struct _stat64i32.st_rdev	unsigned int*
+member struct _stat64i32.st_size	long*
+member struct _stat64i32.st_uid	short*
+member struct stat.st_atime	long long*
+member struct stat.st_ctime	long long*
+member struct stat.st_dev	unsigned int*
+member struct stat.st_gid	short*
+member struct stat.st_ino	unsigned short*
+member struct stat.st_mode	unsigned short*
+member struct stat.st_mtime	long long*
+member struct stat.st_nlink	short*
+member struct stat.st_rdev	unsigned int*
+member struct stat.st_size	long*
+member struct stat.st_uid	short*
+member struct stat64.st_atime	long long*
+member struct stat64.st_ctime	long long*
+member struct stat64.st_dev	unsigned int*
+member struct stat64.st_gid	short*
+member struct stat64.st_ino	unsigned short*
+member struct stat64.st_mode	unsigned short*
+member struct stat64.st_mtime	long long*
+member struct stat64.st_nlink	short*
+member struct stat64.st_rdev	unsigned int*
+member struct stat64.st_size	long long*
+member struct stat64.st_uid	short*
 stat	int (*)(const char*, struct stat*)
 stat64	int (*)(const char*, struct stat64*)
 wstat	int (*)(const unsigned short*, struct stat*)
@@ -999,6 +1126,10 @@ write	int (*)(int, const void*, unsigned int)
 getopt.h y
 getopt_long	int (*)(int, char* const *, const char*, const struct option*, int*)
 getopt_long_only	int (*)(int, char* const *, const char*, const struct option*, int*)
+member struct option.flag	int**
+member struct option.has_arg	int*
+member struct option.name	const char**
+member struct option.val	int*
 
 fcntl.h y
 creat	int (*)(const char*, int)
@@ -1011,6 +1142,10 @@ wctype	unsigned short (*)(const char*)
 
 sys/time.h y
 gettimeofday	int (*)(struct timeval*, void*)
+member struct timeval.tv_sec	long*
+member struct timeval.tv_usec	long*
+member struct timezone.tz_dsttime	int*
+member struct timezone.tz_minuteswest	int*
 
 strings.h y
 strcasecmp	int (*)(const char*, const char*)
@@ -1083,6 +1218,8 @@ _lfind	void* (*)(const void*, const void*, unsigned int*, unsigned int, int (*)(
 _lsearch	void* (*)(const void*, void*, unsigned int*, unsigned int, int (*)(const void*, const void*))
 lfind	void* (*)(const void*, const void*, unsigned int*, unsigned int, int (*)(const void*, const void*))
 lsearch	void* (*)(const void*, void*, unsigned int*, unsigned int, int (*)(const void*, const void*))
+member ENTRY.data	void**
+member ENTRY.key	char**
 tdelete	void* (*)(const void*, void**, int (*)(const void*, const void*))
 tdestroy	void (*)(void*, void (*)(void*))
 tfind	void* (*)(const void*, void* const *, int (*)(const void*, const void*))
@@ -1101,6 +1238,8 @@ fesetexceptflag	int (*)(const unsigned long*, int)
 fesetround	int (*)(int)
 fetestexcept	int (*)(int)
 feupdateenv	int (*)(const fenv_t*)
+member fenv_t._Fe_ctl	unsigned long*
+member fenv_t._Fe_stat	unsigned long*
 typedef fexcept_t	unsigned long*
 
 direct.h y
@@ -2022,6 +2161,1938 @@ lstrcpyA	char* (*)(char*, const char*)
 lstrcpyW	unsigned short* (*)(unsigned short*, const unsigned short*)
 lstrlenA	int (*)(const char*)
 lstrlenW	int (*)(const unsigned short*)
+member ABC.abcA	int*
+member ABC.abcB	unsigned int*
+member ABC.abcC	int*
+member ABCFLOAT.abcfA	float*
+member ABCFLOAT.abcfB	float*
+member ABCFLOAT.abcfC	float*
+member ARM64_NT_CONTEXT.Bcr	unsigned long (*)[8]
+member ARM64_NT_CONTEXT.Bvr	unsigned long long (*)[8]
+member ARM64_NT_CONTEXT.ContextFlags	unsigned long*
+member ARM64_NT_CONTEXT.Cpsr	unsigned long*
+member ARM64_NT_CONTEXT.Fp	unsigned long long*
+member ARM64_NT_CONTEXT.Fpcr	unsigned long*
+member ARM64_NT_CONTEXT.Fpsr	unsigned long*
+member ARM64_NT_CONTEXT.Lr	unsigned long long*
+member ARM64_NT_CONTEXT.Pc	unsigned long long*
+member ARM64_NT_CONTEXT.Sp	unsigned long long*
+member ARM64_NT_CONTEXT.V	ARM64_NT_NEON128 (*)[32]
+member ARM64_NT_CONTEXT.Wcr	unsigned long (*)[2]
+member ARM64_NT_CONTEXT.Wvr	unsigned long long (*)[2]
+member ARM64_NT_CONTEXT.X	unsigned long long (*)[31]
+member ARM64_NT_CONTEXT.X0	unsigned long long*
+member ARM64_NT_CONTEXT.X1	unsigned long long*
+member ARM64_NT_CONTEXT.X10	unsigned long long*
+member ARM64_NT_CONTEXT.X11	unsigned long long*
+member ARM64_NT_CONTEXT.X12	unsigned long long*
+member ARM64_NT_CONTEXT.X13	unsigned long long*
+member ARM64_NT_CONTEXT.X14	unsigned long long*
+member ARM64_NT_CONTEXT.X15	unsigned long long*
+member ARM64_NT_CONTEXT.X16	unsigned long long*
+member ARM64_NT_CONTEXT.X17	unsigned long long*
+member ARM64_NT_CONTEXT.X18	unsigned long long*
+member ARM64_NT_CONTEXT.X19	unsigned long long*
+member ARM64_NT_CONTEXT.X2	unsigned long long*
+member ARM64_NT_CONTEXT.X20	unsigned long long*
+member ARM64_NT_CONTEXT.X21	unsigned long long*
+member ARM64_NT_CONTEXT.X22	unsigned long long*
+member ARM64_NT_CONTEXT.X23	unsigned long long*
+member ARM64_NT_CONTEXT.X24	unsigned long long*
+member ARM64_NT_CONTEXT.X25	unsigned long long*
+member ARM64_NT_CONTEXT.X26	unsigned long long*
+member ARM64_NT_CONTEXT.X27	unsigned long long*
+member ARM64_NT_CONTEXT.X28	unsigned long long*
+member ARM64_NT_CONTEXT.X3	unsigned long long*
+member ARM64_NT_CONTEXT.X4	unsigned long long*
+member ARM64_NT_CONTEXT.X5	unsigned long long*
+member ARM64_NT_CONTEXT.X6	unsigned long long*
+member ARM64_NT_CONTEXT.X7	unsigned long long*
+member ARM64_NT_CONTEXT.X8	unsigned long long*
+member ARM64_NT_CONTEXT.X9	unsigned long long*
+member ARM64_NT_NEON128.B	unsigned char (*)[16]
+member ARM64_NT_NEON128.D	double (*)[2]
+member ARM64_NT_NEON128.H	unsigned short (*)[8]
+member ARM64_NT_NEON128.High	long long*
+member ARM64_NT_NEON128.Low	unsigned long long*
+member ARM64_NT_NEON128.S	float (*)[4]
+member AXESLISTA.axlAxisInfo	AXISINFOA (*)[16]
+member AXESLISTA.axlNumAxes	unsigned long*
+member AXESLISTA.axlReserved	unsigned long*
+member AXESLISTW.axlAxisInfo	AXISINFOW (*)[16]
+member AXESLISTW.axlNumAxes	unsigned long*
+member AXESLISTW.axlReserved	unsigned long*
+member AXISINFOA.axAxisName	unsigned char (*)[16]
+member AXISINFOA.axMaxValue	long*
+member AXISINFOA.axMinValue	long*
+member AXISINFOW.axAxisName	unsigned short (*)[16]
+member AXISINFOW.axMaxValue	long*
+member AXISINFOW.axMinValue	long*
+member BITMAP.bmBits	void**
+member BITMAP.bmBitsPixel	unsigned short*
+member BITMAP.bmHeight	long*
+member BITMAP.bmPlanes	unsigned short*
+member BITMAP.bmType	long*
+member BITMAP.bmWidth	long*
+member BITMAP.bmWidthBytes	long*
+member BITMAPCOREHEADER.bcBitCount	unsigned short*
+member BITMAPCOREHEADER.bcHeight	unsigned short*
+member BITMAPCOREHEADER.bcPlanes	unsigned short*
+member BITMAPCOREHEADER.bcSize	unsigned long*
+member BITMAPCOREHEADER.bcWidth	unsigned short*
+member BITMAPCOREINFO.bmciColors	RGBTRIPLE (*)[1]
+member BITMAPCOREINFO.bmciHeader	BITMAPCOREHEADER*
+member BITMAPFILEHEADER.bfOffBits	unsigned long*
+member BITMAPFILEHEADER.bfReserved1	unsigned short*
+member BITMAPFILEHEADER.bfReserved2	unsigned short*
+member BITMAPFILEHEADER.bfSize	unsigned long*
+member BITMAPFILEHEADER.bfType	unsigned short*
+member BITMAPINFO.bmiColors	RGBQUAD (*)[1]
+member BITMAPINFO.bmiHeader	BITMAPINFOHEADER*
+member BITMAPINFOHEADER.biBitCount	unsigned short*
+member BITMAPINFOHEADER.biClrImportant	unsigned long*
+member BITMAPINFOHEADER.biClrUsed	unsigned long*
+member BITMAPINFOHEADER.biCompression	unsigned long*
+member BITMAPINFOHEADER.biHeight	long*
+member BITMAPINFOHEADER.biPlanes	unsigned short*
+member BITMAPINFOHEADER.biSize	unsigned long*
+member BITMAPINFOHEADER.biSizeImage	unsigned long*
+member BITMAPINFOHEADER.biWidth	long*
+member BITMAPINFOHEADER.biXPelsPerMeter	long*
+member BITMAPINFOHEADER.biYPelsPerMeter	long*
+member BITMAPV4HEADER.bV4AlphaMask	unsigned long*
+member BITMAPV4HEADER.bV4BitCount	unsigned short*
+member BITMAPV4HEADER.bV4BlueMask	unsigned long*
+member BITMAPV4HEADER.bV4CSType	unsigned long*
+member BITMAPV4HEADER.bV4ClrImportant	unsigned long*
+member BITMAPV4HEADER.bV4ClrUsed	unsigned long*
+member BITMAPV4HEADER.bV4Endpoints	CIEXYZTRIPLE*
+member BITMAPV4HEADER.bV4GammaBlue	unsigned long*
+member BITMAPV4HEADER.bV4GammaGreen	unsigned long*
+member BITMAPV4HEADER.bV4GammaRed	unsigned long*
+member BITMAPV4HEADER.bV4GreenMask	unsigned long*
+member BITMAPV4HEADER.bV4Height	long*
+member BITMAPV4HEADER.bV4Planes	unsigned short*
+member BITMAPV4HEADER.bV4RedMask	unsigned long*
+member BITMAPV4HEADER.bV4Size	unsigned long*
+member BITMAPV4HEADER.bV4SizeImage	unsigned long*
+member BITMAPV4HEADER.bV4V4Compression	unsigned long*
+member BITMAPV4HEADER.bV4Width	long*
+member BITMAPV4HEADER.bV4XPelsPerMeter	long*
+member BITMAPV4HEADER.bV4YPelsPerMeter	long*
+member BITMAPV5HEADER.bV5AlphaMask	unsigned long*
+member BITMAPV5HEADER.bV5BitCount	unsigned short*
+member BITMAPV5HEADER.bV5BlueMask	unsigned long*
+member BITMAPV5HEADER.bV5CSType	unsigned long*
+member BITMAPV5HEADER.bV5ClrImportant	unsigned long*
+member BITMAPV5HEADER.bV5ClrUsed	unsigned long*
+member BITMAPV5HEADER.bV5Compression	unsigned long*
+member BITMAPV5HEADER.bV5Endpoints	CIEXYZTRIPLE*
+member BITMAPV5HEADER.bV5GammaBlue	unsigned long*
+member BITMAPV5HEADER.bV5GammaGreen	unsigned long*
+member BITMAPV5HEADER.bV5GammaRed	unsigned long*
+member BITMAPV5HEADER.bV5GreenMask	unsigned long*
+member BITMAPV5HEADER.bV5Height	long*
+member BITMAPV5HEADER.bV5Intent	unsigned long*
+member BITMAPV5HEADER.bV5Planes	unsigned short*
+member BITMAPV5HEADER.bV5ProfileData	unsigned long*
+member BITMAPV5HEADER.bV5ProfileSize	unsigned long*
+member BITMAPV5HEADER.bV5RedMask	unsigned long*
+member BITMAPV5HEADER.bV5Reserved	unsigned long*
+member BITMAPV5HEADER.bV5Size	unsigned long*
+member BITMAPV5HEADER.bV5SizeImage	unsigned long*
+member BITMAPV5HEADER.bV5Width	long*
+member BITMAPV5HEADER.bV5XPelsPerMeter	long*
+member BITMAPV5HEADER.bV5YPelsPerMeter	long*
+member BLENDFUNCTION.AlphaFormat	unsigned char*
+member BLENDFUNCTION.BlendFlags	unsigned char*
+member BLENDFUNCTION.BlendOp	unsigned char*
+member BLENDFUNCTION.SourceConstantAlpha	unsigned char*
+member BY_HANDLE_FILE_INFORMATION.dwFileAttributes	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.dwVolumeSerialNumber	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.ftCreationTime	FILETIME*
+member BY_HANDLE_FILE_INFORMATION.ftLastAccessTime	FILETIME*
+member BY_HANDLE_FILE_INFORMATION.ftLastWriteTime	FILETIME*
+member BY_HANDLE_FILE_INFORMATION.nFileIndexHigh	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.nFileIndexLow	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.nFileSizeHigh	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.nFileSizeLow	unsigned long*
+member BY_HANDLE_FILE_INFORMATION.nNumberOfLinks	unsigned long*
+member CHARSETINFO.ciACP	unsigned int*
+member CHARSETINFO.ciCharset	unsigned int*
+member CHARSETINFO.fs	FONTSIGNATURE*
+member CHAR_INFO.Attributes	unsigned short*
+member CIEXYZ.ciexyzX	long*
+member CIEXYZ.ciexyzY	long*
+member CIEXYZ.ciexyzZ	long*
+member CIEXYZTRIPLE.ciexyzBlue	CIEXYZ*
+member CIEXYZTRIPLE.ciexyzGreen	CIEXYZ*
+member CIEXYZTRIPLE.ciexyzRed	CIEXYZ*
+member COLORADJUSTMENT.caBlueGamma	unsigned short*
+member COLORADJUSTMENT.caBrightness	short*
+member COLORADJUSTMENT.caColorfulness	short*
+member COLORADJUSTMENT.caContrast	short*
+member COLORADJUSTMENT.caFlags	unsigned short*
+member COLORADJUSTMENT.caGreenGamma	unsigned short*
+member COLORADJUSTMENT.caIlluminantIndex	unsigned short*
+member COLORADJUSTMENT.caRedGamma	unsigned short*
+member COLORADJUSTMENT.caRedGreenTint	short*
+member COLORADJUSTMENT.caReferenceBlack	unsigned short*
+member COLORADJUSTMENT.caReferenceWhite	unsigned short*
+member COLORADJUSTMENT.caSize	unsigned short*
+member CONSOLE_READCONSOLE_CONTROL.dwControlKeyState	unsigned long*
+member CONSOLE_READCONSOLE_CONTROL.dwCtrlWakeupMask	unsigned long*
+member CONSOLE_READCONSOLE_CONTROL.nInitialChars	unsigned long*
+member CONSOLE_READCONSOLE_CONTROL.nLength	unsigned long*
+member CONSOLE_SCREEN_BUFFER_INFO.dwCursorPosition	COORD*
+member CONSOLE_SCREEN_BUFFER_INFO.dwMaximumWindowSize	COORD*
+member CONSOLE_SCREEN_BUFFER_INFO.dwSize	COORD*
+member CONSOLE_SCREEN_BUFFER_INFO.srWindow	SMALL_RECT*
+member CONSOLE_SCREEN_BUFFER_INFO.wAttributes	unsigned short*
+member COORD.X	short*
+member COORD.Y	short*
+member COPYFILE2_EXTENDED_PARAMETERS.dwCopyFlags	unsigned long*
+member COPYFILE2_EXTENDED_PARAMETERS.dwSize	unsigned long*
+member COPYFILE2_EXTENDED_PARAMETERS.pfCancel	int**
+member COPYFILE2_EXTENDED_PARAMETERS.pvCallbackContext	void**
+member DESIGNVECTOR.dvNumAxes	unsigned long*
+member DESIGNVECTOR.dvReserved	unsigned long*
+member DESIGNVECTOR.dvValues	long (*)[16]
+member DEVMODEA.dmBitsPerPel	unsigned long*
+member DEVMODEA.dmCollate	short*
+member DEVMODEA.dmColor	short*
+member DEVMODEA.dmCopies	short*
+member DEVMODEA.dmDefaultSource	short*
+member DEVMODEA.dmDeviceName	unsigned char (*)[32]
+member DEVMODEA.dmDisplayFixedOutput	unsigned long*
+member DEVMODEA.dmDisplayFlags	unsigned long*
+member DEVMODEA.dmDisplayFrequency	unsigned long*
+member DEVMODEA.dmDisplayOrientation	unsigned long*
+member DEVMODEA.dmDitherType	unsigned long*
+member DEVMODEA.dmDriverExtra	unsigned short*
+member DEVMODEA.dmDriverVersion	unsigned short*
+member DEVMODEA.dmDuplex	short*
+member DEVMODEA.dmFields	unsigned long*
+member DEVMODEA.dmFormName	unsigned char (*)[32]
+member DEVMODEA.dmICMIntent	unsigned long*
+member DEVMODEA.dmICMMethod	unsigned long*
+member DEVMODEA.dmLogPixels	unsigned short*
+member DEVMODEA.dmMediaType	unsigned long*
+member DEVMODEA.dmNup	unsigned long*
+member DEVMODEA.dmOrientation	short*
+member DEVMODEA.dmPanningHeight	unsigned long*
+member DEVMODEA.dmPanningWidth	unsigned long*
+member DEVMODEA.dmPaperLength	short*
+member DEVMODEA.dmPaperSize	short*
+member DEVMODEA.dmPaperWidth	short*
+member DEVMODEA.dmPelsHeight	unsigned long*
+member DEVMODEA.dmPelsWidth	unsigned long*
+member DEVMODEA.dmPosition	POINTL*
+member DEVMODEA.dmPrintQuality	short*
+member DEVMODEA.dmReserved1	unsigned long*
+member DEVMODEA.dmReserved2	unsigned long*
+member DEVMODEA.dmScale	short*
+member DEVMODEA.dmSize	unsigned short*
+member DEVMODEA.dmSpecVersion	unsigned short*
+member DEVMODEA.dmTTOption	short*
+member DEVMODEA.dmYResolution	short*
+member DEVMODEW.dmBitsPerPel	unsigned long*
+member DEVMODEW.dmCollate	short*
+member DEVMODEW.dmColor	short*
+member DEVMODEW.dmCopies	short*
+member DEVMODEW.dmDefaultSource	short*
+member DEVMODEW.dmDeviceName	unsigned short (*)[32]
+member DEVMODEW.dmDisplayFixedOutput	unsigned long*
+member DEVMODEW.dmDisplayFlags	unsigned long*
+member DEVMODEW.dmDisplayFrequency	unsigned long*
+member DEVMODEW.dmDisplayOrientation	unsigned long*
+member DEVMODEW.dmDitherType	unsigned long*
+member DEVMODEW.dmDriverExtra	unsigned short*
+member DEVMODEW.dmDriverVersion	unsigned short*
+member DEVMODEW.dmDuplex	short*
+member DEVMODEW.dmFields	unsigned long*
+member DEVMODEW.dmFormName	unsigned short (*)[32]
+member DEVMODEW.dmICMIntent	unsigned long*
+member DEVMODEW.dmICMMethod	unsigned long*
+member DEVMODEW.dmLogPixels	unsigned short*
+member DEVMODEW.dmMediaType	unsigned long*
+member DEVMODEW.dmNup	unsigned long*
+member DEVMODEW.dmOrientation	short*
+member DEVMODEW.dmPanningHeight	unsigned long*
+member DEVMODEW.dmPanningWidth	unsigned long*
+member DEVMODEW.dmPaperLength	short*
+member DEVMODEW.dmPaperSize	short*
+member DEVMODEW.dmPaperWidth	short*
+member DEVMODEW.dmPelsHeight	unsigned long*
+member DEVMODEW.dmPelsWidth	unsigned long*
+member DEVMODEW.dmPosition	POINTL*
+member DEVMODEW.dmPrintQuality	short*
+member DEVMODEW.dmReserved1	unsigned long*
+member DEVMODEW.dmReserved2	unsigned long*
+member DEVMODEW.dmScale	short*
+member DEVMODEW.dmSize	unsigned short*
+member DEVMODEW.dmSpecVersion	unsigned short*
+member DEVMODEW.dmTTOption	short*
+member DEVMODEW.dmYResolution	short*
+member DIBSECTION.dsBitfields	unsigned long (*)[3]
+member DIBSECTION.dsBm	BITMAP*
+member DIBSECTION.dsBmih	BITMAPINFOHEADER*
+member DIBSECTION.dsOffset	unsigned long*
+member DIBSECTION.dshSection	void**
+member DISPLAYCONFIG_2DREGION.cx	unsigned int*
+member DISPLAYCONFIG_2DREGION.cy	unsigned int*
+member DISPLAYCONFIG_ADAPTER_NAME.adapterDevicePath	unsigned short (*)[128]
+member DISPLAYCONFIG_ADAPTER_NAME.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_DESKTOP_IMAGE_INFO.DesktopImageClip	RECTL*
+member DISPLAYCONFIG_DESKTOP_IMAGE_INFO.DesktopImageRegion	RECTL*
+member DISPLAYCONFIG_DESKTOP_IMAGE_INFO.PathSourceSize	POINTL*
+member DISPLAYCONFIG_DEVICE_INFO_HEADER.adapterId	LUID*
+member DISPLAYCONFIG_DEVICE_INFO_HEADER.id	unsigned int*
+member DISPLAYCONFIG_DEVICE_INFO_HEADER.size	unsigned int*
+member DISPLAYCONFIG_DEVICE_INFO_HEADER.type	DISPLAYCONFIG_DEVICE_INFO_TYPE*
+member DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO.bitsPerColorChannel	unsigned int*
+member DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO.colorEncoding	DISPLAYCONFIG_COLOR_ENCODING*
+member DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO.value	unsigned int*
+member DISPLAYCONFIG_GET_MONITOR_SPECIALIZATION.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_GET_MONITOR_SPECIALIZATION.value	unsigned int*
+member DISPLAYCONFIG_MODE_INFO.adapterId	LUID*
+member DISPLAYCONFIG_MODE_INFO.id	unsigned int*
+member DISPLAYCONFIG_MODE_INFO.infoType	DISPLAYCONFIG_MODE_INFO_TYPE*
+member DISPLAYCONFIG_MODE_INFO.sourceMode	DISPLAYCONFIG_SOURCE_MODE*
+member DISPLAYCONFIG_MODE_INFO.targetMode	DISPLAYCONFIG_TARGET_MODE*
+member DISPLAYCONFIG_PATH_INFO.flags	unsigned int*
+member DISPLAYCONFIG_PATH_INFO.sourceInfo	DISPLAYCONFIG_PATH_SOURCE_INFO*
+member DISPLAYCONFIG_PATH_INFO.targetInfo	DISPLAYCONFIG_PATH_TARGET_INFO*
+member DISPLAYCONFIG_PATH_SOURCE_INFO.adapterId	LUID*
+member DISPLAYCONFIG_PATH_SOURCE_INFO.id	unsigned int*
+member DISPLAYCONFIG_PATH_SOURCE_INFO.modeInfoIdx	unsigned int*
+member DISPLAYCONFIG_PATH_SOURCE_INFO.statusFlags	unsigned int*
+member DISPLAYCONFIG_PATH_TARGET_INFO.adapterId	LUID*
+member DISPLAYCONFIG_PATH_TARGET_INFO.id	unsigned int*
+member DISPLAYCONFIG_PATH_TARGET_INFO.modeInfoIdx	unsigned int*
+member DISPLAYCONFIG_PATH_TARGET_INFO.outputTechnology	DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY*
+member DISPLAYCONFIG_PATH_TARGET_INFO.refreshRate	DISPLAYCONFIG_RATIONAL*
+member DISPLAYCONFIG_PATH_TARGET_INFO.rotation	DISPLAYCONFIG_ROTATION*
+member DISPLAYCONFIG_PATH_TARGET_INFO.scaling	DISPLAYCONFIG_SCALING*
+member DISPLAYCONFIG_PATH_TARGET_INFO.scanLineOrdering	DISPLAYCONFIG_SCANLINE_ORDERING*
+member DISPLAYCONFIG_PATH_TARGET_INFO.statusFlags	unsigned int*
+member DISPLAYCONFIG_PATH_TARGET_INFO.targetAvailable	int*
+member DISPLAYCONFIG_RATIONAL.Denominator	unsigned int*
+member DISPLAYCONFIG_RATIONAL.Numerator	unsigned int*
+member DISPLAYCONFIG_SDR_WHITE_LEVEL.SDRWhiteLevel	unsigned long*
+member DISPLAYCONFIG_SDR_WHITE_LEVEL.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE.value	unsigned int*
+member DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION.specializationApplicationName	unsigned short (*)[128]
+member DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION.specializationSubType	GUID*
+member DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION.specializationType	GUID*
+member DISPLAYCONFIG_SET_MONITOR_SPECIALIZATION.value	unsigned int*
+member DISPLAYCONFIG_SET_TARGET_PERSISTENCE.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SET_TARGET_PERSISTENCE.value	unsigned int*
+member DISPLAYCONFIG_SOURCE_DEVICE_NAME.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SOURCE_DEVICE_NAME.viewGdiDeviceName	unsigned short (*)[32]
+member DISPLAYCONFIG_SOURCE_MODE.height	unsigned int*
+member DISPLAYCONFIG_SOURCE_MODE.pixelFormat	DISPLAYCONFIG_PIXELFORMAT*
+member DISPLAYCONFIG_SOURCE_MODE.position	POINTL*
+member DISPLAYCONFIG_SOURCE_MODE.width	unsigned int*
+member DISPLAYCONFIG_SUPPORT_VIRTUAL_RESOLUTION.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_SUPPORT_VIRTUAL_RESOLUTION.value	unsigned int*
+member DISPLAYCONFIG_TARGET_BASE_TYPE.baseOutputTechnology	DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY*
+member DISPLAYCONFIG_TARGET_BASE_TYPE.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.connectorInstance	unsigned int*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.edidManufactureId	unsigned short*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.edidProductCodeId	unsigned short*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.flags	DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.monitorDevicePath	unsigned short (*)[128]
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.monitorFriendlyDeviceName	unsigned short (*)[64]
+member DISPLAYCONFIG_TARGET_DEVICE_NAME.outputTechnology	DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY*
+member DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS.value	unsigned int*
+member DISPLAYCONFIG_TARGET_MODE.targetVideoSignalInfo	DISPLAYCONFIG_VIDEO_SIGNAL_INFO*
+member DISPLAYCONFIG_TARGET_PREFERRED_MODE.header	DISPLAYCONFIG_DEVICE_INFO_HEADER*
+member DISPLAYCONFIG_TARGET_PREFERRED_MODE.height	unsigned int*
+member DISPLAYCONFIG_TARGET_PREFERRED_MODE.targetMode	DISPLAYCONFIG_TARGET_MODE*
+member DISPLAYCONFIG_TARGET_PREFERRED_MODE.width	unsigned int*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.activeSize	DISPLAYCONFIG_2DREGION*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.hSyncFreq	DISPLAYCONFIG_RATIONAL*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.pixelRate	unsigned long long*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.scanLineOrdering	DISPLAYCONFIG_SCANLINE_ORDERING*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.totalSize	DISPLAYCONFIG_2DREGION*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.vSyncFreq	DISPLAYCONFIG_RATIONAL*
+member DISPLAYCONFIG_VIDEO_SIGNAL_INFO.videoStandard	unsigned int*
+member DISPLAY_DEVICEA.DeviceID	char (*)[128]
+member DISPLAY_DEVICEA.DeviceKey	char (*)[128]
+member DISPLAY_DEVICEA.DeviceName	char (*)[32]
+member DISPLAY_DEVICEA.DeviceString	char (*)[128]
+member DISPLAY_DEVICEA.StateFlags	unsigned long*
+member DISPLAY_DEVICEA.cb	unsigned long*
+member DISPLAY_DEVICEW.DeviceID	unsigned short (*)[128]
+member DISPLAY_DEVICEW.DeviceKey	unsigned short (*)[128]
+member DISPLAY_DEVICEW.DeviceName	unsigned short (*)[32]
+member DISPLAY_DEVICEW.DeviceString	unsigned short (*)[128]
+member DISPLAY_DEVICEW.StateFlags	unsigned long*
+member DISPLAY_DEVICEW.cb	unsigned long*
+member DOCINFOA.cbSize	int*
+member DOCINFOA.fwType	unsigned long*
+member DOCINFOA.lpszDatatype	const char**
+member DOCINFOA.lpszDocName	const char**
+member DOCINFOA.lpszOutput	const char**
+member DOCINFOW.cbSize	int*
+member DOCINFOW.fwType	unsigned long*
+member DOCINFOW.lpszDatatype	const unsigned short**
+member DOCINFOW.lpszDocName	const unsigned short**
+member DOCINFOW.lpszOutput	const unsigned short**
+member DRAWPATRECT.ptPosition	POINT*
+member DRAWPATRECT.ptSize	POINT*
+member DRAWPATRECT.wPattern	unsigned short*
+member DRAWPATRECT.wStyle	unsigned short*
+member EMR.iType	unsigned long*
+member EMR.nSize	unsigned long*
+member EMRABORTPATH.emr	EMR*
+member EMRALPHABLEND.cbBitsSrc	unsigned long*
+member EMRALPHABLEND.cbBmiSrc	unsigned long*
+member EMRALPHABLEND.crBkColorSrc	unsigned long*
+member EMRALPHABLEND.cxDest	long*
+member EMRALPHABLEND.cxSrc	long*
+member EMRALPHABLEND.cyDest	long*
+member EMRALPHABLEND.cySrc	long*
+member EMRALPHABLEND.dwRop	unsigned long*
+member EMRALPHABLEND.emr	EMR*
+member EMRALPHABLEND.iUsageSrc	unsigned long*
+member EMRALPHABLEND.offBitsSrc	unsigned long*
+member EMRALPHABLEND.offBmiSrc	unsigned long*
+member EMRALPHABLEND.rclBounds	RECTL*
+member EMRALPHABLEND.xDest	long*
+member EMRALPHABLEND.xSrc	long*
+member EMRALPHABLEND.xformSrc	XFORM*
+member EMRALPHABLEND.yDest	long*
+member EMRALPHABLEND.ySrc	long*
+member EMRANGLEARC.eStartAngle	float*
+member EMRANGLEARC.eSweepAngle	float*
+member EMRANGLEARC.emr	EMR*
+member EMRANGLEARC.nRadius	unsigned long*
+member EMRANGLEARC.ptlCenter	POINTL*
+member EMRARC.emr	EMR*
+member EMRARC.ptlEnd	POINTL*
+member EMRARC.ptlStart	POINTL*
+member EMRARC.rclBox	RECTL*
+member EMRBITBLT.cbBitsSrc	unsigned long*
+member EMRBITBLT.cbBmiSrc	unsigned long*
+member EMRBITBLT.crBkColorSrc	unsigned long*
+member EMRBITBLT.cxDest	long*
+member EMRBITBLT.cyDest	long*
+member EMRBITBLT.dwRop	unsigned long*
+member EMRBITBLT.emr	EMR*
+member EMRBITBLT.iUsageSrc	unsigned long*
+member EMRBITBLT.offBitsSrc	unsigned long*
+member EMRBITBLT.offBmiSrc	unsigned long*
+member EMRBITBLT.rclBounds	RECTL*
+member EMRBITBLT.xDest	long*
+member EMRBITBLT.xSrc	long*
+member EMRBITBLT.xformSrc	XFORM*
+member EMRBITBLT.yDest	long*
+member EMRBITBLT.ySrc	long*
+member EMRCOLORCORRECTPALETTE.emr	EMR*
+member EMRCOLORCORRECTPALETTE.ihPalette	unsigned long*
+member EMRCOLORCORRECTPALETTE.nFirstEntry	unsigned long*
+member EMRCOLORCORRECTPALETTE.nPalEntries	unsigned long*
+member EMRCOLORCORRECTPALETTE.nReserved	unsigned long*
+member EMRCOLORMATCHTOTARGET.Data	unsigned char (*)[1]
+member EMRCOLORMATCHTOTARGET.cbData	unsigned long*
+member EMRCOLORMATCHTOTARGET.cbName	unsigned long*
+member EMRCOLORMATCHTOTARGET.dwAction	unsigned long*
+member EMRCOLORMATCHTOTARGET.dwFlags	unsigned long*
+member EMRCOLORMATCHTOTARGET.emr	EMR*
+member EMRCREATEBRUSHINDIRECT.emr	EMR*
+member EMRCREATEBRUSHINDIRECT.ihBrush	unsigned long*
+member EMRCREATEBRUSHINDIRECT.lb	LOGBRUSH32*
+member EMRCREATECOLORSPACE.emr	EMR*
+member EMRCREATECOLORSPACE.ihCS	unsigned long*
+member EMRCREATECOLORSPACE.lcs	LOGCOLORSPACEA*
+member EMRCREATECOLORSPACEW.Data	unsigned char (*)[1]
+member EMRCREATECOLORSPACEW.cbData	unsigned long*
+member EMRCREATECOLORSPACEW.dwFlags	unsigned long*
+member EMRCREATECOLORSPACEW.emr	EMR*
+member EMRCREATECOLORSPACEW.ihCS	unsigned long*
+member EMRCREATECOLORSPACEW.lcs	LOGCOLORSPACEW*
+member EMRCREATEDIBPATTERNBRUSHPT.cbBits	unsigned long*
+member EMRCREATEDIBPATTERNBRUSHPT.cbBmi	unsigned long*
+member EMRCREATEDIBPATTERNBRUSHPT.emr	EMR*
+member EMRCREATEDIBPATTERNBRUSHPT.iUsage	unsigned long*
+member EMRCREATEDIBPATTERNBRUSHPT.ihBrush	unsigned long*
+member EMRCREATEDIBPATTERNBRUSHPT.offBits	unsigned long*
+member EMRCREATEDIBPATTERNBRUSHPT.offBmi	unsigned long*
+member EMRCREATEMONOBRUSH.cbBits	unsigned long*
+member EMRCREATEMONOBRUSH.cbBmi	unsigned long*
+member EMRCREATEMONOBRUSH.emr	EMR*
+member EMRCREATEMONOBRUSH.iUsage	unsigned long*
+member EMRCREATEMONOBRUSH.ihBrush	unsigned long*
+member EMRCREATEMONOBRUSH.offBits	unsigned long*
+member EMRCREATEMONOBRUSH.offBmi	unsigned long*
+member EMRCREATEPALETTE.emr	EMR*
+member EMRCREATEPALETTE.ihPal	unsigned long*
+member EMRCREATEPALETTE.lgpl	LOGPALETTE*
+member EMRCREATEPEN.emr	EMR*
+member EMRCREATEPEN.ihPen	unsigned long*
+member EMRCREATEPEN.lopn	LOGPEN*
+member EMRELLIPSE.emr	EMR*
+member EMRELLIPSE.rclBox	RECTL*
+member EMREOF.emr	EMR*
+member EMREOF.nPalEntries	unsigned long*
+member EMREOF.nSizeLast	unsigned long*
+member EMREOF.offPalEntries	unsigned long*
+member EMREXCLUDECLIPRECT.emr	EMR*
+member EMREXCLUDECLIPRECT.rclClip	RECTL*
+member EMREXTCREATEFONTINDIRECTW.elfw	EXTLOGFONTW*
+member EMREXTCREATEFONTINDIRECTW.emr	EMR*
+member EMREXTCREATEFONTINDIRECTW.ihFont	unsigned long*
+member EMREXTCREATEPEN.cbBits	unsigned long*
+member EMREXTCREATEPEN.cbBmi	unsigned long*
+member EMREXTCREATEPEN.elp	EXTLOGPEN*
+member EMREXTCREATEPEN.emr	EMR*
+member EMREXTCREATEPEN.ihPen	unsigned long*
+member EMREXTCREATEPEN.offBits	unsigned long*
+member EMREXTCREATEPEN.offBmi	unsigned long*
+member EMREXTESCAPE.EscData	unsigned char (*)[1]
+member EMREXTESCAPE.cbEscData	int*
+member EMREXTESCAPE.emr	EMR*
+member EMREXTESCAPE.iEscape	int*
+member EMREXTFLOODFILL.crColor	unsigned long*
+member EMREXTFLOODFILL.emr	EMR*
+member EMREXTFLOODFILL.iMode	unsigned long*
+member EMREXTFLOODFILL.ptlStart	POINTL*
+member EMREXTSELECTCLIPRGN.RgnData	unsigned char (*)[1]
+member EMREXTSELECTCLIPRGN.cbRgnData	unsigned long*
+member EMREXTSELECTCLIPRGN.emr	EMR*
+member EMREXTSELECTCLIPRGN.iMode	unsigned long*
+member EMREXTTEXTOUTA.emr	EMR*
+member EMREXTTEXTOUTA.emrtext	EMRTEXT*
+member EMREXTTEXTOUTA.exScale	float*
+member EMREXTTEXTOUTA.eyScale	float*
+member EMREXTTEXTOUTA.iGraphicsMode	unsigned long*
+member EMREXTTEXTOUTA.rclBounds	RECTL*
+member EMRFILLPATH.emr	EMR*
+member EMRFILLPATH.rclBounds	RECTL*
+member EMRFILLRGN.RgnData	unsigned char (*)[1]
+member EMRFILLRGN.cbRgnData	unsigned long*
+member EMRFILLRGN.emr	EMR*
+member EMRFILLRGN.ihBrush	unsigned long*
+member EMRFILLRGN.rclBounds	RECTL*
+member EMRFORMAT.cbData	unsigned long*
+member EMRFORMAT.dSignature	unsigned long*
+member EMRFORMAT.nVersion	unsigned long*
+member EMRFORMAT.offData	unsigned long*
+member EMRFRAMERGN.RgnData	unsigned char (*)[1]
+member EMRFRAMERGN.cbRgnData	unsigned long*
+member EMRFRAMERGN.emr	EMR*
+member EMRFRAMERGN.ihBrush	unsigned long*
+member EMRFRAMERGN.rclBounds	RECTL*
+member EMRFRAMERGN.szlStroke	SIZE*
+member EMRGDICOMMENT.Data	unsigned char (*)[1]
+member EMRGDICOMMENT.cbData	unsigned long*
+member EMRGDICOMMENT.emr	EMR*
+member EMRGLSBOUNDEDRECORD.Data	unsigned char (*)[1]
+member EMRGLSBOUNDEDRECORD.cbData	unsigned long*
+member EMRGLSBOUNDEDRECORD.emr	EMR*
+member EMRGLSBOUNDEDRECORD.rclBounds	RECTL*
+member EMRGLSRECORD.Data	unsigned char (*)[1]
+member EMRGLSRECORD.cbData	unsigned long*
+member EMRGLSRECORD.emr	EMR*
+member EMRGRADIENTFILL.Ver	TRIVERTEX (*)[1]
+member EMRGRADIENTFILL.emr	EMR*
+member EMRGRADIENTFILL.nTri	unsigned long*
+member EMRGRADIENTFILL.nVer	unsigned long*
+member EMRGRADIENTFILL.rclBounds	RECTL*
+member EMRGRADIENTFILL.ulMode	unsigned long*
+member EMRINVERTRGN.RgnData	unsigned char (*)[1]
+member EMRINVERTRGN.cbRgnData	unsigned long*
+member EMRINVERTRGN.emr	EMR*
+member EMRINVERTRGN.rclBounds	RECTL*
+member EMRLINETO.emr	EMR*
+member EMRLINETO.ptl	POINTL*
+member EMRMASKBLT.cbBitsMask	unsigned long*
+member EMRMASKBLT.cbBitsSrc	unsigned long*
+member EMRMASKBLT.cbBmiMask	unsigned long*
+member EMRMASKBLT.cbBmiSrc	unsigned long*
+member EMRMASKBLT.crBkColorSrc	unsigned long*
+member EMRMASKBLT.cxDest	long*
+member EMRMASKBLT.cyDest	long*
+member EMRMASKBLT.dwRop	unsigned long*
+member EMRMASKBLT.emr	EMR*
+member EMRMASKBLT.iUsageMask	unsigned long*
+member EMRMASKBLT.iUsageSrc	unsigned long*
+member EMRMASKBLT.offBitsMask	unsigned long*
+member EMRMASKBLT.offBitsSrc	unsigned long*
+member EMRMASKBLT.offBmiMask	unsigned long*
+member EMRMASKBLT.offBmiSrc	unsigned long*
+member EMRMASKBLT.rclBounds	RECTL*
+member EMRMASKBLT.xDest	long*
+member EMRMASKBLT.xMask	long*
+member EMRMASKBLT.xSrc	long*
+member EMRMASKBLT.xformSrc	XFORM*
+member EMRMASKBLT.yDest	long*
+member EMRMASKBLT.yMask	long*
+member EMRMASKBLT.ySrc	long*
+member EMRMODIFYWORLDTRANSFORM.emr	EMR*
+member EMRMODIFYWORLDTRANSFORM.iMode	unsigned long*
+member EMRMODIFYWORLDTRANSFORM.xform	XFORM*
+member EMRNAMEDESCAPE.EscData	unsigned char (*)[1]
+member EMRNAMEDESCAPE.cbDriver	int*
+member EMRNAMEDESCAPE.cbEscData	int*
+member EMRNAMEDESCAPE.emr	EMR*
+member EMRNAMEDESCAPE.iEscape	int*
+member EMROFFSETCLIPRGN.emr	EMR*
+member EMROFFSETCLIPRGN.ptlOffset	POINTL*
+member EMRPIXELFORMAT.emr	EMR*
+member EMRPIXELFORMAT.pfd	PIXELFORMATDESCRIPTOR*
+member EMRPLGBLT.aptlDest	POINTL (*)[3]
+member EMRPLGBLT.cbBitsMask	unsigned long*
+member EMRPLGBLT.cbBitsSrc	unsigned long*
+member EMRPLGBLT.cbBmiMask	unsigned long*
+member EMRPLGBLT.cbBmiSrc	unsigned long*
+member EMRPLGBLT.crBkColorSrc	unsigned long*
+member EMRPLGBLT.cxSrc	long*
+member EMRPLGBLT.cySrc	long*
+member EMRPLGBLT.emr	EMR*
+member EMRPLGBLT.iUsageMask	unsigned long*
+member EMRPLGBLT.iUsageSrc	unsigned long*
+member EMRPLGBLT.offBitsMask	unsigned long*
+member EMRPLGBLT.offBitsSrc	unsigned long*
+member EMRPLGBLT.offBmiMask	unsigned long*
+member EMRPLGBLT.offBmiSrc	unsigned long*
+member EMRPLGBLT.rclBounds	RECTL*
+member EMRPLGBLT.xMask	long*
+member EMRPLGBLT.xSrc	long*
+member EMRPLGBLT.xformSrc	XFORM*
+member EMRPLGBLT.yMask	long*
+member EMRPLGBLT.ySrc	long*
+member EMRPOLYDRAW.abTypes	unsigned char (*)[1]
+member EMRPOLYDRAW.aptl	POINTL (*)[1]
+member EMRPOLYDRAW.cptl	unsigned long*
+member EMRPOLYDRAW.emr	EMR*
+member EMRPOLYDRAW.rclBounds	RECTL*
+member EMRPOLYDRAW16.abTypes	unsigned char (*)[1]
+member EMRPOLYDRAW16.apts	POINTS (*)[1]
+member EMRPOLYDRAW16.cpts	unsigned long*
+member EMRPOLYDRAW16.emr	EMR*
+member EMRPOLYDRAW16.rclBounds	RECTL*
+member EMRPOLYLINE.aptl	POINTL (*)[1]
+member EMRPOLYLINE.cptl	unsigned long*
+member EMRPOLYLINE.emr	EMR*
+member EMRPOLYLINE.rclBounds	RECTL*
+member EMRPOLYLINE16.apts	POINTS (*)[1]
+member EMRPOLYLINE16.cpts	unsigned long*
+member EMRPOLYLINE16.emr	EMR*
+member EMRPOLYLINE16.rclBounds	RECTL*
+member EMRPOLYPOLYLINE.aPolyCounts	unsigned long (*)[1]
+member EMRPOLYPOLYLINE.aptl	POINTL (*)[1]
+member EMRPOLYPOLYLINE.cptl	unsigned long*
+member EMRPOLYPOLYLINE.emr	EMR*
+member EMRPOLYPOLYLINE.nPolys	unsigned long*
+member EMRPOLYPOLYLINE.rclBounds	RECTL*
+member EMRPOLYPOLYLINE16.aPolyCounts	unsigned long (*)[1]
+member EMRPOLYPOLYLINE16.apts	POINTS (*)[1]
+member EMRPOLYPOLYLINE16.cpts	unsigned long*
+member EMRPOLYPOLYLINE16.emr	EMR*
+member EMRPOLYPOLYLINE16.nPolys	unsigned long*
+member EMRPOLYPOLYLINE16.rclBounds	RECTL*
+member EMRPOLYTEXTOUTA.aemrtext	EMRTEXT (*)[1]
+member EMRPOLYTEXTOUTA.cStrings	long*
+member EMRPOLYTEXTOUTA.emr	EMR*
+member EMRPOLYTEXTOUTA.exScale	float*
+member EMRPOLYTEXTOUTA.eyScale	float*
+member EMRPOLYTEXTOUTA.iGraphicsMode	unsigned long*
+member EMRPOLYTEXTOUTA.rclBounds	RECTL*
+member EMRRESIZEPALETTE.cEntries	unsigned long*
+member EMRRESIZEPALETTE.emr	EMR*
+member EMRRESIZEPALETTE.ihPal	unsigned long*
+member EMRRESTOREDC.emr	EMR*
+member EMRRESTOREDC.iRelative	long*
+member EMRROUNDRECT.emr	EMR*
+member EMRROUNDRECT.rclBox	RECTL*
+member EMRROUNDRECT.szlCorner	SIZE*
+member EMRSCALEVIEWPORTEXTEX.emr	EMR*
+member EMRSCALEVIEWPORTEXTEX.xDenom	long*
+member EMRSCALEVIEWPORTEXTEX.xNum	long*
+member EMRSCALEVIEWPORTEXTEX.yDenom	long*
+member EMRSCALEVIEWPORTEXTEX.yNum	long*
+member EMRSELECTCLIPPATH.emr	EMR*
+member EMRSELECTCLIPPATH.iMode	unsigned long*
+member EMRSELECTOBJECT.emr	EMR*
+member EMRSELECTOBJECT.ihObject	unsigned long*
+member EMRSELECTPALETTE.emr	EMR*
+member EMRSELECTPALETTE.ihPal	unsigned long*
+member EMRSETARCDIRECTION.emr	EMR*
+member EMRSETARCDIRECTION.iArcDirection	unsigned long*
+member EMRSETBKCOLOR.crColor	unsigned long*
+member EMRSETBKCOLOR.emr	EMR*
+member EMRSETCOLORADJUSTMENT.ColorAdjustment	COLORADJUSTMENT*
+member EMRSETCOLORADJUSTMENT.emr	EMR*
+member EMRSETCOLORSPACE.emr	EMR*
+member EMRSETCOLORSPACE.ihCS	unsigned long*
+member EMRSETDIBITSTODEVICE.cScans	unsigned long*
+member EMRSETDIBITSTODEVICE.cbBitsSrc	unsigned long*
+member EMRSETDIBITSTODEVICE.cbBmiSrc	unsigned long*
+member EMRSETDIBITSTODEVICE.cxSrc	long*
+member EMRSETDIBITSTODEVICE.cySrc	long*
+member EMRSETDIBITSTODEVICE.emr	EMR*
+member EMRSETDIBITSTODEVICE.iStartScan	unsigned long*
+member EMRSETDIBITSTODEVICE.iUsageSrc	unsigned long*
+member EMRSETDIBITSTODEVICE.offBitsSrc	unsigned long*
+member EMRSETDIBITSTODEVICE.offBmiSrc	unsigned long*
+member EMRSETDIBITSTODEVICE.rclBounds	RECTL*
+member EMRSETDIBITSTODEVICE.xDest	long*
+member EMRSETDIBITSTODEVICE.xSrc	long*
+member EMRSETDIBITSTODEVICE.yDest	long*
+member EMRSETDIBITSTODEVICE.ySrc	long*
+member EMRSETICMPROFILE.Data	unsigned char (*)[1]
+member EMRSETICMPROFILE.cbData	unsigned long*
+member EMRSETICMPROFILE.cbName	unsigned long*
+member EMRSETICMPROFILE.dwFlags	unsigned long*
+member EMRSETICMPROFILE.emr	EMR*
+member EMRSETMAPPERFLAGS.dwFlags	unsigned long*
+member EMRSETMAPPERFLAGS.emr	EMR*
+member EMRSETMITERLIMIT.eMiterLimit	float*
+member EMRSETMITERLIMIT.emr	EMR*
+member EMRSETPALETTEENTRIES.aPalEntries	PALETTEENTRY (*)[1]
+member EMRSETPALETTEENTRIES.cEntries	unsigned long*
+member EMRSETPALETTEENTRIES.emr	EMR*
+member EMRSETPALETTEENTRIES.iStart	unsigned long*
+member EMRSETPALETTEENTRIES.ihPal	unsigned long*
+member EMRSETPIXELV.crColor	unsigned long*
+member EMRSETPIXELV.emr	EMR*
+member EMRSETPIXELV.ptlPixel	POINTL*
+member EMRSETVIEWPORTEXTEX.emr	EMR*
+member EMRSETVIEWPORTEXTEX.szlExtent	SIZE*
+member EMRSETVIEWPORTORGEX.emr	EMR*
+member EMRSETVIEWPORTORGEX.ptlOrigin	POINTL*
+member EMRSETWORLDTRANSFORM.emr	EMR*
+member EMRSETWORLDTRANSFORM.xform	XFORM*
+member EMRSTRETCHBLT.cbBitsSrc	unsigned long*
+member EMRSTRETCHBLT.cbBmiSrc	unsigned long*
+member EMRSTRETCHBLT.crBkColorSrc	unsigned long*
+member EMRSTRETCHBLT.cxDest	long*
+member EMRSTRETCHBLT.cxSrc	long*
+member EMRSTRETCHBLT.cyDest	long*
+member EMRSTRETCHBLT.cySrc	long*
+member EMRSTRETCHBLT.dwRop	unsigned long*
+member EMRSTRETCHBLT.emr	EMR*
+member EMRSTRETCHBLT.iUsageSrc	unsigned long*
+member EMRSTRETCHBLT.offBitsSrc	unsigned long*
+member EMRSTRETCHBLT.offBmiSrc	unsigned long*
+member EMRSTRETCHBLT.rclBounds	RECTL*
+member EMRSTRETCHBLT.xDest	long*
+member EMRSTRETCHBLT.xSrc	long*
+member EMRSTRETCHBLT.xformSrc	XFORM*
+member EMRSTRETCHBLT.yDest	long*
+member EMRSTRETCHBLT.ySrc	long*
+member EMRSTRETCHDIBITS.cbBitsSrc	unsigned long*
+member EMRSTRETCHDIBITS.cbBmiSrc	unsigned long*
+member EMRSTRETCHDIBITS.cxDest	long*
+member EMRSTRETCHDIBITS.cxSrc	long*
+member EMRSTRETCHDIBITS.cyDest	long*
+member EMRSTRETCHDIBITS.cySrc	long*
+member EMRSTRETCHDIBITS.dwRop	unsigned long*
+member EMRSTRETCHDIBITS.emr	EMR*
+member EMRSTRETCHDIBITS.iUsageSrc	unsigned long*
+member EMRSTRETCHDIBITS.offBitsSrc	unsigned long*
+member EMRSTRETCHDIBITS.offBmiSrc	unsigned long*
+member EMRSTRETCHDIBITS.rclBounds	RECTL*
+member EMRSTRETCHDIBITS.xDest	long*
+member EMRSTRETCHDIBITS.xSrc	long*
+member EMRSTRETCHDIBITS.yDest	long*
+member EMRSTRETCHDIBITS.ySrc	long*
+member EMRTEXT.fOptions	unsigned long*
+member EMRTEXT.nChars	unsigned long*
+member EMRTEXT.offDx	unsigned long*
+member EMRTEXT.offString	unsigned long*
+member EMRTEXT.ptlReference	POINTL*
+member EMRTEXT.rcl	RECTL*
+member EMRTRANSPARENTBLT.cbBitsSrc	unsigned long*
+member EMRTRANSPARENTBLT.cbBmiSrc	unsigned long*
+member EMRTRANSPARENTBLT.crBkColorSrc	unsigned long*
+member EMRTRANSPARENTBLT.cxDest	long*
+member EMRTRANSPARENTBLT.cxSrc	long*
+member EMRTRANSPARENTBLT.cyDest	long*
+member EMRTRANSPARENTBLT.cySrc	long*
+member EMRTRANSPARENTBLT.dwRop	unsigned long*
+member EMRTRANSPARENTBLT.emr	EMR*
+member EMRTRANSPARENTBLT.iUsageSrc	unsigned long*
+member EMRTRANSPARENTBLT.offBitsSrc	unsigned long*
+member EMRTRANSPARENTBLT.offBmiSrc	unsigned long*
+member EMRTRANSPARENTBLT.rclBounds	RECTL*
+member EMRTRANSPARENTBLT.xDest	long*
+member EMRTRANSPARENTBLT.xSrc	long*
+member EMRTRANSPARENTBLT.xformSrc	XFORM*
+member EMRTRANSPARENTBLT.yDest	long*
+member EMRTRANSPARENTBLT.ySrc	long*
+member ENHMETAHEADER.bOpenGL	unsigned long*
+member ENHMETAHEADER.cbPixelFormat	unsigned long*
+member ENHMETAHEADER.dSignature	unsigned long*
+member ENHMETAHEADER.iType	unsigned long*
+member ENHMETAHEADER.nBytes	unsigned long*
+member ENHMETAHEADER.nDescription	unsigned long*
+member ENHMETAHEADER.nHandles	unsigned short*
+member ENHMETAHEADER.nPalEntries	unsigned long*
+member ENHMETAHEADER.nRecords	unsigned long*
+member ENHMETAHEADER.nSize	unsigned long*
+member ENHMETAHEADER.nVersion	unsigned long*
+member ENHMETAHEADER.offDescription	unsigned long*
+member ENHMETAHEADER.offPixelFormat	unsigned long*
+member ENHMETAHEADER.rclBounds	RECTL*
+member ENHMETAHEADER.rclFrame	RECTL*
+member ENHMETAHEADER.sReserved	unsigned short*
+member ENHMETAHEADER.szlDevice	SIZE*
+member ENHMETAHEADER.szlMicrometers	SIZE*
+member ENHMETAHEADER.szlMillimeters	SIZE*
+member ENHMETARECORD.dParm	unsigned long (*)[1]
+member ENHMETARECORD.iType	unsigned long*
+member ENHMETARECORD.nSize	unsigned long*
+member ENUMLOGFONTA.elfFullName	unsigned char (*)[64]
+member ENUMLOGFONTA.elfLogFont	LOGFONTA*
+member ENUMLOGFONTA.elfStyle	unsigned char (*)[32]
+member ENUMLOGFONTEXA.elfFullName	unsigned char (*)[64]
+member ENUMLOGFONTEXA.elfLogFont	LOGFONTA*
+member ENUMLOGFONTEXA.elfScript	unsigned char (*)[32]
+member ENUMLOGFONTEXA.elfStyle	unsigned char (*)[32]
+member ENUMLOGFONTEXDVA.elfDesignVector	DESIGNVECTOR*
+member ENUMLOGFONTEXDVA.elfEnumLogfontEx	ENUMLOGFONTEXA*
+member ENUMLOGFONTEXDVW.elfDesignVector	DESIGNVECTOR*
+member ENUMLOGFONTEXDVW.elfEnumLogfontEx	ENUMLOGFONTEXW*
+member ENUMLOGFONTEXW.elfFullName	unsigned short (*)[64]
+member ENUMLOGFONTEXW.elfLogFont	LOGFONTW*
+member ENUMLOGFONTEXW.elfScript	unsigned short (*)[32]
+member ENUMLOGFONTEXW.elfStyle	unsigned short (*)[32]
+member ENUMLOGFONTW.elfFullName	unsigned short (*)[64]
+member ENUMLOGFONTW.elfLogFont	LOGFONTW*
+member ENUMLOGFONTW.elfStyle	unsigned short (*)[32]
+member ENUMTEXTMETRICA.etmAxesList	AXESLISTA*
+member ENUMTEXTMETRICA.etmNewTextMetricEx	NEWTEXTMETRICEXA*
+member ENUMTEXTMETRICW.etmAxesList	AXESLISTW*
+member ENUMTEXTMETRICW.etmNewTextMetricEx	NEWTEXTMETRICEXW*
+member EXCEPTION_POINTERS.ContextRecord	ARM64_NT_CONTEXT**
+member EXCEPTION_POINTERS.ExceptionRecord	EXCEPTION_RECORD**
+member EXCEPTION_RECORD.ExceptionAddress	void**
+member EXCEPTION_RECORD.ExceptionCode	unsigned long*
+member EXCEPTION_RECORD.ExceptionFlags	unsigned long*
+member EXCEPTION_RECORD.ExceptionInformation	unsigned long long (*)[15]
+member EXCEPTION_RECORD.ExceptionRecord	EXCEPTION_RECORD**
+member EXCEPTION_RECORD.NumberParameters	unsigned long*
+member EXTLOGFONTA.elfCulture	unsigned long*
+member EXTLOGFONTA.elfFullName	unsigned char (*)[64]
+member EXTLOGFONTA.elfLogFont	LOGFONTA*
+member EXTLOGFONTA.elfMatch	unsigned long*
+member EXTLOGFONTA.elfPanose	PANOSE*
+member EXTLOGFONTA.elfReserved	unsigned long*
+member EXTLOGFONTA.elfStyle	unsigned char (*)[32]
+member EXTLOGFONTA.elfStyleSize	unsigned long*
+member EXTLOGFONTA.elfVendorId	unsigned char (*)[4]
+member EXTLOGFONTA.elfVersion	unsigned long*
+member EXTLOGFONTW.elfCulture	unsigned long*
+member EXTLOGFONTW.elfFullName	unsigned short (*)[64]
+member EXTLOGFONTW.elfLogFont	LOGFONTW*
+member EXTLOGFONTW.elfMatch	unsigned long*
+member EXTLOGFONTW.elfPanose	PANOSE*
+member EXTLOGFONTW.elfReserved	unsigned long*
+member EXTLOGFONTW.elfStyle	unsigned short (*)[32]
+member EXTLOGFONTW.elfStyleSize	unsigned long*
+member EXTLOGFONTW.elfVendorId	unsigned char (*)[4]
+member EXTLOGFONTW.elfVersion	unsigned long*
+member EXTLOGPEN.elpBrushStyle	unsigned int*
+member EXTLOGPEN.elpColor	unsigned long*
+member EXTLOGPEN.elpHatch	unsigned long long*
+member EXTLOGPEN.elpNumEntries	unsigned long*
+member EXTLOGPEN.elpPenStyle	unsigned long*
+member EXTLOGPEN.elpStyleEntry	unsigned long (*)[1]
+member EXTLOGPEN.elpWidth	unsigned long*
+member EXTLOGPEN32.elpBrushStyle	unsigned int*
+member EXTLOGPEN32.elpColor	unsigned long*
+member EXTLOGPEN32.elpHatch	unsigned long*
+member EXTLOGPEN32.elpNumEntries	unsigned long*
+member EXTLOGPEN32.elpPenStyle	unsigned long*
+member EXTLOGPEN32.elpStyleEntry	unsigned long (*)[1]
+member EXTLOGPEN32.elpWidth	unsigned long*
+member FILETIME.dwHighDateTime	unsigned long*
+member FILETIME.dwLowDateTime	unsigned long*
+member FILE_ATTRIBUTE_TAG_INFO.FileAttributes	unsigned long*
+member FILE_ATTRIBUTE_TAG_INFO.ReparseTag	unsigned long*
+member FILE_BASIC_INFO.ChangeTime	LARGE_INTEGER*
+member FILE_BASIC_INFO.CreationTime	LARGE_INTEGER*
+member FILE_BASIC_INFO.FileAttributes	unsigned long*
+member FILE_BASIC_INFO.LastAccessTime	LARGE_INTEGER*
+member FILE_BASIC_INFO.LastWriteTime	LARGE_INTEGER*
+member FILE_FS_PERSISTENT_VOLUME_INFORMATION.FlagMask	unsigned long*
+member FILE_FS_PERSISTENT_VOLUME_INFORMATION.Reserved	unsigned long*
+member FILE_FS_PERSISTENT_VOLUME_INFORMATION.Version	unsigned long*
+member FILE_FS_PERSISTENT_VOLUME_INFORMATION.VolumeFlags	unsigned long*
+member FILE_ID_128.Identifier	unsigned char (*)[16]
+member FIXED.fract	unsigned short*
+member FIXED.value	short*
+member FLASHWINFO.cbSize	unsigned int*
+member FLASHWINFO.dwFlags	unsigned long*
+member FLASHWINFO.dwTimeout	unsigned long*
+member FLASHWINFO.hwnd	struct HWND__**
+member FLASHWINFO.uCount	unsigned int*
+member FOCUS_EVENT_RECORD.bSetFocus	int*
+member FONTSIGNATURE.fsCsb	unsigned long (*)[2]
+member FONTSIGNATURE.fsUsb	unsigned long (*)[4]
+member GCP_RESULTSA.lStructSize	unsigned long*
+member GCP_RESULTSA.lpCaretPos	int**
+member GCP_RESULTSA.lpClass	char**
+member GCP_RESULTSA.lpDx	int**
+member GCP_RESULTSA.lpGlyphs	unsigned short**
+member GCP_RESULTSA.lpOrder	unsigned int**
+member GCP_RESULTSA.lpOutString	char**
+member GCP_RESULTSA.nGlyphs	unsigned int*
+member GCP_RESULTSA.nMaxFit	int*
+member GCP_RESULTSW.lStructSize	unsigned long*
+member GCP_RESULTSW.lpCaretPos	int**
+member GCP_RESULTSW.lpClass	char**
+member GCP_RESULTSW.lpDx	int**
+member GCP_RESULTSW.lpGlyphs	unsigned short**
+member GCP_RESULTSW.lpOrder	unsigned int**
+member GCP_RESULTSW.lpOutString	unsigned short**
+member GCP_RESULTSW.nGlyphs	unsigned int*
+member GCP_RESULTSW.nMaxFit	int*
+member GLYPHMETRICS.gmBlackBoxX	unsigned int*
+member GLYPHMETRICS.gmBlackBoxY	unsigned int*
+member GLYPHMETRICS.gmCellIncX	short*
+member GLYPHMETRICS.gmCellIncY	short*
+member GLYPHMETRICS.gmptGlyphOrigin	POINT*
+member GLYPHMETRICSFLOAT.gmfBlackBoxX	float*
+member GLYPHMETRICSFLOAT.gmfBlackBoxY	float*
+member GLYPHMETRICSFLOAT.gmfCellIncX	float*
+member GLYPHMETRICSFLOAT.gmfCellIncY	float*
+member GLYPHMETRICSFLOAT.gmfptGlyphOrigin	POINTFLOAT*
+member GLYPHSET.cGlyphsSupported	unsigned long*
+member GLYPHSET.cRanges	unsigned long*
+member GLYPHSET.cbThis	unsigned long*
+member GLYPHSET.flAccel	unsigned long*
+member GLYPHSET.ranges	WCRANGE (*)[1]
+member GRADIENT_RECT.LowerRight	unsigned long*
+member GRADIENT_RECT.UpperLeft	unsigned long*
+member GRADIENT_TRIANGLE.Vertex1	unsigned long*
+member GRADIENT_TRIANGLE.Vertex2	unsigned long*
+member GRADIENT_TRIANGLE.Vertex3	unsigned long*
+member GROUP_AFFINITY.Group	unsigned short*
+member GROUP_AFFINITY.Mask	unsigned long long*
+member GROUP_AFFINITY.Reserved	unsigned short (*)[3]
+member GUID.Data1	unsigned long*
+member GUID.Data2	unsigned short*
+member GUID.Data3	unsigned short*
+member GUID.Data4	unsigned char (*)[8]
+member HANDLETABLE.objectHandle	void* (*)[1]
+member ICONINFO.fIcon	int*
+member ICONINFO.hbmColor	struct HBITMAP__**
+member ICONINFO.hbmMask	struct HBITMAP__**
+member ICONINFO.xHotspot	unsigned long*
+member ICONINFO.yHotspot	unsigned long*
+member IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY.BeginAddress	unsigned long*
+member IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY.UnwindData	unsigned long*
+member IMAGE_BASE_RELOCATION.SizeOfBlock	unsigned long*
+member IMAGE_BASE_RELOCATION.VirtualAddress	unsigned long*
+member IMAGE_DATA_DIRECTORY.Size	unsigned long*
+member IMAGE_DATA_DIRECTORY.VirtualAddress	unsigned long*
+member IMAGE_DOS_HEADER.e_cblp	unsigned short*
+member IMAGE_DOS_HEADER.e_cp	unsigned short*
+member IMAGE_DOS_HEADER.e_cparhdr	unsigned short*
+member IMAGE_DOS_HEADER.e_crlc	unsigned short*
+member IMAGE_DOS_HEADER.e_cs	unsigned short*
+member IMAGE_DOS_HEADER.e_csum	unsigned short*
+member IMAGE_DOS_HEADER.e_ip	unsigned short*
+member IMAGE_DOS_HEADER.e_lfanew	long*
+member IMAGE_DOS_HEADER.e_lfarlc	unsigned short*
+member IMAGE_DOS_HEADER.e_magic	unsigned short*
+member IMAGE_DOS_HEADER.e_maxalloc	unsigned short*
+member IMAGE_DOS_HEADER.e_minalloc	unsigned short*
+member IMAGE_DOS_HEADER.e_oemid	unsigned short*
+member IMAGE_DOS_HEADER.e_oeminfo	unsigned short*
+member IMAGE_DOS_HEADER.e_ovno	unsigned short*
+member IMAGE_DOS_HEADER.e_res	unsigned short (*)[4]
+member IMAGE_DOS_HEADER.e_res2	unsigned short (*)[10]
+member IMAGE_DOS_HEADER.e_sp	unsigned short*
+member IMAGE_DOS_HEADER.e_ss	unsigned short*
+member IMAGE_EXPORT_DIRECTORY.AddressOfFunctions	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.AddressOfNameOrdinals	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.AddressOfNames	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.Base	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.Characteristics	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.MajorVersion	unsigned short*
+member IMAGE_EXPORT_DIRECTORY.MinorVersion	unsigned short*
+member IMAGE_EXPORT_DIRECTORY.Name	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.NumberOfFunctions	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.NumberOfNames	unsigned long*
+member IMAGE_EXPORT_DIRECTORY.TimeDateStamp	unsigned long*
+member IMAGE_FILE_HEADER.Characteristics	unsigned short*
+member IMAGE_FILE_HEADER.Machine	unsigned short*
+member IMAGE_FILE_HEADER.NumberOfSections	unsigned short*
+member IMAGE_FILE_HEADER.NumberOfSymbols	unsigned long*
+member IMAGE_FILE_HEADER.PointerToSymbolTable	unsigned long*
+member IMAGE_FILE_HEADER.SizeOfOptionalHeader	unsigned short*
+member IMAGE_FILE_HEADER.TimeDateStamp	unsigned long*
+member IMAGE_IMPORT_BY_NAME.Hint	unsigned short*
+member IMAGE_IMPORT_BY_NAME.Name	char (*)[1]
+member IMAGE_IMPORT_DESCRIPTOR.Characteristics	unsigned long*
+member IMAGE_IMPORT_DESCRIPTOR.FirstThunk	unsigned long*
+member IMAGE_IMPORT_DESCRIPTOR.ForwarderChain	unsigned long*
+member IMAGE_IMPORT_DESCRIPTOR.Name	unsigned long*
+member IMAGE_IMPORT_DESCRIPTOR.OriginalFirstThunk	unsigned long*
+member IMAGE_IMPORT_DESCRIPTOR.TimeDateStamp	unsigned long*
+member IMAGE_NT_HEADERS32.FileHeader	IMAGE_FILE_HEADER*
+member IMAGE_NT_HEADERS32.OptionalHeader	IMAGE_OPTIONAL_HEADER32*
+member IMAGE_NT_HEADERS32.Signature	unsigned long*
+member IMAGE_NT_HEADERS64.FileHeader	IMAGE_FILE_HEADER*
+member IMAGE_NT_HEADERS64.OptionalHeader	IMAGE_OPTIONAL_HEADER64*
+member IMAGE_NT_HEADERS64.Signature	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.AddressOfEntryPoint	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.BaseOfCode	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.BaseOfData	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.CheckSum	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.DataDirectory	IMAGE_DATA_DIRECTORY (*)[16]
+member IMAGE_OPTIONAL_HEADER32.DllCharacteristics	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.FileAlignment	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.ImageBase	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.LoaderFlags	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.Magic	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MajorImageVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MajorLinkerVersion	unsigned char*
+member IMAGE_OPTIONAL_HEADER32.MajorOperatingSystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MajorSubsystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MinorImageVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MinorLinkerVersion	unsigned char*
+member IMAGE_OPTIONAL_HEADER32.MinorOperatingSystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.MinorSubsystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.NumberOfRvaAndSizes	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SectionAlignment	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfCode	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfHeaders	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfHeapCommit	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfHeapReserve	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfImage	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfInitializedData	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfStackCommit	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfStackReserve	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.SizeOfUninitializedData	unsigned long*
+member IMAGE_OPTIONAL_HEADER32.Subsystem	unsigned short*
+member IMAGE_OPTIONAL_HEADER32.Win32VersionValue	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.AddressOfEntryPoint	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.BaseOfCode	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.CheckSum	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.DataDirectory	IMAGE_DATA_DIRECTORY (*)[16]
+member IMAGE_OPTIONAL_HEADER64.DllCharacteristics	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.FileAlignment	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.ImageBase	unsigned long long*
+member IMAGE_OPTIONAL_HEADER64.LoaderFlags	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.Magic	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MajorImageVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MajorLinkerVersion	unsigned char*
+member IMAGE_OPTIONAL_HEADER64.MajorOperatingSystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MajorSubsystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MinorImageVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MinorLinkerVersion	unsigned char*
+member IMAGE_OPTIONAL_HEADER64.MinorOperatingSystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.MinorSubsystemVersion	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.NumberOfRvaAndSizes	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SectionAlignment	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfCode	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfHeaders	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfHeapCommit	unsigned long long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfHeapReserve	unsigned long long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfImage	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfInitializedData	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfStackCommit	unsigned long long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfStackReserve	unsigned long long*
+member IMAGE_OPTIONAL_HEADER64.SizeOfUninitializedData	unsigned long*
+member IMAGE_OPTIONAL_HEADER64.Subsystem	unsigned short*
+member IMAGE_OPTIONAL_HEADER64.Win32VersionValue	unsigned long*
+member IMAGE_RESOURCE_DATA_ENTRY.CodePage	unsigned long*
+member IMAGE_RESOURCE_DATA_ENTRY.OffsetToData	unsigned long*
+member IMAGE_RESOURCE_DATA_ENTRY.Reserved	unsigned long*
+member IMAGE_RESOURCE_DATA_ENTRY.Size	unsigned long*
+member IMAGE_RESOURCE_DIRECTORY.Characteristics	unsigned long*
+member IMAGE_RESOURCE_DIRECTORY.MajorVersion	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY.MinorVersion	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY.NumberOfIdEntries	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY.NumberOfNamedEntries	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY.TimeDateStamp	unsigned long*
+member IMAGE_RESOURCE_DIRECTORY_ENTRY.Id	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY_ENTRY.Name	unsigned long*
+member IMAGE_RESOURCE_DIRECTORY_ENTRY.OffsetToData	unsigned long*
+member IMAGE_RESOURCE_DIRECTORY_STRING.Length	unsigned short*
+member IMAGE_RESOURCE_DIRECTORY_STRING.NameString	char (*)[1]
+member IMAGE_RESOURCE_DIR_STRING_U.Length	unsigned short*
+member IMAGE_RESOURCE_DIR_STRING_U.NameString	unsigned short (*)[1]
+member IMAGE_SECTION_HEADER.Characteristics	unsigned long*
+member IMAGE_SECTION_HEADER.Name	unsigned char (*)[8]
+member IMAGE_SECTION_HEADER.NumberOfLinenumbers	unsigned short*
+member IMAGE_SECTION_HEADER.NumberOfRelocations	unsigned short*
+member IMAGE_SECTION_HEADER.PointerToLinenumbers	unsigned long*
+member IMAGE_SECTION_HEADER.PointerToRawData	unsigned long*
+member IMAGE_SECTION_HEADER.PointerToRelocations	unsigned long*
+member IMAGE_SECTION_HEADER.SizeOfRawData	unsigned long*
+member IMAGE_SECTION_HEADER.VirtualAddress	unsigned long*
+member IMAGE_TLS_DIRECTORY32.AddressOfCallBacks	unsigned long*
+member IMAGE_TLS_DIRECTORY32.AddressOfIndex	unsigned long*
+member IMAGE_TLS_DIRECTORY32.Characteristics	unsigned long*
+member IMAGE_TLS_DIRECTORY32.EndAddressOfRawData	unsigned long*
+member IMAGE_TLS_DIRECTORY32.SizeOfZeroFill	unsigned long*
+member IMAGE_TLS_DIRECTORY32.StartAddressOfRawData	unsigned long*
+member IMAGE_TLS_DIRECTORY64.AddressOfCallBacks	unsigned long long*
+member IMAGE_TLS_DIRECTORY64.AddressOfIndex	unsigned long long*
+member IMAGE_TLS_DIRECTORY64.Characteristics	unsigned long*
+member IMAGE_TLS_DIRECTORY64.EndAddressOfRawData	unsigned long long*
+member IMAGE_TLS_DIRECTORY64.SizeOfZeroFill	unsigned long*
+member IMAGE_TLS_DIRECTORY64.StartAddressOfRawData	unsigned long long*
+member INPUT_RECORD.EventType	unsigned short*
+member KERNINGPAIR.iKernAmount	int*
+member KERNINGPAIR.wFirst	unsigned short*
+member KERNINGPAIR.wSecond	unsigned short*
+member KEY_EVENT_RECORD.bKeyDown	int*
+member KEY_EVENT_RECORD.dwControlKeyState	unsigned long*
+member KEY_EVENT_RECORD.wRepeatCount	unsigned short*
+member KEY_EVENT_RECORD.wVirtualKeyCode	unsigned short*
+member KEY_EVENT_RECORD.wVirtualScanCode	unsigned short*
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D10	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D11	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D12	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D13	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D14	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D15	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D8	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.D9	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.Fp	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.Lr	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X19	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X20	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X21	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X22	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X23	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X24	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X25	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X26	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X27	unsigned long long**
+member KNONVOLATILE_CONTEXT_POINTERS_ARM64.X28	unsigned long long**
+member LARGE_INTEGER.HighPart	long*
+member LARGE_INTEGER.LowPart	unsigned long*
+member LARGE_INTEGER.QuadPart	long long*
+member LAYERPLANEDESCRIPTOR.bReserved	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAccumAlphaBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAccumBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAccumBlueBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAccumGreenBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAccumRedBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAlphaBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAlphaShift	unsigned char*
+member LAYERPLANEDESCRIPTOR.cAuxBuffers	unsigned char*
+member LAYERPLANEDESCRIPTOR.cBlueBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cBlueShift	unsigned char*
+member LAYERPLANEDESCRIPTOR.cColorBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cDepthBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cGreenBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cGreenShift	unsigned char*
+member LAYERPLANEDESCRIPTOR.cRedBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.cRedShift	unsigned char*
+member LAYERPLANEDESCRIPTOR.cStencilBits	unsigned char*
+member LAYERPLANEDESCRIPTOR.crTransparent	unsigned long*
+member LAYERPLANEDESCRIPTOR.dwFlags	unsigned long*
+member LAYERPLANEDESCRIPTOR.iLayerPlane	unsigned char*
+member LAYERPLANEDESCRIPTOR.iPixelType	unsigned char*
+member LAYERPLANEDESCRIPTOR.nSize	unsigned short*
+member LAYERPLANEDESCRIPTOR.nVersion	unsigned short*
+member LOCALESIGNATURE.lsCsbDefault	unsigned long (*)[2]
+member LOCALESIGNATURE.lsCsbSupported	unsigned long (*)[2]
+member LOCALESIGNATURE.lsUsb	unsigned long (*)[4]
+member LOGBRUSH.lbColor	unsigned long*
+member LOGBRUSH.lbHatch	unsigned long long*
+member LOGBRUSH.lbStyle	unsigned int*
+member LOGBRUSH32.lbColor	unsigned long*
+member LOGBRUSH32.lbHatch	unsigned long*
+member LOGBRUSH32.lbStyle	unsigned int*
+member LOGCOLORSPACEA.lcsCSType	long*
+member LOGCOLORSPACEA.lcsEndpoints	CIEXYZTRIPLE*
+member LOGCOLORSPACEA.lcsFilename	char (*)[260]
+member LOGCOLORSPACEA.lcsGammaBlue	unsigned long*
+member LOGCOLORSPACEA.lcsGammaGreen	unsigned long*
+member LOGCOLORSPACEA.lcsGammaRed	unsigned long*
+member LOGCOLORSPACEA.lcsIntent	long*
+member LOGCOLORSPACEA.lcsSignature	unsigned long*
+member LOGCOLORSPACEA.lcsSize	unsigned long*
+member LOGCOLORSPACEA.lcsVersion	unsigned long*
+member LOGCOLORSPACEW.lcsCSType	long*
+member LOGCOLORSPACEW.lcsEndpoints	CIEXYZTRIPLE*
+member LOGCOLORSPACEW.lcsFilename	unsigned short (*)[260]
+member LOGCOLORSPACEW.lcsGammaBlue	unsigned long*
+member LOGCOLORSPACEW.lcsGammaGreen	unsigned long*
+member LOGCOLORSPACEW.lcsGammaRed	unsigned long*
+member LOGCOLORSPACEW.lcsIntent	long*
+member LOGCOLORSPACEW.lcsSignature	unsigned long*
+member LOGCOLORSPACEW.lcsSize	unsigned long*
+member LOGCOLORSPACEW.lcsVersion	unsigned long*
+member LOGFONTA.lfCharSet	unsigned char*
+member LOGFONTA.lfClipPrecision	unsigned char*
+member LOGFONTA.lfEscapement	long*
+member LOGFONTA.lfFaceName	char (*)[32]
+member LOGFONTA.lfHeight	long*
+member LOGFONTA.lfItalic	unsigned char*
+member LOGFONTA.lfOrientation	long*
+member LOGFONTA.lfOutPrecision	unsigned char*
+member LOGFONTA.lfPitchAndFamily	unsigned char*
+member LOGFONTA.lfQuality	unsigned char*
+member LOGFONTA.lfStrikeOut	unsigned char*
+member LOGFONTA.lfUnderline	unsigned char*
+member LOGFONTA.lfWeight	long*
+member LOGFONTA.lfWidth	long*
+member LOGFONTW.lfCharSet	unsigned char*
+member LOGFONTW.lfClipPrecision	unsigned char*
+member LOGFONTW.lfEscapement	long*
+member LOGFONTW.lfFaceName	unsigned short (*)[32]
+member LOGFONTW.lfHeight	long*
+member LOGFONTW.lfItalic	unsigned char*
+member LOGFONTW.lfOrientation	long*
+member LOGFONTW.lfOutPrecision	unsigned char*
+member LOGFONTW.lfPitchAndFamily	unsigned char*
+member LOGFONTW.lfQuality	unsigned char*
+member LOGFONTW.lfStrikeOut	unsigned char*
+member LOGFONTW.lfUnderline	unsigned char*
+member LOGFONTW.lfWeight	long*
+member LOGFONTW.lfWidth	long*
+member LOGPALETTE.palNumEntries	unsigned short*
+member LOGPALETTE.palPalEntry	PALETTEENTRY (*)[1]
+member LOGPALETTE.palVersion	unsigned short*
+member LOGPEN.lopnColor	unsigned long*
+member LOGPEN.lopnStyle	unsigned int*
+member LOGPEN.lopnWidth	POINT*
+member LUID.HighPart	long*
+member LUID.LowPart	unsigned long*
+member LUID_AND_ATTRIBUTES.Attributes	unsigned long*
+member LUID_AND_ATTRIBUTES.Luid	LUID*
+member M128A.High	long long*
+member M128A.Low	unsigned long long*
+member MAT2.eM11	FIXED*
+member MAT2.eM12	FIXED*
+member MAT2.eM21	FIXED*
+member MAT2.eM22	FIXED*
+member MEMORY_BASIC_INFORMATION.AllocationBase	void**
+member MEMORY_BASIC_INFORMATION.AllocationProtect	unsigned long*
+member MEMORY_BASIC_INFORMATION.BaseAddress	void**
+member MEMORY_BASIC_INFORMATION.PartitionId	unsigned short*
+member MEMORY_BASIC_INFORMATION.Protect	unsigned long*
+member MEMORY_BASIC_INFORMATION.RegionSize	unsigned long long*
+member MEMORY_BASIC_INFORMATION.State	unsigned long*
+member MEMORY_BASIC_INFORMATION.Type	unsigned long*
+member MENU_EVENT_RECORD.dwCommandId	unsigned int*
+member METAFILEPICT.hMF	struct HMETAFILE__**
+member METAFILEPICT.mm	long*
+member METAFILEPICT.xExt	long*
+member METAFILEPICT.yExt	long*
+member METAHEADER.mtHeaderSize	unsigned short*
+member METAHEADER.mtMaxRecord	unsigned long*
+member METAHEADER.mtNoObjects	unsigned short*
+member METAHEADER.mtNoParameters	unsigned short*
+member METAHEADER.mtSize	unsigned long*
+member METAHEADER.mtType	unsigned short*
+member METAHEADER.mtVersion	unsigned short*
+member METARECORD.rdFunction	unsigned short*
+member METARECORD.rdParm	unsigned short (*)[1]
+member METARECORD.rdSize	unsigned long*
+member MINMAXINFO.ptMaxPosition	POINT*
+member MINMAXINFO.ptMaxSize	POINT*
+member MINMAXINFO.ptMaxTrackSize	POINT*
+member MINMAXINFO.ptMinTrackSize	POINT*
+member MINMAXINFO.ptReserved	POINT*
+member MONITORINFO.cbSize	unsigned long*
+member MONITORINFO.dwFlags	unsigned long*
+member MONITORINFO.rcMonitor	RECT*
+member MONITORINFO.rcWork	RECT*
+member MONITORINFOEXA.cbSize	unsigned long*
+member MONITORINFOEXA.dwFlags	unsigned long*
+member MONITORINFOEXA.rcMonitor	RECT*
+member MONITORINFOEXA.rcWork	RECT*
+member MONITORINFOEXA.szDevice	char (*)[32]
+member MONITORINFOEXW.cbSize	unsigned long*
+member MONITORINFOEXW.dwFlags	unsigned long*
+member MONITORINFOEXW.rcMonitor	RECT*
+member MONITORINFOEXW.rcWork	RECT*
+member MONITORINFOEXW.szDevice	unsigned short (*)[32]
+member MOUSE_EVENT_RECORD.dwButtonState	unsigned long*
+member MOUSE_EVENT_RECORD.dwControlKeyState	unsigned long*
+member MOUSE_EVENT_RECORD.dwEventFlags	unsigned long*
+member MOUSE_EVENT_RECORD.dwMousePosition	COORD*
+member MSG.hwnd	struct HWND__**
+member MSG.lParam	long long*
+member MSG.message	unsigned int*
+member MSG.pt	POINT*
+member MSG.time	unsigned long*
+member MSG.wParam	unsigned long long*
+member NEWTEXTMETRICA.ntmAvgWidth	unsigned int*
+member NEWTEXTMETRICA.ntmCellHeight	unsigned int*
+member NEWTEXTMETRICA.ntmFlags	unsigned long*
+member NEWTEXTMETRICA.ntmSizeEM	unsigned int*
+member NEWTEXTMETRICA.tmAscent	long*
+member NEWTEXTMETRICA.tmAveCharWidth	long*
+member NEWTEXTMETRICA.tmBreakChar	unsigned char*
+member NEWTEXTMETRICA.tmCharSet	unsigned char*
+member NEWTEXTMETRICA.tmDefaultChar	unsigned char*
+member NEWTEXTMETRICA.tmDescent	long*
+member NEWTEXTMETRICA.tmDigitizedAspectX	long*
+member NEWTEXTMETRICA.tmDigitizedAspectY	long*
+member NEWTEXTMETRICA.tmExternalLeading	long*
+member NEWTEXTMETRICA.tmFirstChar	unsigned char*
+member NEWTEXTMETRICA.tmHeight	long*
+member NEWTEXTMETRICA.tmInternalLeading	long*
+member NEWTEXTMETRICA.tmItalic	unsigned char*
+member NEWTEXTMETRICA.tmLastChar	unsigned char*
+member NEWTEXTMETRICA.tmMaxCharWidth	long*
+member NEWTEXTMETRICA.tmOverhang	long*
+member NEWTEXTMETRICA.tmPitchAndFamily	unsigned char*
+member NEWTEXTMETRICA.tmStruckOut	unsigned char*
+member NEWTEXTMETRICA.tmUnderlined	unsigned char*
+member NEWTEXTMETRICA.tmWeight	long*
+member NEWTEXTMETRICEXA.ntmFontSig	FONTSIGNATURE*
+member NEWTEXTMETRICEXA.ntmTm	NEWTEXTMETRICA*
+member NEWTEXTMETRICEXW.ntmFontSig	FONTSIGNATURE*
+member NEWTEXTMETRICEXW.ntmTm	NEWTEXTMETRICW*
+member NEWTEXTMETRICW.ntmAvgWidth	unsigned int*
+member NEWTEXTMETRICW.ntmCellHeight	unsigned int*
+member NEWTEXTMETRICW.ntmFlags	unsigned long*
+member NEWTEXTMETRICW.ntmSizeEM	unsigned int*
+member NEWTEXTMETRICW.tmAscent	long*
+member NEWTEXTMETRICW.tmAveCharWidth	long*
+member NEWTEXTMETRICW.tmBreakChar	unsigned short*
+member NEWTEXTMETRICW.tmCharSet	unsigned char*
+member NEWTEXTMETRICW.tmDefaultChar	unsigned short*
+member NEWTEXTMETRICW.tmDescent	long*
+member NEWTEXTMETRICW.tmDigitizedAspectX	long*
+member NEWTEXTMETRICW.tmDigitizedAspectY	long*
+member NEWTEXTMETRICW.tmExternalLeading	long*
+member NEWTEXTMETRICW.tmFirstChar	unsigned short*
+member NEWTEXTMETRICW.tmHeight	long*
+member NEWTEXTMETRICW.tmInternalLeading	long*
+member NEWTEXTMETRICW.tmItalic	unsigned char*
+member NEWTEXTMETRICW.tmLastChar	unsigned short*
+member NEWTEXTMETRICW.tmMaxCharWidth	long*
+member NEWTEXTMETRICW.tmOverhang	long*
+member NEWTEXTMETRICW.tmPitchAndFamily	unsigned char*
+member NEWTEXTMETRICW.tmStruckOut	unsigned char*
+member NEWTEXTMETRICW.tmUnderlined	unsigned char*
+member NEWTEXTMETRICW.tmWeight	long*
+member NLSVERSIONINFO.dwDefinedVersion	unsigned long*
+member NLSVERSIONINFO.dwNLSVersion	unsigned long*
+member NLSVERSIONINFO.dwNLSVersionInfoSize	unsigned long*
+member OSVERSIONINFOA.dwBuildNumber	unsigned long*
+member OSVERSIONINFOA.dwMajorVersion	unsigned long*
+member OSVERSIONINFOA.dwMinorVersion	unsigned long*
+member OSVERSIONINFOA.dwOSVersionInfoSize	unsigned long*
+member OSVERSIONINFOA.dwPlatformId	unsigned long*
+member OSVERSIONINFOA.szCSDVersion	char (*)[128]
+member OSVERSIONINFOEXA.dwBuildNumber	unsigned long*
+member OSVERSIONINFOEXA.dwMajorVersion	unsigned long*
+member OSVERSIONINFOEXA.dwMinorVersion	unsigned long*
+member OSVERSIONINFOEXA.dwOSVersionInfoSize	unsigned long*
+member OSVERSIONINFOEXA.dwPlatformId	unsigned long*
+member OSVERSIONINFOEXA.szCSDVersion	char (*)[128]
+member OSVERSIONINFOEXA.wProductType	unsigned char*
+member OSVERSIONINFOEXA.wReserved	unsigned char*
+member OSVERSIONINFOEXA.wServicePackMajor	unsigned short*
+member OSVERSIONINFOEXA.wServicePackMinor	unsigned short*
+member OSVERSIONINFOEXA.wSuiteMask	unsigned short*
+member OSVERSIONINFOEXW.dwBuildNumber	unsigned long*
+member OSVERSIONINFOEXW.dwMajorVersion	unsigned long*
+member OSVERSIONINFOEXW.dwMinorVersion	unsigned long*
+member OSVERSIONINFOEXW.dwOSVersionInfoSize	unsigned long*
+member OSVERSIONINFOEXW.dwPlatformId	unsigned long*
+member OSVERSIONINFOEXW.szCSDVersion	unsigned short (*)[128]
+member OSVERSIONINFOEXW.wProductType	unsigned char*
+member OSVERSIONINFOEXW.wReserved	unsigned char*
+member OSVERSIONINFOEXW.wServicePackMajor	unsigned short*
+member OSVERSIONINFOEXW.wServicePackMinor	unsigned short*
+member OSVERSIONINFOEXW.wSuiteMask	unsigned short*
+member OSVERSIONINFOW.dwBuildNumber	unsigned long*
+member OSVERSIONINFOW.dwMajorVersion	unsigned long*
+member OSVERSIONINFOW.dwMinorVersion	unsigned long*
+member OSVERSIONINFOW.dwOSVersionInfoSize	unsigned long*
+member OSVERSIONINFOW.dwPlatformId	unsigned long*
+member OSVERSIONINFOW.szCSDVersion	unsigned short (*)[128]
+member OUTLINETEXTMETRICA.otmAscent	int*
+member OUTLINETEXTMETRICA.otmDescent	int*
+member OUTLINETEXTMETRICA.otmEMSquare	unsigned int*
+member OUTLINETEXTMETRICA.otmFiller	unsigned char*
+member OUTLINETEXTMETRICA.otmItalicAngle	int*
+member OUTLINETEXTMETRICA.otmLineGap	unsigned int*
+member OUTLINETEXTMETRICA.otmMacAscent	int*
+member OUTLINETEXTMETRICA.otmMacDescent	int*
+member OUTLINETEXTMETRICA.otmMacLineGap	unsigned int*
+member OUTLINETEXTMETRICA.otmPanoseNumber	PANOSE*
+member OUTLINETEXTMETRICA.otmSize	unsigned int*
+member OUTLINETEXTMETRICA.otmTextMetrics	TEXTMETRICA*
+member OUTLINETEXTMETRICA.otmfsSelection	unsigned int*
+member OUTLINETEXTMETRICA.otmfsType	unsigned int*
+member OUTLINETEXTMETRICA.otmpFaceName	char**
+member OUTLINETEXTMETRICA.otmpFamilyName	char**
+member OUTLINETEXTMETRICA.otmpFullName	char**
+member OUTLINETEXTMETRICA.otmpStyleName	char**
+member OUTLINETEXTMETRICA.otmptSubscriptOffset	POINT*
+member OUTLINETEXTMETRICA.otmptSubscriptSize	POINT*
+member OUTLINETEXTMETRICA.otmptSuperscriptOffset	POINT*
+member OUTLINETEXTMETRICA.otmptSuperscriptSize	POINT*
+member OUTLINETEXTMETRICA.otmrcFontBox	RECT*
+member OUTLINETEXTMETRICA.otmsCapEmHeight	unsigned int*
+member OUTLINETEXTMETRICA.otmsCharSlopeRise	int*
+member OUTLINETEXTMETRICA.otmsCharSlopeRun	int*
+member OUTLINETEXTMETRICA.otmsStrikeoutPosition	int*
+member OUTLINETEXTMETRICA.otmsStrikeoutSize	unsigned int*
+member OUTLINETEXTMETRICA.otmsUnderscorePosition	int*
+member OUTLINETEXTMETRICA.otmsUnderscoreSize	int*
+member OUTLINETEXTMETRICA.otmsXHeight	unsigned int*
+member OUTLINETEXTMETRICA.otmusMinimumPPEM	unsigned int*
+member OUTLINETEXTMETRICW.otmAscent	int*
+member OUTLINETEXTMETRICW.otmDescent	int*
+member OUTLINETEXTMETRICW.otmEMSquare	unsigned int*
+member OUTLINETEXTMETRICW.otmFiller	unsigned char*
+member OUTLINETEXTMETRICW.otmItalicAngle	int*
+member OUTLINETEXTMETRICW.otmLineGap	unsigned int*
+member OUTLINETEXTMETRICW.otmMacAscent	int*
+member OUTLINETEXTMETRICW.otmMacDescent	int*
+member OUTLINETEXTMETRICW.otmMacLineGap	unsigned int*
+member OUTLINETEXTMETRICW.otmPanoseNumber	PANOSE*
+member OUTLINETEXTMETRICW.otmSize	unsigned int*
+member OUTLINETEXTMETRICW.otmTextMetrics	TEXTMETRICW*
+member OUTLINETEXTMETRICW.otmfsSelection	unsigned int*
+member OUTLINETEXTMETRICW.otmfsType	unsigned int*
+member OUTLINETEXTMETRICW.otmpFaceName	char**
+member OUTLINETEXTMETRICW.otmpFamilyName	char**
+member OUTLINETEXTMETRICW.otmpFullName	char**
+member OUTLINETEXTMETRICW.otmpStyleName	char**
+member OUTLINETEXTMETRICW.otmptSubscriptOffset	POINT*
+member OUTLINETEXTMETRICW.otmptSubscriptSize	POINT*
+member OUTLINETEXTMETRICW.otmptSuperscriptOffset	POINT*
+member OUTLINETEXTMETRICW.otmptSuperscriptSize	POINT*
+member OUTLINETEXTMETRICW.otmrcFontBox	RECT*
+member OUTLINETEXTMETRICW.otmsCapEmHeight	unsigned int*
+member OUTLINETEXTMETRICW.otmsCharSlopeRise	int*
+member OUTLINETEXTMETRICW.otmsCharSlopeRun	int*
+member OUTLINETEXTMETRICW.otmsStrikeoutPosition	int*
+member OUTLINETEXTMETRICW.otmsStrikeoutSize	unsigned int*
+member OUTLINETEXTMETRICW.otmsUnderscorePosition	int*
+member OUTLINETEXTMETRICW.otmsUnderscoreSize	int*
+member OUTLINETEXTMETRICW.otmsXHeight	unsigned int*
+member OUTLINETEXTMETRICW.otmusMinimumPPEM	unsigned int*
+member OVERLAPPED.Internal	unsigned long long*
+member OVERLAPPED.InternalHigh	unsigned long long*
+member OVERLAPPED.Offset	unsigned long*
+member OVERLAPPED.OffsetHigh	unsigned long*
+member OVERLAPPED.Pointer	void**
+member OVERLAPPED.hEvent	void**
+member PAINTSTRUCT.fErase	int*
+member PAINTSTRUCT.fIncUpdate	int*
+member PAINTSTRUCT.fRestore	int*
+member PAINTSTRUCT.hdc	struct HDC__**
+member PAINTSTRUCT.rcPaint	RECT*
+member PAINTSTRUCT.rgbReserved	unsigned char (*)[32]
+member PALETTEENTRY.peBlue	unsigned char*
+member PALETTEENTRY.peFlags	unsigned char*
+member PALETTEENTRY.peGreen	unsigned char*
+member PALETTEENTRY.peRed	unsigned char*
+member PANOSE.bArmStyle	unsigned char*
+member PANOSE.bContrast	unsigned char*
+member PANOSE.bFamilyType	unsigned char*
+member PANOSE.bLetterform	unsigned char*
+member PANOSE.bMidline	unsigned char*
+member PANOSE.bProportion	unsigned char*
+member PANOSE.bSerifStyle	unsigned char*
+member PANOSE.bStrokeVariation	unsigned char*
+member PANOSE.bWeight	unsigned char*
+member PANOSE.bXHeight	unsigned char*
+member PELARRAY.paRGBs	unsigned char*
+member PELARRAY.paXCount	long*
+member PELARRAY.paXExt	long*
+member PELARRAY.paYCount	long*
+member PELARRAY.paYExt	long*
+member PIXELFORMATDESCRIPTOR.bReserved	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAccumAlphaBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAccumBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAccumBlueBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAccumGreenBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAccumRedBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAlphaBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAlphaShift	unsigned char*
+member PIXELFORMATDESCRIPTOR.cAuxBuffers	unsigned char*
+member PIXELFORMATDESCRIPTOR.cBlueBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cBlueShift	unsigned char*
+member PIXELFORMATDESCRIPTOR.cColorBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cDepthBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cGreenBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cGreenShift	unsigned char*
+member PIXELFORMATDESCRIPTOR.cRedBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.cRedShift	unsigned char*
+member PIXELFORMATDESCRIPTOR.cStencilBits	unsigned char*
+member PIXELFORMATDESCRIPTOR.dwDamageMask	unsigned long*
+member PIXELFORMATDESCRIPTOR.dwFlags	unsigned long*
+member PIXELFORMATDESCRIPTOR.dwLayerMask	unsigned long*
+member PIXELFORMATDESCRIPTOR.dwVisibleMask	unsigned long*
+member PIXELFORMATDESCRIPTOR.iLayerType	unsigned char*
+member PIXELFORMATDESCRIPTOR.iPixelType	unsigned char*
+member PIXELFORMATDESCRIPTOR.nSize	unsigned short*
+member PIXELFORMATDESCRIPTOR.nVersion	unsigned short*
+member POINT.x	long*
+member POINT.y	long*
+member POINTFLOAT.x	float*
+member POINTFLOAT.y	float*
+member POINTFX.x	FIXED*
+member POINTFX.y	FIXED*
+member POINTL.x	long*
+member POINTL.y	long*
+member POINTS.x	short*
+member POINTS.y	short*
+member POLYTEXTA.lpstr	const char**
+member POLYTEXTA.n	unsigned int*
+member POLYTEXTA.pdx	int**
+member POLYTEXTA.rcl	RECT*
+member POLYTEXTA.uiFlags	unsigned int*
+member POLYTEXTA.x	int*
+member POLYTEXTA.y	int*
+member POLYTEXTW.lpstr	const unsigned short**
+member POLYTEXTW.n	unsigned int*
+member POLYTEXTW.pdx	int**
+member POLYTEXTW.rcl	RECT*
+member POLYTEXTW.uiFlags	unsigned int*
+member POLYTEXTW.x	int*
+member POLYTEXTW.y	int*
+member PROCESSOR_NUMBER.Group	unsigned short*
+member PROCESSOR_NUMBER.Number	unsigned char*
+member PROCESSOR_NUMBER.Reserved	unsigned char*
+member PROCESS_INFORMATION.dwProcessId	unsigned long*
+member PROCESS_INFORMATION.dwThreadId	unsigned long*
+member PROCESS_INFORMATION.hProcess	void**
+member PROCESS_INFORMATION.hThread	void**
+member PSFEATURE_CUSTPAPER.lHeight	long*
+member PSFEATURE_CUSTPAPER.lHeightOffset	long*
+member PSFEATURE_CUSTPAPER.lOrientation	long*
+member PSFEATURE_CUSTPAPER.lWidth	long*
+member PSFEATURE_CUSTPAPER.lWidthOffset	long*
+member PSFEATURE_OUTPUT.bPageIndependent	int*
+member PSFEATURE_OUTPUT.bSetPageDevice	int*
+member PSINJECTDATA.DataBytes	unsigned long*
+member PSINJECTDATA.InjectionPoint	unsigned short*
+member PSINJECTDATA.PageNumber	unsigned short*
+member RASTERIZER_STATUS.nLanguageID	short*
+member RASTERIZER_STATUS.nSize	short*
+member RASTERIZER_STATUS.wFlags	short*
+member RAWHID.bRawData	unsigned char (*)[1]
+member RAWHID.dwCount	unsigned long*
+member RAWHID.dwSizeHid	unsigned long*
+member RAWINPUT.header	RAWINPUTHEADER*
+member RAWINPUTDEVICE.dwFlags	unsigned long*
+member RAWINPUTDEVICE.hwndTarget	struct HWND__**
+member RAWINPUTDEVICE.usUsage	unsigned short*
+member RAWINPUTDEVICE.usUsagePage	unsigned short*
+member RAWINPUTDEVICELIST.dwType	unsigned long*
+member RAWINPUTDEVICELIST.hDevice	void**
+member RAWINPUTHEADER.dwSize	unsigned long*
+member RAWINPUTHEADER.dwType	unsigned long*
+member RAWINPUTHEADER.hDevice	void**
+member RAWINPUTHEADER.wParam	unsigned long long*
+member RAWKEYBOARD.ExtraInformation	unsigned long*
+member RAWKEYBOARD.Flags	unsigned short*
+member RAWKEYBOARD.MakeCode	unsigned short*
+member RAWKEYBOARD.Message	unsigned int*
+member RAWKEYBOARD.Reserved	unsigned short*
+member RAWKEYBOARD.VKey	unsigned short*
+member RAWMOUSE.lLastX	long*
+member RAWMOUSE.lLastY	long*
+member RAWMOUSE.ulButtons	unsigned long*
+member RAWMOUSE.ulExtraInformation	unsigned long*
+member RAWMOUSE.ulRawButtons	unsigned long*
+member RAWMOUSE.usFlags	unsigned short*
+member REASON_CONTEXT.Flags	unsigned long*
+member REASON_CONTEXT.Version	unsigned long*
+member RECT.bottom	long*
+member RECT.left	long*
+member RECT.right	long*
+member RECT.top	long*
+member RECTL.bottom	long*
+member RECTL.left	long*
+member RECTL.right	long*
+member RECTL.top	long*
+member RGBQUAD.rgbBlue	unsigned char*
+member RGBQUAD.rgbGreen	unsigned char*
+member RGBQUAD.rgbRed	unsigned char*
+member RGBQUAD.rgbReserved	unsigned char*
+member RGBTRIPLE.rgbtBlue	unsigned char*
+member RGBTRIPLE.rgbtGreen	unsigned char*
+member RGBTRIPLE.rgbtRed	unsigned char*
+member RGNDATA.Buffer	char (*)[1]
+member RGNDATA.rdh	RGNDATAHEADER*
+member RGNDATAHEADER.dwSize	unsigned long*
+member RGNDATAHEADER.iType	unsigned long*
+member RGNDATAHEADER.nCount	unsigned long*
+member RGNDATAHEADER.nRgnSize	unsigned long*
+member RGNDATAHEADER.rcBound	RECT*
+member RID_DEVICE_INFO.cbSize	unsigned long*
+member RID_DEVICE_INFO.dwType	unsigned long*
+member RID_DEVICE_INFO.hid	RID_DEVICE_INFO_HID*
+member RID_DEVICE_INFO.keyboard	RID_DEVICE_INFO_KEYBOARD*
+member RID_DEVICE_INFO.mouse	RID_DEVICE_INFO_MOUSE*
+member RID_DEVICE_INFO_HID.dwProductId	unsigned long*
+member RID_DEVICE_INFO_HID.dwVendorId	unsigned long*
+member RID_DEVICE_INFO_HID.dwVersionNumber	unsigned long*
+member RID_DEVICE_INFO_HID.usUsage	unsigned short*
+member RID_DEVICE_INFO_HID.usUsagePage	unsigned short*
+member RID_DEVICE_INFO_KEYBOARD.dwKeyboardMode	unsigned long*
+member RID_DEVICE_INFO_KEYBOARD.dwNumberOfFunctionKeys	unsigned long*
+member RID_DEVICE_INFO_KEYBOARD.dwNumberOfIndicators	unsigned long*
+member RID_DEVICE_INFO_KEYBOARD.dwNumberOfKeysTotal	unsigned long*
+member RID_DEVICE_INFO_KEYBOARD.dwSubType	unsigned long*
+member RID_DEVICE_INFO_KEYBOARD.dwType	unsigned long*
+member RID_DEVICE_INFO_MOUSE.dwId	unsigned long*
+member RID_DEVICE_INFO_MOUSE.dwNumberOfButtons	unsigned long*
+member RID_DEVICE_INFO_MOUSE.dwSampleRate	unsigned long*
+member RID_DEVICE_INFO_MOUSE.fHasHorizontalWheel	int*
+member RTL_CONDITION_VARIABLE.Ptr	void**
+member RTL_CRITICAL_SECTION.LockCount	long*
+member RTL_CRITICAL_SECTION.LockSemaphore	void**
+member RTL_CRITICAL_SECTION.OwningThread	void**
+member RTL_CRITICAL_SECTION.RecursionCount	long*
+member RTL_CRITICAL_SECTION.SpinCount	unsigned long long*
+member RTL_RUN_ONCE.Ptr	void**
+member RTL_SRWLOCK.Ptr	void**
+member SECURITY_ATTRIBUTES.bInheritHandle	int*
+member SECURITY_ATTRIBUTES.lpSecurityDescriptor	void**
+member SECURITY_ATTRIBUTES.nLength	unsigned long*
+member SIZE.cx	long*
+member SIZE.cy	long*
+member SMALL_RECT.Bottom	short*
+member SMALL_RECT.Left	short*
+member SMALL_RECT.Right	short*
+member SMALL_RECT.Top	short*
+member SOCKADDR.sa_data	char (*)[14]
+member SOCKADDR.sa_family	unsigned short*
+member SOCKADDR_IN.sin_addr	struct in_addr*
+member SOCKADDR_IN.sin_family	short*
+member SOCKADDR_IN.sin_port	unsigned short*
+member SOCKADDR_IN.sin_zero	char (*)[8]
+member STARTUPINFOA.cb	unsigned long*
+member STARTUPINFOA.cbReserved2	unsigned short*
+member STARTUPINFOA.dwFillAttribute	unsigned long*
+member STARTUPINFOA.dwFlags	unsigned long*
+member STARTUPINFOA.dwX	unsigned long*
+member STARTUPINFOA.dwXCountChars	unsigned long*
+member STARTUPINFOA.dwXSize	unsigned long*
+member STARTUPINFOA.dwY	unsigned long*
+member STARTUPINFOA.dwYCountChars	unsigned long*
+member STARTUPINFOA.dwYSize	unsigned long*
+member STARTUPINFOA.hStdError	void**
+member STARTUPINFOA.hStdInput	void**
+member STARTUPINFOA.hStdOutput	void**
+member STARTUPINFOA.lpDesktop	char**
+member STARTUPINFOA.lpReserved	char**
+member STARTUPINFOA.lpReserved2	unsigned char**
+member STARTUPINFOA.lpTitle	char**
+member STARTUPINFOA.wShowWindow	unsigned short*
+member STARTUPINFOEXA.StartupInfo	STARTUPINFOA*
+member STARTUPINFOEXW.StartupInfo	STARTUPINFOW*
+member STARTUPINFOW.cb	unsigned long*
+member STARTUPINFOW.cbReserved2	unsigned short*
+member STARTUPINFOW.dwFillAttribute	unsigned long*
+member STARTUPINFOW.dwFlags	unsigned long*
+member STARTUPINFOW.dwX	unsigned long*
+member STARTUPINFOW.dwXCountChars	unsigned long*
+member STARTUPINFOW.dwXSize	unsigned long*
+member STARTUPINFOW.dwY	unsigned long*
+member STARTUPINFOW.dwYCountChars	unsigned long*
+member STARTUPINFOW.dwYSize	unsigned long*
+member STARTUPINFOW.hStdError	void**
+member STARTUPINFOW.hStdInput	void**
+member STARTUPINFOW.hStdOutput	void**
+member STARTUPINFOW.lpDesktop	unsigned short**
+member STARTUPINFOW.lpReserved	unsigned short**
+member STARTUPINFOW.lpReserved2	unsigned char**
+member STARTUPINFOW.lpTitle	unsigned short**
+member STARTUPINFOW.wShowWindow	unsigned short*
+member SYSTEMTIME.wDay	unsigned short*
+member SYSTEMTIME.wDayOfWeek	unsigned short*
+member SYSTEMTIME.wHour	unsigned short*
+member SYSTEMTIME.wMilliseconds	unsigned short*
+member SYSTEMTIME.wMinute	unsigned short*
+member SYSTEMTIME.wMonth	unsigned short*
+member SYSTEMTIME.wSecond	unsigned short*
+member SYSTEMTIME.wYear	unsigned short*
+member SYSTEM_INFO.dwActiveProcessorMask	unsigned long long*
+member SYSTEM_INFO.dwAllocationGranularity	unsigned long*
+member SYSTEM_INFO.dwNumberOfProcessors	unsigned long*
+member SYSTEM_INFO.dwOemId	unsigned long*
+member SYSTEM_INFO.dwPageSize	unsigned long*
+member SYSTEM_INFO.dwProcessorType	unsigned long*
+member SYSTEM_INFO.lpMaximumApplicationAddress	void**
+member SYSTEM_INFO.lpMinimumApplicationAddress	void**
+member SYSTEM_INFO.wProcessorArchitecture	unsigned short*
+member SYSTEM_INFO.wProcessorLevel	unsigned short*
+member SYSTEM_INFO.wProcessorRevision	unsigned short*
+member SYSTEM_INFO.wReserved	unsigned short*
+member TEXTMETRICA.tmAscent	long*
+member TEXTMETRICA.tmAveCharWidth	long*
+member TEXTMETRICA.tmBreakChar	unsigned char*
+member TEXTMETRICA.tmCharSet	unsigned char*
+member TEXTMETRICA.tmDefaultChar	unsigned char*
+member TEXTMETRICA.tmDescent	long*
+member TEXTMETRICA.tmDigitizedAspectX	long*
+member TEXTMETRICA.tmDigitizedAspectY	long*
+member TEXTMETRICA.tmExternalLeading	long*
+member TEXTMETRICA.tmFirstChar	unsigned char*
+member TEXTMETRICA.tmHeight	long*
+member TEXTMETRICA.tmInternalLeading	long*
+member TEXTMETRICA.tmItalic	unsigned char*
+member TEXTMETRICA.tmLastChar	unsigned char*
+member TEXTMETRICA.tmMaxCharWidth	long*
+member TEXTMETRICA.tmOverhang	long*
+member TEXTMETRICA.tmPitchAndFamily	unsigned char*
+member TEXTMETRICA.tmStruckOut	unsigned char*
+member TEXTMETRICA.tmUnderlined	unsigned char*
+member TEXTMETRICA.tmWeight	long*
+member TEXTMETRICW.tmAscent	long*
+member TEXTMETRICW.tmAveCharWidth	long*
+member TEXTMETRICW.tmBreakChar	unsigned short*
+member TEXTMETRICW.tmCharSet	unsigned char*
+member TEXTMETRICW.tmDefaultChar	unsigned short*
+member TEXTMETRICW.tmDescent	long*
+member TEXTMETRICW.tmDigitizedAspectX	long*
+member TEXTMETRICW.tmDigitizedAspectY	long*
+member TEXTMETRICW.tmExternalLeading	long*
+member TEXTMETRICW.tmFirstChar	unsigned short*
+member TEXTMETRICW.tmHeight	long*
+member TEXTMETRICW.tmInternalLeading	long*
+member TEXTMETRICW.tmItalic	unsigned char*
+member TEXTMETRICW.tmLastChar	unsigned short*
+member TEXTMETRICW.tmMaxCharWidth	long*
+member TEXTMETRICW.tmOverhang	long*
+member TEXTMETRICW.tmPitchAndFamily	unsigned char*
+member TEXTMETRICW.tmStruckOut	unsigned char*
+member TEXTMETRICW.tmUnderlined	unsigned char*
+member TEXTMETRICW.tmWeight	long*
+member TIME_ZONE_INFORMATION.Bias	long*
+member TIME_ZONE_INFORMATION.DaylightBias	long*
+member TIME_ZONE_INFORMATION.DaylightDate	SYSTEMTIME*
+member TIME_ZONE_INFORMATION.DaylightName	unsigned short (*)[32]
+member TIME_ZONE_INFORMATION.StandardBias	long*
+member TIME_ZONE_INFORMATION.StandardDate	SYSTEMTIME*
+member TIME_ZONE_INFORMATION.StandardName	unsigned short (*)[32]
+member TOKEN_PRIVILEGES.PrivilegeCount	unsigned long*
+member TOKEN_PRIVILEGES.Privileges	LUID_AND_ATTRIBUTES (*)[1]
+member TRIVERTEX.Alpha	unsigned short*
+member TRIVERTEX.Blue	unsigned short*
+member TRIVERTEX.Green	unsigned short*
+member TRIVERTEX.Red	unsigned short*
+member TRIVERTEX.x	long*
+member TRIVERTEX.y	long*
+member TTPOLYCURVE.apfx	POINTFX (*)[1]
+member TTPOLYCURVE.cpfx	unsigned short*
+member TTPOLYCURVE.wType	unsigned short*
+member TTPOLYGONHEADER.cb	unsigned long*
+member TTPOLYGONHEADER.dwType	unsigned long*
+member TTPOLYGONHEADER.pfxStart	POINTFX*
+member ULARGE_INTEGER.HighPart	unsigned long*
+member ULARGE_INTEGER.LowPart	unsigned long*
+member ULARGE_INTEGER.QuadPart	unsigned long long*
+member UNWIND_HISTORY_TABLE.Count	unsigned long*
+member UNWIND_HISTORY_TABLE.Entry	UNWIND_HISTORY_TABLE_ENTRY (*)[12]
+member UNWIND_HISTORY_TABLE.GlobalHint	unsigned char*
+member UNWIND_HISTORY_TABLE.HighAddress	unsigned long long*
+member UNWIND_HISTORY_TABLE.LocalHint	unsigned char*
+member UNWIND_HISTORY_TABLE.LowAddress	unsigned long long*
+member UNWIND_HISTORY_TABLE.Once	unsigned char*
+member UNWIND_HISTORY_TABLE.Search	unsigned char*
+member UNWIND_HISTORY_TABLE_ENTRY.FunctionEntry	IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY**
+member UNWIND_HISTORY_TABLE_ENTRY.ImageBase	unsigned long long*
+member VS_FIXEDFILEINFO.dwFileDateLS	unsigned long*
+member VS_FIXEDFILEINFO.dwFileDateMS	unsigned long*
+member VS_FIXEDFILEINFO.dwFileFlags	unsigned long*
+member VS_FIXEDFILEINFO.dwFileFlagsMask	unsigned long*
+member VS_FIXEDFILEINFO.dwFileOS	unsigned long*
+member VS_FIXEDFILEINFO.dwFileSubtype	unsigned long*
+member VS_FIXEDFILEINFO.dwFileType	unsigned long*
+member VS_FIXEDFILEINFO.dwFileVersionLS	unsigned long*
+member VS_FIXEDFILEINFO.dwFileVersionMS	unsigned long*
+member VS_FIXEDFILEINFO.dwProductVersionLS	unsigned long*
+member VS_FIXEDFILEINFO.dwProductVersionMS	unsigned long*
+member VS_FIXEDFILEINFO.dwSignature	unsigned long*
+member VS_FIXEDFILEINFO.dwStrucVersion	unsigned long*
+member WCRANGE.cGlyphs	unsigned short*
+member WCRANGE.wcLow	unsigned short*
+member WGLSWAP.hdc	struct HDC__**
+member WGLSWAP.uiFlags	unsigned int*
+member WIN32_FILE_ATTRIBUTE_DATA.dwFileAttributes	unsigned long*
+member WIN32_FILE_ATTRIBUTE_DATA.ftCreationTime	FILETIME*
+member WIN32_FILE_ATTRIBUTE_DATA.ftLastAccessTime	FILETIME*
+member WIN32_FILE_ATTRIBUTE_DATA.ftLastWriteTime	FILETIME*
+member WIN32_FILE_ATTRIBUTE_DATA.nFileSizeHigh	unsigned long*
+member WIN32_FILE_ATTRIBUTE_DATA.nFileSizeLow	unsigned long*
+member WIN32_FIND_DATAA.cAlternateFileName	char (*)[14]
+member WIN32_FIND_DATAA.cFileName	char (*)[260]
+member WIN32_FIND_DATAA.dwFileAttributes	unsigned long*
+member WIN32_FIND_DATAA.dwReserved0	unsigned long*
+member WIN32_FIND_DATAA.dwReserved1	unsigned long*
+member WIN32_FIND_DATAA.ftCreationTime	FILETIME*
+member WIN32_FIND_DATAA.ftLastAccessTime	FILETIME*
+member WIN32_FIND_DATAA.ftLastWriteTime	FILETIME*
+member WIN32_FIND_DATAA.nFileSizeHigh	unsigned long*
+member WIN32_FIND_DATAA.nFileSizeLow	unsigned long*
+member WIN32_FIND_DATAW.cAlternateFileName	unsigned short (*)[14]
+member WIN32_FIND_DATAW.cFileName	unsigned short (*)[260]
+member WIN32_FIND_DATAW.dwFileAttributes	unsigned long*
+member WIN32_FIND_DATAW.dwReserved0	unsigned long*
+member WIN32_FIND_DATAW.dwReserved1	unsigned long*
+member WIN32_FIND_DATAW.ftCreationTime	FILETIME*
+member WIN32_FIND_DATAW.ftLastAccessTime	FILETIME*
+member WIN32_FIND_DATAW.ftLastWriteTime	FILETIME*
+member WIN32_FIND_DATAW.nFileSizeHigh	unsigned long*
+member WIN32_FIND_DATAW.nFileSizeLow	unsigned long*
+member WINDOWPLACEMENT.flags	unsigned int*
+member WINDOWPLACEMENT.length	unsigned int*
+member WINDOWPLACEMENT.ptMaxPosition	POINT*
+member WINDOWPLACEMENT.ptMinPosition	POINT*
+member WINDOWPLACEMENT.rcNormalPosition	RECT*
+member WINDOWPLACEMENT.showCmd	unsigned int*
+member WINDOW_BUFFER_SIZE_RECORD.dwSize	COORD*
+member WNDCLASSA.cbClsExtra	int*
+member WNDCLASSA.cbWndExtra	int*
+member WNDCLASSA.hCursor	struct HICON__**
+member WNDCLASSA.hIcon	struct HICON__**
+member WNDCLASSA.hInstance	struct HINSTANCE__**
+member WNDCLASSA.hbrBackground	struct HBRUSH__**
+member WNDCLASSA.lpfnWndProc	long long (**)(struct HWND__*, unsigned int, unsigned long long, long long)
+member WNDCLASSA.lpszClassName	const char**
+member WNDCLASSA.lpszMenuName	const char**
+member WNDCLASSA.style	unsigned int*
+member WNDCLASSW.cbClsExtra	int*
+member WNDCLASSW.cbWndExtra	int*
+member WNDCLASSW.hCursor	struct HICON__**
+member WNDCLASSW.hIcon	struct HICON__**
+member WNDCLASSW.hInstance	struct HINSTANCE__**
+member WNDCLASSW.hbrBackground	struct HBRUSH__**
+member WNDCLASSW.lpfnWndProc	long long (**)(struct HWND__*, unsigned int, unsigned long long, long long)
+member WNDCLASSW.lpszClassName	const unsigned short**
+member WNDCLASSW.lpszMenuName	const unsigned short**
+member WNDCLASSW.style	unsigned int*
+member WSABUF.buf	char**
+member WSABUF.len	unsigned long*
+member WSADATA.iMaxSockets	unsigned short*
+member WSADATA.iMaxUdpDg	unsigned short*
+member WSADATA.lpVendorInfo	char**
+member WSADATA.szDescription	char (*)[257]
+member WSADATA.szSystemStatus	char (*)[129]
+member WSADATA.wHighVersion	unsigned short*
+member WSADATA.wVersion	unsigned short*
+member WSANETWORKEVENTS.iErrorCode	int (*)[10]
+member WSANETWORKEVENTS.lNetworkEvents	long*
+member WSAPROTOCOLCHAIN.ChainEntries	unsigned long (*)[7]
+member WSAPROTOCOLCHAIN.ChainLen	int*
+member WSAPROTOCOL_INFOA.ProtocolChain	WSAPROTOCOLCHAIN*
+member WSAPROTOCOL_INFOA.ProviderId	GUID*
+member WSAPROTOCOL_INFOA.dwCatalogEntryId	unsigned long*
+member WSAPROTOCOL_INFOA.dwMessageSize	unsigned long*
+member WSAPROTOCOL_INFOA.dwProviderFlags	unsigned long*
+member WSAPROTOCOL_INFOA.dwProviderReserved	unsigned long*
+member WSAPROTOCOL_INFOA.dwServiceFlags1	unsigned long*
+member WSAPROTOCOL_INFOA.dwServiceFlags2	unsigned long*
+member WSAPROTOCOL_INFOA.dwServiceFlags3	unsigned long*
+member WSAPROTOCOL_INFOA.dwServiceFlags4	unsigned long*
+member WSAPROTOCOL_INFOA.iAddressFamily	int*
+member WSAPROTOCOL_INFOA.iMaxSockAddr	int*
+member WSAPROTOCOL_INFOA.iMinSockAddr	int*
+member WSAPROTOCOL_INFOA.iNetworkByteOrder	int*
+member WSAPROTOCOL_INFOA.iProtocol	int*
+member WSAPROTOCOL_INFOA.iProtocolMaxOffset	int*
+member WSAPROTOCOL_INFOA.iSecurityScheme	int*
+member WSAPROTOCOL_INFOA.iSocketType	int*
+member WSAPROTOCOL_INFOA.iVersion	int*
+member WSAPROTOCOL_INFOA.szProtocol	char (*)[256]
+member WSAPROTOCOL_INFOW.ProtocolChain	WSAPROTOCOLCHAIN*
+member WSAPROTOCOL_INFOW.ProviderId	GUID*
+member WSAPROTOCOL_INFOW.dwCatalogEntryId	unsigned long*
+member WSAPROTOCOL_INFOW.dwMessageSize	unsigned long*
+member WSAPROTOCOL_INFOW.dwProviderFlags	unsigned long*
+member WSAPROTOCOL_INFOW.dwProviderReserved	unsigned long*
+member WSAPROTOCOL_INFOW.dwServiceFlags1	unsigned long*
+member WSAPROTOCOL_INFOW.dwServiceFlags2	unsigned long*
+member WSAPROTOCOL_INFOW.dwServiceFlags3	unsigned long*
+member WSAPROTOCOL_INFOW.dwServiceFlags4	unsigned long*
+member WSAPROTOCOL_INFOW.iAddressFamily	int*
+member WSAPROTOCOL_INFOW.iMaxSockAddr	int*
+member WSAPROTOCOL_INFOW.iMinSockAddr	int*
+member WSAPROTOCOL_INFOW.iNetworkByteOrder	int*
+member WSAPROTOCOL_INFOW.iProtocol	int*
+member WSAPROTOCOL_INFOW.iProtocolMaxOffset	int*
+member WSAPROTOCOL_INFOW.iSecurityScheme	int*
+member WSAPROTOCOL_INFOW.iSocketType	int*
+member WSAPROTOCOL_INFOW.iVersion	int*
+member WSAPROTOCOL_INFOW.szProtocol	unsigned short (*)[256]
+member XFORM.eDx	float*
+member XFORM.eDy	float*
+member XFORM.eM11	float*
+member XFORM.eM12	float*
+member XFORM.eM21	float*
+member XFORM.eM22	float*
+member XSAVE_FORMAT.ControlWord	unsigned short*
+member XSAVE_FORMAT.DataOffset	unsigned long*
+member XSAVE_FORMAT.DataSelector	unsigned short*
+member XSAVE_FORMAT.ErrorOffset	unsigned long*
+member XSAVE_FORMAT.ErrorOpcode	unsigned short*
+member XSAVE_FORMAT.ErrorSelector	unsigned short*
+member XSAVE_FORMAT.FloatRegisters	M128A (*)[8]
+member XSAVE_FORMAT.MxCsr	unsigned long*
+member XSAVE_FORMAT.MxCsr_Mask	unsigned long*
+member XSAVE_FORMAT.Reserved1	unsigned char*
+member XSAVE_FORMAT.Reserved2	unsigned short*
+member XSAVE_FORMAT.Reserved3	unsigned short*
+member XSAVE_FORMAT.Reserved4	unsigned char (*)[96]
+member XSAVE_FORMAT.StatusWord	unsigned short*
+member XSAVE_FORMAT.TagWord	unsigned char*
+member XSAVE_FORMAT.XmmRegisters	M128A (*)[16]
+member _IMAGE_RUNTIME_FUNCTION_ENTRY.BeginAddress	unsigned long*
+member _IMAGE_RUNTIME_FUNCTION_ENTRY.EndAddress	unsigned long*
+member _IMAGE_RUNTIME_FUNCTION_ENTRY.UnwindData	unsigned long*
+member _IMAGE_RUNTIME_FUNCTION_ENTRY.UnwindInfoAddress	unsigned long*
+member fd_set.fd_array	unsigned long long (*)[64]
+member fd_set.fd_count	unsigned int*
+member struct HACCEL__.unused	int*
+member struct HBITMAP__.unused	int*
+member struct HBRUSH__.unused	int*
+member struct HCOLORSPACE__.unused	int*
+member struct HDC__.unused	int*
+member struct HDESK__.unused	int*
+member struct HDROP__.unused	int*
+member struct HENHMETAFILE__.unused	int*
+member struct HFONT__.unused	int*
+member struct HGLRC__.unused	int*
+member struct HHOOK__.unused	int*
+member struct HICON__.unused	int*
+member struct HINSTANCE__.unused	int*
+member struct HKEY__.unused	int*
+member struct HKL__.unused	int*
+member struct HLSURF__.unused	int*
+member struct HMENU__.unused	int*
+member struct HMETAFILE__.unused	int*
+member struct HMONITOR__.unused	int*
+member struct HPALETTE__.unused	int*
+member struct HPEN__.unused	int*
+member struct HRAWINPUT__.unused	int*
+member struct HRGN__.unused	int*
+member struct HRSRC__.unused	int*
+member struct HSPRITE__.unused	int*
+member struct HSTR__.unused	int*
+member struct HTASK__.unused	int*
+member struct HUMPD__.unused	int*
+member struct HWINEVENTHOOK__.unused	int*
+member struct HWINSTA__.unused	int*
+member struct HWND__.unused	int*
+member struct protoent.p_aliases	char***
+member struct protoent.p_name	char**
+member struct protoent.p_proto	short*
+member struct sockaddr_storage.__ss_align	long long*
+member struct sockaddr_storage.__ss_pad1	char (*)[6]
+member struct sockaddr_storage.__ss_pad2	char (*)[112]
 ntohl	unsigned long (*)(unsigned long)
 ntohs	unsigned short (*)(unsigned short)
 recv	int (*)(unsigned long long, char*, int, int)
@@ -3176,10 +5247,39 @@ PathCchSkipRoot	long (*)(const unsigned short*, const unsigned short**)
 psapi.h p
 EnumProcessModules	int (*)(void*, struct HINSTANCE__**, unsigned long, unsigned long*)
 GetProcessMemoryInfo	int (*)(void*, PROCESS_MEMORY_COUNTERS*, unsigned long)
+member PROCESS_MEMORY_COUNTERS.PageFaultCount	unsigned long*
+member PROCESS_MEMORY_COUNTERS.PagefileUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.PeakPagefileUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.PeakWorkingSetSize	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.QuotaNonPagedPoolUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.QuotaPagedPoolUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.QuotaPeakNonPagedPoolUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.QuotaPeakPagedPoolUsage	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.WorkingSetSize	unsigned long long*
+member PROCESS_MEMORY_COUNTERS.cb	unsigned long*
 typedef PPROCESS_MEMORY_COUNTERS	PROCESS_MEMORY_COUNTERS**
 
 delayimp.h p
 __HrLoadAllImportsForDll	long (*)(const char*)
+member DelayLoadInfo.cb	unsigned long*
+member DelayLoadInfo.dlp	DelayLoadProc*
+member DelayLoadInfo.dwLastError	unsigned long*
+member DelayLoadInfo.hmodCur	struct HINSTANCE__**
+member DelayLoadInfo.pfnCur	long long (**)()
+member DelayLoadInfo.pidd	const ImgDelayDescr**
+member DelayLoadInfo.ppfn	long long (***)()
+member DelayLoadInfo.szDll	const char**
+member DelayLoadProc.dwOrdinal	unsigned long*
+member DelayLoadProc.fImportByName	int*
+member DelayLoadProc.szProcName	const char**
+member ImgDelayDescr.dwTimeStamp	unsigned long*
+member ImgDelayDescr.grAttrs	unsigned long*
+member ImgDelayDescr.rvaBoundIAT	unsigned long*
+member ImgDelayDescr.rvaDLLName	unsigned long*
+member ImgDelayDescr.rvaHmod	unsigned long*
+member ImgDelayDescr.rvaIAT	unsigned long*
+member ImgDelayDescr.rvaINT	unsigned long*
+member ImgDelayDescr.rvaUnloadIAT	unsigned long*
 typedef PCImgDelayDescr	const ImgDelayDescr**
 typedef PCImgThunkData	const IMAGE_THUNK_DATA64**
 typedef PDelayLoadInfo	DelayLoadInfo**
@@ -3463,11 +5563,42 @@ getnameinfo	int (*)(const SOCKADDR*, int, char*, unsigned long, char*, unsigned 
 getservbyname	struct servent* (*)(const char*, const char*)
 inet_ntop	const char* (*)(int, const void*, char*, unsigned long long)
 inet_pton	int (*)(int, const char*, void*)
+member SOCKADDR_IN6.sin6_addr	struct in6_addr*
+member SOCKADDR_IN6.sin6_family	short*
+member SOCKADDR_IN6.sin6_flowinfo	unsigned long*
+member SOCKADDR_IN6.sin6_port	unsigned short*
+member SOCKADDR_IN6.sin6_scope_id	unsigned long*
+member struct addrinfo.ai_addr	SOCKADDR**
+member struct addrinfo.ai_addrlen	unsigned long long*
+member struct addrinfo.ai_canonname	char**
+member struct addrinfo.ai_family	int*
+member struct addrinfo.ai_flags	int*
+member struct addrinfo.ai_next	struct addrinfo**
+member struct addrinfo.ai_protocol	int*
+member struct addrinfo.ai_socktype	int*
+member struct hostent.h_addr_list	char***
+member struct hostent.h_addrtype	short*
+member struct hostent.h_aliases	char***
+member struct hostent.h_length	short*
+member struct hostent.h_name	char**
+member struct servent.s_aliases	char***
+member struct servent.s_name	char**
+member struct servent.s_port	short*
+member struct servent.s_proto	char**
 typedef LPSOCKADDR_IN6	SOCKADDR_IN6**
 typedef PSOCKADDR_IN6	SOCKADDR_IN6**
 typedef socklen_t	int*
 
+mstcpip.h p
+member struct tcp_keepalive.keepaliveinterval	unsigned long*
+member struct tcp_keepalive.keepalivetime	unsigned long*
+member struct tcp_keepalive.onoff	unsigned long*
+
 mswsock.h y
+member TRANSMIT_FILE_BUFFERS.Head	void**
+member TRANSMIT_FILE_BUFFERS.HeadLength	unsigned long*
+member TRANSMIT_FILE_BUFFERS.Tail	void**
+member TRANSMIT_FILE_BUFFERS.TailLength	unsigned long*
 typedef LPFN_ACCEPTEX	int (**)(unsigned long long, unsigned long long, void*, unsigned long, unsigned long, unsigned long, unsigned long*, OVERLAPPED*)
 typedef LPFN_CONNECTEX	int (**)(unsigned long long, const SOCKADDR*, int, void*, unsigned long, unsigned long*, OVERLAPPED*)
 typedef LPFN_DISCONNECTEX	int (**)(unsigned long long, OVERLAPPED*, unsigned long, unsigned long)
@@ -3480,9 +5611,14 @@ iphlpapi.h y
 ConvertInterfaceLuidToNameW	unsigned long (*)(const NET_LUID*, unsigned short*, unsigned long long)
 if_indextoname	char* (*)(unsigned long, char*)
 if_nametoindex	unsigned long (*)(const char*)
+member NET_LUID.Value	unsigned long long*
 typedef NET_IFINDEX	unsigned long*
 
 ws2bth.h p
+member SOCKADDR_BTH.addressFamily	unsigned short*
+member SOCKADDR_BTH.btAddr	unsigned long long*
+member SOCKADDR_BTH.port	unsigned long*
+member SOCKADDR_BTH.serviceClassId	GUID*
 typedef BTH_ADDR	unsigned long long*
 typedef PBTH_ADDR	unsigned long long**
 typedef PSOCKADDR_BTH	SOCKADDR_BTH**
@@ -3497,6 +5633,21 @@ UuidToStringW	long (*)(const GUID*, unsigned short**)
 typedef RPC_CSTR	unsigned char**
 typedef RPC_WSTR	unsigned short**
 
+hvsocket.h p
+member SOCKADDR_HV.Family	unsigned short*
+member SOCKADDR_HV.Reserved	unsigned short*
+member SOCKADDR_HV.ServiceId	GUID*
+member SOCKADDR_HV.VmId	GUID*
+
 winternl.h y
+member OBJECT_ATTRIBUTES.Attributes	unsigned long*
+member OBJECT_ATTRIBUTES.Length	unsigned long*
+member OBJECT_ATTRIBUTES.ObjectName	UNICODE_STRING**
+member OBJECT_ATTRIBUTES.RootDirectory	void**
+member OBJECT_ATTRIBUTES.SecurityDescriptor	void**
+member OBJECT_ATTRIBUTES.SecurityQualityOfService	void**
+member UNICODE_STRING.Buffer	unsigned short**
+member UNICODE_STRING.Length	unsigned short*
+member UNICODE_STRING.MaximumLength	unsigned short*
 typedef POBJECT_ATTRIBUTES	OBJECT_ATTRIBUTES**
 typedef PUNICODE_STRING	UNICODE_STRING**

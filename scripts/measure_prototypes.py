@@ -5,11 +5,13 @@ compatible with, which a unit test holds badc's declarations against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
 reference toolchain, badc lists the functions and objects a unit including
-it declares, each with the type of its address, and its typedef names, each
-with the type of a pointer to the type it names (`--dump-prototypes`). A
-probe built with the reference compiler initializes a pointer of badc's
-type with each, `__typeof__(<badc's type>) p = &name;` or
-`= (name *)0;`, incompatible pointer types an error: a failed initialization is a declaration that
+it declares and the members of its named records, each with the type of
+its address, and its typedef names, each with the type of a pointer to the
+type it names (`--dump-prototypes`). A probe built with the reference
+compiler initializes a pointer of badc's type with each,
+`__typeof__(<badc's type>) p = &name;`, `= &((record *)0)->member;` or
+`= (name *)0;`, incompatible pointer types, those differing in signedness
+included, an error: a failed initialization is a declaration that
 differs from the C library's, which the run reports and leaves out; a
 name the reference does not declare is left out. gcc records a
 `noreturn` or `const` attribute as a qualifier of the function type, which
@@ -43,12 +45,14 @@ from measure_header_targets import TARGETS, is_clang, require_current_badc  # no
 from measure_record_layouts import prelude, shipped_headers  # noqa: E402
 
 OUT_DIR = REPO / "libc" / "prototypes"
-# Incompatible pointer types are the one diagnostic that fails a check: gcc
-# and clang 22 make them errors, clang 21 warns, and its -w would silence
-# the -Werror= that promotes them.
-GCC_FLAGS = ["-fsyntax-only", "-w", "-Werror=incompatible-pointer-types"]
+# Incompatible pointer types, those differing in the signedness of the
+# pointed-to integer type included, are the diagnostics that fail a check.
+# Each compiler only warns of the latter, and -w would silence the -Werror=
+# that promotes them; clang 21 warns of the former too.
+GCC_FLAGS = ["-fsyntax-only", "-Werror=incompatible-pointer-types", "-Werror=pointer-sign"]
 CLANG_FLAGS = ["-fsyntax-only", "-Wno-everything", "-Werror=incompatible-pointer-types",
-               "-ferror-limit=0"]
+               "-Werror=pointer-sign", "-ferror-limit=0"]
+DIFFERS = re.compile(r"incompatible|pointer-sign")
 # Declarations badc keeps different on purpose, reported as departures.
 GNU_ENUM = ("glibc's _GNU_SOURCE declaration takes the resource, priority or "
             "timer selector as an enum compatible with unsigned int; badc keeps "
@@ -62,11 +66,14 @@ DEPARTURES = {
     **{("windows", n): SDK
        for n in ("_atoflt", "_atoflt_l", "RtlAddFunctionTable", "RtlDeleteFunctionTable",
                  "RtlLookupFunctionEntry", "RtlVirtualUnwind", "typedef PRUNTIME_FUNCTION",
-                 "typedef PXMM_SAVE_AREA32")},
+                 "typedef PXMM_SAVE_AREA32", "member CONTEXT.FltSave",
+                 "member UNWIND_HISTORY_TABLE_ENTRY.FunctionEntry",
+                 "member struct sockaddr_storage.ss_family")},
     **{("windows", n): OFF_T for n in ("ftruncate", "truncate", "typedef off_t")},
     **{("windows", f"typedef {n}"): "the 16-bit fast types are MSVC's int"
        for n in ("int_fast16_t", "uint_fast16_t", "atomic_int_fast16_t", "atomic_uint_fast16_t")},
     ("windows", "typedef pid_t"): "msvcrt's _getpid returns int",
+    ("macos", "member glob_t.gl_errblk"): "badc has no blocks; the SDK's member without them",
 }
 # The compilers' intrinsic headers: their vector types are each compiler's
 # own, which no declaration of the other's is compatible with.
@@ -87,8 +94,14 @@ def badc_prototypes(badc: str, target: str, src: str) -> dict[str, str] | None:
 
 def address(name: str) -> str:
     """The expression of the type badc's entry spells: a declared name's
-    address, or for a typedef name a null pointer to its type."""
-    return f"({name[8:]} *)0" if name.startswith("typedef ") else f"&{name}"
+    address, for a typedef name a null pointer to its type, and for a
+    record member its address in a record at null."""
+    if name.startswith("typedef "):
+        return f"({name[8:]} *)0"
+    if name.startswith("member "):
+        record, member = name[7:].rsplit(".", 1)
+        return f"&(({record} *)0)->{member}"
+    return f"&{name}"
 
 
 def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], list[str]] | None:
@@ -115,7 +128,7 @@ def check(cc: list[str], src: str, protos: dict[str, str]) -> tuple[list[str], l
         for m in re.finditer(r"probe\.c:(\d+):\d+: error: (.*)", r.stderr):
             i = int(m.group(1)) - first
             if 0 <= i < len(kept):
-                (failed if "incompatible" in m.group(2) else other).add(kept[i])
+                (failed if DIFFERS.search(m.group(2)) else other).add(kept[i])
         # A line with any other error names a function the reference does
         # not declare, or a type it cannot spell: not comparable.
         failed -= other

@@ -727,7 +727,8 @@ fn dump_prototypes_spells_the_declared_types() {
          Impl *open_it(const char *path, Mode m, struct stat *st, ...);\n\
          void (*handler(int sig, void (*fn)(int)))(int);\nint no_prototype();\n\
          extern char *names[2];\nextern Impl *current;\nint defined_here;\n\
-         typedef long count_t;\ntypedef int (*cmp_t)(const void *, const void *);\n",
+         typedef long count_t;\ntypedef int (*cmp_t)(const void *, const void *);\n\
+         struct pt { long x; int (*cb)(int); char name[4]; unsigned flag : 1; };\n",
     )
     .expect("write unit");
     let out = Command::new(badc)
@@ -756,6 +757,21 @@ fn dump_prototypes_spells_the_declared_types() {
     );
     assert!(
         !lines.iter().any(|l| l.starts_with("typedef Impl\t")),
+        "{text}"
+    );
+    assert!(lines.contains(&"member struct pt.x\tlong*"), "{text}");
+    assert!(
+        lines.contains(&"member struct pt.cb\tint (**)(int)"),
+        "{text}"
+    );
+    assert!(
+        lines.contains(&"member struct pt.name\tchar (*)[4]"),
+        "{text}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l.starts_with("member struct pt.flag\t")),
         "{text}"
     );
     assert!(

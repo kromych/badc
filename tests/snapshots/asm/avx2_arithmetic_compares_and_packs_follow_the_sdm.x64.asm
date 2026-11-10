@@ -41,12 +41,11 @@ Disassembly of section .text:
                	leaq	0x20(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movq	(%rsp), %rcx
-               	movq	%rcx, 0x20(%rsp)
-               	movq	0x8(%rsp), %rcx
-               	movq	%rcx, 0x28(%rsp)
-               	movq	%rax, %rcx
-               	movups	(%rcx), %xmm0
+               	movq	(%rsp), %rax
+               	movq	%rax, 0x20(%rsp)
+               	movq	0x8(%rsp), %rax
+               	movq	%rax, 0x28(%rsp)
+               	movups	0x20(%rsp), %xmm0
                	leave
                	retq
 
@@ -66,12 +65,11 @@ Disassembly of section .text:
                	leaq	0x20(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movq	0x10(%rsp), %rcx
-               	movq	%rcx, 0x20(%rsp)
-               	movq	0x18(%rsp), %rcx
-               	movq	%rcx, 0x28(%rsp)
-               	movq	%rax, %rcx
-               	movups	(%rcx), %xmm0
+               	movq	0x10(%rsp), %rax
+               	movq	%rax, 0x20(%rsp)
+               	movq	0x18(%rsp), %rax
+               	movq	%rax, 0x28(%rsp)
+               	movups	0x20(%rsp), %xmm0
                	leave
                	retq
 

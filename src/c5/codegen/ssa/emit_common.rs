@@ -2731,6 +2731,33 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::agg_parts::run", &mut ssa_funcs, |funcs| {
             super::super::passes::agg_parts::run(funcs, target);
         });
+        // A vector parameter or result the parts carry leaves its object
+        // an ordinary vector local: promote it as the first run would have.
+        pipeline.run("ssa::mem2reg::run vector parts", &mut ssa_funcs, |funcs| {
+            use super::super::ir::{FunctionSsa, Inst, LoadKind::V128};
+            let vector_parts = |f: &FunctionSsa| {
+                f.insts.iter().any(|i| match i {
+                    Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => *kind == V128,
+                    Inst::AggParts { parts, .. } => parts.iter().any(|&p| {
+                        matches!(f.insts.get(p as usize), Some(Inst::Load { kind: V128, .. }))
+                    }),
+                    _ => false,
+                })
+            };
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
+                if vector_parts(f) {
+                    super::vector_slots::run(f);
+                    super::asm_outputs::run(f);
+                    let promoted = super::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function
         // holding a candidate object; the promoted field slots feed the

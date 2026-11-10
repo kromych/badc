@@ -778,7 +778,7 @@ impl FunctionEmitter<'_, '_> {
             let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
-            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
                 continue;
             }
             if super::ssa::emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc)
@@ -792,7 +792,7 @@ impl FunctionEmitter<'_, '_> {
             let Some((true, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
-            fp_moves.push((Place::FpReg(src), dst, false));
+            fp_moves.push((Place::FpReg(src), dst, *kind == LoadKind::V128));
             fp_vids.push(vid);
             fp_homes.push(dst);
         }
@@ -2336,7 +2336,7 @@ fn emit_parts_return(
                 int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
             }
             (true, Place::FpReg(_) | Place::Spill(_)) => {
-                fp_moves.push((src, Place::FpReg(r), false))
+                fp_moves.push((src, Place::FpReg(r), alloc.is_wide(p)))
             }
             (true, Place::IntReg(s)) => cross.push((r, Reg(s))),
             _ => return fail("AggParts: part not in a register or spill slot of its bank"),

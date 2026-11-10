@@ -130,7 +130,6 @@ Disassembly of section .text:
                	subq	$0x60, %rsp
                	andq	$-0x20, %rsp
                	movq	%rdi, -0x20(%rbp)
-               	movups	%xmm0, 0x20(%rsp)
                	movq	0x10(%rbp), %r10
                	movq	%r10, (%rsp)
                	movq	0x18(%rbp), %r10
@@ -148,8 +147,9 @@ Disassembly of section .text:
                	movq	0x48(%rbp), %r10
                	movq	%r10, 0x48(%rsp)
                	movsbq	%dil, %rdi
-               	movb	%dil, -0x20(%rbp)
                	leaq	0x20(%rsp), %rax
+               	movups	%xmm0, 0x20(%rsp)
+               	movb	%dil, -0x20(%rbp)
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x25, %eax

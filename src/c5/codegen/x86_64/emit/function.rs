@@ -1873,7 +1873,7 @@ fn emit_parts_return(
                 int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
             }
             (true, Place::FpReg(_) | Place::Spill(_)) => {
-                fp_moves.push((src, Place::FpReg(r), false))
+                fp_moves.push((src, Place::FpReg(r), alloc.is_wide(p)))
             }
             (true, Place::IntReg(s)) => cross.push((Reg(r), Reg(s))),
             _ => return fail("AggParts: part not in a register or spill slot of its bank"),

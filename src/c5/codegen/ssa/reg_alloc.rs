@@ -3363,7 +3363,9 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
             Inst::Load { kind, .. }
             | Inst::LoadLocal { kind, .. }
             | Inst::Phi { kind, .. }
-            | Inst::AsmOut { kind, .. } => *kind == LoadKind::V128,
+            | Inst::AsmOut { kind, .. }
+            | Inst::ParamPart { kind, .. }
+            | Inst::RetPart { kind, .. } => *kind == LoadKind::V128,
             Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
             Inst::InlineAsm { asm, .. } => asm
                 .operands
@@ -3980,7 +3982,7 @@ pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
         return None;
     };
     let (ints, fps) = agg_return_regs(target);
-    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128);
     let bank = if fp { fps } else { ints };
     bank.get(*slot as usize).map(|&r| (fp, r))
 }

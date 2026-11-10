@@ -624,6 +624,23 @@ fn emit_incoming(
     let Some((is_fp, src)) = src else {
         return fail(alloc::format!("{name}: no incoming register"));
     };
+    if *kind == LoadKind::V128 {
+        if !is_fp {
+            return fail(alloc::format!("{name}: vector from an integer register"));
+        }
+        match dst {
+            Place::FpReg(r) => {
+                if r != src {
+                    emit(code, super::encode::enc_mov_v16b(r, src));
+                }
+            }
+            Place::Spill(slot) => {
+                emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), Reg(16));
+            }
+            _ => return fail(alloc::format!("{name}: vector dst not fp reg / spill")),
+        }
+        return Ok(());
+    }
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         if !is_fp {
             return fail(alloc::format!("{name}: FP value from an integer register"));

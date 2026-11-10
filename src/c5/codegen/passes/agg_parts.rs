@@ -19,10 +19,10 @@
 //! A field moves as a load or store of its own width, so the pass takes an
 //! aggregate only when its fields tile its registers that way: integer
 //! fields of 1, 2, 4 or 8 bytes in an integer register, shifted into
-//! place, and one `float` or `double` filling a floating-point register.
-//! A union, a `float` beside an integer in one register, two `float`s in
-//! one SSE eightbyte and a vector keep the prologue and epilogue
-//! transfers. A parameter object whose address escapes, or that a member
+//! place, one `float` or `double` filling a floating-point register, and a
+//! vector filling one whole, a 16-byte one as a 128-bit value. A union, a
+//! `float` beside an integer in one register and two `float`s in one SSE
+//! eightbyte keep the prologue and epilogue transfers. A parameter object whose address escapes, or that a member
 //! access reaches at a variable offset, stays in memory whatever the
 //! stores look like, so its registers are stored whole, as the prologue
 //! stored them.
@@ -82,9 +82,16 @@ fn tape_carries(parts: &[RegPart], n_fields: usize) -> bool {
             p.fields.as_slice(),
             [f] if f.offset == p.offset
                 && f.size == p.width
-                && matches!((f.kind, f.size), (ScalarKind::F64, 8) | (ScalarKind::F32, 4))
+                && matches!(
+                    (f.kind, f.size),
+                    (ScalarKind::F64 | ScalarKind::Vector, 8) | (ScalarKind::F32, 4)
+                )
         ),
-        RegClass::Vector | RegClass::X87 | RegClass::NoClass => false,
+        RegClass::Vector => matches!(
+            p.fields.as_slice(),
+            [f] if f.offset == p.offset && f.size == 16 && f.kind == ScalarKind::Vector
+        ),
+        RegClass::X87 | RegClass::NoClass => false,
     })
 }
 
@@ -94,10 +101,12 @@ fn sorted_fields(p: &RegPart) -> Vec<crate::c5::codegen::abi_classify::FlatField
     fields
 }
 
-/// The bank and precision a part's value takes.
+/// The bank and precision a part's value takes: an 8-byte vector moves as
+/// the 64 bits of a `double`, a 16-byte one as a whole vector register.
 fn part_kind(p: &RegPart) -> LoadKind {
     match (p.class, p.width) {
         (RegClass::Integer, _) => LoadKind::I64,
+        (RegClass::Vector, _) => LoadKind::V128,
         (_, 4) => LoadKind::F32,
         _ => LoadKind::F64,
     }
@@ -225,6 +234,7 @@ fn scatter(
             gap_stores(&mut pieces, pos, f.offset);
             let kind = match (p.class, f.size) {
                 (RegClass::Integer, size) => store_kind(size),
+                (RegClass::Vector, _) => StoreKind::V128,
                 (_, 4) => StoreKind::F32,
                 _ => StoreKind::F64,
             };
@@ -299,9 +309,8 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
     };
     if p.class != RegClass::Integer {
         let f = p.fields[0];
-        let single = f.size == 4;
-        let kind = if single { LoadKind::F32 } else { LoadKind::F64 };
-        return load(plan, f.offset, f.size, kind, single);
+        let kind = part_kind(p);
+        return load(plan, f.offset, f.size, kind, kind == LoadKind::F32);
     }
     let mut acc = None;
     for f in sorted_fields(p) {
@@ -629,6 +638,60 @@ mod tests {
                 );
             }
             assert_eq!(f.param_local_slots[0], 0, "{t}");
+        }
+    }
+
+    /// A 16-byte vector parameter arrives as one 128-bit part stored whole,
+    /// and a vector result leaves as one 128-bit part: System V passes it
+    /// in one xmm register (SSE + SSEUP), AAPCS64 in one q register (6.4.2).
+    /// An 8-byte AArch64 vector moves as the 64 bits of a d register.
+    #[test]
+    fn vector_transfers_move_as_whole_registers() {
+        const SRC: &str = "typedef int v4i __attribute__((vector_size(16))); \
+            typedef short v4s __attribute__((vector_size(8))); \
+            v4i twice(v4i a) { return a + a; } \
+            v4s neg(v4s a) { return -a; }";
+        let cases = [
+            (Target::LinuxX64, "twice", LoadKind::V128, StoreKind::V128),
+            (
+                Target::LinuxAarch64,
+                "twice",
+                LoadKind::V128,
+                StoreKind::V128,
+            ),
+            (Target::LinuxAarch64, "neg", LoadKind::F64, StoreKind::F64),
+        ];
+        for (target, name, load, store) in cases {
+            let mut f = walked(SRC, name, target);
+            run(core::slice::from_mut(&mut f), target);
+            let t = text(&f);
+            let part = f
+                .insts
+                .iter()
+                .position(|i| matches!(i, Inst::ParamPart { .. }))
+                .unwrap_or_else(|| panic!("{target:?} {name}: no part: {t}"));
+            assert!(
+                matches!(f.insts[part], Inst::ParamPart { idx: 0, part: 0, kind } if kind == load),
+                "{target:?} {name}: {t}"
+            );
+            assert!(
+                f.insts.iter().any(|i| matches!(*i,
+                    Inst::StoreLocal { value, kind, .. } | Inst::Store { value, kind, disp: 0, .. }
+                        if value as usize == part && kind == store)),
+                "{target:?} {name}: the part is not stored whole: {t}"
+            );
+            let Terminator::Return(r) = f.blocks.last().expect("a block").terminator else {
+                panic!("{target:?} {name}: {t}")
+            };
+            let Inst::AggParts { parts, fp_mask, .. } = &f.insts[r as usize] else {
+                panic!("{target:?} {name}: {t}")
+            };
+            assert_eq!(parts.len(), 1, "{t}");
+            assert!(fp_mask.has(0), "{t}");
+            assert!(
+                matches!(f.insts[parts[0] as usize], Inst::Load { kind, .. } if kind == load),
+                "{target:?} {name}: {t}"
+            );
         }
     }
 

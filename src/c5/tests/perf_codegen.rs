@@ -3021,6 +3021,39 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
     );
 }
 
+/// Vector parameters and results travel in v registers (AAPCS64 6.4.2): a
+/// function taking and returning `uint32x4_t` is its instructions and
+/// `ret`, as with gcc 16 and clang, and a loop over parameters keeps them
+/// in registers. Stored to the frame on entry and returned through it, the
+/// loop below took 49 instructions.
+#[test]
+fn vector_parameters_and_results_stay_in_registers() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+uint32x4_t add2(uint32x4_t a, uint32x4_t b) { return vaddq_u32(a, b); }\n\
+uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n) {\n\
+    for (int i = 0; i < n; i++) {\n\
+        a = vaddq_u32(a, b); d = veorq_u32(d, a);\n\
+        d = vorrq_u32(vshlq_n_u32(d, 16), vshrq_n_u32(d, 16));\n\
+        c = vaddq_u32(c, d); b = veorq_u32(b, c);\n\
+    }\n\
+    return vaddq_u32(vaddq_u32(a, b), vaddq_u32(c, d));\n\
+}\n";
+    let add2 = a64(SRC, "add2");
+    // `add v0.4s, v0.4s, v1.4s; ret`
+    assert_eq!(
+        add2,
+        [0x4EA1_8400, 0xD65F_03C0],
+        "aarch64 add2: {add2:08x?}"
+    );
+    let ws = a64(SRC, "round4");
+    // Any load or store (the A64 encoding group op0 = x1x0).
+    let access = |w: u32| w & 0x0A00_0000 == 0x0800_0000;
+    assert!(
+        !ws.iter().any(|&w| access(w)),
+        "aarch64 round4: a vector goes through memory: {ws:08x?}"
+    );
+}
+
 /// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
 /// values in SIMD registers, as gcc 16 and clang do: each function is its
 /// instructions and `ret`, with no frame.

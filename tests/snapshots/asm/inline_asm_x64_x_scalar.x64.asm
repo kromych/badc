@@ -70,25 +70,13 @@ Disassembly of section .text:
                	retq
 
 <vadd>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movups	%xmm0, -0x20(%rbp)
-               	movups	%xmm1, -0x10(%rbp)
-               	movups	-0x20(%rbp), %xmm0
-               	movups	-0x10(%rbp), %xmm1
                	addps	%xmm1, %xmm0
-               	movups	%xmm0, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rax
-               	movq	%rax, %rcx
-               	movups	(%rcx), %xmm0
-               	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x48, %rsp
                	pushq	%rbx
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
@@ -98,11 +86,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	leaq	-0x50(%rbp), %r9
+               	leaq	-0x40(%rbp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x30(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -112,10 +100,6 @@ Disassembly of section .text:
                	movups	(%r10), %xmm1
                	callq	<addr>
                	movups	%xmm0, -0x30(%rbp)
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x40(%rbp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
@@ -228,14 +212,14 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	leaq	(%rbx,%rax), %rcx
-               	movss	-0x40(%rbp), %xmm0
+               	movss	-0x30(%rbp), %xmm0
                	movl	$0x41300000, %eax       # imm = 0x41300000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	movl	$0x1, %eax
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x34(%rbp), %xmm0
+               	movss	-0x24(%rbp), %xmm0
                	movl	$0x42300000, %eax       # imm = 0x42300000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

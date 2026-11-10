@@ -398,28 +398,26 @@ Disassembly of section .text:
                	add	x2, x1, #0x9
                	and	x2, x2, #0xff
                	sturb	w2, [x29, #-0x7]
-               	sub	x2, x29, #0x10
-               	add	x3, x1, #0xa
-               	and	x3, x3, #0xff
-               	sturb	w3, [x29, #-0x6]
+               	add	x2, x1, #0xa
+               	and	x2, x2, #0xff
+               	sturb	w2, [x29, #-0x6]
                	add	x1, x1, #0xb
                	and	x1, x1, #0xff
                	sturb	w1, [x29, #-0x5]
-               	and	x1, x0, #0xff
-               	add	x0, x1, #0xc
                	and	x0, x0, #0xff
-               	sturb	w0, [x29, #-0x4]
-               	add	x0, x1, #0xd
-               	and	x0, x0, #0xff
-               	sturb	w0, [x29, #-0x3]
-               	add	x0, x1, #0xe
-               	and	x0, x0, #0xff
-               	sturb	w0, [x29, #-0x2]
-               	add	x0, x1, #0xf
+               	add	x1, x0, #0xc
+               	and	x1, x1, #0xff
+               	sturb	w1, [x29, #-0x4]
+               	add	x1, x0, #0xd
+               	and	x1, x1, #0xff
+               	sturb	w1, [x29, #-0x3]
+               	add	x1, x0, #0xe
+               	and	x1, x1, #0xff
+               	sturb	w1, [x29, #-0x2]
+               	add	x0, x0, #0xf
                	and	x0, x0, #0xff
                	sturb	w0, [x29, #-0x1]
-               	mov	x16, x2
-               	ldr	q0, [x16]
+               	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

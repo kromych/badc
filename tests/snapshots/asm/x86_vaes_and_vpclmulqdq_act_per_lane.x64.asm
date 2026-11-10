@@ -29,10 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	subq	$0x80, %rsp
+               	subq	$0x60, %rsp
                	andq	$-0x20, %rsp
-               	movups	%xmm0, 0x20(%rsp)
-               	movups	%xmm1, 0x30(%rsp)
                	movq	0x10(%rbp), %r10
                	movq	%r10, (%rsp)
                	movq	0x18(%rbp), %r10
@@ -43,49 +41,45 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	movq	(%rsp), %rax
                	movq	0x8(%rsp), %rcx
-               	leaq	0x40(%rsp), %rdx
+               	leaq	0x20(%rsp), %rdx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdx)
-               	movq	%rax, 0x40(%rsp)
-               	movq	%rcx, 0x48(%rsp)
-               	movups	0x40(%rsp), %xmm0
-               	leaq	0x20(%rsp), %rax
-               	leaq	0x50(%rsp), %rdx
-               	movups	%xmm0, 0x50(%rsp)
-               	leaq	0x40(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	0x60(%rsp), %rax
-               	movdqu	(%rdx), %xmm15
-               	movdqu	(%rcx), %xmm14
+               	movq	%rax, 0x20(%rsp)
+               	movq	%rcx, 0x28(%rsp)
+               	movups	0x20(%rsp), %xmm2
+               	leaq	0x30(%rsp), %rcx
+               	movups	%xmm2, 0x30(%rsp)
+               	leaq	0x20(%rsp), %rdx
+               	movups	%xmm0, 0x20(%rsp)
+               	leaq	0x40(%rsp), %rax
+               	movdqu	(%rcx), %xmm15
+               	movdqu	(%rdx), %xmm14
                	pcmpeqb	%xmm14, %xmm15
                	movdqu	%xmm15, (%rax)
-               	leaq	-0x8(%rbp), %rdx
+               	leaq	-0x8(%rbp), %rcx
                	movdqu	(%rax), %xmm14
                	pmovmskb	%xmm14, %r11d
-               	movl	%r11d, (%rdx)
+               	movl	%r11d, (%rcx)
                	movl	-0x8(%rbp), %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	xorl	%eax, %eax
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x10(%rsp), %rax
-               	movq	0x18(%rsp), %rdx
-               	leaq	0x40(%rsp), %rsi
+               	movq	0x18(%rsp), %rcx
+               	leaq	0x20(%rsp), %rdx
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
-               	movq	%rax, 0x40(%rsp)
-               	movq	%rdx, 0x48(%rsp)
-               	movups	0x40(%rsp), %xmm0
-               	leaq	0x30(%rsp), %rax
-               	movups	%xmm0, 0x50(%rsp)
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	leaq	0x50(%rsp), %rcx
-               	leaq	0x40(%rsp), %rdx
-               	leaq	0x60(%rsp), %rax
+               	movups	%xmm14, (%rdx)
+               	movq	%rax, 0x20(%rsp)
+               	movq	%rcx, 0x28(%rsp)
+               	movups	0x20(%rsp), %xmm0
+               	movups	%xmm0, 0x30(%rsp)
+               	movups	%xmm1, 0x20(%rsp)
+               	leaq	0x30(%rsp), %rcx
+               	leaq	0x20(%rsp), %rdx
+               	leaq	0x40(%rsp), %rax
                	movdqu	(%rcx), %xmm15
                	movdqu	(%rdx), %xmm14
                	pcmpeqb	%xmm14, %xmm15

@@ -472,8 +472,7 @@ pub(crate) fn register_parts(
     let AggClass::Regs(classes) = classify_aggregate(desc, abi, is_return) else {
         return None;
     };
-    if classes.is_empty() || classes.contains(&RegClass::Vector) || classes.contains(&RegClass::X87)
-    {
+    if classes.is_empty() || classes.contains(&RegClass::X87) {
         return None;
     }
     let (size, fields) = (desc.size, &desc.fields);
@@ -481,10 +480,10 @@ pub(crate) fn register_parts(
         Some(hfa) if abi.arch != Arch::X86_64 => hfa
             .members()
             .into_iter()
-            .map(|(off, msize)| (off, msize, RegClass::Sse))
+            .map(|(off, msize)| (off, msize, hfa.reg_class()))
             .collect(),
         _ => register_slots(&classes)
-            .map(|(class, off)| (off, (size - off).min(8), class))
+            .map(|(class, off)| (off, (size - off).min(class.width()), class))
             .collect(),
     };
     Some(
@@ -1292,8 +1291,11 @@ mod tests {
             let parts = register_parts(&desc(8, &two_ints), abi, false).expect("one register");
             assert_eq!((parts.len(), parts[0].fields.len()), (1, 2));
         }
-        assert!(
-            register_parts(&desc(16, &[ff(0, 16, ScalarKind::Vector)]), sysv(), false).is_none()
+        let vector = register_parts(&desc(16, &[ff(0, 16, ScalarKind::Vector)]), sysv(), false)
+            .expect("one vector register");
+        assert_eq!(
+            (vector.len(), vector[0].class, vector[0].width),
+            (1, RegClass::Vector, 16)
         );
         let big = [
             ff(0, 8, ScalarKind::Int),

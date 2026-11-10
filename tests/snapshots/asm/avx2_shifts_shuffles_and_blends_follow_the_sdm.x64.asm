@@ -281,10 +281,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movups	%xmm0, -0x20(%rbp)
                	movq	%rdi, %rsi
-               	leaq	-0x10(%rbp), %rdi
                	leaq	-0x20(%rbp), %rax
+               	movups	%xmm0, -0x20(%rbp)
+               	leaq	-0x10(%rbp), %rdi
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
                	movl	$0x10, %edx

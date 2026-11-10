@@ -863,6 +863,26 @@ fn emit_incoming(
     let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
     let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
         .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
+    if kind == LoadKind::V128 {
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: vector not in an FP argument register"
+            ));
+        };
+        match dst {
+            Place::FpReg(r) => {
+                if r != x {
+                    emit_movapd_xmm_xmm(code, Reg(r), Reg(x));
+                }
+            }
+            Place::Spill(slot) => {
+                let (sb, off) = v128_spill_addr(frame, slot);
+                emit_movups_mem_xmm(code, sb, off, Reg(x));
+            }
+            _ => return fail(alloc::format!("{name}: vector dst not fp reg / spill")),
+        }
+        return Ok(());
+    }
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy

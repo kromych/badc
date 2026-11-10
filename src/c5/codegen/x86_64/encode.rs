@@ -220,7 +220,13 @@ pub(crate) fn emit_load_disp32(
         LoadKind::U16 => (Mnem::Movzx, None, 8, 2),
         LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
         LoadKind::U8 => (Mnem::Movzx, None, 8, 1),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!("disp32 load of a floating kind")
         }
     };
@@ -1128,16 +1134,65 @@ pub(crate) fn emit_vex_fma_mem(
 }
 
 fn emit_vex_0f_prefix(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: u8) {
+    emit_vex_0f(code, reg, vvvv, rm, pp, false);
+}
+
+/// The VEX prefix of a 0F-map instruction: `reg` in ModR/M.reg, `vvvv`
+/// the second source (`Reg(0)` when the form has none), `rm` the r/m
+/// register or memory base, `pp` the implied 66 / F3 / F2 prefix, and
+/// `l256` VEX.L, the 256-bit form.
+pub(crate) fn emit_vex_0f(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: u8, l256: bool) {
     let r = u8::from(!reg.high());
     let v = !(((vvvv.high() as u8) << 3) | vvvv.lo()) & 0xF;
+    let l = u8::from(l256) << 2;
     if rm.high() {
         emit_byte(code, 0xC4);
         emit_byte(code, (r << 7) | (1 << 6) | 0b00001);
-        emit_byte(code, (v << 3) | pp);
+        emit_byte(code, (v << 3) | l | pp);
     } else {
         emit_byte(code, 0xC5);
-        emit_byte(code, (r << 7) | (v << 3) | pp);
+        emit_byte(code, (r << 7) | (v << 3) | l | pp);
     }
+}
+
+/// `VMOVUPS ymm, m256`: `VEX.256.0F 10 /r`.
+pub(crate) fn emit_vmovups_ymm_mem(code: &mut Vec<u8>, ymm: Reg, base: Reg, disp: i32) {
+    emit_vex_0f(code, ymm, Reg(0), base, 0, true);
+    emit_byte(code, 0x10);
+    emit_modrm_mem(code, ymm, base, disp);
+}
+
+/// `VMOVUPS m256, ymm`: `VEX.256.0F 11 /r`.
+pub(crate) fn emit_vmovups_mem_ymm(code: &mut Vec<u8>, base: Reg, disp: i32, ymm: Reg) {
+    emit_vex_0f(code, ymm, Reg(0), base, 0, true);
+    emit_byte(code, 0x11);
+    emit_modrm_mem(code, ymm, base, disp);
+}
+
+/// `VMOVAPS ymm, ymm`: `VEX.256.0F 28 /r`.
+pub(crate) fn emit_vmovaps_ymm_ymm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_vex_0f(code, dst, Reg(0), src, 0, true);
+    emit_byte(code, 0x28);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `VMOVQ xmm, r64`, which clears bits 64..256: `VEX.128.66.0F.W1 6E /r`.
+pub(crate) fn emit_vmovq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
+    emit_byte(code, 0xC4);
+    emit_byte(
+        code,
+        (u8::from(!xmm.high()) << 7) | (1 << 6) | (u8::from(!src.high()) << 5) | 0b00001,
+    );
+    emit_byte(code, 0x80 | (0xF << 3) | 0b01);
+    emit_byte(code, 0x6E);
+    emit_byte(code, modrm(0b11, xmm.lo(), src.lo()));
+}
+
+/// `VZEROUPPER`: `VEX.128.0F 77`, clearing bits 128..256 of every ymm
+/// register, which a legacy SSE instruction after 256-bit code would
+/// otherwise carry as a dependency.
+pub(crate) fn emit_vzeroupper(code: &mut Vec<u8>) {
+    code.extend_from_slice(&[0xC5, 0xF8, 0x77]);
 }
 
 /// Emit a VEX three-operand scalar FP arithmetic instruction:

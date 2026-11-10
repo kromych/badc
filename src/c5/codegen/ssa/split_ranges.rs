@@ -406,7 +406,7 @@ mod tests {
             f32_values: vec![false; n],
             high_observed: Vec::new(),
             high_clear: Vec::new(),
-            wide: vec![false; n],
+            wide: vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
         }
     }

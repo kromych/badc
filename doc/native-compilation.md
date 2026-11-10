@@ -86,6 +86,9 @@ refuses an x86 `-march=` CPU without x86-64-v3, and `-mno-<ext>` for an
 extension of x86-64-v3 the code generator emits, except a vector extension
 under `-mno-sse`. `-mtune=` is accepted and changes nothing.
 
+On x86-64 the 32-byte GNU vectors are values in the ymm registers, and a
+function holding one executes `vzeroupper` before each call and return.
+
 Feature macros:
 
 - x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,

@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use super::constfold_branch::edge_truth;
 use crate::c5::codegen::ssa::mem2reg::predecessors;
-use crate::c5::codegen::ssa::reg_alloc::{produces_fp_result, wide_values};
+use crate::c5::codegen::ssa::reg_alloc::{VecWidth, produces_fp_result, wide_values};
 use crate::c5::codegen::ssa::tape;
 use crate::c5::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
@@ -37,7 +37,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// the value: `constfold_branch` decides a test of the phi from that edge.
 fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
     let mut to: Vec<(ValueId, ValueId)> = Vec::new();
-    let mut wide: Option<Vec<bool>> = None;
+    let mut wide: Option<Vec<VecWidth>> = None;
     for (b, block) in func.blocks.iter().enumerate().skip(1) {
         let [p] = preds[b][..] else {
             continue;
@@ -101,7 +101,7 @@ fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
 /// file, and for a float the same scalar and vector width.
 pub(crate) fn reads_alike(
     func: &FunctionSsa,
-    wide: &mut Option<Vec<bool>>,
+    wide: &mut Option<Vec<VecWidth>>,
     phi: ValueId,
     v: ValueId,
 ) -> bool {

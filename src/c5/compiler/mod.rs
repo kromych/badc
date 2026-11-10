@@ -2638,6 +2638,10 @@ pub struct Compiler {
     nostdinc: bool,
     /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
     freestanding: bool,
+    /// Mirror of [`CompileOptions::x86_features`], which the program carries.
+    x86_features: crate::c5::X86Features,
+    /// Mirror of [`CompileOptions::no_fp_regs`], which the program carries.
+    no_fp_regs: bool,
     /// The `_Atomic` object types the unit forms, for
     /// [`Self::declare_atomic_libcalls`].
     atomic_types_formed: Vec<i64>,
@@ -3420,6 +3424,8 @@ impl Compiler {
                 }),
             nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
+            x86_features: opts.x86_features,
+            no_fp_regs: opts.no_fp_regs,
             atomic_types_formed: Vec::new(),
             atomic_generic_libcalls: false,
             preprocessed: opts.preprocessed,
@@ -4287,6 +4293,8 @@ impl Compiler {
             linker_directives: core::mem::take(&mut self.pp_linker_directives),
             auto_includes: Vec::new(),
             freestanding: self.freestanding,
+            x86_features: self.x86_features,
+            no_fp_regs: self.no_fp_regs,
             strlen_folds,
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit

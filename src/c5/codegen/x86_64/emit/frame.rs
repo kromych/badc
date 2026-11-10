@@ -76,6 +76,10 @@ pub(crate) struct Frame {
     /// The FP scratch xmm registers, outside the allocator's banks; see
     /// `RegBanks::fp_scratch`.
     pub fp_scratch: [u8; super::ssa::reg_alloc::FP_SCRATCH_COUNT],
+    /// The body holds 256- or 512-bit values, so a `vzeroupper` precedes
+    /// each call and return: the legacy SSE code on either side would
+    /// otherwise carry the upper halves as a dependency.
+    pub wide_regs: bool,
     /// The regions `frame_bytes` sums.
     pub parts: super::ssa::emit_common::FrameStack,
 }
@@ -174,6 +178,10 @@ pub(crate) fn compute_frame(
         }),
         fixed_regs,
         fp_scratch: alloc.fp_scratch,
+        wide_regs: alloc
+            .wide
+            .iter()
+            .any(|&w| w >= super::ssa::reg_alloc::VecWidth::V256),
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
             locals: declared_locals_bytes,

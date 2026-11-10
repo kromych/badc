@@ -1,6 +1,8 @@
 //! Whole-object vector slots as values. A two-cell object accessed only
 //! whole -- 16-byte copies and zero fills, `V128` loads and stores, 16-byte
 //! SIMD asm operands -- becomes `V128` slot accesses for mem2reg to promote,
+//! and a four- or eight-cell one met by `V256` or `V512` accesses the same
+//! way at its width,
 //! provided something reads it and it meets a SIMD operand or a vector ABI
 //! piece directly or through whole copies. A one-cell object an 8-byte SIMD
 //! operand meets becomes `F64` accesses the same way ([`cell_slots`]). An
@@ -51,30 +53,53 @@ enum Side {
     Addr(ValueId),
 }
 
-/// The whole-object access kinds of a rewritten slot.
+/// The whole-object access kinds of a rewritten slot and its size in
+/// 8-byte cells.
 #[derive(Clone, Copy)]
 struct Whole {
     load: LoadKind,
     store: StoreKind,
+    cells: i64,
 }
 
 const QUAD: Whole = Whole {
     load: LoadKind::V128,
     store: StoreKind::V128,
+    cells: 2,
 };
+
+/// The AVX and AVX-512 widths; only code built for them accesses a slot
+/// at these kinds, which selects it.
+const WIDE: [Whole; 2] = [
+    Whole {
+        load: LoadKind::V256,
+        store: StoreKind::V256,
+        cells: 4,
+    },
+    Whole {
+        load: LoadKind::V512,
+        store: StoreKind::V512,
+        cells: 8,
+    },
+];
 
 const DOUBLE: Whole = Whole {
     load: LoadKind::F64,
     store: StoreKind::F64,
+    cells: 1,
 };
 
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {
         return BTreeSet::new();
     }
-    let mut slots = eligible(func, false);
-    if !slots.is_empty() {
-        rewrite(func, &slots, QUAD);
+    let mut slots = BTreeSet::new();
+    for w in [QUAD].into_iter().chain(WIDE) {
+        let s = eligible(func, false, w);
+        if !s.is_empty() {
+            rewrite(func, &s, w);
+            slots.extend(s);
+        }
     }
     let cells = cell_slots(func);
     if !cells.is_empty() {
@@ -90,9 +115,13 @@ pub(crate) fn applies(func: &FunctionSsa) -> bool {
 }
 
 /// [`run`]'s slots once `callee` is spliced: its aggregate parameters are
-/// ordinary objects there, and a 16-byte vector return is read back whole.
+/// ordinary objects there, and a vector return is read back whole.
 pub(crate) fn spliced_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
-    eligible(callee, true)
+    let mut slots = BTreeSet::new();
+    for w in [QUAD].into_iter().chain(WIDE) {
+        slots.extend(eligible(callee, true, w));
+    }
+    slots
 }
 
 fn slot_load(off: i64, w: Whole) -> Inst {
@@ -115,12 +144,14 @@ fn slot_store(off: i64, value: ValueId, w: Whole) -> Inst {
     }
 }
 
-/// With `spliced`, see [`spliced_slots`].
-fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
+/// The slots of `w`'s size accessed only whole at its kinds. With
+/// `spliced`, see [`spliced_slots`].
+fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
+    let bytes = w.cells * 8;
     let mut slots: BTreeSet<i64> = func
         .multi_cell_slots
         .iter()
-        .filter(|&&(_, cells)| cells == 2)
+        .filter(|&&(_, cells)| cells == w.cells)
         .map(|&(base, _)| base)
         .collect();
     let params = func.param_local_slots.iter().filter(|_| !spliced);
@@ -155,7 +186,11 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
         .filter(|b| matches!(b.terminator, Terminator::AsmGoto { .. }) && !b.inst_range.is_empty())
         .map(|b| b.inst_range.end - 1)
         .collect();
-    let covering = |off: i64| [off, off - 1].into_iter().filter(|b| slots.contains(b));
+    let covering = |off: i64| {
+        (0..w.cells)
+            .map(move |k| off - k)
+            .filter(|b| slots.contains(b))
+    };
     let mut reject: BTreeSet<i64> = BTreeSet::new();
     let mut addr: BTreeMap<ValueId, i64> = BTreeMap::new();
     let (mut reads, mut simd) = (BTreeSet::new(), BTreeSet::new());
@@ -177,7 +212,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 kind,
                 volatile,
             } => {
-                let whole = disp == 0 && kind == LoadKind::V128 && !volatile;
+                let whole = disp == 0 && kind == w.load && !volatile;
                 reject.extend(covering(off).filter(|&b| b != off || !whole));
                 if whole && slots.contains(&off) {
                     reads.insert(off);
@@ -191,7 +226,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let whole = disp == 0 && kind == StoreKind::V128 && !volatile;
+                let whole = disp == 0 && kind == w.store && !volatile;
                 reject.extend(covering(off).filter(|&b| b != off || !whole));
                 if whole && slots.contains(&off) {
                     simd.insert(off);
@@ -228,7 +263,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 size,
                 align,
             } => {
-                let ok = *size == 16 && *align >= 16 && !used[v];
+                let ok = *size == bytes && *align >= 16 && !used[v];
                 check(*dst, ok, &mut reject);
                 check(*src, ok, &mut reject);
                 if let Some(&s) = addr.get(src) {
@@ -238,7 +273,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     }
                 }
             }
-            Inst::Mzero { dst, size, .. } => check(*dst, *size == 16 && !used[v], &mut reject),
+            Inst::Mzero { dst, size, .. } => check(*dst, *size == bytes && !used[v], &mut reject),
             Inst::Load {
                 addr: a,
                 disp,
@@ -246,7 +281,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == LoadKind::V128 && !*volatile;
+                let ok = *disp == 0 && *kind == w.load && !*volatile;
                 check(*a, ok, &mut reject);
                 if let Some(&b) = addr.get(a) {
                     reads.insert(b);
@@ -261,7 +296,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                 volatile,
                 ..
             } => {
-                let ok = *disp == 0 && *kind == StoreKind::V128 && !*volatile && a != value;
+                let ok = *disp == 0 && *kind == w.store && !*volatile && a != value;
                 check(*a, ok, &mut reject);
                 check(*value, false, &mut reject);
                 if let Some(&b) = addr.get(a) {
@@ -275,6 +310,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
                     let ok = op.is_some_and(|o| {
                         matches!(o.constraint, AsmConstraint::Fp)
                             && o.width == 16
+                            && bytes == 16
                             && !o.value
                             && (!o.is_output || !goto)
                     });
@@ -293,7 +329,9 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
     let vector_return = spliced
         && func.ret_agg.is_some_and(|i| {
             let d = &func.agg_descs[i as usize];
-            d.size == 16 && d.fields.len() == 1 && matches!(d.fields[0].kind, ScalarKind::Vector)
+            d.size as i64 == bytes
+                && d.fields.len() == 1
+                && matches!(d.fields[0].kind, ScalarKind::Vector)
         });
     for b in &func.blocks {
         let read_back = vector_return && matches!(b.terminator, Terminator::Return(_));

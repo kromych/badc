@@ -424,6 +424,8 @@ fn load_kind_width(kind: super::super::ir::LoadKind) -> u32 {
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
     }
 }
 
@@ -438,6 +440,8 @@ fn store_kind_width(kind: super::super::ir::StoreKind) -> u32 {
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 => 10,
         StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -557,18 +561,16 @@ pub(crate) fn place_same_loc(a: super::reg_alloc::Place, b: super::reg_alloc::Pl
     }
 }
 
-/// Whether two places share storage; a `wide` spill spans two units.
+/// Whether two places share storage; a vector spill spans its width's units.
 fn places_overlap(
     a: super::reg_alloc::Place,
-    a_wide: bool,
+    a_w: super::reg_alloc::VecWidth,
     b: super::reg_alloc::Place,
-    b_wide: bool,
+    b_w: super::reg_alloc::VecWidth,
 ) -> bool {
     use super::reg_alloc::Place;
     match (a, b) {
-        (Place::Spill(x), Place::Spill(y)) => {
-            x < y + 1 + u32::from(b_wide) && y < x + 1 + u32::from(a_wide)
-        }
+        (Place::Spill(x), Place::Spill(y)) => x < y + b_w.units() && y < x + a_w.units(),
         _ => place_same_loc(a, b),
     }
 }
@@ -599,6 +601,40 @@ pub(crate) trait EmitBackend {
     );
     /// Load FP register `dst` from spill slot `slot`.
     fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Self::Frame, slot: u32, dst: u8);
+    /// The FP transfers and constant load above, of a 256- or 512-bit
+    /// value; only x86-64 under AVX and AVX-512 has values that wide.
+    fn wide_reg_mov(
+        &self,
+        _code: &mut alloc::vec::Vec<u8>,
+        _w: super::reg_alloc::VecWidth,
+        _dst: u8,
+        _src: u8,
+    ) {
+        unreachable!("{}: no 256-bit values", Self::ARCH)
+    }
+    fn wide_spill_store(
+        &self,
+        _code: &mut alloc::vec::Vec<u8>,
+        _frame: Self::Frame,
+        _w: super::reg_alloc::VecWidth,
+        _slot: u32,
+        _src: u8,
+    ) {
+        unreachable!("{}: no 256-bit values", Self::ARCH)
+    }
+    fn wide_spill_load(
+        &self,
+        _code: &mut alloc::vec::Vec<u8>,
+        _frame: Self::Frame,
+        _w: super::reg_alloc::VecWidth,
+        _slot: u32,
+        _dst: u8,
+    ) {
+        unreachable!("{}: no 256-bit values", Self::ARCH)
+    }
+    fn wide_load_const(&self, _code: &mut alloc::vec::Vec<u8>, _dst: u8, _scratch: u8, _bits: i64) {
+        unreachable!("{}: no 256-bit values", Self::ARCH)
+    }
     /// The three FP transfers above, of all 128 bits of a SIMD register.
     fn v128_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
     fn v128_spill_store(
@@ -700,7 +736,7 @@ pub(crate) struct Aarch64Backend {
 
 /// Emit a resolved FP location-to-location move. The four source/target
 /// combinations are shared; the backend supplies the register and spill-slot
-/// transfers, all 128 bits for `wide`. `stage` carries a spill-to-spill value.
+/// transfers at the value's width. `stage` carries a spill-to-spill value.
 pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
@@ -708,10 +744,20 @@ pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     dst: super::reg_alloc::Place,
     frame: B::Frame,
     stage: u8,
-    wide: bool,
+    width: super::reg_alloc::VecWidth,
 ) {
-    use super::reg_alloc::Place;
+    use super::reg_alloc::{Place, VecWidth};
+    let wide = width == VecWidth::V128;
+    let w = width;
+    let big = width >= VecWidth::V256;
     match (src, dst) {
+        (Place::FpReg(s), Place::FpReg(t)) if big => b.wide_reg_mov(code, w, t, s),
+        (Place::FpReg(s), Place::Spill(slot)) if big => b.wide_spill_store(code, frame, w, slot, s),
+        (Place::Spill(slot), Place::FpReg(t)) if big => b.wide_spill_load(code, frame, w, slot, t),
+        (Place::Spill(ss), Place::Spill(ts)) if big => {
+            b.wide_spill_load(code, frame, w, ss, stage);
+            b.wide_spill_store(code, frame, w, ts, stage);
+        }
         (Place::FpReg(s), Place::FpReg(t)) if wide => b.v128_reg_mov(code, t, s),
         (Place::FpReg(s), Place::Spill(slot)) if wide => b.v128_spill_store(code, frame, slot, s),
         (Place::Spill(slot), Place::FpReg(t)) if wide => b.v128_spill_load(code, frame, slot, t),
@@ -819,7 +865,11 @@ pub(crate) fn emit_place_move<B: EmitBackend>(
 pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
     code: &mut alloc::vec::Vec<u8>,
-    moves: &mut alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
+    moves: &mut alloc::vec::Vec<(
+        super::reg_alloc::Place,
+        super::reg_alloc::Place,
+        super::reg_alloc::VecWidth,
+    )>,
     frame: B::Frame,
     hold: u8,
     stage: u8,
@@ -1077,12 +1127,19 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
         // After both same-file parallel copies: any FP move reading a phi's
         // register as its source has already run, so overwriting the FP
         // destination here cannot clobber a still-pending read.
-        for (bits, dst, is_f64, wide) in m.fp_const {
+        for (bits, dst, is_f64, width) in m.fp_const {
+            use super::reg_alloc::VecWidth;
+            let big = width >= VecWidth::V256;
             match dst {
+                Place::FpReg(t) if big => b.wide_load_const(code, t, int_stage, bits),
                 Place::FpReg(t) => b.fp_reg_load_const(code, t, int_stage, bits, is_f64),
+                Place::Spill(slot) if big => {
+                    b.wide_load_const(code, fp_stage, int_stage, bits);
+                    b.wide_spill_store(code, frame, width, slot, fp_stage);
+                }
                 Place::Spill(slot) => {
                     b.fp_reg_load_const(code, fp_stage, int_stage, bits, is_f64);
-                    if wide {
+                    if width == VecWidth::V128 {
                         b.v128_spill_store(code, frame, slot, fp_stage);
                     } else {
                         b.fp_spill_store(code, frame, slot, fp_stage);
@@ -1099,10 +1156,19 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
 /// parallel copy per register file, without the moves that stay in place.
 pub(crate) struct EdgeMoves {
     pub(crate) int: alloc::vec::Vec<PlaceMove>,
-    /// `(src, dst, wide)`.
-    pub(crate) fp: alloc::vec::Vec<(super::reg_alloc::Place, super::reg_alloc::Place, bool)>,
-    /// `(bits, dst, is_f64, wide)` for a constant feeding an FP phi.
-    pub(crate) fp_const: alloc::vec::Vec<(i64, super::reg_alloc::Place, bool, bool)>,
+    /// `(src, dst, width)`.
+    pub(crate) fp: alloc::vec::Vec<(
+        super::reg_alloc::Place,
+        super::reg_alloc::Place,
+        super::reg_alloc::VecWidth,
+    )>,
+    /// `(bits, dst, is_f64, width)` for a constant feeding an FP phi.
+    pub(crate) fp_const: alloc::vec::Vec<(
+        i64,
+        super::reg_alloc::Place,
+        bool,
+        super::reg_alloc::VecWidth,
+    )>,
 }
 
 impl EdgeMoves {
@@ -1125,7 +1191,13 @@ pub(crate) fn phi_income_reads_no_place(
         Some(Inst::Undef) => true,
         Some(Inst::Imm(_)) => matches!(
             kind,
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+            LoadKind::F32
+                | LoadKind::F64
+                | LoadKind::F80
+                | LoadKind::F128
+                | LoadKind::V128
+                | LoadKind::V256
+                | LoadKind::V512
         ),
         _ => false,
     }
@@ -1164,16 +1236,25 @@ pub(crate) fn edge_moves(
         {
             continue;
         }
-        let wide = matches!(kind, LoadKind::V128);
+        let wide = super::reg_alloc::VecWidth::of_load(*kind);
         let phi_is_fp = matches!(
             kind,
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+            LoadKind::F32
+                | LoadKind::F64
+                | LoadKind::F80
+                | LoadKind::F128
+                | LoadKind::V128
+                | LoadKind::V256
+                | LoadKind::V512
         );
         if phi_is_fp {
             // `phi_class` never coalesces a constant into an FP phi's class,
             // wherever the constant is placed; the move rebuilds it.
             if let Inst::Imm(bits) = func.insts[*src_v as usize] {
-                let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
+                let is_f64 = matches!(
+                    kind,
+                    LoadKind::F64 | LoadKind::V128 | LoadKind::V256 | LoadKind::V512
+                );
                 m.fp_const.push((bits, dst_place, is_f64, wide));
                 continue;
             }

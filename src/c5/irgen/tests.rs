@@ -30,6 +30,7 @@ fn walk(
         true,
         Default::default(),
         false,
+        (crate::c5::X86Features::NONE, false),
     )
     .map(|(func, _)| func)
 }

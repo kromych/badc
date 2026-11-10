@@ -862,6 +862,8 @@ pub(crate) mod test_support {
             linker_directives: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
+            x86_features: crate::c5::X86Features::NONE,
+            no_fp_regs: false,
             strlen_folds: false,
             data_align: 8,
             image_align_error: None,

@@ -159,6 +159,7 @@ pub(crate) fn walk_program(
                 interposable: program.interposable_refs,
             },
             program.freestanding,
+            (program.x86_features, program.no_fp_regs),
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the

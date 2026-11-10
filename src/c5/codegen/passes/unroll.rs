@@ -468,7 +468,13 @@ pub(crate) fn bind_phis(
         };
         let fp = matches!(
             kind,
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+            LoadKind::F32
+                | LoadKind::F64
+                | LoadKind::F80
+                | LoadKind::F128
+                | LoadKind::V128
+                | LoadKind::V256
+                | LoadKind::V512
         );
         let input = incoming.iter().find(|(from, _)| *from == pred).map(|i| i.1);
         let value = input.filter(|_| !fp).and_then(|src| {

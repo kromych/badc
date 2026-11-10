@@ -65,7 +65,7 @@ use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,
     Unsupported, build_arg_aggs, c5_slot_to_fp_offset, param_entry_ext, place_same_loc,
 };
-use super::ssa::reg_alloc::{Allocation, Place};
+use super::ssa::reg_alloc::{Allocation, Place, VecWidth};
 use super::table::Mnem;
 use super::{AddrPart, DataFixup};
 
@@ -197,6 +197,98 @@ fn materialize_v128(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame
             Some(scratch)
         }
         Place::None => None,
+    }
+}
+
+/// A 256- or 512-bit spill occupies its width's units, addressed at the
+/// lowest.
+fn wide_spill_addr(frame: Frame, w: VecWidth, slot: u32) -> (Reg, i32) {
+    spill_slot_addr(frame, slot + w.units() - 1)
+}
+
+/// A zmm transfer through the assembler's EVEX tables, which scale an
+/// 8-bit displacement by the operand size as EVEX does.
+fn emit_zmm(code: &mut Vec<u8>, mnem: &'static str, ops: &[super::asm::Concrete]) {
+    let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+    super::asm::encode(code, 8, m, None, ops).expect("EVEX zmm transfer");
+}
+
+fn zmm(n: Reg) -> super::asm::Concrete {
+    super::asm::Concrete::Reg {
+        reg: super::asm::ZMM_BASE + n.0,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+fn zmm_mem(base: Reg, disp: i32) -> super::asm::Concrete {
+    super::asm::Concrete::Mem {
+        base: base.0,
+        index: None,
+        scale: 1,
+        disp,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+/// `vmovups` of a 256- or 512-bit register from `[base + disp]`.
+fn emit_wide_load(code: &mut Vec<u8>, w: VecWidth, dst: Reg, base: Reg, disp: i32) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovups", &[zmm_mem(base, disp), zmm(dst)]);
+    } else {
+        emit_vmovups_ymm_mem(code, dst, base, disp);
+    }
+}
+
+/// `vmovups` of a 256- or 512-bit register to `[base + disp]`.
+fn emit_wide_store(code: &mut Vec<u8>, w: VecWidth, base: Reg, disp: i32, src: Reg) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovups", &[zmm(src), zmm_mem(base, disp)]);
+    } else {
+        emit_vmovups_mem_ymm(code, base, disp, src);
+    }
+}
+
+/// `vmovaps` between 256- or 512-bit registers.
+fn emit_wide_mov(code: &mut Vec<u8>, w: VecWidth, dst: Reg, src: Reg) {
+    if w == VecWidth::V512 {
+        emit_zmm(code, "vmovaps", &[zmm(src), zmm(dst)]);
+    } else {
+        emit_vmovaps_ymm_ymm(code, dst, src);
+    }
+}
+
+/// [`materialize_v128`] for a 256- or 512-bit value; `vmovq` clears the
+/// bits above 64.
+fn materialize_wide(
+    code: &mut Vec<u8>,
+    w: VecWidth,
+    place: Place,
+    scratch: Reg,
+    frame: Frame,
+) -> Option<Reg> {
+    match place {
+        Place::FpReg(r) => Some(Reg(r)),
+        Place::Spill(slot) => {
+            let (sb, off) = wide_spill_addr(frame, w, slot);
+            emit_wide_load(code, w, scratch, sb, off);
+            Some(scratch)
+        }
+        Place::IntReg(r) => {
+            emit_vmovq_xmm_r(code, scratch, Reg(r));
+            Some(scratch)
+        }
+        Place::None => None,
+    }
+}
+
+fn mirror_wide_dst(code: &mut Vec<u8>, w: VecWidth, dst: Place, src: Reg, frame: Frame) {
+    match dst {
+        Place::FpReg(r) if r != src.0 => emit_wide_mov(code, w, Reg(r), src),
+        Place::Spill(slot) => {
+            let (sb, off) = wide_spill_addr(frame, w, slot);
+            emit_wide_store(code, w, sb, off, src);
+        }
+        _ => {}
     }
 }
 

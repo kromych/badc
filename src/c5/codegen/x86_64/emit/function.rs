@@ -76,6 +76,21 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::X64Backen
         let (sb, off) = spill_slot_addr(frame, slot);
         emit_movsd_xmm_mem(code, Reg(dst), sb, off);
     }
+    fn wide_reg_mov(&self, code: &mut Vec<u8>, w: VecWidth, dst: u8, src: u8) {
+        emit_wide_mov(code, w, Reg(dst), Reg(src));
+    }
+    fn wide_spill_store(&self, code: &mut Vec<u8>, frame: Frame, w: VecWidth, slot: u32, src: u8) {
+        let (sb, off) = wide_spill_addr(frame, w, slot);
+        emit_wide_store(code, w, sb, off, Reg(src));
+    }
+    fn wide_spill_load(&self, code: &mut Vec<u8>, frame: Frame, w: VecWidth, slot: u32, dst: u8) {
+        let (sb, off) = wide_spill_addr(frame, w, slot);
+        emit_wide_load(code, w, Reg(dst), sb, off);
+    }
+    fn wide_load_const(&self, code: &mut Vec<u8>, dst: u8, scratch: u8, bits: i64) {
+        self.int_reg_load_imm(code, scratch, bits);
+        emit_vmovq_xmm_r(code, Reg(dst), Reg(scratch));
+    }
     fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
         emit_movapd_xmm_xmm(code, Reg(dst), Reg(src));
     }
@@ -1864,7 +1879,8 @@ fn emit_parts_return(
         (&[Reg::RAX.0, Reg::RDX.0], &[Reg::XMM0.0, Reg::XMM0.0 + 1]),
     );
     let mut int_moves: Vec<PlaceMove> = Vec::new();
-    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+        Vec::new();
     let mut cross: Vec<(Reg, Reg)> = Vec::new();
     for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
         let src = place_of(alloc, p);
@@ -1873,7 +1889,7 @@ fn emit_parts_return(
                 int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
             }
             (true, Place::FpReg(_) | Place::Spill(_)) => {
-                fp_moves.push((src, Place::FpReg(r), alloc.is_wide(p)))
+                fp_moves.push((src, Place::FpReg(r), alloc.width(p)))
             }
             (true, Place::IntReg(s)) => cross.push((Reg(r), Reg(s))),
             _ => return fail("AggParts: part not in a register or spill slot of its bank"),
@@ -1903,6 +1919,7 @@ fn emit_epilogue_ret(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
+    clear_upper(code, frame);
     emit_frame_teardown(code, func, frame, alloc, abi);
     emit_hardened_ret(code, abi, extern_sites);
 }

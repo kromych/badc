@@ -17064,6 +17064,44 @@ fn a_zero_fill_under_no_fp_regs_writes_no_xmm() {
     );
 }
 
+/// Under `-mno-sse` / `-mgeneral-regs-only` a GNU vector operation stays
+/// lane by lane in the integer registers: the whole-vector instruction it
+/// takes otherwise needs the vector registers the flag withholds.
+#[test]
+fn vector_arithmetic_under_no_fp_regs_stays_in_integer_registers() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "typedef int v4si __attribute__((vector_size(16)));\n\
+               typedef int v8si __attribute__((vector_size(32)));\n\
+               void a4(v4si *r, const v4si *a, const v4si *b) { *r = *a + *b; }\n\
+               void a8(v8si *r, const v8si *a, const v8si *b) { *r = *a ^ *b; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for optimize in [false, true] {
+            let program = Compiler::with_options(
+                alloc::string::String::from(src),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_no_fp_regs(true)
+                    .with_optimize(optimize),
+            )
+            .compile()
+            .expect("compile");
+            let mut opts = NativeOptions::new();
+            if optimize {
+                opts = opts.with_optimize();
+            }
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                no_fp_regs: true,
+                ..opts
+            };
+            if let Err(e) = crate::c5::codegen::lower_for(&program, target, opts) {
+                panic!("{target:?} optimize={optimize}: {e}");
+            }
+        }
+    }
+}
+
 /// A read of a zero-filled local folds at `-O` as a read of a stored zero
 /// does: after the fill and a byte store over part of it, `s[0]` and `s[8]`
 /// are known, so the function compiles to its constant return.

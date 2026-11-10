@@ -48,6 +48,8 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
     }
 }
 
@@ -59,6 +61,8 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -162,14 +166,28 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
             } => {
                 data(*addr)
                     && (*align == 0 || !strict_align)
-                    && !matches!(kind, LoadKind::F80 | LoadKind::F128 | LoadKind::V128)
+                    && !matches!(
+                        kind,
+                        LoadKind::F80
+                            | LoadKind::F128
+                            | LoadKind::V128
+                            | LoadKind::V256
+                            | LoadKind::V512
+                    )
             }
             Inst::Store {
                 addr, kind, align, ..
             } => {
                 data(*addr)
                     && (*align == 0 || !strict_align)
-                    && !matches!(kind, StoreKind::F80 | StoreKind::F128 | StoreKind::V128)
+                    && !matches!(
+                        kind,
+                        StoreKind::F80
+                            | StoreKind::F128
+                            | StoreKind::V128
+                            | StoreKind::V256
+                            | StoreKind::V512
+                    )
             }
             _ => false,
         })

@@ -23,6 +23,7 @@ pub(crate) fn walk_function(
     jump_tables: bool,
     named_refs: super::NamedRefs,
     freestanding: bool,
+    (x86, no_fp_regs): (crate::c5::X86Features, bool),
 ) -> Result<(FunctionSsa, alloc::vec::Vec<FunctionSsa>), WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
@@ -86,6 +87,8 @@ pub(crate) fn walk_function(
         jump_tables,
         named_refs,
         freestanding,
+        x86,
+        no_fp_regs,
     };
     if !fun.is_naked {
         ctx.release_param_lock_words(&mut b);

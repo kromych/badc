@@ -780,9 +780,13 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            (0, false)
-        }
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => (0, false),
     }
 }
 
@@ -1148,7 +1152,13 @@ pub(super) fn int_load_op(kind: LoadKind) -> Option<MemOp> {
         LoadKind::U16 => LDRH,
         LoadKind::I8 => LDRSB,
         LoadKind::U8 => LDRB,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             return None;
         }
     })
@@ -1160,7 +1170,13 @@ fn int_store_op(kind: StoreKind) -> Option<MemOp> {
         StoreKind::I32 => STR_W,
         StoreKind::I16 => STRH,
         StoreKind::I8 => STRB,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             return None;
         }
     })
@@ -1646,7 +1662,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
@@ -1661,7 +1683,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm, ext),
         LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm, ext),
         LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm, ext),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
@@ -1707,7 +1735,13 @@ pub(super) fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     };
@@ -1757,7 +1791,13 @@ pub(super) fn emit_store_indexed(
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
         (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
         (
-            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+            StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512,
             _,
         ) => unreachable!(),
     };

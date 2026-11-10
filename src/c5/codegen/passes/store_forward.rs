@@ -72,6 +72,8 @@ fn load_width(kind: LoadKind) -> u8 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
         LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
     }
 }
 
@@ -83,6 +85,8 @@ fn store_width(kind: StoreKind) -> u8 {
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -647,7 +651,13 @@ fn const_for_load(bits: i64, kind: LoadKind) -> Option<i64> {
         LoadKind::U16 => Some(bits as u16 as i64),
         LoadKind::I8 => Some(bits as i8 as i64),
         LoadKind::U8 => Some(bits as u8 as i64),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => None,
     }
 }
 

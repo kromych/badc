@@ -338,6 +338,12 @@ struct Walker<'a> {
     named_refs: NamedRefs,
     /// `-ffreestanding`: the layout of an `_Atomic` object.
     freestanding: bool,
+    /// The x86 extensions, which set the widest vector one instruction
+    /// takes.
+    x86: crate::c5::X86Features,
+    /// `-mno-sse` / `-mgeneral-regs-only`: vector operations stay lane by
+    /// lane in the integer registers.
+    no_fp_regs: bool,
     /// The aggregate result temporaries of the calls walked so far whose
     /// full expression has not ended (C17 6.2.4p8).
     call_temps: alloc::vec::Vec<i64>,

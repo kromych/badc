@@ -1121,16 +1121,29 @@ impl VecLane {
 
     /// Whether the target has one instruction for the element-wise `op` on
     /// vectors of `bytes` bytes: SSE2 has no 8-, 32- or 64-bit integer
-    /// multiply, AdvSIMD no 64-bit one. An 8-byte vector of one element is
+    /// multiply, AdvSIMD no 64-bit one, and a 32-byte vector is one ymm
+    /// register on x86-64, whose baseline has AVX2; `x86` holds the unit's
+    /// extensions beyond it. An 8-byte vector of one element is
     /// a scalar, a bitwise operation on an 8-byte one a single integer
     /// instruction, and on x86-64 an 8-byte one fills the low half of an xmm
     /// register, whose floating upper lanes the instruction would compute
     /// too, raising their exceptions.
-    pub(crate) fn binop_in_one_instruction(self, op: BinOp, x86: bool, bytes: u8) -> bool {
+    pub(crate) fn binop_in_one_instruction(
+        self,
+        op: BinOp,
+        x86: Option<crate::c5::X86Features>,
+        bytes: u8,
+    ) -> bool {
         let bitwise = matches!(op, BinOp::And | BinOp::Or | BinOp::Xor);
-        if bytes == 8 && (self.bytes() == 8 || bitwise || x86 && self.is_float()) {
+        if bytes == 8 && (self.bytes() == 8 || bitwise || x86.is_some() && self.is_float()) {
             return false;
         }
+        // x86-64 code assumes x86-64-v3, whose AVX2 has every ymm form; the
+        // zmm ones are AVX-512's, which a unit enables.
+        if bytes == 32 && x86.is_none() || bytes > 32 {
+            return false;
+        }
+        let x86 = x86.is_some();
         match op {
             BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor => !self.is_float(),
             BinOp::Mul if x86 => self == VecLane::I16,
@@ -1171,6 +1184,11 @@ pub(crate) enum LoadKind {
     F128,
     /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
     V128,
+    /// 32 bytes read whole into a ymm register: a 256-bit vector value,
+    /// which exists only on x86-64 under AVX.
+    V256,
+    /// 64 bytes read whole into a zmm register, under AVX-512F.
+    V512,
 }
 
 impl LoadKind {
@@ -1182,7 +1200,13 @@ impl LoadKind {
             LoadKind::I32 | LoadKind::U32 => Some(4),
             LoadKind::I16 | LoadKind::U16 => Some(2),
             LoadKind::I8 | LoadKind::U8 => Some(1),
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => None,
         }
     }
 }
@@ -1222,6 +1246,10 @@ pub(crate) enum StoreKind {
     F128,
     /// See [`LoadKind::V128`].
     V128,
+    /// See [`LoadKind::V256`].
+    V256,
+    /// See [`LoadKind::V512`].
+    V512,
 }
 
 /// Integer / FP binary opcode. The planner's choice between

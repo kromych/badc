@@ -522,6 +522,12 @@ pub struct Program {
     /// `-ffreestanding`: an `_Atomic` object takes the freestanding layout
     /// ([`crate::c5::compiler::types::atomic_layout`]).
     pub(crate) freestanding: bool,
+    /// The x86 extensions the unit targets (`-m<ext>`, `-march=`), which
+    /// decide the vector widths its operations lower at.
+    pub(crate) x86_features: crate::c5::X86Features,
+    /// `-mno-sse` / `-mgeneral-regs-only`: no operation lowers to the
+    /// vector registers.
+    pub(crate) no_fp_regs: bool,
     /// `-fno-builtin` leaves a call to the C library `strlen` foldable.
     pub(crate) strlen_folds: bool,
     /// Source-declared Windows subsystem. Set by
@@ -860,6 +866,8 @@ impl DataOffsets for Program {
             linker_directives: _,
             auto_includes: _,
             freestanding: _,
+            x86_features: _,
+            no_fp_regs: _,
             strlen_folds: _,
             subsystem: _,
             finished_functions,
@@ -1009,6 +1017,8 @@ mod data_offset_tests {
             linker_directives: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
+            x86_features: crate::c5::X86Features::NONE,
+            no_fp_regs: false,
             strlen_folds: false,
             data_align: 8,
             image_align_error: None,

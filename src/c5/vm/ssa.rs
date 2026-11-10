@@ -606,22 +606,34 @@ struct Frame<'a> {
     /// `func.over_aligned` places its object at `realign_base + region_off`.
     realign_base: usize,
     block_idx: usize,
-    /// The 128-bit values (`LoadKind::V128` loads, `Inst::VecBinop`), by
-    /// `ValueId`; their `regs` entries stay 0.
-    vregs: alloc::collections::BTreeMap<ValueId, [u8; 16]>,
+    /// The 128-, 256- and 512-bit values (`V128` / `V256` / `V512` loads,
+    /// `Inst::VecBinop`), by `ValueId`, in the low bytes; their `regs`
+    /// entries stay 0.
+    vregs: alloc::collections::BTreeMap<ValueId, [u8; 64]>,
 }
 
 impl Frame<'_> {
-    fn v128(&self, v: ValueId) -> Result<[u8; 16], C5Error> {
+    fn vbytes(&self, v: ValueId) -> Result<[u8; 64], C5Error> {
         self.vregs
             .get(&v)
             .copied()
-            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not a 128-bit value")))
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not a vector value")))
+    }
+
+    fn v128(&self, v: ValueId) -> Result<[u8; 16], C5Error> {
+        Ok(self.vbytes(v)?[..16].try_into().unwrap())
+    }
+
+    /// Value `v`, the low `bytes.len()` bytes of the register.
+    fn set_vbytes(&mut self, v: ValueId, bytes: &[u8]) {
+        let mut b = [0u8; 64];
+        b[..bytes.len()].copy_from_slice(bytes);
+        self.regs[v as usize] = 0;
+        self.vregs.insert(v, b);
     }
 
     fn set_v128(&mut self, v: ValueId, bytes: [u8; 16]) {
-        self.regs[v as usize] = 0;
-        self.vregs.insert(v, bytes);
+        self.set_vbytes(v, &bytes);
     }
 
     /// The link a call at instruction `call` of this frame hands `callee`.
@@ -1329,9 +1341,9 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, load_width(*kind), AccessKind::Read)?;
-            if *kind == LoadKind::V128 {
-                let bytes = mem.read_bytes(a as usize, 16)?.try_into().unwrap();
-                frame.set_v128(v, bytes);
+            if matches!(kind, LoadKind::V128 | LoadKind::V256 | LoadKind::V512) {
+                let bytes = mem.read_bytes(a as usize, load_width(*kind))?;
+                frame.set_vbytes(v, bytes);
                 return Ok(());
             }
             frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
@@ -1355,9 +1367,9 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(a as usize, store_width(*kind), AccessKind::Write)?;
-            if *kind == StoreKind::V128 {
-                let bytes = frame.v128(*value)?;
-                mem.write_bytes(a as usize, &bytes)?;
+            if matches!(kind, StoreKind::V128 | StoreKind::V256 | StoreKind::V512) {
+                let bytes = frame.vbytes(*value)?;
+                mem.write_bytes(a as usize, &bytes[..store_width(*kind)])?;
                 return Ok(());
             }
             let stored = narrow_store(frame.regs[*value as usize], *kind);
@@ -1759,8 +1771,15 @@ fn run_inst<H: Host>(
                 let r = vec_binop(*op, *lane, wide(a), wide(c));
                 frame.regs[v as usize] = i64::from_le_bytes(r[..8].try_into().unwrap());
             } else {
-                let r = vec_binop(*op, *lane, frame.v128(*lhs)?, frame.v128(*rhs)?);
-                frame.set_v128(v, r);
+                // A wider operation is the 128-bit one on each 16 bytes.
+                let (a, c) = (frame.vbytes(*lhs)?, frame.vbytes(*rhs)?);
+                let n = usize::from(*bytes);
+                let mut r = [0u8; 64];
+                for h in (0..n).step_by(16) {
+                    let part = |x: &[u8; 64]| -> [u8; 16] { x[h..h + 16].try_into().unwrap() };
+                    r[h..h + 16].copy_from_slice(&vec_binop(*op, *lane, part(&a), part(&c)));
+                }
+                frame.set_vbytes(v, &r[..n]);
             }
             return Ok(());
         }
@@ -4528,6 +4547,8 @@ fn load_width(kind: LoadKind) -> usize {
         // read covers all 16.
         LoadKind::F80 => 10,
         LoadKind::F128 | LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::V512 => 64,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -4541,6 +4562,8 @@ fn store_width(kind: StoreKind) -> usize {
         // bytes untouched, as gcc's FSTP does; binary128 writes 16.
         StoreKind::F80 => 10,
         StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -4582,10 +4605,8 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         LoadKind::I8 => slice[0] as i8 as i64,
         LoadKind::U8 => slice[0] as i64,
         // The -O vector promotion producing this kind never reaches the VM.
-        LoadKind::V128 => {
-            return Err(C5Error::Runtime(
-                "128-bit vector load in the interpreter".into(),
-            ));
+        LoadKind::V128 | LoadKind::V256 | LoadKind::V512 => {
+            return Err(C5Error::Runtime("vector load in the interpreter".into()));
         }
     };
     Ok(val)
@@ -4630,9 +4651,9 @@ fn store_to_memory(
             b[8..].copy_from_slice(&hi.to_le_bytes());
             mem.write_bytes(addr, &b)
         }
-        StoreKind::V128 => Err(C5Error::Runtime(
-            "128-bit vector store in the interpreter".into(),
-        )),
+        StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
+            Err(C5Error::Runtime("vector store in the interpreter".into()))
+        }
     }
 }
 
@@ -4682,9 +4703,13 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
-            value
-        }
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => value,
     }
 }
 

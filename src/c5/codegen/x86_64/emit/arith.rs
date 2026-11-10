@@ -147,6 +147,20 @@ pub(super) fn emit_copy(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    let w = alloc.width(value);
+    if is_fp && w >= VecWidth::V256 {
+        let Some(dd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(dn) = materialize_wide(code, w, src_place, dd, frame) else {
+            return fail("Copy: value not fp reg / spill / int reg");
+        };
+        if dn.0 != dd.0 {
+            emit_wide_mov(code, w, dd, dn);
+        }
+        mirror_wide_dst(code, w, dst, dd, frame);
+        return Ok(());
+    }
     if is_fp && alloc.is_wide(value) {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Copy: dst not fp reg / spill");

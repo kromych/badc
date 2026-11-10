@@ -2438,14 +2438,22 @@ impl AsmScratch {
         // Last, as the store-backs read operand registers: the spilled
         // outputs store, the rest move as a parallel copy (`xchg` cycles).
         let mut int_moves: alloc::vec::Vec<PlaceMove> = alloc::vec::Vec::new();
-        let mut fp_moves: alloc::vec::Vec<(Place, Place, bool)> = alloc::vec::Vec::new();
+        let mut fp_moves: alloc::vec::Vec<(
+            Place,
+            Place,
+            crate::c5::codegen::ssa::reg_alloc::VecWidth,
+        )> = alloc::vec::Vec::new();
         for (i, place) in stmt.alloc.asm_output_places(stmt.func, stmt.site) {
             let Some(r) = op_reg[i] else { continue };
             let op = &stmt.asm.operands[i];
             let xmm = matches!(op.constraint, AsmConstraint::Fp).then_some(op.width);
             match place {
                 Place::Spill(slot) => self.store_spilled(out.cx.code, stmt, r, slot, xmm),
-                place @ Place::FpReg(_) => fp_moves.push((Place::FpReg(r), place, true)),
+                place @ Place::FpReg(_) => fp_moves.push((
+                    Place::FpReg(r),
+                    place,
+                    crate::c5::codegen::ssa::reg_alloc::VecWidth::V128,
+                )),
                 place @ Place::IntReg(_) => {
                     int_moves.push(PlaceMove::copy(Place::IntReg(r), place))
                 }

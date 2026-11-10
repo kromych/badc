@@ -69,7 +69,7 @@ fn load_int_kind(kind: LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 => return None,
+        K::F32 | K::F64 | K::F80 | K::F128 | K::V128 | K::V256 | K::V512 => return None,
     })
 }
 
@@ -80,7 +80,13 @@ fn store_int_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => 2,
         StoreKind::I32 => 4,
         StoreKind::I64 => 8,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             return None;
         }
     })

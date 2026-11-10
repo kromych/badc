@@ -202,8 +202,8 @@ pub(crate) struct Allocation {
     /// is dead. Filled on x86-64, the only target whose count
     /// instructions need one; empty entries read as false.
     pub count_nonzero: Vec<bool>,
-    /// Per value: a 128-bit vector ([`wide_values`]).
-    pub wide: Vec<bool>,
+    /// Per value: its vector width ([`wide_values`]).
+    pub wide: Vec<VecWidth>,
     /// Registers an `Inst::InlineAsm` statement must preserve around its
     /// body, as `(gpr_mask, fp_mask)`. The emit saves and restores the
     /// registers a block writes that this names and leaves the rest
@@ -257,7 +257,11 @@ impl Allocation {
     }
 
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
-        self.wide.get(v as usize).copied().unwrap_or(false)
+        self.width(v) != VecWidth::Scalar
+    }
+
+    pub(crate) fn width(&self, v: ValueId) -> VecWidth {
+        self.wide.get(v as usize).copied().unwrap_or_default()
     }
 
     /// Whether `v`, the value of `inst`, lives in the FP file.
@@ -395,7 +399,13 @@ fn zero_testable_load(inst: &Inst) -> bool {
     };
     !matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512
     )
 }
 
@@ -435,7 +445,9 @@ fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<Va
         StoreKind::F32 => is_f32 && narrow,
         StoreKind::I64 => wide,
         StoreKind::F64 => !is_f32 && wide,
-        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => false,
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
+            false
+        }
     };
     fits.then_some(value)
 }
@@ -1486,11 +1498,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             forbid: 0,
             avoid: 0,
             loop_avoid: 0,
-            wide: false,
+            wide: VecWidth::Scalar,
             follow: [None; 3],
         });
         entry.is_fp = produces_fp_result(inst) || fp_const[v];
-        entry.wide |= wide[v];
+        entry.wide = entry.wide.max(wide[v]);
         entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
@@ -2725,8 +2737,8 @@ pub(crate) struct NodeConstraints {
     /// is live: the emit saves and restores it around that instruction at
     /// every iteration, so a callee-saved register is taken first.
     pub loop_avoid: u64,
-    /// A 128-bit value, whose spill takes two units.
-    pub wide: bool,
+    /// The vector width, whose spill takes two or four units.
+    pub wide: VecWidth,
     /// Nodes whose register, or hint while uncolored, this one prefers next.
     pub follow: [Option<ValueId>; 3],
 }
@@ -2896,9 +2908,9 @@ pub(crate) fn color_graph(
                     Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
                     Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
                     Place::Spill(s) => {
-                        slot_used[s as usize] = stamp;
-                        if constraints[root as usize].is_some_and(|nc| nc.wide) {
-                            slot_used[s as usize + 1] = stamp;
+                        let units = constraints[root as usize].map_or(1, |nc| nc.wide.units());
+                        for u in s..s + units {
+                            slot_used[u as usize] = stamp;
                         }
                     }
                     Place::None => {
@@ -2934,12 +2946,15 @@ pub(crate) fn color_graph(
         };
         // A callee-saved register of a low64-only convention keeps just
         // its low 64 bits across a call, so a 128-bit value live across
-        // one spills; Win64 saves the whole register and takes it.
-        let callee = if c.wide && c.must_callee && banks.callee_fpr_low64_only {
-            &callee_full[..0]
-        } else {
-            &callee_full[..callee_full.len().min(cap)]
-        };
+        // one spills; Win64 saves the whole xmm register and takes it, but
+        // no convention keeps a ymm register's upper half.
+        let low64 = banks.callee_fpr_low64_only;
+        let callee =
+            if c.must_callee && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64)) {
+                &callee_full[..0]
+            } else {
+                &callee_full[..callee_full.len().min(cap)]
+            };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
         let mut avoid = c.avoid | hinted;
@@ -3019,7 +3034,7 @@ pub(crate) fn color_graph(
                 // and under vfork the child's writes land on the
                 // parent's shared stack -- so every value gets a
                 // dedicated slot.
-                let units = if c.wide { 2 } else { 1 };
+                let units = c.wide.units();
                 let slot_free = |s: u32| {
                     (s..s + units).all(|u| u >= spill_count || slot_used[u as usize] != stamp)
                 };
@@ -3358,9 +3373,50 @@ pub(crate) fn produces_value(inst: &Inst) -> bool {
     !matches!(result_kind(inst), ResultKind::None)
 }
 
-/// Per value: whether it is a 128-bit vector.
-pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
-    let mut wide: Vec<bool> = func
+/// The width of an FP-file value: a scalar, or a vector that spills to
+/// two (128-bit) or four (256-bit) units.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum VecWidth {
+    #[default]
+    Scalar,
+    V128,
+    V256,
+    V512,
+}
+
+impl VecWidth {
+    pub(crate) fn of_bytes(bytes: u8) -> Self {
+        match bytes {
+            16 => VecWidth::V128,
+            32 => VecWidth::V256,
+            64 => VecWidth::V512,
+            _ => VecWidth::Scalar,
+        }
+    }
+
+    pub(crate) fn of_load(kind: LoadKind) -> Self {
+        match kind {
+            LoadKind::V128 => VecWidth::V128,
+            LoadKind::V256 => VecWidth::V256,
+            LoadKind::V512 => VecWidth::V512,
+            _ => VecWidth::Scalar,
+        }
+    }
+
+    /// Spill units (8 bytes each) a value of this width takes.
+    pub(crate) fn units(self) -> u32 {
+        match self {
+            VecWidth::Scalar => 1,
+            VecWidth::V128 => 2,
+            VecWidth::V256 => 4,
+            VecWidth::V512 => 8,
+        }
+    }
+}
+
+/// Per value: its vector width.
+pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
+    let mut wide: Vec<VecWidth> = func
         .insts
         .iter()
         .map(|inst| match inst {
@@ -3369,19 +3425,29 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
             | Inst::Phi { kind, .. }
             | Inst::AsmOut { kind, .. }
             | Inst::ParamPart { kind, .. }
-            | Inst::RetPart { kind, .. } => *kind == LoadKind::V128,
-            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => *kind == StoreKind::V128,
+            | Inst::RetPart { kind, .. } => VecWidth::of_load(*kind),
+            Inst::Store { kind, .. } | Inst::StoreLocal { kind, .. } => match kind {
+                StoreKind::V128 => VecWidth::V128,
+                StoreKind::V256 => VecWidth::V256,
+                StoreKind::V512 => VecWidth::V512,
+                _ => VecWidth::Scalar,
+            },
             Inst::InlineAsm { asm, .. } => asm
                 .operands
                 .iter()
                 .find(|o| o.value && o.is_output)
-                .is_some_and(|o| o.width == 16),
+                .filter(|o| o.width == 16)
+                .map_or(VecWidth::Scalar, |_| VecWidth::V128),
             Inst::X86SimdVal { op, .. } => {
                 let row = crate::c5::x86_simd::get(*op);
-                row.form.returns_vector() && row.bytes == 16
+                if row.form.returns_vector() {
+                    VecWidth::of_bytes(row.bytes)
+                } else {
+                    VecWidth::Scalar
+                }
             }
-            Inst::VecBinop { bytes, .. } => *bytes == 16,
-            _ => false,
+            Inst::VecBinop { bytes, .. } => VecWidth::of_bytes(*bytes),
+            _ => VecWidth::Scalar,
         })
         .collect();
     // A copy may precede its source on the tape.
@@ -3390,10 +3456,10 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
         changed = false;
         for (v, inst) in func.insts.iter().enumerate() {
             if let Inst::Copy { value, .. } = inst
-                && !wide[v]
-                && wide.get(*value as usize).copied().unwrap_or(false)
+                && let Some(&w) = wide.get(*value as usize)
+                && w > wide[v]
             {
-                wide[v] = true;
+                wide[v] = w;
                 changed = true;
             }
         }
@@ -3421,16 +3487,24 @@ fn result_kind(inst: &Inst) -> ResultKind {
         | ParamPart { kind, .. }
         | RetPart { kind, .. }
         | AsmOut { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         AggParts { .. } => ResultKind::None,
         Phi { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Copy { is_fp, .. } => {
@@ -3441,24 +3515,46 @@ fn result_kind(inst: &Inst) -> ResultKind {
             }
         }
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         }
         | StoreLocal {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         }
         | SegStore {
             kind:
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128,
+                StoreKind::F32
+                | StoreKind::F64
+                | StoreKind::F80
+                | StoreKind::F128
+                | StoreKind::V128
+                | StoreKind::V256
+                | StoreKind::V512,
             ..
         } => ResultKind::Fp,
         X86Simd { .. } => ResultKind::None,
@@ -3472,9 +3568,13 @@ fn result_kind(inst: &Inst) -> ResultKind {
         }
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-                ResultKind::Fp
-            }
+            LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -3679,6 +3779,8 @@ fn stack_arg_loads(
                             | LoadKind::F80
                             | LoadKind::F128
                             | LoadKind::V128
+                            | LoadKind::V256
+                            | LoadKind::V512
                     )
                     && !func.over_aligned.iter().any(|m| m.slot == off)
                     && use_counts.get(v as usize) == Some(&1)
@@ -3999,7 +4101,10 @@ pub(crate) fn ret_part_reg(target: Target, inst: &Inst) -> Option<(bool, u8)> {
         return None;
     };
     let (ints, fps) = agg_return_regs(target);
-    let fp = matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128);
+    let fp = matches!(
+        kind,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::V128 | LoadKind::V256 | LoadKind::V512
+    );
     let bank = if fp { fps } else { ints };
     bank.get(*slot as usize).map(|&r| (fp, r))
 }
@@ -4605,12 +4710,17 @@ mod tests {
             forbid: 0,
             avoid: 0,
             loop_avoid: 0,
-            wide: false,
+            wide: VecWidth::Scalar,
             follow: [None; 3],
         })
     }
 
     fn fp_node(must_callee: bool, wide: bool) -> Option<NodeConstraints> {
+        let wide = if wide {
+            VecWidth::V128
+        } else {
+            VecWidth::Scalar
+        };
         Some(NodeConstraints {
             is_fp: true,
             must_callee,

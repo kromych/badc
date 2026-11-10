@@ -1090,14 +1090,19 @@ impl AsmRegion {
         // Last, as the store-backs read operand registers: spilled integer
         // outputs first (a bound one may hold x16 / x17), then the copies.
         let mut int_moves: Vec<PlaceMove> = Vec::new();
-        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+            Vec::new();
         let mut pending: Vec<(u8, u32)> = Vec::new();
         for &(i, place) in &ops.outs {
             let Some(r) = ops.op_reg[i] else { continue };
             let op = &ops.asm.operands[i];
             match (matches!(op.constraint, AsmConstraint::Fp), place) {
                 (_, Place::None) => {}
-                (true, _) => fp_moves.push((Place::FpReg(r), place, op.width == 16)),
+                (true, _) => fp_moves.push((
+                    Place::FpReg(r),
+                    place,
+                    crate::c5::codegen::ssa::reg_alloc::VecWidth::of_bytes(op.width),
+                )),
                 (false, Place::Spill(slot)) => pending.push((r, slot)),
                 (false, _) => int_moves.push(PlaceMove::copy(Place::IntReg(r), place)),
             }

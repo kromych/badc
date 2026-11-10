@@ -532,6 +532,8 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::F80 => "F80",
         LoadKind::F128 => "F128",
         LoadKind::V128 => "V128",
+        LoadKind::V256 => "V256",
+        LoadKind::V512 => "V512",
     }
 }
 
@@ -546,6 +548,8 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::F80 => "F80",
         StoreKind::F128 => "F128",
         StoreKind::V128 => "V128",
+        StoreKind::V256 => "V256",
+        StoreKind::V512 => "V512",
     }
 }
 

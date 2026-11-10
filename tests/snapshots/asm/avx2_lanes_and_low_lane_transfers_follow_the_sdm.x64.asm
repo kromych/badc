@@ -186,7 +186,6 @@ Disassembly of section .text:
                	movq	0x8(%rbx), %rcx
                	movq	0x10(%rbx), %rdx
                	movq	0x18(%rbx), %rsi
-               	leaq	(%rsp), %rdi
                	movq	%rax, (%rsp)
                	movq	%rcx, 0x8(%rsp)
                	movq	%rdx, 0x10(%rsp)
@@ -225,613 +224,38 @@ Disassembly of section .text:
                	movups	%xmm14, 0x150(%rax)
                	movups	%xmm14, 0x160(%rax)
                	movups	%xmm14, 0x170(%rax)
-               	leaq	0x20(%rsp), %rax
-               	leaq	0x240(%rsp), %rcx
-               	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	0x10(%rdi), %xmm14
-               	movups	%xmm14, 0x10(%rcx)
-               	leaq	0x260(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rcx)
-               	movzbq	0x240(%rsp), %rax
-               	movzbq	0x260(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c0(%rsp)
-               	movzbq	0x241(%rsp), %rax
-               	movzbq	0x261(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c1(%rsp)
-               	movzbq	0x242(%rsp), %rax
-               	movzbq	0x262(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c2(%rsp)
-               	movzbq	0x243(%rsp), %rax
-               	movzbq	0x263(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c3(%rsp)
-               	movzbq	0x244(%rsp), %rax
-               	movzbq	0x264(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c4(%rsp)
-               	movzbq	0x245(%rsp), %rax
-               	movzbq	0x265(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c5(%rsp)
-               	movzbq	0x246(%rsp), %rax
-               	movzbq	0x266(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c6(%rsp)
-               	movzbq	0x247(%rsp), %rax
-               	movzbq	0x267(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c7(%rsp)
-               	movzbq	0x248(%rsp), %rax
-               	movzbq	0x268(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c8(%rsp)
-               	movzbq	0x249(%rsp), %rax
-               	movzbq	0x269(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1c9(%rsp)
-               	movzbq	0x24a(%rsp), %rax
-               	movzbq	0x26a(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1ca(%rsp)
-               	movzbq	0x24b(%rsp), %rax
-               	movzbq	0x26b(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1cb(%rsp)
-               	movzbq	0x24c(%rsp), %rax
-               	movzbq	0x26c(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1cc(%rsp)
-               	movzbq	0x24d(%rsp), %rax
-               	movzbq	0x26d(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1cd(%rsp)
-               	movzbq	0x24e(%rsp), %rax
-               	movzbq	0x26e(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1ce(%rsp)
-               	movzbq	0x24f(%rsp), %rax
-               	movzbq	0x26f(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1cf(%rsp)
-               	movzbq	0x250(%rsp), %rax
-               	movzbq	0x270(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d0(%rsp)
-               	movzbq	0x251(%rsp), %rax
-               	movzbq	0x271(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d1(%rsp)
-               	movzbq	0x252(%rsp), %rax
-               	movzbq	0x272(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d2(%rsp)
-               	movzbq	0x253(%rsp), %rax
-               	movzbq	0x273(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d3(%rsp)
-               	movzbq	0x254(%rsp), %rax
-               	movzbq	0x274(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d4(%rsp)
-               	movzbq	0x255(%rsp), %rax
-               	movzbq	0x275(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d5(%rsp)
-               	movzbq	0x256(%rsp), %rax
-               	movzbq	0x276(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d6(%rsp)
-               	movzbq	0x257(%rsp), %rax
-               	movzbq	0x277(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d7(%rsp)
-               	movzbq	0x258(%rsp), %rax
-               	movzbq	0x278(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d8(%rsp)
-               	movzbq	0x259(%rsp), %rax
-               	movzbq	0x279(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1d9(%rsp)
-               	movzbq	0x25a(%rsp), %rax
-               	movzbq	0x27a(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1da(%rsp)
-               	movzbq	0x25b(%rsp), %rax
-               	movzbq	0x27b(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1db(%rsp)
-               	movzbq	0x25c(%rsp), %rax
-               	movzbq	0x27c(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1dc(%rsp)
-               	movzbq	0x25d(%rsp), %rax
-               	movzbq	0x27d(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1dd(%rsp)
-               	movzbq	0x25e(%rsp), %rax
-               	movzbq	0x27e(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1de(%rsp)
-               	movzbq	0x25f(%rsp), %rax
-               	movzbq	0x27f(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0x1df(%rsp)
-               	movq	0x1c0(%rsp), %rax
-               	movq	0x1c8(%rsp), %rcx
-               	movq	0x1d0(%rsp), %rdx
-               	movq	0x1d8(%rsp), %rsi
-               	movq	%rax, 0x40(%rsp)
-               	movq	%rcx, 0x48(%rsp)
-               	movq	%rdx, 0x50(%rsp)
-               	movq	%rsi, 0x58(%rsp)
-               	leaq	(%rsp), %rax
-               	leaq	0x20(%rsp), %rcx
-               	leaq	0x240(%rsp), %rdx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
-               	leaq	0x260(%rsp), %rax
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	0x10(%rcx), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	movzwq	0x240(%rsp), %rax
-               	movzwq	0x260(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1c0(%rsp)
-               	movzwq	0x242(%rsp), %rax
-               	movzwq	0x262(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1c2(%rsp)
-               	movzwq	0x244(%rsp), %rax
-               	movzwq	0x264(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1c4(%rsp)
-               	movzwq	0x246(%rsp), %rax
-               	movzwq	0x266(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1c6(%rsp)
-               	movzwq	0x248(%rsp), %rax
-               	movzwq	0x268(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1c8(%rsp)
-               	movzwq	0x24a(%rsp), %rax
-               	movzwq	0x26a(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1ca(%rsp)
-               	movzwq	0x24c(%rsp), %rax
-               	movzwq	0x26c(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1cc(%rsp)
-               	movzwq	0x24e(%rsp), %rax
-               	movzwq	0x26e(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1ce(%rsp)
-               	movzwq	0x250(%rsp), %rax
-               	movzwq	0x270(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1d0(%rsp)
-               	movzwq	0x252(%rsp), %rax
-               	movzwq	0x272(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1d2(%rsp)
-               	movzwq	0x254(%rsp), %rax
-               	movzwq	0x274(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1d4(%rsp)
-               	movzwq	0x256(%rsp), %rax
-               	movzwq	0x276(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1d6(%rsp)
-               	movzwq	0x258(%rsp), %rax
-               	movzwq	0x278(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1d8(%rsp)
-               	movzwq	0x25a(%rsp), %rax
-               	movzwq	0x27a(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1da(%rsp)
-               	movzwq	0x25c(%rsp), %rax
-               	movzwq	0x27c(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1dc(%rsp)
-               	movzwq	0x25e(%rsp), %rax
-               	movzwq	0x27e(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movw	%ax, 0x1de(%rsp)
-               	movq	0x1c0(%rsp), %rcx
-               	movq	0x1c8(%rsp), %rdx
-               	movq	0x1d0(%rsp), %rsi
-               	movq	0x1d8(%rsp), %rdi
-               	leaq	0x40(%rsp), %rax
-               	addq	$0x20, %rax
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
-               	movq	%rdi, 0x18(%rax)
-               	movl	(%rsp), %eax
-               	movl	0x4(%rsp), %ecx
-               	movl	0x8(%rsp), %edx
-               	movl	0xc(%rsp), %esi
-               	movl	0x10(%rsp), %edi
-               	movl	0x14(%rsp), %r8d
-               	movl	0x18(%rsp), %r9d
-               	movl	0x1c(%rsp), %r13d
-               	movl	0x20(%rsp), %r14d
-               	movl	0x24(%rsp), %r15d
-               	movl	0x28(%rsp), %r10d
-               	movq	%r10, -0x28(%rbp)
-               	movl	0x2c(%rsp), %r10d
-               	movq	%r10, -0x30(%rbp)
-               	movl	0x30(%rsp), %r10d
-               	movq	%r10, -0x38(%rbp)
-               	movl	0x34(%rsp), %r10d
-               	movq	%r10, -0x40(%rbp)
-               	movl	0x38(%rsp), %r10d
-               	movq	%r10, -0x48(%rbp)
-               	movl	0x3c(%rsp), %r10d
-               	movq	%r10, -0x50(%rbp)
-               	addq	%r14, %rax
-               	movl	%eax, 0x1c0(%rsp)
-               	leaq	(%rcx,%r15), %rax
-               	movl	%eax, 0x1c4(%rsp)
-               	movq	%rdx, %rax
-               	addq	-0x28(%rbp), %rax
-               	movl	%eax, 0x1c8(%rsp)
-               	movq	%rsi, %rax
-               	addq	-0x30(%rbp), %rax
-               	movl	%eax, 0x1cc(%rsp)
-               	movq	%rdi, %rax
-               	addq	-0x38(%rbp), %rax
-               	movl	%eax, 0x1d0(%rsp)
-               	movq	%r8, %rax
-               	addq	-0x40(%rbp), %rax
-               	movl	%eax, 0x1d4(%rsp)
-               	movq	%r9, %rax
-               	addq	-0x48(%rbp), %rax
-               	movl	%eax, 0x1d8(%rsp)
-               	movq	%r13, %rax
-               	addq	-0x50(%rbp), %rax
-               	movl	%eax, 0x1dc(%rsp)
-               	movq	0x1c0(%rsp), %rcx
-               	movq	0x1c8(%rsp), %rdx
-               	movq	0x1d0(%rsp), %rsi
-               	movq	0x1d8(%rsp), %rdi
-               	leaq	0x40(%rsp), %rax
-               	addq	$0x40, %rax
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
-               	movq	%rdi, 0x18(%rax)
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
-               	addq	%rax, %rdi
-               	addq	%rcx, %r8
-               	addq	%r9, %rdx
-               	addq	%r13, %rsi
-               	leaq	0x40(%rsp), %rcx
-               	leaq	0x60(%rcx), %rax
-               	movq	%rdi, (%rax)
-               	movq	%r8, 0x8(%rax)
-               	movq	%rdx, 0x10(%rax)
-               	movq	%rsi, 0x18(%rax)
-               	leaq	(%rsp), %rax
-               	leaq	0x20(%rsp), %rdx
-               	leaq	0x240(%rsp), %rsi
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rsi)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rsi)
-               	leaq	0x260(%rsp), %rax
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	0x10(%rdx), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	movzbq	0x240(%rsp), %rax
-               	movzbq	0x260(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c0(%rsp)
-               	movzbq	0x241(%rsp), %rax
-               	movzbq	0x261(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c1(%rsp)
-               	movzbq	0x242(%rsp), %rax
-               	movzbq	0x262(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c2(%rsp)
-               	movzbq	0x243(%rsp), %rax
-               	movzbq	0x263(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c3(%rsp)
-               	movzbq	0x244(%rsp), %rax
-               	movzbq	0x264(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c4(%rsp)
-               	movzbq	0x245(%rsp), %rax
-               	movzbq	0x265(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c5(%rsp)
-               	movzbq	0x246(%rsp), %rax
-               	movzbq	0x266(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c6(%rsp)
-               	movzbq	0x247(%rsp), %rax
-               	movzbq	0x267(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c7(%rsp)
-               	movzbq	0x248(%rsp), %rax
-               	movzbq	0x268(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c8(%rsp)
-               	movzbq	0x249(%rsp), %rax
-               	movzbq	0x269(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1c9(%rsp)
-               	movzbq	0x24a(%rsp), %rax
-               	movzbq	0x26a(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1ca(%rsp)
-               	movzbq	0x24b(%rsp), %rax
-               	movzbq	0x26b(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1cb(%rsp)
-               	movzbq	0x24c(%rsp), %rax
-               	movzbq	0x26c(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1cc(%rsp)
-               	movzbq	0x24d(%rsp), %rax
-               	movzbq	0x26d(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1cd(%rsp)
-               	movzbq	0x24e(%rsp), %rax
-               	movzbq	0x26e(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1ce(%rsp)
-               	movzbq	0x24f(%rsp), %rax
-               	movzbq	0x26f(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1cf(%rsp)
-               	movzbq	0x250(%rsp), %rax
-               	movzbq	0x270(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d0(%rsp)
-               	movzbq	0x251(%rsp), %rax
-               	movzbq	0x271(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d1(%rsp)
-               	movzbq	0x252(%rsp), %rax
-               	movzbq	0x272(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d2(%rsp)
-               	movzbq	0x253(%rsp), %rax
-               	movzbq	0x273(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d3(%rsp)
-               	movzbq	0x254(%rsp), %rax
-               	movzbq	0x274(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d4(%rsp)
-               	movzbq	0x255(%rsp), %rax
-               	movzbq	0x275(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d5(%rsp)
-               	movzbq	0x256(%rsp), %rax
-               	movzbq	0x276(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d6(%rsp)
-               	movzbq	0x257(%rsp), %rax
-               	movzbq	0x277(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d7(%rsp)
-               	movzbq	0x258(%rsp), %rax
-               	movzbq	0x278(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d8(%rsp)
-               	movzbq	0x259(%rsp), %rax
-               	movzbq	0x279(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1d9(%rsp)
-               	movzbq	0x25a(%rsp), %rax
-               	movzbq	0x27a(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1da(%rsp)
-               	movzbq	0x25b(%rsp), %rax
-               	movzbq	0x27b(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1db(%rsp)
-               	movzbq	0x25c(%rsp), %rax
-               	movzbq	0x27c(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1dc(%rsp)
-               	movzbq	0x25d(%rsp), %rax
-               	movzbq	0x27d(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1dd(%rsp)
-               	movzbq	0x25e(%rsp), %rax
-               	movzbq	0x27e(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1de(%rsp)
-               	movzbq	0x25f(%rsp), %rax
-               	movzbq	0x27f(%rsp), %rdx
-               	subq	%rdx, %rax
-               	movb	%al, 0x1df(%rsp)
-               	movq	0x1c0(%rsp), %rdx
-               	movq	0x1c8(%rsp), %rsi
-               	movq	0x1d0(%rsp), %rdi
-               	movq	0x1d8(%rsp), %r8
-               	leaq	0x80(%rcx), %rax
-               	movq	%rdx, (%rax)
-               	movq	%rsi, 0x8(%rax)
-               	movq	%rdi, 0x10(%rax)
-               	movq	%r8, 0x18(%rax)
-               	leaq	(%rsp), %rax
-               	leaq	0x20(%rsp), %rcx
-               	leaq	0x240(%rsp), %rdx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
-               	leaq	0x260(%rsp), %rax
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	0x10(%rcx), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	movzwq	0x240(%rsp), %rax
-               	movzwq	0x260(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1c0(%rsp)
-               	movzwq	0x242(%rsp), %rax
-               	movzwq	0x262(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1c2(%rsp)
-               	movzwq	0x244(%rsp), %rax
-               	movzwq	0x264(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1c4(%rsp)
-               	movzwq	0x246(%rsp), %rax
-               	movzwq	0x266(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1c6(%rsp)
-               	movzwq	0x248(%rsp), %rax
-               	movzwq	0x268(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1c8(%rsp)
-               	movzwq	0x24a(%rsp), %rax
-               	movzwq	0x26a(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1ca(%rsp)
-               	movzwq	0x24c(%rsp), %rax
-               	movzwq	0x26c(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1cc(%rsp)
-               	movzwq	0x24e(%rsp), %rax
-               	movzwq	0x26e(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1ce(%rsp)
-               	movzwq	0x250(%rsp), %rax
-               	movzwq	0x270(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1d0(%rsp)
-               	movzwq	0x252(%rsp), %rax
-               	movzwq	0x272(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1d2(%rsp)
-               	movzwq	0x254(%rsp), %rax
-               	movzwq	0x274(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1d4(%rsp)
-               	movzwq	0x256(%rsp), %rax
-               	movzwq	0x276(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1d6(%rsp)
-               	movzwq	0x258(%rsp), %rax
-               	movzwq	0x278(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1d8(%rsp)
-               	movzwq	0x25a(%rsp), %rax
-               	movzwq	0x27a(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1da(%rsp)
-               	movzwq	0x25c(%rsp), %rax
-               	movzwq	0x27c(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1dc(%rsp)
-               	movzwq	0x25e(%rsp), %rax
-               	movzwq	0x27e(%rsp), %rcx
-               	subq	%rcx, %rax
-               	movw	%ax, 0x1de(%rsp)
-               	movq	0x1c0(%rsp), %rcx
-               	movq	0x1c8(%rsp), %rdx
-               	movq	0x1d0(%rsp), %rsi
-               	movq	0x1d8(%rsp), %rdi
-               	leaq	0x40(%rsp), %rax
-               	addq	$0xa0, %rax
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
-               	movq	%rdi, 0x18(%rax)
-               	movl	(%rsp), %eax
-               	movl	0x4(%rsp), %ecx
-               	movl	0x8(%rsp), %edx
-               	movl	0xc(%rsp), %esi
-               	movl	0x10(%rsp), %edi
-               	movl	0x14(%rsp), %r8d
-               	movl	0x18(%rsp), %r9d
-               	movl	0x1c(%rsp), %r13d
-               	movl	0x20(%rsp), %r14d
-               	movl	0x24(%rsp), %r15d
-               	movl	0x28(%rsp), %r10d
-               	movq	%r10, -0x28(%rbp)
-               	movl	0x2c(%rsp), %r10d
-               	movq	%r10, -0x30(%rbp)
-               	movl	0x30(%rsp), %r10d
-               	movq	%r10, -0x38(%rbp)
-               	movl	0x34(%rsp), %r10d
-               	movq	%r10, -0x40(%rbp)
-               	movl	0x38(%rsp), %r10d
-               	movq	%r10, -0x48(%rbp)
-               	movl	0x3c(%rsp), %r10d
-               	movq	%r10, -0x50(%rbp)
-               	subq	%r14, %rax
-               	movl	%eax, 0x1c0(%rsp)
-               	subq	%r15, %rcx
-               	movl	%ecx, 0x1c4(%rsp)
-               	subq	-0x28(%rbp), %rdx
-               	movl	%edx, 0x1c8(%rsp)
-               	subq	-0x30(%rbp), %rsi
-               	movl	%esi, 0x1cc(%rsp)
-               	subq	-0x38(%rbp), %rdi
-               	movl	%edi, 0x1d0(%rsp)
-               	subq	-0x40(%rbp), %r8
-               	movl	%r8d, 0x1d4(%rsp)
-               	subq	-0x48(%rbp), %r9
-               	movl	%r9d, 0x1d8(%rsp)
-               	subq	-0x50(%rbp), %r13
-               	movl	%r13d, 0x1dc(%rsp)
-               	movq	0x1c0(%rsp), %rcx
-               	movq	0x1c8(%rsp), %rdx
-               	movq	0x1d0(%rsp), %rsi
-               	movq	0x1d8(%rsp), %rdi
-               	leaq	0x40(%rsp), %rax
-               	addq	$0xc0, %rax
-               	movq	%rcx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rsi, 0x10(%rax)
-               	movq	%rdi, 0x18(%rax)
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
-               	negq	%rdi
-               	addq	%rax, %rdi
-               	subq	%r8, %rcx
-               	subq	%r9, %rdx
-               	subq	%r13, %rsi
-               	leaq	0x40(%rsp), %rax
-               	addq	$0xe0, %rax
-               	movq	%rdi, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, 0x10(%rax)
-               	movq	%rsi, 0x18(%rax)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpaddb	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x40(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpaddw	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x60(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpaddd	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x80(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpaddq	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0xa0(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpsubb	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0xc0(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpsubw	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0xe0(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpsubd	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x100(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpsubq	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x120(%rsp)
                	leaq	(%rsp), %rax
                	leaq	0x20(%rsp), %rcx
                	leaq	0x240(%rsp), %rdx
@@ -1100,6 +524,7 @@ Disassembly of section .text:
                	movq	%r11, 0x30(%rsp)
                	movq	0x18(%r10), %r11
                	movq	%r11, 0x38(%rsp)
+               	vzeroupper
                	callq	<addr>
                	addq	$0x40, %rsp
                	leaq	0x1c0(%rsp), %rax
@@ -1225,7 +650,7 @@ Disassembly of section .text:
                	movq	%r14, %rsi
                	shlq	$0x5, %rsi
                	addq	%rax, %rsi
-               	leaq	0x260(%rsp), %rax
+               	leaq	0x240(%rsp), %rax
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rax)
                	movups	0x10(%rsi), %xmm14
@@ -1339,87 +764,41 @@ Disassembly of section .text:
                	movups	%xmm14, 0x50(%rax)
                	movups	%xmm14, 0x60(%rax)
                	movups	%xmm14, 0x70(%rax)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpand	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x1c0(%rsp)
                	movq	(%rsp), %rax
                	movq	0x8(%rsp), %rcx
                	movq	0x10(%rsp), %rdx
                	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
-               	andq	%rdi, %rax
-               	andq	%r8, %rcx
-               	andq	%r9, %rdx
-               	andq	%r13, %rsi
-               	movq	%rax, 0x1c0(%rsp)
-               	movq	%rcx, 0x1c8(%rsp)
-               	movq	%rdx, 0x1d0(%rsp)
-               	movq	%rsi, 0x1d8(%rsp)
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
+               	vmovups	0x20(%rsp), %ymm0
                	xorq	$-0x1, %rax
+               	movq	%rax, 0x260(%rsp)
                	xorq	$-0x1, %rcx
+               	movq	%rcx, 0x268(%rsp)
                	xorq	$-0x1, %rdx
+               	movq	%rdx, 0x270(%rsp)
                	xorq	$-0x1, %rsi
-               	andq	%rax, %rdi
-               	andq	%r8, %rcx
-               	andq	%r9, %rdx
-               	andq	%r13, %rsi
-               	leaq	0x1c0(%rsp), %rax
-               	addq	$0x20, %rax
-               	movq	%rdi, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, 0x10(%rax)
-               	movq	%rsi, 0x18(%rax)
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
-               	orq	%rax, %rdi
-               	orq	%r8, %rcx
-               	orq	%r9, %rdx
-               	orq	%r13, %rsi
-               	leaq	0x1c0(%rsp), %rax
-               	addq	$0x40, %rax
-               	movq	%rdi, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, 0x10(%rax)
-               	movq	%rsi, 0x18(%rax)
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rcx
-               	movq	0x10(%rsp), %rdx
-               	movq	0x18(%rsp), %rsi
-               	movq	0x20(%rsp), %rdi
-               	movq	0x28(%rsp), %r8
-               	movq	0x30(%rsp), %r9
-               	movq	0x38(%rsp), %r13
-               	xorq	%rax, %rdi
-               	xorq	%r8, %rcx
-               	xorq	%r9, %rdx
-               	xorq	%r13, %rsi
-               	leaq	0x1c0(%rsp), %rax
-               	addq	$0x60, %rax
-               	movq	%rdi, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rdx, 0x10(%rax)
-               	movq	%rsi, 0x18(%rax)
+               	movq	%rsi, 0x278(%rsp)
+               	vmovups	0x260(%rsp), %ymm1
+               	vpand	%ymm0, %ymm1, %ymm0
+               	vmovups	%ymm0, 0x1e0(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpor	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x200(%rsp)
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpxor	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x220(%rsp)
                	xorl	%edx, %edx
                	leaq	-0x20(%rbp), %rsi
                	leaq	0x1c0(%rsp), %rax
                	movq	%rdx, %rcx
                	shlq	$0x5, %rcx
                	addq	%rax, %rcx
-               	leaq	0x260(%rsp), %rax
+               	leaq	0x240(%rsp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movups	0x10(%rcx), %xmm14
@@ -1502,6 +881,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
+               	vzeroupper
                	leave
                	retq
                	movl	$0x1, %ecx
@@ -1516,21 +896,17 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
-               	movq	(%rsp), %rax
-               	movq	0x8(%rsp), %rdx
-               	movq	0x10(%rsp), %rsi
-               	movq	0x18(%rsp), %rdi
-               	movq	0x20(%rsp), %r8
-               	movq	0x28(%rsp), %r9
-               	movq	0x30(%rsp), %rbx
-               	movq	0x38(%rsp), %r12
-               	andq	%r8, %rax
-               	andq	%r9, %rdx
-               	andq	%rbx, %rsi
-               	andq	%r12, %rdi
+               	vmovups	(%rsp), %ymm0
+               	vmovups	0x20(%rsp), %ymm1
+               	vpand	%ymm1, %ymm0, %ymm0
+               	vmovups	%ymm0, 0x260(%rsp)
+               	movq	0x260(%rsp), %rax
+               	movq	0x268(%rsp), %rdx
                	orq	%rdx, %rax
-               	orq	%rsi, %rax
-               	orq	%rdi, %rax
+               	movq	0x270(%rsp), %rdx
+               	orq	%rdx, %rax
+               	movq	0x278(%rsp), %rdx
+               	orq	%rdx, %rax
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1543,6 +919,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
+               	vzeroupper
                	leave
                	retq
                	movl	$0x1, %eax
@@ -1552,6 +929,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
+               	vzeroupper
                	leave
                	retq
                	movl	$0x1, %eax
@@ -1561,6 +939,7 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
+               	vzeroupper
                	leave
                	retq
 

@@ -1101,7 +1101,14 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.load_kind_uniform = false,
                     }
-                    if matches!(kind, LoadKind::F32 | LoadKind::F64 | LoadKind::V128) {
+                    if matches!(
+                        kind,
+                        LoadKind::F32
+                            | LoadKind::F64
+                            | LoadKind::V128
+                            | LoadKind::V256
+                            | LoadKind::V512
+                    ) {
                         a.fp_kind_access = true;
                         a.fp_load = true;
                         match a.fp_load_kind {
@@ -1129,7 +1136,7 @@ fn slot_accesses(
                             StoreKind::F32 => func.f32_values.get(*value as usize) == Some(&true),
                             _ => false,
                         };
-                    let is_fp = matches!(kind, StoreKind::V128)
+                    let is_fp = matches!(kind, StoreKind::V128 | StoreKind::V256 | StoreKind::V512)
                         || fp_constant
                         || super::reg_alloc::produces_fp_result(stored);
                     let Some(a) = out.get_mut(off) else { continue };
@@ -1139,7 +1146,14 @@ fn slot_accesses(
                         Some(k) if k == *kind => {}
                         Some(_) => a.store_kind_uniform = false,
                     }
-                    if matches!(kind, StoreKind::F32 | StoreKind::F64 | StoreKind::V128) {
+                    if matches!(
+                        kind,
+                        StoreKind::F32
+                            | StoreKind::F64
+                            | StoreKind::V128
+                            | StoreKind::V256
+                            | StoreKind::V512
+                    ) {
                         a.fp_kind_access = true;
                     }
                     if is_fp {
@@ -1150,6 +1164,8 @@ fn slot_accesses(
                         let k = match kind {
                             StoreKind::F32 => LoadKind::F32,
                             StoreKind::V128 => LoadKind::V128,
+                            StoreKind::V256 => LoadKind::V256,
+                            StoreKind::V512 => LoadKind::V512,
                             _ => LoadKind::F64,
                         };
                         match a.fp_store_kind {
@@ -1214,7 +1230,12 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
         LoadKind::I64 | LoadKind::F64 => Some(8),
-        LoadKind::F32 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        LoadKind::F32
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => None,
     }
 }
 
@@ -1224,7 +1245,12 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I16 => Some(2),
         StoreKind::I32 => Some(4),
         StoreKind::I64 | StoreKind::F64 => Some(8),
-        StoreKind::F32 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => None,
+        StoreKind::F32
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => None,
     }
 }
 
@@ -1251,7 +1277,9 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         | LoadKind::F64
         | LoadKind::F80
         | LoadKind::F128
-        | LoadKind::V128 => false,
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => false,
     }
 }
 
@@ -1292,7 +1320,9 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
         | LoadKind::F64
         | LoadKind::F80
         | LoadKind::F128
-        | LoadKind::V128 => {
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!("not a narrow load kind")
         }
     }

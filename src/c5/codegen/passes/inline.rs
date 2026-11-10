@@ -684,6 +684,8 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 16,
+        StoreKind::V256 => 32,
+        StoreKind::V512 => 64,
     }
 }
 
@@ -3650,7 +3652,9 @@ fn splice_param_ref(
         | LoadKind::F64
         | LoadKind::F80
         | LoadKind::F128
-        | LoadKind::V128 => {
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             return arg;
         }
     };

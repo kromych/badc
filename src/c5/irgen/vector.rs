@@ -61,7 +61,7 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// The lane of an 8- or 16-byte vector operation the target does in one
+    /// The lane of an 8-, 16- or 32-byte vector operation the target does in one
     /// instruction on whole vectors (`Inst::VecBinop`): two vector operands,
     /// no comparison, an element of 1, 2, 4 or 8 bytes or a `float` or
     /// `double`.
@@ -74,7 +74,11 @@ impl<'a> Walker<'a> {
         both_vectors: bool,
     ) -> Option<crate::c5::ir::VecLane> {
         use crate::c5::ir::VecLane;
-        if !matches!(size, 8 | 16) || !both_vectors || is_vector_compare_op(op) {
+        if !matches!(size, 8 | 16 | 32)
+            || !both_vectors
+            || is_vector_compare_op(op)
+            || self.no_fp_regs
+        {
             return None;
         }
         let lane = if is_floating_scalar(elem_ty) {
@@ -92,7 +96,8 @@ impl<'a> Walker<'a> {
                 _ => return None,
             }
         };
-        lane.binop_in_one_instruction(lane_op, self.target.is_x86_64(), size as u8)
+        let x86 = self.target.is_x86_64().then_some(self.x86);
+        lane.binop_in_one_instruction(lane_op, x86, size as u8)
             .then_some(lane)
     }
 
@@ -130,10 +135,10 @@ impl<'a> Walker<'a> {
             {
                 let lv = self.walk_copy_operand(b, lhs)?;
                 let rv = self.walk_copy_operand(b, rhs)?;
-                let (lk, sk) = if size == 16 {
-                    (LoadKind::V128, StoreKind::V128)
-                } else {
-                    (LoadKind::F64, StoreKind::F64)
+                let (lk, sk) = match size {
+                    32 => (LoadKind::V256, StoreKind::V256),
+                    16 => (LoadKind::V128, StoreKind::V128),
+                    _ => (LoadKind::F64, StoreKind::F64),
                 };
                 let a = b.load(lv, lk);
                 let c = b.load(rv, lk);

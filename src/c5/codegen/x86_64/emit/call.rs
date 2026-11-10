@@ -542,6 +542,15 @@ fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
         .sum::<usize>() as u8
 }
 
+/// `vzeroupper` ahead of a call or return out of a body holding 256- or
+/// 512-bit values ([`Frame::wide_regs`]); the call's arguments are in
+/// place and none is that wide.
+pub(super) fn clear_upper(code: &mut Vec<u8>, frame: Frame) {
+    if frame.wide_regs {
+        super::encode::emit_vzeroupper(code);
+    }
+}
+
 /// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass
 /// patches once the callee's native offset is known.
 fn emit_call_to(code: &mut Vec<u8>, fixups: &mut Vec<Fixup>, target_pc: usize) {
@@ -623,6 +632,7 @@ pub(super) fn emit_call(
     if let Some(n) = xmm_count {
         super::encode::emit_mov_al_imm8(code, n);
     }
+    clear_upper(code, frame);
     emit_call_to(code, fixups, target_pc);
     if ends_path {
         return Ok(());
@@ -707,6 +717,7 @@ pub(super) fn emit_call_ext(
             super::encode::emit_xor_eax_eax(code);
         }
     }
+    clear_upper(code, frame);
     let call_site = code.len();
     plt_call_fixups.push(PltCallFixup {
         instr_offset: call_site,
@@ -862,6 +873,7 @@ pub(super) fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
+        clear_upper(code, frame);
         emit_hardened_call_r(code, target_scratch, abi, extern_sites);
         if ends_path {
             return Ok(());
@@ -902,6 +914,7 @@ pub(super) fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
+        clear_upper(code, frame);
         emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
         if ends_path {
             return Ok(());
@@ -1245,6 +1258,7 @@ pub(super) fn emit_tail_call(
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, frame, alloc);
+    clear_upper(code, frame);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.

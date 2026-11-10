@@ -261,7 +261,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             0x6B | 0x80 | 0x83 | 0xC0 | 0xC1 | 0xC6 => (true, 1),
             0xB8..=0xBF => (false, if rex & 8 != 0 { 8 } else { wide }),
             0xC2 => (false, 2),
-            0x0F05 | 0x0F0B | 0x0F31 | 0x0FA2 | 0x0FC8..=0x0FCF => (false, 0),
+            0x0F05 | 0x0F0B | 0x0F31 | 0x0F77 | 0x0FA2 | 0x0FC8..=0x0FCF => (false, 0),
             0x3800..=0x38FF => (true, 0),
             0x3A00..=0x3AFF => (true, 1),
             0x0F80..=0x0F8F => (false, 4),
@@ -3105,6 +3105,32 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
         let insns = x64(MMX, name);
         m.expect(insns.len() == 2, || format!("x86-64 {name}: {insns:x?}"));
     }
+    m.finish();
+}
+
+/// GNU vector arithmetic on 32-byte vectors is one ymm instruction per
+/// operator on x86-64, whose x86-64-v3 baseline has AVX2, with the value in
+/// a ymm register: `*r = *a + *b` is gcc 16's two loads, `vpaddd`, the
+/// store, `vzeroupper` and `ret`, from 36 lane by lane; a sum over an array
+/// keeps its accumulator in a register across the loop, with no store
+/// before the one after it.
+#[test]
+fn ymm_vector_arithmetic_stays_in_registers() {
+    const SRC: &str = "typedef int v8i __attribute__((vector_size(32)));\n\
+void addi(v8i *r, const v8i *a, const v8i *b) { *r = *a + *b; }\n\
+v8i acc(const v8i *p, int n) { v8i s = {0}; for (int i = 0; i < n; i++) s = s + p[i]; return s; }\n";
+    let mut m = Misses::default();
+    let addi = x64(SRC, "addi");
+    m.expect(addi.len() == 6 && addi[..4].iter().all(|i| i.vex), || {
+        format!("x86-64 addi: {addi:x?}")
+    });
+    let acc = x64(SRC, "acc");
+    // A store is `vmovups m256, ymm` (0F 11) or a general mov to memory.
+    let stores = acc
+        .iter()
+        .filter(|i| i.op == 0x0F11 || (i.op == 0x89 && !i.reg_form()))
+        .count();
+    m.expect(stores <= 2, || format!("x86-64 acc: {acc:x?}"));
     m.finish();
 }
 

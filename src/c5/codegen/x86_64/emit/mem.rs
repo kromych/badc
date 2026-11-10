@@ -239,7 +239,13 @@ pub(super) fn emit_load_kind_mem(
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
         LoadKind::I8 => super::encode::emit_movsx_r_mem8(code, rd, base, disp),
         LoadKind::U8 => super::encode::emit_movzx_r_mem8(code, rd, base, disp),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     }
@@ -262,7 +268,13 @@ fn emit_store_kind_mem(
         StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, src),
         StoreKind::I16 => super::encode::emit_mov_mem16_r(code, base, disp, src),
         StoreKind::I8 => super::encode::emit_mov_mem8_r(code, base, disp, src),
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     }
@@ -299,6 +311,15 @@ fn emit_load_fp_mem(
         return fail(alloc::format!("{site}: dst not fp reg / spill"));
     };
     // `movups` carries no alignment requirement.
+    if matches!(kind, LoadKind::V256 | LoadKind::V512) {
+        let w = VecWidth::of_load(kind);
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        emit_wide_load(code, w, dd, base, disp);
+        mirror_wide_dst(code, w, dst, dd, frame);
+        return Ok(());
+    }
     if matches!(kind, LoadKind::V128) {
         if let Some(p) = seg {
             code.push(p);
@@ -371,6 +392,23 @@ fn emit_store_fp_mem(
     bound: Option<u32>,
     site: &str,
 ) -> Emit {
+    if matches!(kind, StoreKind::V256 | StoreKind::V512) {
+        let w = if kind == StoreKind::V512 {
+            VecWidth::V512
+        } else {
+            VecWidth::V256
+        };
+        let scratch = Reg(frame.fp_scratch[0]);
+        let Some(dn) = materialize_wide(code, w, value_place, scratch, frame) else {
+            return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
+        };
+        if let Some(p) = seg {
+            code.push(p);
+        }
+        emit_wide_store(code, w, base, disp, dn);
+        mirror_wide_dst(code, w, dst, dn, frame);
+        return Ok(());
+    }
     if matches!(kind, StoreKind::V128) {
         let Some(dn) = materialize_v128(code, value_place, Reg(frame.fp_scratch[0]), frame) else {
             return fail(alloc::format!("{site}: value not fp reg / spill / int reg"));
@@ -511,7 +549,13 @@ pub(super) fn emit_load_local(
 pub(super) fn is_fp_load(kind: LoadKind) -> bool {
     matches!(
         kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        LoadKind::F32
+            | LoadKind::F64
+            | LoadKind::F80
+            | LoadKind::F128
+            | LoadKind::V128
+            | LoadKind::V256
+            | LoadKind::V512
     )
 }
 
@@ -519,7 +563,13 @@ pub(super) fn is_fp_load(kind: LoadKind) -> bool {
 pub(super) fn is_fp_store(kind: StoreKind) -> bool {
     matches!(
         kind,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128
+        StoreKind::F32
+            | StoreKind::F64
+            | StoreKind::F80
+            | StoreKind::F128
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512
     )
 }
 
@@ -615,7 +665,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     };
@@ -641,7 +697,13 @@ pub(super) fn emit_load_indexed(
         LoadKind::U16 => super::encode::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
         LoadKind::I8 => super::encode::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
         LoadKind::U8 => super::encode::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => {
             unreachable!()
         }
     }
@@ -673,7 +735,13 @@ pub(super) fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => {
             unreachable!()
         }
     };
@@ -737,7 +805,9 @@ pub(super) fn emit_store_indexed(
             | StoreKind::F64
             | StoreKind::F80
             | StoreKind::F128
-            | StoreKind::V128 => unreachable!(),
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512 => unreachable!(),
         },
         None => match kind {
             StoreKind::I64 => super::encode::emit_mov_sib_r(code, rbase, rindex, scale, rv),
@@ -748,7 +818,9 @@ pub(super) fn emit_store_indexed(
             | StoreKind::F64
             | StoreKind::F80
             | StoreKind::F128
-            | StoreKind::V128 => unreachable!(),
+            | StoreKind::V128
+            | StoreKind::V256
+            | StoreKind::V512 => unreachable!(),
         },
     }
     // c5 store-op leaves the value in the accumulator.
@@ -835,7 +907,7 @@ fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
-        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => {
+        StoreKind::F80 | StoreKind::F128 | StoreKind::V128 | StoreKind::V256 | StoreKind::V512 => {
             return fail("immediate store: no immediate form at this width");
         }
     };
@@ -1530,9 +1602,13 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            (0, false)
-        }
+        LoadKind::F32
+        | LoadKind::F64
+        | LoadKind::F80
+        | LoadKind::F128
+        | LoadKind::V128
+        | LoadKind::V256
+        | LoadKind::V512 => (0, false),
     }
 }
 
@@ -1543,7 +1619,13 @@ fn int_store_width(kind: StoreKind) -> u32 {
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 | StoreKind::V128 => 0,
+        StoreKind::F32
+        | StoreKind::F64
+        | StoreKind::F80
+        | StoreKind::F128
+        | StoreKind::V128
+        | StoreKind::V256
+        | StoreKind::V512 => 0,
     }
 }
 

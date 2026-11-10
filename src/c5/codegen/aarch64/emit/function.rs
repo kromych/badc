@@ -770,7 +770,8 @@ impl FunctionEmitter<'_, '_> {
             param_plan,
             ..
         } = self.fcx;
-        let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+            Vec::new();
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
         for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
@@ -792,7 +793,11 @@ impl FunctionEmitter<'_, '_> {
             let Some((true, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
-            fp_moves.push((Place::FpReg(src), dst, *kind == LoadKind::V128));
+            fp_moves.push((
+                Place::FpReg(src),
+                dst,
+                crate::c5::codegen::ssa::reg_alloc::VecWidth::of_load(*kind),
+            ));
             fp_vids.push(vid);
             fp_homes.push(dst);
         }
@@ -2327,7 +2332,8 @@ fn emit_parts_return(
 ) -> Emit {
     let regs = super::ssa::reg_alloc::agg_part_regs(fp_mask, parts.len(), (&[0, 1], &[0, 1, 2, 3]));
     let mut int_moves: Vec<PlaceMove> = Vec::new();
-    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, crate::c5::codegen::ssa::reg_alloc::VecWidth)> =
+        Vec::new();
     let mut cross: Vec<(u8, Reg)> = Vec::new();
     for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
         let src = place_of(alloc, p);
@@ -2336,7 +2342,7 @@ fn emit_parts_return(
                 int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
             }
             (true, Place::FpReg(_) | Place::Spill(_)) => {
-                fp_moves.push((src, Place::FpReg(r), alloc.is_wide(p)))
+                fp_moves.push((src, Place::FpReg(r), alloc.width(p)))
             }
             (true, Place::IntReg(s)) => cross.push((r, Reg(s))),
             _ => return fail("AggParts: part not in a register or spill slot of its bank"),

@@ -485,6 +485,9 @@ pub struct Program {
     pub structs: Vec<crate::c5::compiler::StructDef>,
     /// The file-scope typedef names and the layouts of the types they name.
     pub typedefs: Vec<TypedefLayout>,
+    /// Each file-scope function declaration and its type as a pointer to
+    /// it, spelled in C; recorded under `CompileOptions::prototypes`.
+    pub prototypes: Vec<(String, String)>,
     /// Captured enum definitions. Sourced from
     /// `Compiler::enums` at `compile()`; the DWARF emitter walks
     /// this to produce DW_TAG_enumeration_type + DW_TAG_enumerator
@@ -840,6 +843,7 @@ impl DataOffsets for Program {
             variables: _, // frame-relative slots
             structs: _,
             typedefs: _,
+            prototypes: _,
             enums: _,
             entry_name: _,
             entry_pragma: _,
@@ -988,6 +992,7 @@ mod data_offset_tests {
             variables: Vec::new(),
             structs: Vec::new(),
             typedefs: Vec::new(),
+            prototypes: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,

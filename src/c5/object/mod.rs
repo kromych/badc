@@ -854,6 +854,7 @@ pub(crate) mod test_support {
             variables: Vec::new(),
             structs: Vec::new(),
             typedefs: Vec::new(),
+            prototypes: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,

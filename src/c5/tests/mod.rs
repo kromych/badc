@@ -75,6 +75,7 @@ mod patchable_entry;
 mod perf_codegen;
 mod pointer_tracking;
 mod programs;
+mod prototypes;
 mod record_layouts;
 mod redeclaration;
 #[cfg(feature = "full")]

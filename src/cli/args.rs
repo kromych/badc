@@ -103,6 +103,8 @@ pub(crate) struct FrontEnd {
     pub(crate) gnu89_inline: Option<bool>,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
+    /// `--dump-prototypes`: record each unit's function declarations.
+    pub(crate) prototypes: bool,
     pub(crate) char_signed: Option<bool>,
     /// `-fwrapv` / `-fno-strict-overflow` against `-fno-wrapv` /
     /// `-fstrict-overflow`, the last one given winning.
@@ -403,6 +405,9 @@ pub(crate) struct Cli {
     /// `--dump-records`: each unit through the front end, its tagged
     /// structures' and unions' layouts printed.
     pub(crate) dump_records: bool,
+    /// `--dump-prototypes`: each unit through the front end, its function
+    /// declarations' types printed.
+    pub(crate) dump_prototypes: bool,
     /// `--freestanding`: no embedded startup runtime, and the program's
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
@@ -650,6 +655,7 @@ struct Parser {
     compile_only: bool,
     syntax_only: bool,
     dump_records: bool,
+    dump_prototypes: bool,
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
@@ -1214,6 +1220,10 @@ impl Parser {
             "-c" | "--compile-only" => self.compile_only = true,
             "-fsyntax-only" => self.syntax_only = true,
             "--dump-records" => self.dump_records = true,
+            "--dump-prototypes" => {
+                self.dump_prototypes = true;
+                self.front.prototypes = true;
+            }
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             "--verify-ssa" => self.codegen.verify_ssa = true,
@@ -2490,6 +2500,7 @@ impl Parser {
             compile_only: self.compile_only,
             syntax_only: self.syntax_only,
             dump_records: self.dump_records,
+            dump_prototypes: self.dump_prototypes,
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,
@@ -2912,6 +2923,7 @@ impl FrontEnd {
             .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
+            .with_prototypes(self.prototypes)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
             .with_fp_contract(self.fp_contract)

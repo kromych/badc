@@ -152,6 +152,35 @@ pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     }
 }
 
+/// `--dump-prototypes`: each C source through the front end, then one
+/// `<name>\t<type>` line per function it declares with a prototype, the
+/// type that of a pointer to the function.
+pub(crate) fn dump_prototypes(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic("badc: error: --dump-prototypes requires at least one source input");
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    let dumps = compile_units(sources, workers, |_, src| {
+        let mut log = TuLog::default();
+        let res = translate_tu(src, None, &cfg, &mut log).map(|p| {
+            (p.prototypes.iter())
+                .map(|(name, ty)| format!("{name}\t{ty}\n"))
+                .collect::<String>()
+        });
+        (log, res)
+    });
+    for dump in dumps {
+        outln!("{dump}");
+    }
+}
+
 fn record_layouts(program: &badc::Program) -> String {
     use core::fmt::Write;
     let mut out = String::new();

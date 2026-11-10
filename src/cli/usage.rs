@@ -85,6 +85,8 @@ Output mode -- pick at most one (defaults to a native binary):
   -fsyntax-only            Check each unit through the front end (an
                            assembler unit through the assembler) and
                            write nothing; -E takes precedence.
+  --dump-prototypes        Print each function a unit declares with its
+                           type as a pointer to it, spelled in C.
   --dump-records           Print the size, alignment and member offsets
                            of each structure and union a unit defines
                            with a tag or a typedef name, as laid out

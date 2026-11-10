@@ -638,6 +638,9 @@ pub struct CompileOptions {
     /// requirement -- the linker picks the entry once it
     /// merges every TU).
     pub no_entry_point: bool,
+    /// Record each file-scope function declaration's type in
+    /// `Program::prototypes`.
+    pub prototypes: bool,
     /// When true, every non-static function defined in this unit is
     /// exported in addition to any named by `#pragma export`. Set for
     /// `--shared` builds so a runtime `dlopen` consumer can `dlsym` the
@@ -1109,6 +1112,11 @@ impl CompileOptions {
     /// link-time decision.
     pub fn with_no_entry_point(mut self, on: bool) -> Self {
         self.no_entry_point = on;
+        self
+    }
+    /// See [`Self::prototypes`].
+    pub fn with_prototypes(mut self, on: bool) -> Self {
+        self.prototypes = on;
         self
     }
     /// See [`Self::link_defined_fns`].
@@ -2583,6 +2591,8 @@ pub struct Compiler {
     /// returns a `Program` with `entry_pc = 0` /
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
+    /// Mirror of [`CompileOptions::prototypes`].
+    prototypes: bool,
 
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
@@ -3374,6 +3384,7 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            prototypes: opts.prototypes,
             msvc: opts.msvc && target.is_windows(),
             data_align: 8,
             image_align_error: None,
@@ -3552,6 +3563,69 @@ impl Compiler {
                 record: record.filter(|_| s.array_size == 0),
                 signed: integer.then(|| !types::is_unsigned_ty(ty) && !types::is_bool_ty(ty)),
             });
+        }
+        out
+    }
+
+    /// Each file-scope function declaration with a prototype, and its type
+    /// as a pointer to it, spelled in C. A record or enum whose tag is the
+    /// implementation's own (a leading underscore) or absent is spelled by
+    /// the typedef name that reaches it, and a `va_list` parameter by that
+    /// name.
+    fn function_prototypes(&self) -> Vec<(String, String)> {
+        // A copy of the registry whose entries to rename carry a placeholder
+        // tag, replaced in the spelling by the typedef name.
+        let mut structs = self.structs.clone();
+        let mut names: Vec<(String, &str)> = Vec::new();
+        let rename = |structs: &mut Vec<StructDef>, id: usize| -> Option<String> {
+            let d = &mut structs[id];
+            let implementation = d.name.is_empty() || d.is_anonymous || d.name.starts_with('_');
+            if d.name.starts_with("__badc_typedef_") || !implementation {
+                return None;
+            }
+            let kind = match (d.enum_underlying.is_some(), d.is_union) {
+                (true, _) => "enum",
+                (false, true) => "union",
+                (false, false) => "struct",
+            };
+            d.name = alloc::format!("__badc_typedef_{id}");
+            Some(alloc::format!("{kind} {}", d.name))
+        };
+        for s in self
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Typedef as i64)
+        {
+            let ty = s.type_;
+            let id = match types::enum_id_of(ty) {
+                Some(id) => id,
+                None if types::is_struct_ty(ty) => types::struct_id_of(ty),
+                None => continue,
+            };
+            let bare = s.array_size == 0
+                && if types::enum_id_of(ty).is_some() {
+                    types::ptr_depth_of(ty) == 0
+                } else {
+                    types::struct_ptr_depth(ty) == 0
+                };
+            if bare && let Some(spelled) = rename(&mut structs, id) {
+                names.push((spelled, s.name.as_str()));
+            }
+        }
+        let functions = (self.symbols.iter()).filter(|s| {
+            (s.class == Token::Fun as i64 || s.class == Token::Sys as i64)
+                && s.fn_type.params.prototyped
+                && !s.name.is_empty()
+        });
+        let mut out = Vec::new();
+        for s in functions {
+            let mut text =
+                types::fn_type_spelling(types::add_ptr_level(s.type_), &s.fn_type, 1, &structs);
+            for (spelled, name) in &names {
+                text = replace_word(&text, spelled, name);
+            }
+            text = replace_word(&text, "struct __builtin_va_list*", "va_list");
+            out.push((s.name.clone(), text));
         }
         out
     }
@@ -4007,6 +4081,11 @@ impl Compiler {
         let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
         let typedefs = self.typedef_layouts();
+        let prototypes = if self.prototypes {
+            self.function_prototypes()
+        } else {
+            Vec::new()
+        };
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -4082,6 +4161,7 @@ impl Compiler {
             // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
             typedefs,
+            prototypes,
             structs: self.structs,
             enums: self.enums,
             // Resolved entry name. Includes the value from a
@@ -4149,4 +4229,19 @@ impl crate::c5::layout::DataRemap for RelocatedGlobals {
     fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
         Some((self.shift(lo), self.shift(lo) + (hi - lo)))
     }
+}
+
+/// `text` with each occurrence of `word` that no identifier character
+/// continues replaced by `with`.
+fn replace_word(text: &str, word: &str, with: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find(word) {
+        let end = i + word.len();
+        let bounded = !rest[end..].starts_with(|c: char| c == '_' || c.is_ascii_alphanumeric());
+        out += &rest[..i];
+        out += if bounded { with } else { word };
+        rest = &rest[end..];
+    }
+    out + rest
 }

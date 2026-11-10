@@ -680,6 +680,45 @@ fn syntax_only_checks_units_and_writes_nothing() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("int main(void)"));
 }
 
+/// `--dump-prototypes` prints each function a unit declares with a
+/// prototype, its type as a pointer to it: a record or enum with an
+/// implementation tag (a leading underscore) or none is spelled by the
+/// typedef name that reaches it, a public tag as written.
+#[test]
+fn dump_prototypes_spells_the_declared_types() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-dump-prototypes");
+    let unit = dir.join("protos.c");
+    std::fs::write(
+        &unit,
+        "typedef struct _impl Impl;\ntypedef enum { A, B } Mode;\nstruct stat;\n\
+         Impl *open_it(const char *path, Mode m, struct stat *st, ...);\n\
+         void (*handler(int sig, void (*fn)(int)))(int);\nint no_prototype();\n",
+    )
+    .expect("write unit");
+    let out = Command::new(badc)
+        .args(["--dump-prototypes", "--target=linux-x64"])
+        .arg(&unit)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
+    assert!(
+        lines.contains(&"open_it\tImpl* (*)(const char*, Mode, struct stat*, ...)"),
+        "{text}"
+    );
+    assert!(lines.iter().any(|l| l.starts_with("handler\t")), "{text}");
+    assert!(
+        !lines.iter().any(|l| l.starts_with("no_prototype\t")),
+        "{text}"
+    );
+}
+
 /// `--dump-records` prints each complete tagged record a unit defines, as
 /// laid out for `--target`: `struct|union <tag> <size> <align>`, then each
 /// member's offset, a bit-field's as storage unit, bit offset, and width.

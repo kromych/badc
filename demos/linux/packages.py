@@ -2709,13 +2709,15 @@ def run_guest_script(args, vm: Target, failures: list[str]) -> dict:
 TCG_DEVICE_TIMEOUT = 600
 
 
-def tcg_device_timeout_command(distro: str, release: str) -> str:
+def tcg_device_timeout_command(distro: str, index: int | None) -> str:
     """The root command that gives the badc kernel's boot entry
-    TCG_DEVICE_TIMEOUT: grubby on Fedora's BLS entry, a grub drop-in and
-    update-grub on Debian."""
+    TCG_DEVICE_TIMEOUT: grubby on Fedora's BLS entry at `index`, a grub
+    drop-in and update-grub on Debian. grubby is given the index because
+    the path it matches carries its boot prefix: a cloud image with /boot
+    on the root filesystem names the kernel /boot/boot/vmlinuz-<release>."""
     arg = f"systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"
     if distro == "fedora":
-        return f"grubby --update-kernel=/boot/vmlinuz-{release} --args={arg}"
+        return f"grubby --update-kernel={index} --args={arg}"
     line = f'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT {arg}"'
     script = (f"mkdir -p /etc/default/grub.d && printf '%s\\n' {shlex.quote(line)} "
               f"> /etc/default/grub.d/99-badc-tcg.cfg && update-grub")
@@ -2820,16 +2822,23 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
                             f"{result['install_tail'][-300:]}")
             return result
 
+        index = None
+        if arch["distro"] == "fedora":
+            entries = grubby_entries(vm.ssh("grubby --info=ALL", sudo=True).stdout)
+            index = grubby_index(entries, args.release)
+            if index is None:
+                failures.append(f"no boot entry loads vmlinuz-{args.release} "
+                                f"after the install ({len(entries)} entries)")
+                return result
         if accel == "tcg":
-            vm.ssh(tcg_device_timeout_command(arch["distro"], args.release),
+            vm.ssh(tcg_device_timeout_command(arch["distro"], index),
                    sudo=True, check=True)
             result["device_timeout"] = TCG_DEVICE_TIMEOUT
         # Make the new kernel the default entry. Debian's update-grub sorts
         # by version, which is asserted rather than assumed; Fedora's BLS
         # default is set explicitly.
         if arch["distro"] == "fedora":
-            r = vm.ssh(f"grubby --set-default /boot/vmlinuz-{args.release}",
-                       sudo=True)
+            r = vm.ssh(f"grubby --set-default-index={index}", sudo=True)
             # Without grubby the BLS default is the highest version, which
             # the post-reboot uname assertion checks either way.
             result["boot_select"] = ("grubby --set-default" if r.returncode == 0
@@ -3766,10 +3775,14 @@ def _self_test() -> int:
                         "Entering emergency mode.\r\n")[0] == "panic"
 
     _self_test_wait()
-    fedora = tcg_device_timeout_command("fedora", "7.2.9")
-    assert fedora == ("grubby --update-kernel=/boot/vmlinuz-7.2.9 "
+    fedora = tcg_device_timeout_command("fedora", 1)
+    assert fedora == ("grubby --update-kernel=1 "
                       f"--args=systemd.default_device_timeout_sec={TCG_DEVICE_TIMEOUT}"), fedora
-    debian = shlex.split(tcg_device_timeout_command("ubuntu", "7.2.9"))
+    # Fedora 44's cloud image keeps /boot on the root filesystem.
+    rooted = grubby_entries('index=0\nkernel="/boot/boot/vmlinuz-6.19.10-300.fc44.x86_64"\n'
+                            'index=1\nkernel="/boot/boot/vmlinuz-7.2.9"\n')
+    assert grubby_index(rooted, "7.2.9") == 1
+    debian = shlex.split(tcg_device_timeout_command("ubuntu", None))
     assert debian[:2] == ["sh", "-c"], debian
     assert debian[2].endswith("/etc/default/grub.d/99-badc-tcg.cfg && update-grub"), debian
     assert f"device_timeout_sec={TCG_DEVICE_TIMEOUT}" in debian[2], debian

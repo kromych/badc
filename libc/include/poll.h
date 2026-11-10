@@ -22,11 +22,16 @@ typedef unsigned long nfds_t;
 #define POLLHUP 0x010
 #define POLLNVAL 0x020
 
-// XSI normal/priority-band events; the values match macOS and Linux.
+// XSI normal/priority-band events. The SDK's POLLWRNORM is POLLOUT.
 #define POLLRDNORM 0x040
 #define POLLRDBAND 0x080
+#ifdef __APPLE__
+#define POLLWRNORM POLLOUT
+#define POLLWRBAND 0x100
+#else
 #define POLLWRNORM 0x100
 #define POLLWRBAND 0x200
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

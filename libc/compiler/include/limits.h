@@ -63,10 +63,18 @@
 #define LLONG_MAX    9223372036854775807
 #define ULLONG_MAX  18446744073709551615
 
+#ifdef __APPLE__
+#define PATH_MAX    1024
+#else
 #define PATH_MAX    4096
+#endif
 #define NAME_MAX    255
 #define IOV_MAX     1024
+#ifdef __linux__
+#define HOST_NAME_MAX 64
+#else
 #define HOST_NAME_MAX 255
+#endif
 #define LOGIN_NAME_MAX 256
 
 // Legacy BSD open-files bound; macOS <sys/syslimits.h> still defines it

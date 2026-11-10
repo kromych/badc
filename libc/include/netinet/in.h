@@ -39,7 +39,11 @@
 #define IPPROTO_UDPLITE  136
 #define IPPROTO_MPLS     137
 #define IPPROTO_RAW      255
+#ifdef __APPLE__
+#define IPPROTO_MAX      256
+#else
 #define IPPROTO_MAX      263
+#endif
 #ifdef __linux__
 #define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
 #endif

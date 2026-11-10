@@ -13,7 +13,11 @@ struct rlimit {
     rlim_t rlim_max;
 };
 
+#ifdef __APPLE__
+#define RLIM_INFINITY (((unsigned long long)1 << 63) - 1)
+#else
 #define RLIM_INFINITY (~0ULL)
+#endif
 
 // Limit identifiers. The numbering past STACK/CORE diverges between
 // macOS and Linux because the value reaches the host libc.

@@ -100,7 +100,12 @@
 #define IPPROTO_TCP 6
 #define IPPROTO_UDP 17
 #define INADDR_ANY  0
+// listen()'s backlog bound: the kernel's 4096 since Linux 5.4.
+#ifdef __linux__
+#define SOMAXCONN   4096
+#else
 #define SOMAXCONN   128
+#endif
 
 // Protocol families. POSIX PF_* mirror the AF_* address families; every
 // current target defines them with equal values.

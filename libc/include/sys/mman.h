@@ -32,8 +32,12 @@
 #define MAP_FAILED    ((void*)-1)
 
 #define MS_ASYNC      1
-#define MS_SYNC       4
 #define MS_INVALIDATE 2
+#ifdef __APPLE__
+#define MS_SYNC       0x10
+#else
+#define MS_SYNC       4
+#endif
 
 // mlockall() flags. MCL_CURRENT / MCL_FUTURE share values across the POSIX
 // targets; MCL_ONFAULT is Linux-only.

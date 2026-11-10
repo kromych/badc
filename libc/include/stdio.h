@@ -40,6 +40,23 @@
 #define _IOFBF 0
 #endif
 
+// The C library's limits: tmpnam and ctermid write up to L_tmpnam and
+// L_ctermid bytes into the caller's buffer.
+#if defined(__APPLE__)
+#define FILENAME_MAX 1024
+#define FOPEN_MAX    20
+#define TMP_MAX      308915776
+#define BUFSIZ       1024
+#define L_tmpnam     1024
+#define L_ctermid    1024
+#elif defined(__linux__)
+#define FILENAME_MAX 4096
+#define FOPEN_MAX    16
+#define TMP_MAX      238328
+#define BUFSIZ       8192
+#define L_tmpnam     20
+#define L_ctermid    9
+#else
 #ifndef FILENAME_MAX
 #define FILENAME_MAX 4096
 #endif
@@ -55,13 +72,16 @@
 #ifndef L_tmpnam
 #define L_tmpnam     20
 #endif
-// Buffer size for ctermid() (POSIX). macOS uses 1024; Linux uses 9, but
-// the larger value is safe everywhere since ctermid writes a short path.
 #ifndef L_ctermid
 #define L_ctermid    1024
 #endif
+#endif
 #ifndef PATH_MAX
+#ifdef __APPLE__
+#define PATH_MAX     1024
+#else
 #define PATH_MAX     4096
+#endif
 #endif
 
 // `FILE` and `fpos_t` (C17 7.21.1) in the C library's size and alignment:

@@ -580,15 +580,22 @@
 #define M_E  2.71828182845904523536
 #endif
 
-// C99 7.12.3.1: floating-point category codes returned by fpclassify.
-// The values are an implementation choice; user code compares against
-// the names.
+// C99 7.12.3.1: floating-point category codes returned by fpclassify, the C
+// library's values, which code built against its headers exchanges.
 #ifndef FP_NAN
+#ifdef __APPLE__
+#define FP_NAN 1
+#define FP_INFINITE 2
+#define FP_ZERO 3
+#define FP_NORMAL 4
+#define FP_SUBNORMAL 5
+#else
 #define FP_NAN 0
 #define FP_INFINITE 1
 #define FP_ZERO 2
 #define FP_SUBNORMAL 3
 #define FP_NORMAL 4
+#endif
 #endif
 
 // C99 7.12.3: the classification macros take any real floating type and

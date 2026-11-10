@@ -5,23 +5,21 @@
 #include <limits.h>
 #include <sys/types.h>
 
-// Filesystem and identity limits. The values match the supported hosts
-// (macOS / Linux agree on these); programs use them to size stack
-// buffers for paths, hostnames, and login names.
-#ifndef MAXPATHLEN
-#define MAXPATHLEN 1024
-#endif
-#ifndef MAXHOSTNAMELEN
+// Filesystem and identity limits, the C library's: programs size buffers
+// for paths and host names with them.
+#ifdef __linux__
+#define MAXPATHLEN     4096
+#define MAXHOSTNAMELEN 64
+#define MAXSYMLINKS    20
+#define NGROUPS        65536
+#else
+#define MAXPATHLEN     1024
 #define MAXHOSTNAMELEN 256
+#define MAXSYMLINKS    32
+#define NGROUPS        16
 #endif
 #ifndef MAXLOGNAME
 #define MAXLOGNAME 255
-#endif
-#ifndef MAXSYMLINKS
-#define MAXSYMLINKS 32
-#endif
-#ifndef NGROUPS
-#define NGROUPS 16
 #endif
 #ifndef NOFILE
 #define NOFILE 256

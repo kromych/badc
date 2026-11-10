@@ -361,9 +361,14 @@ int fchflags(int fd, unsigned int flags);
 #define S_IWRITE S_IWUSR
 #define S_IEXEC  S_IXUSR
 
-// utimensat(2) special nanosecond values (C11 / POSIX.1-2008).
+// utimensat(2) special nanosecond values (POSIX.1-2008), the C library's.
+#ifdef __APPLE__
+#define UTIME_NOW  -1
+#define UTIME_OMIT -2
+#else
 #define UTIME_NOW  ((1L << 30) - 1L)
 #define UTIME_OMIT ((1L << 30) - 2L)
+#endif
 
 // statfs / statvfs -- filesystem-level metadata. The real layout
 // differs across platforms; this opaque buffer is wide enough for

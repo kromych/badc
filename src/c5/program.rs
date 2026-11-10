@@ -192,6 +192,16 @@ pub struct AutoInclude {
     pub bound: bool,
 }
 
+/// A file-scope typedef name, the size and alignment of the type it names,
+/// and the index in `Program::structs` of the record it names, if any.
+#[derive(Debug, Clone)]
+pub struct TypedefLayout {
+    pub name: String,
+    pub size: usize,
+    pub align: usize,
+    pub record: Option<usize>,
+}
+
 /// Compiled program ready for the VM.
 ///
 /// `data` is the static data segment (string literals plus zero-
@@ -471,6 +481,8 @@ pub struct Program {
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
+    /// The file-scope typedef names and the layouts of the types they name.
+    pub typedefs: Vec<TypedefLayout>,
     /// Captured enum definitions. Sourced from
     /// `Compiler::enums` at `compile()`; the DWARF emitter walks
     /// this to produce DW_TAG_enumeration_type + DW_TAG_enumerator
@@ -825,6 +837,7 @@ impl DataOffsets for Program {
             source_path: _,
             variables: _, // frame-relative slots
             structs: _,
+            typedefs: _,
             enums: _,
             entry_name: _,
             entry_pragma: _,
@@ -972,6 +985,7 @@ mod data_offset_tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            typedefs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,

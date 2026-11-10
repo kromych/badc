@@ -534,6 +534,7 @@ fn synth_program(
         source_path: String::new(),
         variables: Vec::new(),
         structs: Vec::new(),
+        typedefs: Vec::new(),
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
         entry_pragma: None,

@@ -1,11 +1,130 @@
 # Reference record layouts for linux-x64, written by scripts/measure_record_layouts.py.
 # `<header> y|p` (p: the unit includes the base headers first), then
-# `struct|union <tag> <size> <align>` and per member
+# `struct|union <tag>|typedef <name> <size> <align>` and per member
 # `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`.
+
+x86intrin.h y
+typedef size_t 8 8
+typedef ptrdiff_t 8 8
+typedef wchar_t 4 4
+typedef max_align_t 32 16
+  __max_align_ll 0
+  __max_align_ld 16
+typedef div_t 8 4
+  quot 0
+  rem 4
+typedef ldiv_t 16 8
+  quot 0
+  rem 8
+typedef lldiv_t 16 8
+  quot 0
+  rem 8
+
+stdint.h y
+typedef int8_t 1 1
+typedef int16_t 2 2
+typedef int32_t 4 4
+typedef int64_t 8 8
+typedef intptr_t 8 8
+typedef intmax_t 8 8
+typedef uint8_t 1 1
+typedef uint16_t 2 2
+typedef uint32_t 4 4
+typedef uint64_t 8 8
+typedef uintptr_t 8 8
+typedef uintmax_t 8 8
+typedef int_least8_t 1 1
+typedef int_least16_t 2 2
+typedef int_least32_t 4 4
+typedef int_least64_t 8 8
+typedef uint_least8_t 1 1
+typedef uint_least16_t 2 2
+typedef uint_least32_t 4 4
+typedef uint_least64_t 8 8
+typedef int_fast8_t 1 1
+typedef int_fast16_t 8 8
+typedef int_fast32_t 8 8
+typedef int_fast64_t 8 8
+typedef uint_fast8_t 1 1
+typedef uint_fast16_t 8 8
+typedef uint_fast32_t 8 8
+typedef uint_fast64_t 8 8
+
+inttypes.h y
+typedef imaxdiv_t 16 8
+  quot 0
+  rem 8
+
+setjmp.h y
+struct __jmp_buf_tag 200 8
+  __jmpbuf 0
+  __mask_was_saved 64
+  __saved_mask 72
+typedef jmp_buf 200 8
+typedef sigjmp_buf 200 8
+
+string.h y
+typedef locale_t 8 8
 
 sched.h y
 struct sched_param 4 4
   sched_priority 0
+typedef cpu_set_t 128 8
+  __bits 0
+
+spawn.h y
+typedef sigset_t 128 8
+  __val 0
+typedef posix_spawnattr_t 336 8
+typedef posix_spawn_file_actions_t 80 8
+
+stdio.h y
+typedef fpos_t 16 8
+typedef FILE 216 8
+
+stdarg.h y
+typedef va_list 24 8
+
+stdatomic.h y
+typedef memory_order 4 4
+typedef atomic_bool 1 1
+typedef atomic_char 1 1
+typedef atomic_schar 1 1
+typedef atomic_uchar 1 1
+typedef atomic_short 2 2
+typedef atomic_ushort 2 2
+typedef atomic_int 4 4
+typedef atomic_uint 4 4
+typedef atomic_long 8 8
+typedef atomic_ulong 8 8
+typedef atomic_llong 8 8
+typedef atomic_ullong 8 8
+typedef atomic_char16_t 2 2
+typedef atomic_char32_t 4 4
+typedef atomic_wchar_t 4 4
+typedef atomic_int_least8_t 1 1
+typedef atomic_uint_least8_t 1 1
+typedef atomic_int_least16_t 2 2
+typedef atomic_uint_least16_t 2 2
+typedef atomic_int_least32_t 4 4
+typedef atomic_uint_least32_t 4 4
+typedef atomic_int_least64_t 8 8
+typedef atomic_uint_least64_t 8 8
+typedef atomic_int_fast8_t 1 1
+typedef atomic_uint_fast8_t 1 1
+typedef atomic_int_fast16_t 8 8
+typedef atomic_uint_fast16_t 8 8
+typedef atomic_int_fast32_t 8 8
+typedef atomic_uint_fast32_t 8 8
+typedef atomic_int_fast64_t 8 8
+typedef atomic_uint_fast64_t 8 8
+typedef atomic_intptr_t 8 8
+typedef atomic_uintptr_t 8 8
+typedef atomic_size_t 8 8
+typedef atomic_ptrdiff_t 8 8
+typedef atomic_intmax_t 8 8
+typedef atomic_uintmax_t 8 8
+typedef atomic_flag 1 1
 
 locale.h y
 struct lconv 96 8
@@ -28,8 +147,8 @@ struct lconv 96 8
   p_sign_posn 86
   n_sign_posn 87
   int_p_cs_precedes 88
-  int_n_cs_precedes 90
   int_p_sep_by_space 89
+  int_n_cs_precedes 90
   int_n_sep_by_space 91
   int_p_sign_posn 92
   int_n_sign_posn 93
@@ -50,6 +169,25 @@ struct sigevent 64 8
   sigev_notify 12
   sigev_notify_function 16
   sigev_notify_attributes 24
+typedef sig_atomic_t 4 4
+typedef sig_t 8 8
+typedef sighandler_t 8 8
+typedef siginfo_t 128 8
+  si_signo 0
+  si_errno 4
+  si_code 8
+  __pad0 12
+  si_pid 16
+  si_uid 20
+  si_status 24
+  si_band 16
+  si_fd 24
+  si_addr 16
+  si_value 24
+typedef stack_t 24 8
+  ss_sp 0
+  ss_flags 8
+  ss_size 16
 
 time.h y
 struct timespec 16 8
@@ -70,6 +208,17 @@ struct tm 56 8
 struct itimerspec 32 8
   it_interval 0
   it_value 16
+typedef time_t 8 8
+typedef clock_t 8 8
+typedef clockid_t 4 4
+typedef timer_t 8 8
+
+uchar.h y
+typedef mbstate_t 8 4
+  __count 0
+  __value 4
+typedef char16_t 2 2
+typedef char32_t 4 4
 
 utime.h y
 struct utimbuf 16 8
@@ -92,6 +241,7 @@ struct sockaddr 16 2
   sa_data 2
 struct sockaddr_storage 128 8
   ss_family 0
+  __ss_padding 2
   __ss_align 120
 struct iovec 16 8
   iov_base 0
@@ -135,6 +285,41 @@ struct hostent 32 8
   h_addrtype 16
   h_length 20
   h_addr_list 24
+typedef ssize_t 8 8
+typedef off_t 8 8
+typedef off64_t 8 8
+typedef loff_t 8 8
+typedef pid_t 4 4
+typedef uid_t 4 4
+typedef gid_t 4 4
+typedef mode_t 4 4
+typedef dev_t 8 8
+typedef u_int8_t 1 1
+typedef u_int16_t 2 2
+typedef u_int32_t 4 4
+typedef u_int64_t 8 8
+typedef u_char 1 1
+typedef u_short 2 2
+typedef u_int 4 4
+typedef u_long 8 8
+typedef quad_t 8 8
+typedef u_quad_t 8 8
+typedef ino_t 8 8
+typedef ino64_t 8 8
+typedef nlink_t 8 8
+typedef blksize_t 8 8
+typedef blkcnt_t 8 8
+typedef blkcnt64_t 8 8
+typedef id_t 4 4
+typedef useconds_t 4 4
+typedef suseconds_t 8 8
+typedef fsblkcnt_t 8 8
+typedef fsfilcnt_t 8 8
+typedef socklen_t 4 4
+typedef key_t 4 4
+typedef fd_set 128 8
+  fds_bits 0
+typedef sa_family_t 2 2
 
 ucontext.h y
 struct _libc_fpxreg 16 2
@@ -163,6 +348,21 @@ struct ucontext_t 968 8
   uc_sigmask 296
   __fpregs_mem 424
   __ssp 936
+typedef greg_t 8 8
+typedef gregset_t 184 8
+typedef fpregset_t 8 8
+typedef mcontext_t 256 8
+  gregs 0
+  fpregs 184
+  __reserved1 192
+typedef ucontext_t 968 8
+  uc_flags 0
+  uc_link 8
+  uc_stack 16
+  uc_mcontext 40
+  uc_sigmask 296
+  __fpregs_mem 424
+  __ssp 936
 
 sys/prctl.h y
 struct prctl_mm_map 104 8
@@ -180,6 +380,32 @@ struct prctl_mm_map 104 8
   auxv 88
   auxv_size 96
   exe_fd 100
+typedef __s8 1 1
+typedef __u8 1 1
+typedef __s16 2 2
+typedef __u16 2 2
+typedef __s32 4 4
+typedef __u32 4 4
+typedef __s64 8 8
+typedef __u64 8 8
+typedef __le16 2 2
+typedef __be16 2 2
+typedef __le32 4 4
+typedef __be32 4 4
+typedef __le64 8 8
+typedef __be64 8 8
+typedef __sum16 2 2
+typedef __wsum 4 4
+typedef __poll_t 4 4
+typedef __kernel_long_t 8 8
+typedef __kernel_ulong_t 8 8
+typedef __kernel_off_t 8 8
+typedef __kernel_loff_t 8 8
+typedef __kernel_time64_t 8 8
+typedef __kernel_old_time_t 8 8
+typedef __kernel_time_t 8 8
+typedef __kernel_clock_t 8 8
+typedef __kernel_suseconds_t 8 8
 
 sys/epoll.h y
 union epoll_data 8 8
@@ -190,6 +416,11 @@ union epoll_data 8 8
 struct epoll_event 12 1
   events 0
   data 4
+typedef epoll_data_t 8 8
+  ptr 0
+  fd 0
+  u32 0
+  u64 0
 
 sys/signalfd.h y
 struct signalfd_siginfo 128 8
@@ -254,6 +485,13 @@ struct group 32 8
   gr_gid 16
   gr_mem 24
 
+langinfo.h y
+typedef nl_item 4 4
+typedef nl_catd 8 8
+
+iconv.h y
+typedef iconv_t 8 8
+
 netinet/in.h y
 struct in_addr 4 4
   s_addr 0
@@ -287,6 +525,8 @@ struct in_pktinfo 12 4
 struct in6_pktinfo 20 4
   ipi6_addr 0
   ipi6_ifindex 16
+typedef in_port_t 2 2
+typedef in_addr_t 4 4
 
 dirent.h y
 struct dirent 280 8
@@ -354,9 +594,15 @@ struct statx 256 8
 struct FTW 8 4
   base 0
   level 4
+typedef fsid_t 8 4
 
 fts.h y
 struct _ftsent 120 8
+  fts_path 48
+  fts_pathlen 64
+  fts_info 98
+  fts_statp 104
+typedef FTSENT 120 8
   fts_path 48
   fts_pathlen 64
   fts_info 98
@@ -424,6 +670,7 @@ struct shmid_ds 112 8
   shm_nattch 88
   __glibc_reserved5 96
   __glibc_reserved6 104
+typedef shmatt_t 8 8
 
 sys/sem.h y
 struct sembuf 6 2
@@ -476,6 +723,8 @@ struct msginfo 32 4
   msgssz 20
   msgtql 24
   msgseg 28
+typedef msgqnum_t 8 8
+typedef msglen_t 8 8
 
 sys/un.h y
 struct sockaddr_un 110 2
@@ -504,6 +753,231 @@ struct ether_header 14 1
   ether_dhost 0
   ether_shost 6
   ether_type 12
+
+elf.h y
+typedef Elf32_Half 2 2
+typedef Elf64_Half 2 2
+typedef Elf32_Word 4 4
+typedef Elf32_Sword 4 4
+typedef Elf64_Word 4 4
+typedef Elf64_Sword 4 4
+typedef Elf32_Xword 8 8
+typedef Elf32_Sxword 8 8
+typedef Elf64_Xword 8 8
+typedef Elf64_Sxword 8 8
+typedef Elf32_Addr 4 4
+typedef Elf64_Addr 8 8
+typedef Elf32_Off 4 4
+typedef Elf64_Off 8 8
+typedef Elf32_Section 2 2
+typedef Elf64_Section 2 2
+typedef Elf32_Versym 2 2
+typedef Elf64_Versym 2 2
+typedef Elf32_Ehdr 52 4
+  e_ident 0
+  e_type 16
+  e_machine 18
+  e_version 20
+  e_entry 24
+  e_phoff 28
+  e_shoff 32
+  e_flags 36
+  e_ehsize 40
+  e_phentsize 42
+  e_phnum 44
+  e_shentsize 46
+  e_shnum 48
+  e_shstrndx 50
+typedef Elf64_Ehdr 64 8
+  e_ident 0
+  e_type 16
+  e_machine 18
+  e_version 20
+  e_entry 24
+  e_phoff 32
+  e_shoff 40
+  e_flags 48
+  e_ehsize 52
+  e_phentsize 54
+  e_phnum 56
+  e_shentsize 58
+  e_shnum 60
+  e_shstrndx 62
+typedef Elf32_Shdr 40 4
+  sh_name 0
+  sh_type 4
+  sh_flags 8
+  sh_addr 12
+  sh_offset 16
+  sh_size 20
+  sh_link 24
+  sh_info 28
+  sh_addralign 32
+  sh_entsize 36
+typedef Elf64_Shdr 64 8
+  sh_name 0
+  sh_type 4
+  sh_flags 8
+  sh_addr 16
+  sh_offset 24
+  sh_size 32
+  sh_link 40
+  sh_info 44
+  sh_addralign 48
+  sh_entsize 56
+typedef Elf32_Sym 16 4
+  st_name 0
+  st_value 4
+  st_size 8
+  st_info 12
+  st_other 13
+  st_shndx 14
+typedef Elf64_Sym 24 8
+  st_name 0
+  st_info 4
+  st_other 5
+  st_shndx 6
+  st_value 8
+  st_size 16
+typedef Elf32_Syminfo 4 2
+  si_boundto 0
+  si_flags 2
+typedef Elf64_Syminfo 4 2
+  si_boundto 0
+  si_flags 2
+typedef Elf32_Rel 8 4
+  r_offset 0
+  r_info 4
+typedef Elf64_Rel 16 8
+  r_offset 0
+  r_info 8
+typedef Elf32_Rela 12 4
+  r_offset 0
+  r_info 4
+  r_addend 8
+typedef Elf64_Rela 24 8
+  r_offset 0
+  r_info 8
+  r_addend 16
+typedef Elf32_Relr 4 4
+typedef Elf64_Relr 8 8
+typedef Elf32_Phdr 32 4
+  p_type 0
+  p_offset 4
+  p_vaddr 8
+  p_paddr 12
+  p_filesz 16
+  p_memsz 20
+  p_flags 24
+  p_align 28
+typedef Elf64_Phdr 56 8
+  p_type 0
+  p_flags 4
+  p_offset 8
+  p_vaddr 16
+  p_paddr 24
+  p_filesz 32
+  p_memsz 40
+  p_align 48
+typedef Elf32_Dyn 8 4
+  d_tag 0
+  d_un 4
+typedef Elf64_Dyn 16 8
+  d_tag 0
+  d_un 8
+typedef Elf32_Verdef 20 4
+  vd_version 0
+  vd_flags 2
+  vd_ndx 4
+  vd_cnt 6
+  vd_hash 8
+  vd_aux 12
+  vd_next 16
+typedef Elf64_Verdef 20 4
+  vd_version 0
+  vd_flags 2
+  vd_ndx 4
+  vd_cnt 6
+  vd_hash 8
+  vd_aux 12
+  vd_next 16
+typedef Elf32_Verdaux 8 4
+  vda_name 0
+  vda_next 4
+typedef Elf64_Verdaux 8 4
+  vda_name 0
+  vda_next 4
+typedef Elf32_Verneed 16 4
+  vn_version 0
+  vn_cnt 2
+  vn_file 4
+  vn_aux 8
+  vn_next 12
+typedef Elf64_Verneed 16 4
+  vn_version 0
+  vn_cnt 2
+  vn_file 4
+  vn_aux 8
+  vn_next 12
+typedef Elf32_Vernaux 16 4
+  vna_hash 0
+  vna_flags 4
+  vna_other 6
+  vna_name 8
+  vna_next 12
+typedef Elf64_Vernaux 16 4
+  vna_hash 0
+  vna_flags 4
+  vna_other 6
+  vna_name 8
+  vna_next 12
+typedef Elf32_auxv_t 8 4
+  a_type 0
+  a_un 4
+typedef Elf64_auxv_t 16 8
+  a_type 0
+  a_un 8
+typedef Elf32_Nhdr 12 4
+  n_namesz 0
+  n_descsz 4
+  n_type 8
+typedef Elf64_Nhdr 12 4
+  n_namesz 0
+  n_descsz 4
+  n_type 8
+typedef Elf32_Move 24 8
+  m_value 0
+  m_info 8
+  m_poffset 12
+  m_repeat 16
+  m_stride 18
+typedef Elf64_Move 32 8
+  m_value 0
+  m_info 8
+  m_poffset 16
+  m_repeat 24
+  m_stride 26
+typedef Elf32_Lib 20 4
+  l_name 0
+  l_time_stamp 4
+  l_checksum 8
+  l_version 12
+  l_flags 16
+typedef Elf64_Lib 20 4
+  l_name 0
+  l_time_stamp 4
+  l_checksum 8
+  l_version 12
+  l_flags 16
+typedef Elf32_Chdr 12 4
+  ch_type 0
+  ch_size 4
+  ch_addralign 8
+typedef Elf64_Chdr 24 8
+  ch_type 0
+  ch_reserved 4
+  ch_size 8
+  ch_addralign 16
 
 link.h y
 struct link_map 40 8
@@ -541,6 +1015,12 @@ struct termios 60 4
   c_cc 17
   c_ispeed 52
   c_ospeed 56
+typedef tcflag_t 4 4
+typedef cc_t 1 1
+typedef speed_t 4 4
+
+sys/eventfd.h y
+typedef eventfd_t 8 8
 
 sys/statvfs.h y
 struct statvfs 112 8
@@ -573,6 +1053,9 @@ struct statfs 120 8
   f_flags 80
   f_spare 88
 
+sys/wait.h y
+typedef idtype_t 4 4
+
 sys/resource.h y
 struct rlimit 16 8
   rlim_cur 0
@@ -594,6 +1077,12 @@ struct rusage 144 8
   ru_nsignals 120
   ru_nvcsw 128
   ru_nivcsw 136
+typedef rlim_t 8 8
+
+wctype.h y
+typedef wint_t 4 4
+typedef wctype_t 8 8
+typedef wctrans_t 8 8
 
 sys/ioctl.h y
 struct winsize 8 2
@@ -622,12 +1111,68 @@ struct pollfd 8 4
   fd 0
   events 4
   revents 6
+typedef nfds_t 8 8
+
+glob.h y
+typedef glob_t 72 8
+  gl_pathc 0
+  gl_pathv 8
+  gl_offs 16
+  gl_flags 24
+  gl_closedir 32
+  gl_readdir 40
+  gl_opendir 48
+  gl_lstat 56
+  gl_stat 64
+
+regex.h y
+typedef regoff_t 4 4
+typedef regex_t 64 8
+  re_nsub 48
+typedef regmatch_t 8 4
+  rm_so 0
+  rm_eo 4
 
 pthread.h y
 struct __pthread_cleanup_frame 24 8
   __cancel_routine 0
   __cancel_arg 8
   __do_it 16
+typedef pthread_mutex_t 40 8
+  __size 0
+  __align 0
+typedef pthread_cond_t 48 8
+  __size 0
+  __align 0
+typedef pthread_mutexattr_t 4 4
+  __size 0
+  __align 0
+typedef pthread_condattr_t 4 4
+  __size 0
+  __align 0
+typedef pthread_attr_t 56 8
+  __size 0
+  __align 0
+typedef pthread_spinlock_t 4 4
+typedef pthread_barrier_t 32 8
+  __size 0
+  __align 0
+typedef pthread_barrierattr_t 4 4
+  __size 0
+  __align 0
+typedef pthread_rwlock_t 56 8
+  __size 0
+  __align 0
+typedef pthread_rwlockattr_t 8 8
+  __size 0
+  __align 0
+typedef pthread_t 8 8
+typedef pthread_key_t 4 4
+typedef pthread_once_t 4 4
+
+semaphore.h y
+typedef sem_t 32 8
+  __align 0
 
 mqueue.h y
 struct mq_attr 64 8
@@ -636,6 +1181,7 @@ struct mq_attr 64 8
   mq_msgsize 16
   mq_curmsgs 24
   __pad 32
+typedef mqd_t 4 4
 
 aio.h y
 struct aiocb 168 8
@@ -676,6 +1222,12 @@ struct aiocb64 168 8
   aio_offset 128
   __glibc_reserved 136
 
+wordexp.h y
+typedef wordexp_t 24 8
+  we_wordc 0
+  we_wordv 8
+  we_offs 16
+
 search.h y
 struct entry 16 8
   key 0
@@ -688,6 +1240,13 @@ struct hsearch_data 16 8
   table 0
   size 8
   filled 12
+typedef ENTRY 16 8
+  key 0
+  data 8
+typedef ACTION 4 4
+typedef VISIT 4 4
+typedef __compar_fn_t 8 8
+typedef comparison_fn_t 8 8
 
 utmpx.h y
 struct __exit_status 4 2
@@ -705,6 +1264,25 @@ struct utmpx 384 4
   ut_tv 340
   ut_addr_v6 348
   __glibc_reserved 364
+
+dlfcn.h y
+typedef Dl_info 32 8
+  dli_fname 0
+  dli_fbase 8
+  dli_sname 16
+  dli_saddr 24
+
+fenv.h y
+typedef fexcept_t 2 2
+typedef fenv_t 32 4
+  __control_word 0
+  __status_word 4
+  __tags 8
+  __eip 12
+  __cs_selector 16
+  __data_offset 20
+  __data_selector 24
+  __mxcsr 28
 
 scsi/sg.h y
 struct sg_iovec 16 8
@@ -751,11 +1329,49 @@ struct sg_req_info 24 8
   usr_ptr 8
   duration 16
   unused 20
+typedef sg_iovec_t 16 8
+  iov_base 0
+  iov_len 8
+typedef sg_io_hdr_t 88 8
+  interface_id 0
+  dxfer_direction 4
+  cmd_len 8
+  mx_sb_len 9
+  iovec_count 10
+  dxfer_len 12
+  dxferp 16
+  cmdp 24
+  sbp 32
+  timeout 40
+  flags 44
+  pack_id 48
+  usr_ptr 56
+  status 64
+  masked_status 65
+  msg_status 66
+  sb_len_wr 67
+  host_status 68
+  driver_status 70
+  resid 72
+  duration 76
+  info 80
+typedef sg_req_info_t 24 8
+  req_state 0
+  orphan 1
+  sg_io_owned 2
+  problem 3
+  pack_id 4
+  usr_ptr 8
+  duration 16
+  unused 20
 
 linux/ppdev.h y
 struct ppdev_frob_struct 2 1
   mask 0
   val 1
+
+linux/parport.h y
+typedef parport_device_class 4 4
 
 linux/vm_sockets.h y
 struct sockaddr_vm 16 4
@@ -765,6 +1381,7 @@ struct sockaddr_vm 16 4
   svm_cid 8
   svm_flags 12
   svm_zero 13
+typedef __kernel_sa_family_t 2 2
 
 linux/time_types.h y
 struct __kernel_timespec 16 8
@@ -863,6 +1480,8 @@ struct sockaddr_can 24 8
 struct can_filter 8 4
   can_id 0
   can_mask 4
+typedef canid_t 4 4
+typedef can_err_mask_t 4 4
 
 linux/can/raw.h y
 struct can_raw_vcid_options 4 1
@@ -879,6 +1498,9 @@ struct j1939_filter 32 8
   pgn_mask 20
   addr 24
   addr_mask 25
+typedef pgn_t 4 4
+typedef priority_t 1 1
+typedef name_t 8 8
 
 netpacket/packet.h y
 struct sockaddr_ll 20 4

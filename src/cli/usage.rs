@@ -86,8 +86,9 @@ Output mode -- pick at most one (defaults to a native binary):
                            assembler unit through the assembler) and
                            write nothing; -E takes precedence.
   --dump-records           Print the size, alignment and member offsets
-                           of each tagged structure and union a unit
-                           defines, as laid out for --target.
+                           of each structure and union a unit defines
+                           with a tag or a typedef name, as laid out
+                           for --target.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of

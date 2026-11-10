@@ -3516,6 +3516,44 @@ impl Compiler {
     ///
     /// Drains `self.pending_exports` -- callers should only invoke
     /// once on the way out of `compile()`.
+    /// The file-scope typedef names (C17 6.7.8) with the size and alignment
+    /// of the type each names, an array's included, and the record a
+    /// typedef of a complete structure or union names.
+    fn typedef_layouts(&self) -> Vec<crate::c5::program::TypedefLayout> {
+        let mut out = Vec::new();
+        for s in self
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Typedef as i64)
+        {
+            let ty = s.type_;
+            let record = (types::is_struct_ty(ty) && types::struct_ptr_depth(ty) == 0)
+                .then(|| types::struct_id_of(ty));
+            if record.is_some_and(|id| {
+                let d = &self.structs[id];
+                !d.is_complete || d.is_vector || d.is_array
+            }) || s.array_size < 0
+            {
+                continue;
+            }
+            let count = match s.array_dims.len() {
+                0 | 1 => s.array_size.max(1),
+                _ => s.array_dims.iter().product(),
+            } as usize;
+            let align = match s.type_align {
+                0 => self.align_of_type(ty),
+                a => a as usize,
+            };
+            out.push(crate::c5::program::TypedefLayout {
+                name: s.name.clone(),
+                size: self.size_of_type(ty) * count,
+                align,
+                record: record.filter(|_| s.array_size == 0),
+            });
+        }
+        out
+    }
+
     fn resolve_exports(
         &mut self,
     ) -> Result<(Vec<crate::c5::program::ExportedFunction>, Vec<String>), C5Error> {
@@ -3966,6 +4004,7 @@ impl Compiler {
             .map_err(|e| self.failed(e))?;
         let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
+        let typedefs = self.typedef_layouts();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -4040,6 +4079,7 @@ impl Compiler {
             // walk member offsets / bitfield layouts and produce
             // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
+            typedefs,
             structs: self.structs,
             enums: self.enums,
             // Resolved entry name. Includes the value from a

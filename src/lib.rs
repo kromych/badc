@@ -148,8 +148,8 @@ pub use c5::{
     Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, LaxVectors,
     MachOImageOptions, NativeOptions, OutputKind, Overwrite, PatchableEntry, PredefinedKind,
     PredefinedSymbol, Preprocessed, Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard,
-    StackProtect, StackProtector, SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm,
-    dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
+    StackProtect, StackProtector, StructDef, SymVisibility, Target, TargetSet, Trace, VariableInfo,
+    Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
     jit_run_with_options, mach_o_symbol_name, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]

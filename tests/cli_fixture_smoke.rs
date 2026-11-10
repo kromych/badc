@@ -689,7 +689,8 @@ fn dump_records_prints_the_target_layouts() {
         &unit,
         "struct s { char c; long l; unsigned a : 3, b : 5; };\n\
          union u { short h; double d; };\nstruct incomplete;\n\
-         struct { int anonymous; } v;\n",
+         struct { int anonymous; } v;\n\
+         typedef struct { short x; } T;\ntypedef union u U;\n",
     )
     .expect("write unit");
     let dump = |target: &str| {
@@ -705,10 +706,15 @@ fn dump_records_prints_the_target_layouts() {
         );
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
-    let lp64 = "struct s 24 8\n  c 0\n  l 8\n  a 16 0 3\n  b 16 3 5\n\
-                union u 8 8\n  h 0\n  d 0";
-    let llp64 = "struct s 12 4\n  c 0\n  l 4\n  a 8 0 3\n  b 8 3 5\n\
-                 union u 8 8\n  h 0\n  d 0";
+    let typedefs = "typedef T 2 2\n  x 0\ntypedef U 8 8\n  h 0\n  d 0";
+    let lp64 = format!(
+        "struct s 24 8\n  c 0\n  l 8\n  a 16 0 3\n  b 16 3 5\n\
+         union u 8 8\n  h 0\n  d 0\n{typedefs}"
+    );
+    let llp64 = format!(
+        "struct s 12 4\n  c 0\n  l 4\n  a 8 0 3\n  b 8 3 5\n\
+         union u 8 8\n  h 0\n  d 0\n{typedefs}"
+    );
     assert_eq!(dump("linux-x64").trim_end(), lp64);
     assert_eq!(dump("windows-x64").trim_end(), llp64);
 }

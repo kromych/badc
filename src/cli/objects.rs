@@ -126,7 +126,8 @@ pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 
 /// `--dump-records`: each C source through the front end, then one
 /// `struct|union <tag> <size> <align>` line per complete tagged record, in
-/// definition order, followed by `  <member> <offset>` for each named member,
+/// definition order, and `typedef <name> <size> <align>` per file-scope
+/// typedef naming a record, each followed by `  <member> <offset>` for each named member,
 /// or `  <member> <offset> <bit offset> <width>` for a bit-field, the offset
 /// being its storage unit's.
 pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
@@ -154,24 +155,42 @@ pub(crate) fn dump_records(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 fn record_layouts(program: &badc::Program) -> String {
     use core::fmt::Write;
     let mut out = String::new();
-    let records = (program.structs.iter())
-        .filter(|s| s.is_complete && !s.is_anonymous && !s.is_vector && !s.is_array);
-    for s in records {
-        let kind = if s.is_union { "union" } else { "struct" };
-        let _ = writeln!(out, "{kind} {} {} {}", s.name, s.size, s.align);
-        for f in &s.fields {
-            if f.bit_width > 0 {
-                let _ = writeln!(
-                    out,
-                    "  {} {} {} {}",
-                    f.name, f.offset, f.bit_offset, f.bit_width
-                );
-            } else {
-                let _ = writeln!(out, "  {} {}", f.name, f.offset);
-            }
+    let tagged = (program.structs.iter())
+        .filter(|s| s.is_complete && !s.is_anonymous && !s.is_vector && !s.is_array)
+        .map(|s| {
+            (
+                if s.is_union { "union" } else { "struct" },
+                s.name.as_str(),
+                s,
+            )
+        });
+    for s in tagged {
+        let (kind, name, s) = s;
+        let _ = writeln!(out, "{kind} {name} {} {}", s.size, s.align);
+        write_members(&mut out, s);
+    }
+    for t in &program.typedefs {
+        let _ = writeln!(out, "typedef {} {} {}", t.name, t.size, t.align);
+        if let Some(id) = t.record {
+            write_members(&mut out, &program.structs[id]);
         }
     }
     out
+}
+
+fn write_members(out: &mut String, s: &badc::StructDef) {
+    use core::fmt::Write;
+    for f in &s.fields {
+        if f.bit_width > 0 {
+            let _ = writeln!(
+                out,
+                "  {} {} {} {}",
+                f.name, f.offset, f.bit_offset, f.bit_width
+            );
+        } else {
+            let _ = writeln!(out, "  {} {}", f.name, f.offset);
+        }
+    }
 }
 
 /// `--ar` mode: bundle each `.c` input (compiled to a native

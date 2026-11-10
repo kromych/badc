@@ -853,6 +853,7 @@ pub(crate) mod test_support {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            typedefs: Vec::new(),
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,

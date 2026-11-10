@@ -4,15 +4,15 @@ structures and unions the bundled headers define, which a unit test holds
 badc's layouts against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
-reference toolchain, badc lists the tagged records a unit including it
-defines (`--dump-records`); a probe built with the reference compiler and
+reference toolchain, badc lists the tagged records and the typedef names a
+unit including it defines (`--dump-records`); a probe built with the reference compiler and
 run on this machine prints their size, alignment and member offsets, and
 each bit-field's first bit and width. A record or member the reference
 does not define is left out. A record is listed under the first header
 whose unit defines it: the base headers each unit includes, then the
 registry's order.
 
-TODO(#2018): the Windows targets, and records named only by a typedef.
+TODO(#2018): the Windows targets.
 
 Run on a machine of the target, against a built badc:
 
@@ -91,7 +91,7 @@ def probe_source(src: str, records) -> tuple[str, dict[int, tuple]]:
         lines.append(text)
 
     for i, (kind, tag, members) in enumerate(records):
-        t = f"{kind} {tag}"
+        t = tag if kind == "typedef" else f"{kind} {tag}"
         emit(f'  printf("R {i} %zu %zu\\n", sizeof({t}), _Alignof({t}));', (i, None))
         for m in members:
             name = m[0]
@@ -155,7 +155,7 @@ def main() -> int:
     out = [f"# Reference record layouts for {args.target}, written by "
            "scripts/measure_record_layouts.py.",
            "# `<header> y|p` (p: the unit includes the base headers first), then",
-           "# `struct|union <tag> <size> <align>` and per member",
+           "# `struct|union <tag>|typedef <name> <size> <align>` and per member",
            "# `<name> <offset>` or, for a bit-field, `<name> bit <first bit> <width>`."]
     for header, cell in shipped_headers(args.target):
         src = prelude(header, cell)

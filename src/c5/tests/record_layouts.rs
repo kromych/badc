@@ -1,5 +1,5 @@
-//! The tagged records of the bundled headers against the layouts the
-//! reference toolchains measured: `libc/record-layouts/<target>.txt`, written
+//! The records and typedef names of the bundled headers against the layouts
+//! the reference toolchains measured: `libc/record-layouts/<target>.txt`, written
 //! by `scripts/measure_record_layouts.py`. Each header's unit is the one the
 //! script measured: the feature-test macros, the base headers for a header
 //! marked `p`, then the header.
@@ -19,7 +19,8 @@ enum Member {
 }
 
 struct Record<'a> {
-    is_union: bool,
+    /// `struct`, `union`, or `typedef` for a record named by a typedef.
+    kind: &'a str,
     tag: &'a str,
     size: usize,
     align: usize,
@@ -43,7 +44,7 @@ fn parse(table: &str) -> Vec<Header<'_>> {
         } else if !line.starts_with(' ') {
             let records = &mut headers.last_mut().expect("header").2;
             records.push(Record {
-                is_union: f[0] == "union",
+                kind: f[0],
                 tag: f[1],
                 size: num(2),
                 align: num(3),
@@ -80,21 +81,41 @@ fn check(target: Target, table: &str) {
             }
         };
         for r in records {
-            let kind = if r.is_union { "union" } else { "struct" };
-            let Some(def) = (program.structs.iter()).find(|s| {
-                s.is_complete && !s.is_anonymous && s.is_union == r.is_union && s.name == r.tag
-            }) else {
+            let kind = r.kind;
+            // (size, align, the record's members if it names one)
+            let found = if kind == "typedef" {
+                (program.typedefs.iter())
+                    .find(|t| t.name == r.tag)
+                    .map(|t| {
+                        (
+                            t.size,
+                            t.align,
+                            t.record.map(|id| &program.structs[id].fields),
+                        )
+                    })
+            } else {
+                (program.structs.iter())
+                    .find(|s| {
+                        s.is_complete
+                            && !s.is_anonymous
+                            && s.is_union == (kind == "union")
+                            && s.name == r.tag
+                    })
+                    .map(|s| (s.size, s.align, Some(&s.fields)))
+            };
+            let Some((size, align, fields)) = found else {
                 failures.push(format!("{header}: {kind} {} is not defined", r.tag));
                 continue;
             };
-            if (def.size, def.align) != (r.size, r.align) {
+            if (size, align) != (r.size, r.align) {
                 failures.push(format!(
-                    "{header}: {kind} {}: size {} align {}, the reference's {} {}",
-                    r.tag, def.size, def.align, r.size, r.align
+                    "{header}: {kind} {}: size {size} align {align}, the reference's {} {}",
+                    r.tag, r.size, r.align
                 ));
             }
+            let fields = fields.map_or(&[][..], |f| &f[..]);
             for (name, want) in &r.members {
-                let field = def.fields.iter().find(|f| f.name == *name);
+                let field = fields.iter().find(|f| f.name == *name);
                 let got = field.map(|f| match f.bit_width {
                     0 => Member::At(f.offset),
                     w => Member::Bits(f.offset * 8 + f.bit_offset as usize, w),

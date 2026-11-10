@@ -13,8 +13,8 @@ differs from the C library's, which the run reports and leaves out; a
 function the reference does not declare is left out. gcc records a
 `noreturn` or `const` attribute as a qualifier of the function type, which
 the initialization only drops, so gcc serves as well as clang. A function
-is listed under the first header, in registry order, whose unit declares
-it.
+is listed under the first header, in registry order, whose unit the
+reference declares it in.
 
 TODO(#2024): windows-arm64.
 
@@ -127,7 +127,6 @@ def main() -> int:
             print(f"skip {header}: badc rejects the unit", file=sys.stderr)
             continue
         protos = {n: t for n, t in protos.items() if n not in seen}
-        seen.update(protos)
         if not protos:
             continue
         result = check(cc, src, protos)
@@ -135,6 +134,7 @@ def main() -> int:
             print(f"skip {header}: the reference probe does not build", file=sys.stderr)
             continue
         kept, differ = result
+        seen.update(kept + differ)
         platform = args.target.split("-")[0]
         for n in differ:
             why = DEPARTURES.get((platform, n))

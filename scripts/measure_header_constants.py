@@ -5,11 +5,12 @@ values against.
 
 For each header `libc/header-targets.txt` marks as shipped by the target's
 reference toolchain, badc lists the object-like macros a unit including it
-defines (`-dM -E`), less the predefined ones and the names C17 7.1.3
-reserves to the implementation. A probe built with the reference compiler
-and run on this machine keeps those that are integer constant expressions
-there and prints each one's value as a `long long`. A constant is listed
-under the first header, in registry order, whose unit defines it.
+defines (`-dM -E`), less the predefined ones, the names C17 7.1.3 reserves
+to the implementation, and those an earlier unit measured. A probe built
+with the reference compiler and run on this machine keeps those that are
+integer constant expressions there and prints each one's value as a
+`long long`. A constant is listed under the first header, in registry
+order, whose unit the reference measures it in.
 
 TODO(#2023): windows-arm64.
 
@@ -107,13 +108,13 @@ def main() -> int:
             continue
         names = sorted(n for n, v in macros.items()
                        if n not in seen and not RESERVED.match(n) and v.strip())
-        seen.update(macros)
         if not names:
             continue
         values = measure(cc, src, names)
         if values is None:
             print(f"skip {header}: the reference probe does not build", file=sys.stderr)
             continue
+        seen.update(values)
         if values:
             out += ["", f"{header} {cell}"] + [f"{n} {v}" for n, v in sorted(values.items())]
             count += len(values)

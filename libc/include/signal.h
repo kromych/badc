@@ -507,6 +507,7 @@ typedef struct sigaltstack {
 } stack_t;
 #define SIGSTKSZ    131072
 #define MINSIGSTKSZ 32768
+#define SS_DISABLE  4
 #else
 typedef struct {
     void  *ss_sp;
@@ -515,9 +516,9 @@ typedef struct {
 } stack_t;
 #define SIGSTKSZ    8192
 #define MINSIGSTKSZ 2048
+#define SS_DISABLE  2
 #endif
 #define SS_ONSTACK 1
-#define SS_DISABLE 2
 int sigaltstack(const stack_t *ss, stack_t *oss);
 #endif
 

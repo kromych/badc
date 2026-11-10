@@ -108,12 +108,13 @@ impl Marshal<'_> {
             return Some(scratch);
         }
         // A frame load it left to the call (`Allocation::stack_load`): an
-        // ordinary local, at its rbp-relative home.
+        // ordinary local, at its rbp-relative home, extended as the load's
+        // kind defines it, since the argument slot takes all 64 bits.
         if let Some(&(off, disp, kind)) = self.alloc.stack_load.get(&self.args[i]) {
             let fp_off =
                 super::ssa::emit_common::c5_slot_to_fp_offset(off, 16, self.frame.locals_shift());
             let disp = i32::try_from(fp_off + i64::from(disp)).ok()?;
-            emit_load_kind_mem(code, kind, scratch, Reg::RBP, disp, None, false);
+            emit_load_kind_mem(code, kind, scratch, Reg::RBP, disp, None, true);
             return Some(scratch);
         }
         materialize_int_shifted(

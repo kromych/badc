@@ -11,6 +11,8 @@ const FEATURES: &str =
     "#define _GNU_SOURCE 1\n#define _XOPEN_SOURCE 700\n#define _DARWIN_C_SOURCE 1\n";
 const BASE: &str = "#include <sys/types.h>\n#include <sys/socket.h>\n\
                     #include <netinet/in.h>\n#include <stdint.h>\n#include <stddef.h>\n";
+/// `PREREQS["windows"]`.
+const WINDOWS_BASE: &str = "#include <winsock2.h>\n#include <windows.h>\n";
 
 /// Per header: its name, whether its unit includes the base headers, and
 /// its constants.
@@ -49,7 +51,49 @@ const DEPARTURES: &[(Target, &str, &str)] = &[
         MACOS_11,
     ),
     (Target::MacOSAarch64, "AIO_LISTIO_MAX", MACOS_11),
+    (Target::WindowsX64, "INT_FAST16_MIN", FAST16),
+    (Target::WindowsX64, "INT_FAST16_MAX", FAST16),
+    (Target::WindowsX64, "UINT_FAST16_MAX", FAST16),
+    (Target::WindowsX64, "DECIMAL_DIG", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_DECIMAL_DIG", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_DIG", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_MANT_DIG", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_MAX_10_EXP", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_MAX_EXP", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_MIN_10_EXP", LONG_DOUBLE),
+    (Target::WindowsX64, "LDBL_MIN_EXP", LONG_DOUBLE),
+    (Target::WindowsX64, "WINVER", WINDOWS_10),
+    (Target::WindowsX64, "NTDDI_VERSION", WINDOWS_10),
+    (Target::WindowsX64, "WINAPI_PARTITION_APP", WINDOWS_10),
+    (Target::WindowsX64, "WINAPI_PARTITION_PC_APP", WINDOWS_10),
+    (Target::WindowsX64, "WINAPI_PARTITION_PHONE_APP", WINDOWS_10),
+    (Target::WindowsX64, "WINAPI_PARTITION_SYSTEM", WINDOWS_10),
+    (Target::WindowsX64, "REG_LEGAL_OPTION", CURRENT_SDK),
 ];
+
+const FAST16: &str = "the 16-bit fast types are MSVC's int";
+const LONG_DOUBLE: &str = "long double is MSVC's 8-byte double, mingw-w64 gcc's the x87 type";
+const WINDOWS_10: &str = "the headers target Windows 10; mingw-w64 defaults to an earlier version";
+const CURRENT_SDK: &str = "the current SDK's value, which mingw-w64 lags";
+
+/// Constants badc defines as something other than an integer on purpose,
+/// left out of the unit that evaluates the rest.
+const NOT_INTEGERS: &[(Target, &str, &str)] = &[
+    (Target::WindowsX64, "PTHREAD_MUTEX_INITIALIZER", PTHREAD),
+    (
+        Target::WindowsX64,
+        "PTHREAD_RECURSIVE_MUTEX_INITIALIZER",
+        PTHREAD,
+    ),
+    (
+        Target::WindowsX64,
+        "PTHREAD_ERRORCHECK_MUTEX_INITIALIZER",
+        PTHREAD,
+    ),
+    (Target::WindowsX64, "PTHREAD_COND_INITIALIZER", PTHREAD),
+];
+
+const PTHREAD: &str = "libc/lib/pthread_ext.c keeps the lock inline, winpthreads a handle";
 
 /// glibc 2.42 numbered the termios speeds by their baud rates, with new
 /// symbol versions of the speed functions; badc binds the earlier versions,
@@ -65,8 +109,18 @@ fn termios_speed(target: Target, name: &str) -> bool {
 fn check(target: Target, table: &str) {
     let mut failures = Vec::new();
     let departs = |name: &str| DEPARTURES.iter().any(|&(t, n, _)| t == target && n == name);
+    let evaluated = |&&(name, _): &&(&str, i64)| {
+        !NOT_INTEGERS
+            .iter()
+            .any(|&(t, n, _)| t == target && n == name)
+    };
     for (header, base, constants) in parse(table) {
-        let base = if base { BASE } else { "" };
+        let constants: Vec<(&str, i64)> = constants.iter().filter(evaluated).copied().collect();
+        let base = match (base, target.is_windows()) {
+            (false, _) => "",
+            (true, false) => BASE,
+            (true, true) => WINDOWS_BASE,
+        };
         let mut src = format!("{FEATURES}{base}#include <{header}>\n");
         for (i, (name, _)) in constants.iter().enumerate() {
             src += &format!("long long __badc_v{i} = (long long)({name});\n");
@@ -131,5 +185,13 @@ fn linux_aarch64_constants_are_glibcs() {
     check(
         Target::LinuxAarch64,
         include_str!("../../../libc/header-constants/linux-aarch64.txt"),
+    );
+}
+
+#[test]
+fn windows_x64_constants_are_mingw_w64s() {
+    check(
+        Target::WindowsX64,
+        include_str!("../../../libc/header-constants/windows-x64.txt"),
     );
 }

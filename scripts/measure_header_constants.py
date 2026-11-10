@@ -11,7 +11,7 @@ and run on this machine keeps those that are integer constant expressions
 there and prints each one's value as a `long long`. A constant is listed
 under the first header, in registry order, whose unit defines it.
 
-TODO(#2023): the Windows targets.
+TODO(#2023): windows-arm64.
 
 Run on a machine of the target, against a built badc:
 

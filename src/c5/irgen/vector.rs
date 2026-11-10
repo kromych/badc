@@ -280,7 +280,7 @@ impl<'a> Walker<'a> {
             };
             ops.push(v);
         }
-        if form == Form::Store {
+        if matches!(form, Form::Store | Form::MaskStore) {
             b.x86_simd(op, imm, ops);
             return Ok(b.imm(0));
         }

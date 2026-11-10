@@ -23,6 +23,18 @@ pub(crate) enum Form {
     Vvv,
     /// [`Form::Vvv`] with an imm8 (`vpternlogd`).
     VvvI,
+    /// `mask = op(a, b, imm8)`: a bit per lane of the row's `int_width`
+    /// where the imm8 predicate holds (`vpcmpub` into an opmask).
+    CmpMask,
+    /// `v = op(src, mask, a)`: lane `i` of `a` where mask bit `i` is set,
+    /// of `src` elsewhere (`vpblendmb`).
+    MaskBlend,
+    /// `v = op(mask, p)`: the lanes the mask selects read from `p`, the
+    /// others zero and not read (`vmovdqu8 {k}{z}`).
+    MaskLoad,
+    /// `op(p, mask, v)`: the lanes the mask selects written to `p`, the
+    /// others not touched (`vmovdqu8 {k}`).
+    MaskStore,
     /// `v128 = op(v128, imm8)`.
     VI,
     /// `v128 = op(v128)`.
@@ -218,6 +230,10 @@ pub(crate) enum Sem {
     /// Each bit is `imm` bit `(acc << 2) | (a << 1) | b` of the three
     /// operands' bits (`vpternlogd`).
     TernLog,
+    /// The imm8 predicate of `vpcmp` / `vpcmpu` over lanes of the width,
+    /// signed when `true`: 0 eq, 1 lt, 2 le, 3 false, 4 ne, 5 nlt, 6 nle,
+    /// 7 true.
+    CmpPred(u8, bool),
     /// Each 128-bit half is the half of either source, or zero, that the
     /// immediate's nibble selects (`vperm2i128`).
     Perm2x128,
@@ -756,6 +772,45 @@ pub(crate) const OPS: &[SimdOp] = &[
     op512("__builtin_ia32_vpdpwssd512", "vpdpwssd", Form::Vvv, Ret::V16si, Sem::DotWords(false), 0),
     op512("__builtin_ia32_vpdpwssds512", "vpdpwssds", Form::Vvv, Ret::V16si, Sem::DotWords(true), 0),
     op512("__builtin_ia32_pternlogq512", "vpternlogq", Form::VvvI, Ret::V8di, Sem::TernLog, 0),
+    // The AVX-512 opmask forms: compares into a mask, blends and the masked
+    // transfers, the mask an integer the lowering moves into k1; the
+    // transfers at each vector length (AVX512VL), by lane width.
+    SimdOp { name: "__builtin_ia32_cmpb512_mask", mnem: "vpcmpb", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpb512_mask", mnem: "vpcmpub", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(1, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmb_512", mnem: "vpblendmb", form: Form::MaskBlend, ret: Ret::V64qi, sem: Sem::Move, int_width: 1, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquqi512_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V64qi, sem: Sem::Move, int_width: 1, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedquqi512_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquqi256_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V32qi, sem: Sem::Move, int_width: 1, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedquqi256_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddquqi128_mask", mnem: "vmovdqu8", form: Form::MaskLoad, ret: Ret::V16qi, sem: Sem::Move, int_width: 1, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedquqi128_mask", mnem: "vmovdqu8", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 1, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpw512_mask", mnem: "vpcmpw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpw512_mask", mnem: "vpcmpuw", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(2, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmw_512", mnem: "vpblendmw", form: Form::MaskBlend, ret: Ret::V32hi, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquhi512_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V32hi, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedquhi512_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddquhi256_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V16hi, sem: Sem::Move, int_width: 2, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedquhi256_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddquhi128_mask", mnem: "vmovdqu16", form: Form::MaskLoad, ret: Ret::V8hi, sem: Sem::Move, int_width: 2, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedquhi128_mask", mnem: "vmovdqu16", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 2, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpd512_mask", mnem: "vpcmpd", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpd512_mask", mnem: "vpcmpud", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(4, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmd_512", mnem: "vpblendmd", form: Form::MaskBlend, ret: Ret::V16si, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqusi512_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V16si, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedqusi512_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqusi256_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V8si, sem: Sem::Move, int_width: 4, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedqusi256_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddqusi128_mask", mnem: "vmovdqu32", form: Form::MaskLoad, ret: Ret::V4si, sem: Sem::Move, int_width: 4, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedqusi128_mask", mnem: "vmovdqu32", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 4, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_cmpq512_mask", mnem: "vpcmpq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, true), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_ucmpq512_mask", mnem: "vpcmpuq", form: Form::CmpMask, ret: Ret::Int64, sem: Sem::CmpPred(8, false), int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_blendmq_512", mnem: "vpblendmq", form: Form::MaskBlend, ret: Ret::V8di, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqudi512_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V8di, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_storedqudi512_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 64 },
+    SimdOp { name: "__builtin_ia32_loaddqudi256_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V4di, sem: Sem::Move, int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_storedqudi256_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 32 },
+    SimdOp { name: "__builtin_ia32_loaddqudi128_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V2di, sem: Sem::Move, int_width: 8, bytes: 16 },
+    SimdOp { name: "__builtin_ia32_storedqudi128_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 16 },
     // The MMX forms over 8-byte vectors, as gcc names their builtins.
     op64("__builtin_ia32_paddsb", "paddsb", Ret::V8qi, Sem::AddSat(1, true)),
     op64("__builtin_ia32_paddsw", "paddsw", Ret::V4hi, Sem::AddSat(2, true)),
@@ -802,13 +857,14 @@ impl SimdOp {
     /// the pointer operand as well. The store form has no destination of
     /// its own; its 16 bytes go through the pointer operand, its first.
     pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
-        let width = if self.form.returns_vector() || self.form == Form::Store {
-            self.bytes
-        } else if self.form == Form::ToInt || (self.form == Form::Extract && self.int_width == 8) {
-            self.int_width
-        } else {
-            4
-        };
+        let width =
+            if self.form.returns_vector() || matches!(self.form, Form::Store | Form::MaskStore) {
+                self.bytes
+            } else if self.form == Form::ToInt || self.int_width == 8 {
+                self.int_width
+            } else {
+                4
+            };
         let pointer = (self.form == Form::RdRand).then_some((1, self.int_width));
         core::iter::once((0, width)).chain(pointer)
     }
@@ -820,9 +876,20 @@ impl Form {
         match self {
             Form::V | Form::Load | Form::MoveMask | Form::RdRand | Form::ToInt => 1,
             Form::Vv | Form::VI | Form::Shift | Form::Store | Form::Extract => 2,
-            Form::VvI | Form::Insert | Form::Vvv => 3,
+            Form::VvI | Form::Insert | Form::Vvv | Form::CmpMask | Form::MaskBlend => 3,
+            Form::MaskStore => 3,
+            Form::MaskLoad => 2,
             Form::VvvI => 4,
         }
+    }
+
+    /// Whether the form takes an opmask, which only EVEX encodes at every
+    /// vector length.
+    pub(crate) fn is_opmask(self) -> bool {
+        matches!(
+            self,
+            Form::CmpMask | Form::MaskBlend | Form::MaskLoad | Form::MaskStore
+        )
     }
 
     /// Whether the last operand must be an integer constant expression that
@@ -830,7 +897,7 @@ impl Form {
     pub(crate) fn takes_imm(self) -> bool {
         matches!(
             self,
-            Form::VvI | Form::VI | Form::Extract | Form::Insert | Form::VvvI
+            Form::VvI | Form::VI | Form::Extract | Form::Insert | Form::VvvI | Form::CmpMask
         )
     }
 
@@ -842,6 +909,8 @@ impl Form {
                 | Form::VvI
                 | Form::Vvv
                 | Form::VvvI
+                | Form::MaskBlend
+                | Form::MaskLoad
                 | Form::VI
                 | Form::V
                 | Form::Shift
@@ -1374,9 +1443,46 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         | Sem::ShufLanes128
         | Sem::DotBytes(_)
         | Sem::DotWords(_)
-        | Sem::TernLog => {}
+        | Sem::TernLog
+        | Sem::CmpPred(..) => {}
     }
     o
+}
+
+/// `Form::CmpMask`: bit `i` set where lane `i` of width `w` satisfies the
+/// predicate between `a` and `b`, over the first `n` bytes.
+pub(crate) fn eval_cmp_mask(sem: Sem, a: &[u8; 64], b: &[u8; 64], imm: u8, n: usize) -> u64 {
+    let Sem::CmpPred(w, signed) = sem else {
+        return 0;
+    };
+    let wd = usize::from(w);
+    let mut m = 0u64;
+    for i in 0..n / wd {
+        let get = |v: &[u8; 64]| {
+            let mut x = [0u8; 8];
+            x[..wd].copy_from_slice(&v[i * wd..i * wd + wd]);
+            let u = u64::from_le_bytes(x);
+            if signed {
+                let sh = 64 - 8 * u32::from(w);
+                i128::from((u << sh) as i64 >> sh)
+            } else {
+                i128::from(u)
+            }
+        };
+        let (x, y) = (get(a), get(b));
+        let holds = match imm & 7 {
+            0 => x == y,
+            1 => x < y,
+            2 => x <= y,
+            3 => false,
+            4 => x != y,
+            5 => x >= y,
+            6 => x > y,
+            _ => true,
+        };
+        m |= u64::from(holds) << i;
+    }
+    m
 }
 
 /// A 32- or 64-byte form over the first `n` bytes: a permutation across the

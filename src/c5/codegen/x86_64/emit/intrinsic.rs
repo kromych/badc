@@ -15,7 +15,7 @@ pub(super) fn emit_x86_simd(
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
-    if x86_simd::get(op).bytes >= 32 {
+    if x86_simd::get(op).bytes >= 32 || x86_simd::get(op).form.is_opmask() {
         return emit_x86_simd_wide(code, op, imm, args, alloc, frame);
     }
     let dst_x: u8 = frame.fp_scratch[1];
@@ -85,7 +85,14 @@ pub(super) fn emit_x86_simd(
     }
     let imm8 = Concrete::Imm(imm.unwrap_or(0) as i64);
     match row.form {
-        Form::Vvv | Form::VvvI => return fail("x86 simd: a three-source form is 32 bytes or more"),
+        Form::Vvv
+        | Form::VvvI
+        | Form::CmpMask
+        | Form::MaskBlend
+        | Form::MaskLoad
+        | Form::MaskStore => {
+            return fail("x86 simd: an EVEX form outside the wide lowering");
+        }
         Form::Vv | Form::VvI => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {
                 return fail("x86 simd: operand 1 has no place");
@@ -458,7 +465,7 @@ pub(super) fn emit_x86_simd_val(
     use crate::c5::ir::AsmRegSize;
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
-    if row.bytes >= 32 {
+    if row.bytes >= 32 || row.form.is_opmask() {
         return emit_x86_simd_val_wide(code, op, imm, args, dst, alloc, frame);
     }
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
@@ -525,7 +532,14 @@ pub(super) fn emit_x86_simd_val(
         _ => fail("x86 simd: integer result not int reg / spill"),
     };
     let w = match row.form {
-        Form::Vvv | Form::VvvI => return fail("x86 simd: a three-source form is 32 bytes or more"),
+        Form::Vvv
+        | Form::VvvI
+        | Form::CmpMask
+        | Form::MaskBlend
+        | Form::MaskLoad
+        | Form::MaskStore => {
+            return fail("x86 simd: an EVEX form outside the wide lowering");
+        }
         Form::Vv | Form::VvI => {
             let commutes = row.form == Form::Vv && row.sem.commutes();
             let imm = (row.form == Form::VvI).then(|| imm.unwrap_or(0));
@@ -1873,11 +1887,62 @@ pub(super) fn emit_atomic_cas(
     Ok(())
 }
 
-/// A vector register of a 32- or 64-byte form: ymm or zmm `n`.
+/// A vector register of a form of `bytes`: xmm, ymm or zmm `n`.
 fn wide_reg(bytes: u8, n: u8) -> super::asm::Concrete {
-    use super::asm::{Concrete, YMM_BASE, ZMM_BASE};
+    use super::asm::{Concrete, XMM_BASE, YMM_BASE, ZMM_BASE};
+    let base = match bytes {
+        64 => ZMM_BASE,
+        32 => YMM_BASE,
+        _ => XMM_BASE,
+    };
     Concrete::Reg {
-        reg: if bytes == 64 { ZMM_BASE } else { YMM_BASE } + n,
+        reg: base + n,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+/// Opmask k1, which the opmask forms read and write; the allocator assigns
+/// no opmask register.
+fn k1() -> super::asm::Concrete {
+    super::asm::Concrete::Reg {
+        reg: super::asm::MASK_BASE + 1,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    }
+}
+
+/// `kmovq` between k1 and general register `r`, into k1 when `into_k`.
+fn kmov(code: &mut Vec<u8>, r: Reg, into_k: bool) -> Emit {
+    let gpr = super::asm::Concrete::Reg {
+        reg: r.0,
+        size: crate::c5::ir::AsmRegSize::Quad,
+    };
+    let ops = if into_k { [gpr, k1()] } else { [k1(), gpr] };
+    encode_wide(code, "kmovq", &ops)
+}
+
+/// [`encode_wide`] under write mask k1, zeroing the unselected lanes when
+/// `zeroing`.
+fn encode_masked(
+    code: &mut Vec<u8>,
+    mnem: &'static str,
+    ops: &[super::asm::Concrete],
+    zeroing: bool,
+) -> Emit {
+    let lead_imm = matches!(ops.first(), Some(super::asm::Concrete::Imm(_)));
+    let Some(mut f) = super::evex::op(mnem, lead_imm) else {
+        return fail(alloc::format!("x86 simd: `{mnem}` has no EVEX form"));
+    };
+    (f.mask, f.zeroing) = (1, zeroing);
+    super::asm::encode(code, 8, super::asm::Mnemonic::Evex(f), None, ops)
+        .or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+}
+
+fn mem_at(base: Reg) -> super::asm::Concrete {
+    super::asm::Concrete::Mem {
+        base: base.0,
+        index: None,
+        scale: 1,
+        disp: 0,
         size: crate::c5::ir::AsmRegSize::Quad,
     }
 }
@@ -2065,6 +2130,52 @@ fn emit_x86_simd_wide(
             emit_mov_mem_r(code, d, 0, SCRATCH_R11);
             return Ok(());
         }
+        Form::CmpMask => {
+            load(code, 1, dst_x)?;
+            load(code, 2, src_x)?;
+            let ops = [
+                super::asm::Concrete::Imm(i64::from(imm.unwrap_or(0))),
+                wide_reg(row.bytes, src_x),
+                wide_reg(row.bytes, dst_x),
+                k1(),
+            ];
+            encode_wide(code, row.mnem, &ops)?;
+            kmov(code, SCRATCH_R11, false)?;
+            let d = operand(code, 0, SCRATCH_R10)?;
+            emit_mov_mem_r(code, d, 0, SCRATCH_R11);
+            return Ok(());
+        }
+        Form::MaskBlend => {
+            load(code, 1, dst_x)?;
+            load(code, 3, src_x)?;
+            let m = operand(code, 2, SCRATCH_R11)?;
+            kmov(code, m, true)?;
+            let r = |n| wide_reg(row.bytes, n);
+            encode_masked(code, row.mnem, &[r(src_x), r(dst_x), r(dst_x)], false)?;
+        }
+        Form::MaskLoad => {
+            let m = operand(code, 1, SCRATCH_R11)?;
+            kmov(code, m, true)?;
+            let p = operand(code, 2, SCRATCH_R10)?;
+            encode_masked(
+                code,
+                row.mnem,
+                &[mem_at(p), wide_reg(row.bytes, dst_x)],
+                true,
+            )?;
+        }
+        Form::MaskStore => {
+            load(code, 2, dst_x)?;
+            let m = operand(code, 1, SCRATCH_R11)?;
+            kmov(code, m, true)?;
+            let p = operand(code, 0, SCRATCH_R10)?;
+            return encode_masked(
+                code,
+                row.mnem,
+                &[wide_reg(row.bytes, dst_x), mem_at(p)],
+                false,
+            );
+        }
         _ => return fail(alloc::format!("x86 simd: {} has no wide form", row.name)),
     }
     let d = operand(code, 0, SCRATCH_R10)?;
@@ -2153,6 +2264,38 @@ fn emit_x86_simd_val_wide(
                 },
             };
             wide_shift(code, row, imm, count, (a, rd, sb))?;
+        }
+        Form::CmpMask => {
+            let a = vector(code, 0, sa)?;
+            let b = vector(code, 1, sb)?;
+            let ops = [
+                super::asm::Concrete::Imm(i64::from(imm.unwrap_or(0))),
+                wide_reg(row.bytes, b),
+                wide_reg(row.bytes, a),
+                k1(),
+            ];
+            encode_wide(code, row.mnem, &ops)?;
+            return match dst {
+                Place::IntReg(r) => kmov(code, Reg(r), false),
+                Place::Spill(slot) => {
+                    kmov(code, SCRATCH_R11, false)?;
+                    let (sbase, off) = spill_slot_addr(frame, slot);
+                    emit_mov_mem_r(code, sbase, off, SCRATCH_R11);
+                    Ok(())
+                }
+                _ => fail("x86 simd: integer result not int reg / spill"),
+            };
+        }
+        Form::MaskBlend => {
+            let src = vector(code, 0, sa)?;
+            let a = vector(code, 2, sb)?;
+            let Some(m) = place(1).and_then(|p| materialize_int(code, p, SCRATCH_R11, frame))
+            else {
+                return fail("x86 simd: mask has no place");
+            };
+            kmov(code, m, true)?;
+            let r = |n| wide_reg(row.bytes, n);
+            encode_masked(code, row.mnem, &[r(a), r(src), r(rd)], false)?;
         }
         Form::MoveMask => {
             let a = vector(code, 0, sa)?;

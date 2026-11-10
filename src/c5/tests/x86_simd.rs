@@ -1658,8 +1658,8 @@ fn the_table_is_well_formed() {
         );
         assert_eq!(
             row.ret == x86_simd::Ret::Void,
-            row.form == x86_simd::Form::Store,
-            "{}: only the store returns void",
+            matches!(row.form, x86_simd::Form::Store | x86_simd::Form::MaskStore),
+            "{}: only the stores return void",
             row.name
         );
     }
@@ -1791,7 +1791,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::ShufLanes128
         | Sem::DotBytes(_)
         | Sem::DotWords(_)
-        | Sem::TernLog => false,
+        | Sem::TernLog
+        | Sem::CmpPred(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
@@ -2070,5 +2071,76 @@ int main(void) {\n\
                 "no {what}"
             );
         }
+    }
+}
+
+/// The AVX-512 opmask rows: compares into a mask by predicate, signed and
+/// unsigned, the blend it selects, and the masked transfers at each vector
+/// length, a load that ends with its buffer reading none of the lanes past
+/// it. Checked in the interpreter at -O0 and -O against the same
+/// operations written per element; each lowers to its EVEX instruction
+/// under k1.
+#[test]
+fn avx512_opmask_rows_select_their_lanes() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str = "typedef long long v8di __attribute__((vector_size(64)));\n\
+typedef char v64qi __attribute__((vector_size(64)));\n\
+typedef char v32qi __attribute__((vector_size(32)));\n\
+typedef char v16qi __attribute__((vector_size(16)));\n\
+static unsigned char A[64], B[64];\n\
+static unsigned char tail[70];\n\
+int main(void) {\n\
+    for (int i = 0; i < 64; i++) A[i] = (unsigned char)(i * 37 + 11), B[i] = (unsigned char)(i * 53 + 7);\n\
+    for (int i = 0; i < 70; i++) tail[i] = (unsigned char)(i + 1);\n\
+    v64qi a, b; __builtin_memcpy(&a, A, 64); __builtin_memcpy(&b, B, 64);\n\
+    long long lt = __builtin_ia32_ucmpb512_mask(a, b, 1);\n\
+    long long sle = __builtin_ia32_cmpb512_mask(a, b, 2);\n\
+    for (int i = 0; i < 64; i++) {\n\
+        if (((lt >> i) & 1) != (A[i] < B[i])) return 1;\n\
+        if (((sle >> i) & 1) != ((signed char)A[i] <= (signed char)B[i])) return 2;\n\
+    }\n\
+    v64qi bl = __builtin_ia32_blendmb_512(a, lt, b);\n\
+    for (int i = 0; i < 64; i++) if ((unsigned char)bl[i] != (((lt >> i) & 1) ? B[i] : A[i])) return 3;\n\
+    // The 6 bytes left at the end of `tail`, a mask for 6 lanes: nothing past it is read.\n\
+    v64qi t = __builtin_ia32_loaddquqi512_mask(0x3F, (const char *)(tail + 64));\n\
+    for (int i = 0; i < 64; i++) if ((unsigned char)t[i] != (i < 6 ? tail[64 + i] : 0)) return 4;\n\
+    unsigned char out[64] = {0};\n\
+    __builtin_ia32_storedquqi512_mask((char *)out, 0x8000000000000001LL, a);\n\
+    for (int i = 0; i < 64; i++) if (out[i] != ((i == 0 || i == 63) ? A[i] : 0)) return 5;\n\
+    v32qi h = __builtin_ia32_loaddquqi256_mask(0xF0F0F0F0u, (const char *)A);\n\
+    for (int i = 0; i < 32; i++) if ((unsigned char)h[i] != (((0xF0F0F0F0u >> i) & 1) ? A[i] : 0)) return 6;\n\
+    v16qi q = __builtin_ia32_loaddquqi128_mask(0x00FF, (const char *)B);\n\
+    for (int i = 0; i < 16; i++) if ((unsigned char)q[i] != (i < 8 ? B[i] : 0)) return 7;\n\
+    return 0;\n\
+}\n\
+";
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+    #[cfg(feature = "full")]
+    {
+        let opts = CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            crate::NativeOptions::new().with_optimize(),
+        )
+        .expect("emit_native for linux-x64");
+        // `kmovq %rax, %k1` (C4 E1 FB 92 C8) moves a mask in.
+        assert!(
+            bytes.windows(4).any(|w| w == [0xC4, 0xE1, 0xFB, 0x92]),
+            "no kmovq into k1"
+        );
     }
 }

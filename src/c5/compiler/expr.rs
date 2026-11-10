@@ -407,11 +407,14 @@ impl Compiler {
                 | Form::ToInt => i == 0,
                 Form::Vv | Form::VvI => i < 2,
                 Form::Vvv | Form::VvvI => i < 3,
-                Form::Store => i == 1,
-                Form::Load | Form::RdRand => false,
+                Form::CmpMask => i < 2,
+                Form::MaskBlend => i != 1,
+                Form::Store | Form::MaskStore => i == row.form.arity() - 1,
+                Form::Load | Form::RdRand | Form::MaskLoad => false,
             };
             let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
-                || (row.form == Form::Store && i == 0);
+                || (matches!(row.form, Form::Store | Form::MaskStore) && i == 0)
+                || (row.form == Form::MaskLoad && i == 1);
             let bytes = usize::from(row.bytes);
             if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == bytes)
             {

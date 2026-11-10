@@ -4006,7 +4006,7 @@ fn run_x86_simd(
 ) -> Result<(), C5Error> {
     use crate::c5::x86_simd::{self, Form};
     let row = x86_simd::get(op);
-    if row.bytes >= 32 {
+    if row.bytes >= 32 || row.form.is_opmask() {
         return run_x86_simd_wide(mem, frame, row, imm, args);
     }
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
@@ -4034,7 +4034,12 @@ fn run_x86_simd(
     }
     let imm8 = imm.unwrap_or(0);
     match row.form {
-        Form::Vvv | Form::VvvI => {
+        Form::Vvv
+        | Form::VvvI
+        | Form::CmpMask
+        | Form::MaskBlend
+        | Form::MaskLoad
+        | Form::MaskStore => {
             return Err(C5Error::Runtime(format!(
                 "vm_ssa: {} has no 16-byte form",
                 row.name
@@ -4152,6 +4157,42 @@ fn run_x86_simd_wide(
             eval(&read(mem, operand(1)?)?, &zero, &zero, count)
         }
         Form::Load | Form::Store => read(mem, operand(1)?)?,
+        Form::CmpMask => {
+            let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
+            let m = x86_simd::eval_cmp_mask(row.sem, &a, &b, imm8, n);
+            mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
+            return Ok(());
+        }
+        Form::MaskBlend => {
+            let (mut out, m, a) = (
+                read(mem, operand(1)?)?,
+                operand(2)? as u64,
+                read(mem, operand(3)?)?,
+            );
+            let w = usize::from(row.int_width);
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                out[i * w..i * w + w].copy_from_slice(&a[i * w..i * w + w]);
+            }
+            out
+        }
+        // Only the selected lanes are read or written, as the instruction
+        // suppresses faults in the others.
+        Form::MaskLoad => {
+            let (m, p, w) = (operand(1)? as u64, operand(2)?, usize::from(row.int_width));
+            let mut out = [0u8; 64];
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                out[i * w..i * w + w].copy_from_slice(mem.read_bytes(p + i * w, w)?);
+            }
+            out
+        }
+        Form::MaskStore => {
+            let (p, m, v) = (operand(0)?, operand(1)? as u64, read(mem, operand(2)?)?);
+            let w = usize::from(row.int_width);
+            for i in (0..n / w).filter(|&i| m >> i & 1 != 0) {
+                mem.write_bytes(p + i * w, &v[i * w..i * w + w])?;
+            }
+            return Ok(());
+        }
         Form::MoveMask => {
             let a = read(mem, operand(1)?)?;
             let mut m = 0u64;

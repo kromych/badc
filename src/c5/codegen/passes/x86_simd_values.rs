@@ -85,7 +85,9 @@ fn run_one(func: &mut FunctionSsa) {
                 _ => (LoadKind::V128, StoreKind::V128),
             };
             match row.form {
-                Form::RdRand => continue,
+                // The masked transfers stay in memory: a store and a load
+                // through a pointer are no values.
+                Form::RdRand | Form::MaskLoad | Form::MaskStore => continue,
                 // A `loadu` is a 128-bit load from its pointer stored to the
                 // destination; a `storeu` the converse. The pointer bears
                 // no alignment.
@@ -103,7 +105,8 @@ fn run_one(func: &mut FunctionSsa) {
                     let mut srcs = Vec::new();
                     for (k, &a) in args.iter().enumerate().skip(1) {
                         let vector = match row.form {
-                            Form::Vv | Form::VvI | Form::Vvv | Form::VvvI => true,
+                            Form::Vv | Form::VvI | Form::Vvv | Form::VvvI | Form::CmpMask => true,
+                            Form::MaskBlend => k != 2,
                             _ => k == 1,
                         };
                         srcs.push(if vector {
@@ -115,7 +118,9 @@ fn run_one(func: &mut FunctionSsa) {
                     let kind = match row.form {
                         f if f.returns_vector() => vstore,
                         Form::ToInt if row.int_width == 8 => StoreKind::I64,
-                        Form::Extract | Form::MoveMask if row.int_width == 8 => StoreKind::I64,
+                        Form::Extract | Form::MoveMask | Form::CmpMask if row.int_width == 8 => {
+                            StoreKind::I64
+                        }
                         _ => StoreKind::I32,
                     };
                     push(&mut ins, At::After(v), store(args[0], v, kind, 0));

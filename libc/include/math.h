@@ -589,6 +589,12 @@
 #define FP_ZERO 3
 #define FP_NORMAL 4
 #define FP_SUBNORMAL 5
+#elif defined(_WIN32)
+#define FP_NAN 0x0100
+#define FP_NORMAL 0x0400
+#define FP_INFINITE (FP_NAN | FP_NORMAL)
+#define FP_ZERO 0x4000
+#define FP_SUBNORMAL (FP_NORMAL | FP_ZERO)
 #else
 #define FP_NAN 0
 #define FP_INFINITE 1

@@ -25,7 +25,7 @@
 #define EAI_FAIL      11003
 #define EAI_FAMILY    10047
 #define EAI_MEMORY    8
-#define EAI_NODATA    11001
+#define EAI_NODATA    11004
 #define EAI_NONAME    11001
 #define EAI_SERVICE   10109
 #define EAI_SOCKTYPE  10044
@@ -46,8 +46,8 @@
 
 // Multicast-filter WSAIoctl codes (ws2ipdef.h, reached through
 // ws2tcpip.h). Their presence signals a recent enough SDK.
-#define SIO_GET_MULTICAST_FILTER  _WSAIOR(IOC_WS2, 14)
-#define SIO_SET_MULTICAST_FILTER  _WSAIOW(IOC_WS2, 13)
+#define SIO_GET_MULTICAST_FILTER  _IOW('t', 124 | IOC_IN, unsigned long)
+#define SIO_SET_MULTICAST_FILTER  _IOW('t', 125, unsigned long)
 
 // IPv4 / IPv6 string-conversion helpers (ws2tcpip.h), ws2_32 exports on
 // the targeted Windows version; <winsock2.h> declares the inet_ntoa and

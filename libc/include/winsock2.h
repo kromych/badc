@@ -216,7 +216,7 @@ typedef enum {
 #define SO_SNDTIMEO    0x1005
 #define SO_RCVTIMEO    0x1006
 #define SO_TYPE        0x1008
-#define SO_EXCLUSIVEADDRUSE 0xfffffffb
+#define SO_EXCLUSIVEADDRUSE ((int)(~SO_REUSEADDR))
 
 // recv / send flags (winsock2.h).
 #define MSG_OOB       0x1

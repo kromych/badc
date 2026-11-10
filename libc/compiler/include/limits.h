@@ -63,8 +63,10 @@
 #define LLONG_MAX    9223372036854775807
 #define ULLONG_MAX  18446744073709551615
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #define PATH_MAX    1024
+#elif defined(_WIN32)
+#define PATH_MAX    260
 #else
 #define PATH_MAX    4096
 #endif

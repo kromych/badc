@@ -28,11 +28,16 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN  ((void (*)(int))1)
 #define SIG_ERR  ((void (*)(int))-1)
 
-// C99-required signal numbers (7.14). These values match every
-// supported host, including Windows msvcrt.
+// C99-required signal numbers (7.14), the same on every supported host but
+// for msvcrt's SIGABRT, 22 (its 6 is SIGABRT_COMPAT).
 #define SIGINT  2
 #define SIGILL  4
+#ifdef _WIN32
+#define SIGABRT 22
+#define SIGABRT_COMPAT 6
+#else
 #define SIGABRT 6
+#endif
 #define SIGFPE  8
 #define SIGSEGV 11
 #define SIGTERM 15

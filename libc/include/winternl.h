@@ -45,7 +45,7 @@ typedef struct _OBJECT_ATTRIBUTES *POBJECT_ATTRIBUTES;
 #define SYNCHRONIZATION_EVENT   1
 
 // Transaction-manager / process-flag values.
-#define TRANSACTION_ALL_ACCESS  0x000F003FUL
+#define TRANSACTION_ALL_ACCESS  0x001F003FUL
 #define PS_INHERIT_HANDLES      4
 
 // NTSTATUS values. The full set lives in `<ntstatus.h>`; the

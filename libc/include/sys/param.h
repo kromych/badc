@@ -12,6 +12,11 @@
 #define MAXHOSTNAMELEN 64
 #define MAXSYMLINKS    20
 #define NGROUPS        65536
+#elif defined(_WIN32)
+#define MAXPATHLEN     260
+#define MAXHOSTNAMELEN 256
+#define MAXSYMLINKS    32
+#define NGROUPS        16
 #else
 #define MAXPATHLEN     1024
 #define MAXHOSTNAMELEN 256

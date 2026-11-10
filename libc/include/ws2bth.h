@@ -23,7 +23,7 @@ typedef BTH_ADDR *PBTH_ADDR;
 #define SOL_SCO     0x0101
 
 // SOL_RFCOMM option names (ws2bth.h).
-#define SO_BTH_ENCRYPT  0x00000001
+#define SO_BTH_ENCRYPT  0x00000002
 #define SO_BTH_AUTHENTICATE 0x80000001
 #define SO_BTH_MTU      0x80000007
 #define SO_BTH_MTU_MAX  0x80000008

@@ -101,8 +101,10 @@
 #define IPPROTO_UDP 17
 #define INADDR_ANY  0
 // listen()'s backlog bound: the kernel's 4096 since Linux 5.4.
-#ifdef __linux__
+#if defined(__linux__)
 #define SOMAXCONN   4096
+#elif defined(_WIN32)
+#define SOMAXCONN   0x7fffffff
 #else
 #define SOMAXCONN   128
 #endif

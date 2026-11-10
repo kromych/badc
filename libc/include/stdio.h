@@ -57,28 +57,17 @@
 #define L_tmpnam     20
 #define L_ctermid    9
 #else
-#ifndef FILENAME_MAX
-#define FILENAME_MAX 4096
-#endif
-#ifndef FOPEN_MAX
-#define FOPEN_MAX    1024
-#endif
-#ifndef TMP_MAX
-#define TMP_MAX      308915776
-#endif
-#ifndef BUFSIZ
-#define BUFSIZ       8192
-#endif
-#ifndef L_tmpnam
-#define L_tmpnam     20
-#endif
-#ifndef L_ctermid
-#define L_ctermid    1024
-#endif
+#define FILENAME_MAX 260
+#define FOPEN_MAX    20
+#define TMP_MAX      32767
+#define BUFSIZ       512
+#define L_tmpnam     14
 #endif
 #ifndef PATH_MAX
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #define PATH_MAX     1024
+#elif defined(_WIN32)
+#define PATH_MAX     260
 #else
 #define PATH_MAX     4096
 #endif

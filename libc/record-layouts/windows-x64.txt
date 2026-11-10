@@ -87,8 +87,21 @@ typedef SETJMP_FLOAT128 16 16
 typedef jmp_buf 256 16
 
 sched.h y
+struct timespec 16 8
+  tv_sec 0
+  tv_nsec 8
 struct sched_param 4 4
   sched_priority 0
+typedef time_t 8 8 signed
+typedef clockid_t 4 4 signed
+typedef ssize_t 8 8 signed
+typedef off64_t 8 8 signed
+typedef off_t 4 4 signed
+typedef pid_t 8 8 signed
+typedef mode_t 2 2 unsigned
+typedef dev_t 4 4 unsigned
+typedef ino_t 2 2 unsigned
+typedef useconds_t 4 4 unsigned
 
 stdio.h y
 typedef fpos_t 8 8 signed
@@ -183,9 +196,6 @@ signal.h y
 typedef sig_atomic_t 4 4 signed
 
 time.h y
-struct timespec 16 8
-  tv_sec 0
-  tv_nsec 8
 struct tm 36 4
   tm_sec 0
   tm_min 4
@@ -196,9 +206,7 @@ struct tm 36 4
   tm_wday 24
   tm_yday 28
   tm_isdst 32
-typedef time_t 8 8 signed
 typedef clock_t 4 4 signed
-typedef clockid_t 4 4 signed
 
 uchar.h y
 struct _wfinddata64i32_t 560 8
@@ -286,16 +294,6 @@ struct stat64 56 8
 struct FTW 8 4
   base 0
   level 4
-
-unistd.h y
-typedef ssize_t 8 8 signed
-typedef off_t 4 4 signed
-typedef off64_t 8 8 signed
-typedef pid_t 8 8 signed
-typedef mode_t 2 2 unsigned
-typedef dev_t 4 4 unsigned
-typedef ino_t 2 2 unsigned
-typedef useconds_t 4 4 unsigned
 
 getopt.h y
 struct option 32 8
@@ -2578,6 +2576,14 @@ struct sockaddr_storage 128 8
   __ss_pad1 2
   __ss_align 8
   __ss_pad2 16
+struct WSAData 408 8
+  wVersion 0
+  wHighVersion 2
+  iMaxSockets 4
+  iMaxUdpDg 6
+  lpVendorInfo 8
+  szDescription 16
+  szSystemStatus 273
 struct in_addr 4 4
   S_un 0
 struct sockaddr_in 16 4
@@ -2588,14 +2594,6 @@ struct sockaddr_in 16 4
 struct _WSANETWORKEVENTS 44 4
   lNetworkEvents 0
   iErrorCode 4
-struct WSAData 408 8
-  wVersion 0
-  wHighVersion 2
-  iMaxSockets 4
-  iMaxUdpDg 6
-  lpVendorInfo 8
-  szDescription 16
-  szSystemStatus 273
 struct _WSAPROTOCOLCHAIN 32 4
   ChainLen 0
   ChainEntries 4
@@ -2948,12 +2946,12 @@ typedef PROCESSOR_NUMBER 4 2
   Number 2
   Reserved 3
 typedef PPROCESSOR_NUMBER 8 8
-typedef IMAGE_RUNTIME_FUNCTION_ENTRY 12 4
+typedef _IMAGE_RUNTIME_FUNCTION_ENTRY 12 4
   BeginAddress 0
   EndAddress 4
   UnwindInfoAddress 8
   UnwindData 8
-typedef PIMAGE_RUNTIME_FUNCTION_ENTRY 8 8
+typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY 8 8
 typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 4
   BeginAddress 0
   UnwindData 4
@@ -2965,6 +2963,12 @@ typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 4
   CR bit 53 2
   FrameSize bit 55 9
 typedef PIMAGE_ARM64_RUNTIME_FUNCTION_ENTRY 8 8
+typedef IMAGE_RUNTIME_FUNCTION_ENTRY 12 4
+  BeginAddress 0
+  EndAddress 4
+  UnwindInfoAddress 8
+  UnwindData 8
+typedef PIMAGE_RUNTIME_FUNCTION_ENTRY 8 8
 typedef RUNTIME_FUNCTION 12 4
   BeginAddress 0
   EndAddress 4

@@ -584,15 +584,17 @@ pub(crate) enum Inst {
         imm: Option<u8>,
         args: Vec<ValueId>,
     },
-    /// The GNU vector extension's element-wise `op` over two 16-byte vectors
-    /// held as `V128` values, `lane` naming the element type: the integer
+    /// The GNU vector extension's element-wise `op` over two vectors of
+    /// `bytes` bytes, 16 held as `V128` values and 8 as the `F64` bits of a
+    /// floating-point register, `lane` naming the element type: the integer
     /// `Add`, `Sub`, `Mul`, `And`, `Or` and `Xor`, wrapping, and the
-    /// floating `Fadd`, `Fsub`, `Fmul` and `Fdiv`. Defines the `V128`
-    /// result. The walker emits one only where
+    /// floating `Fadd`, `Fsub`, `Fmul` and `Fdiv`. Defines the result in
+    /// the operands' form. The walker emits one only where
     /// [`VecLane::binop_in_one_instruction`] holds for the target.
     VecBinop {
         op: BinOp,
         lane: VecLane,
+        bytes: u8,
         lhs: ValueId,
         rhs: ValueId,
     },
@@ -1117,10 +1119,18 @@ impl VecLane {
         matches!(self, VecLane::F32 | VecLane::F64)
     }
 
-    /// Whether the target has one instruction for the element-wise `op`:
-    /// SSE2 has no 8-, 32- or 64-bit integer multiply, AdvSIMD no 64-bit
-    /// one.
-    pub(crate) fn binop_in_one_instruction(self, op: BinOp, x86: bool) -> bool {
+    /// Whether the target has one instruction for the element-wise `op` on
+    /// vectors of `bytes` bytes: SSE2 has no 8-, 32- or 64-bit integer
+    /// multiply, AdvSIMD no 64-bit one. An 8-byte vector of one element is
+    /// a scalar, a bitwise operation on an 8-byte one a single integer
+    /// instruction, and on x86-64 an 8-byte one fills the low half of an xmm
+    /// register, whose floating upper lanes the instruction would compute
+    /// too, raising their exceptions.
+    pub(crate) fn binop_in_one_instruction(self, op: BinOp, x86: bool, bytes: u8) -> bool {
+        let bitwise = matches!(op, BinOp::And | BinOp::Or | BinOp::Xor);
+        if bytes == 8 && (self.bytes() == 8 || bitwise || x86 && self.is_float()) {
+            return false;
+        }
         match op {
             BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor => !self.is_float(),
             BinOp::Mul if x86 => self == VecLane::I16,

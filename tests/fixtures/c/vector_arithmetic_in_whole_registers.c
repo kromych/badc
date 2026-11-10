@@ -1,4 +1,4 @@
-// GNU vector arithmetic on 16-byte vectors of every element type, the
+// GNU vector arithmetic on 8- and 16-byte vectors of every element type, the
 // integer lanes wrapping on overflow and the floating ones rounding as the
 // scalar operation does, checked against the same arithmetic per element.
 // Returns 0 when every check passes; each failure returns a distinct code.
@@ -10,6 +10,10 @@ typedef unsigned v4u __attribute__((vector_size(16)));
 typedef long long v2l __attribute__((vector_size(16)));
 typedef float v4f __attribute__((vector_size(16)));
 typedef double v2d __attribute__((vector_size(16)));
+typedef unsigned char v8b __attribute__((vector_size(8)));
+typedef short v4h __attribute__((vector_size(8)));
+typedef int v2i __attribute__((vector_size(8)));
+typedef float v2f __attribute__((vector_size(8)));
 
 __attribute__((noinline)) v16c c_ops(v16c a, v16c b) { return (a + b) ^ (a - b) | (a & b); }
 __attribute__((noinline)) v8s s_ops(v8s a, v8s b) { return a * b + (a - b); }
@@ -18,6 +22,10 @@ __attribute__((noinline)) v4u u_ops(v4u a, v4u b) { return (a - b) ^ (a | b); }
 __attribute__((noinline)) v2l l_ops(v2l a, v2l b) { return (a + b) - (a & b); }
 __attribute__((noinline)) v4f f_ops(v4f a, v4f b) { return (a * b + a) / (b - a); }
 __attribute__((noinline)) v2d d_ops(v2d a, v2d b) { return (a - b) * (a + b) / b; }
+__attribute__((noinline)) v8b b8_ops(v8b a, v8b b) { return (a + b) ^ (a | b); }
+__attribute__((noinline)) v4h h8_ops(v4h a, v4h b) { return a * b - a; }
+__attribute__((noinline)) v2i i8_ops(v2i a, v2i b) { return (a - b) & (a + b); }
+__attribute__((noinline)) v2f f8_ops(v2f a, v2f b) { return (a - b) / b; }
 
 int main(void) {
     v16c ca, cb;
@@ -67,6 +75,30 @@ int main(void) {
         double q = da[i] + db[i];
         double r = p * q;
         if (d[i] != r / db[i]) return 7;
+    }
+    v8b ba, bb;
+    v4h ha, hb;
+    v2i ja, jb;
+    v2f ga, gb;
+    for (int i = 0; i < 8; i++) ba[i] = (unsigned char)(i * 41 + 200), bb[i] = (unsigned char)(i * 13 + 99);
+    for (int i = 0; i < 4; i++) ha[i] = (short)(i * 12345 - 20000), hb[i] = (short)(i + 7);
+    for (int i = 0; i < 2; i++) {
+        ja[i] = 2000000000 + i, jb[i] = -2000000000 - i;
+        ga[i] = 2.5f + (float)i, gb[i] = 0.5f + (float)i;
+    }
+    v8b b8 = b8_ops(ba, bb);
+    for (int i = 0; i < 8; i++)
+        if (b8[i] != (unsigned char)((unsigned char)(ba[i] + bb[i]) ^ (ba[i] | bb[i]))) return 8;
+    v4h h8 = h8_ops(ha, hb);
+    for (int i = 0; i < 4; i++)
+        if (h8[i] != (short)((short)(ha[i] * hb[i]) - ha[i])) return 9;
+    v2i i8 = i8_ops(ja, jb);
+    for (int i = 0; i < 2; i++)
+        if (i8[i] != (int)((unsigned)(ja[i] - jb[i]) & (unsigned)(ja[i] + jb[i]))) return 10;
+    v2f f8 = f8_ops(ga, gb);
+    for (int i = 0; i < 2; i++) {
+        float p = ga[i] - gb[i];
+        if (f8[i] != p / gb[i]) return 11;
     }
     return 0;
 }

@@ -1926,12 +1926,17 @@ impl SsaBuilder {
     /// destination address in `args[0]`, so the local caches are cleared.
     pub(crate) fn vec_binop(
         &mut self,
-        op: BinOp,
-        lane: crate::c5::ir::VecLane,
+        (op, lane, bytes): (BinOp, crate::c5::ir::VecLane, u8),
         lhs: ValueId,
         rhs: ValueId,
     ) -> ValueId {
-        self.push(Inst::VecBinop { op, lane, lhs, rhs })
+        self.push(Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        })
     }
 
     pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {

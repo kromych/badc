@@ -472,9 +472,21 @@ pub(super) fn emit_inst(
         }
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame, scratch),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
-        Inst::VecBinop { op, lane, lhs, rhs } => {
-            emit_vec_binop(code, (*op, *lane), (*lhs, *rhs), dst, alloc, frame, scratch)
-        }
+        Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => emit_vec_binop(
+            code,
+            (*op, *lane, *bytes),
+            (*lhs, *rhs),
+            dst,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Fma {
             a,
             b,
@@ -683,9 +695,10 @@ fn emit_incoming(
 
 /// `Inst::VecBinop`: the AdvSIMD instruction on the operands' v registers,
 /// a spilled one reloaded into an FP scratch, the result spilled from one.
+/// An 8-byte vector takes the 64-bit form on the d registers.
 fn emit_vec_binop(
     code: &mut Vec<u8>,
-    (op, lane): (super::super::ir::BinOp, super::super::ir::VecLane),
+    (op, lane, bytes): (super::super::ir::BinOp, super::super::ir::VecLane, u8),
     (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
     dst: Place,
     alloc: &Allocation,
@@ -695,6 +708,25 @@ fn emit_vec_binop(
     let Some(qd) = fp_or_spill_dst(dst, frame) else {
         return fail("VecBinop: dst not fp reg / spill");
     };
+    if bytes == 8 {
+        let Some(dn) = materialize_fp(code, place_of(alloc, lhs), frame.fp_scratch[0], frame)
+        else {
+            return fail("VecBinop: lhs not fp reg / spill");
+        };
+        let Some(dm) = materialize_fp(code, place_of(alloc, rhs), frame.fp_scratch[1], frame)
+        else {
+            return fail("VecBinop: rhs not fp reg / spill");
+        };
+        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm)) else {
+            return fail(alloc::format!(
+                "VecBinop: no instruction for {op:?} on {lane:?}"
+            ));
+        };
+        // The 64-bit form: Q clear.
+        emit(code, word & !0x4000_0000);
+        store_spilled_fp(code, frame, dst, qd);
+        return Ok(());
+    }
     let Some(qn) = materialize_v128(
         code,
         place_of(alloc, lhs),

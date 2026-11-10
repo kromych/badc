@@ -3037,7 +3037,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v715 Imm(0)                                           -> x1
     v716 Imm(0)                                           -> x1
     v717 Imm(0)                                           -> x1
-    v718 VecBinop { op=And, lane=I64, lhs=v698, rhs=v711 } -> d2
+    v718 VecBinop { op=And, lane=I64, bytes=16, lhs=v698, rhs=v711 } -> d2
     v719 LocalAddr(-99)                                   -> x1
     v720 StoreLocal { off=-99, value=v718, kind=V128 }    -> -
     v721 LocalAddr(-99)                                   -> x1
@@ -3079,7 +3079,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v755 Imm(0)                                           -> x1
     v756 LoadLocal { off=-102, kind=V128 }                -> d2
     v757 Imm(0)                                           -> x1
-    v758 VecBinop { op=And, lane=I64, lhs=v756, rhs=v711 } -> d2
+    v758 VecBinop { op=And, lane=I64, bytes=16, lhs=v756, rhs=v711 } -> d2
     v759 LocalAddr(-101)                                  -> x1
     v760 StoreLocal { off=-101, value=v758, kind=V128 }   -> -
     v761 LocalAddr(-101)                                  -> x1
@@ -3116,7 +3116,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v790 Imm(0)                                           -> x1
     v791 Imm(0)                                           -> x1
     v792 Imm(0)                                           -> x1
-    v793 VecBinop { op=And, lane=I64, lhs=v698, rhs=v711 } -> d2
+    v793 VecBinop { op=And, lane=I64, bytes=16, lhs=v698, rhs=v711 } -> d2
     v794 LocalAddr(-99)                                   -> x1
     v795 StoreLocal { off=-99, value=v793, kind=V128 }    -> -
     v796 LocalAddr(-99)                                   -> x1
@@ -3156,7 +3156,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v1029 Imm(0)                                           -> x1
     v1030 LoadLocal { off=-102, kind=V128 }                -> d2
     v1031 Imm(0)                                           -> x1
-    v1032 VecBinop { op=And, lane=I64, lhs=v1030, rhs=v711 } -> d2
+    v1032 VecBinop { op=And, lane=I64, bytes=16, lhs=v1030, rhs=v711 } -> d2
     v1033 LocalAddr(-101)                                  -> x1
     v1034 StoreLocal { off=-101, value=v1032, kind=V128 }  -> -
     v1035 LocalAddr(-101)                                  -> x1
@@ -3206,7 +3206,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v824 Imm(0)                                           -> x1
     v825 Imm(0)                                           -> x1
     v826 Imm(0)                                           -> x1
-    v827 VecBinop { op=And, lane=I64, lhs=v698, rhs=v711 } -> d2
+    v827 VecBinop { op=And, lane=I64, bytes=16, lhs=v698, rhs=v711 } -> d2
     v828 LocalAddr(-99)                                   -> x1
     v829 StoreLocal { off=-99, value=v827, kind=V128 }    -> -
     v830 LocalAddr(-99)                                   -> x1
@@ -3242,7 +3242,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v858 Imm(0)                                           -> x1
     v859 Imm(0)                                           -> x1
     v860 Imm(0)                                           -> x1
-    v861 VecBinop { op=And, lane=I64, lhs=v698, rhs=v711 } -> d2
+    v861 VecBinop { op=And, lane=I64, bytes=16, lhs=v698, rhs=v711 } -> d2
     v862 LocalAddr(-99)                                   -> x1
     v863 StoreLocal { off=-99, value=v861, kind=V128 }    -> -
     v864 LocalAddr(-99)                                   -> x1
@@ -3282,7 +3282,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v1075 Imm(0)                                           -> x1
     v1076 LoadLocal { off=-102, kind=V128 }                -> d0
     v1077 Imm(0)                                           -> x1
-    v1078 VecBinop { op=And, lane=I64, lhs=v1076, rhs=v711 } -> d0
+    v1078 VecBinop { op=And, lane=I64, bytes=16, lhs=v1076, rhs=v711 } -> d0
     v1079 LocalAddr(-101)                                  -> x1
     v1080 StoreLocal { off=-101, value=v1078, kind=V128 }  -> -
     v1081 LocalAddr(-101)                                  -> x1
@@ -3665,7 +3665,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v604 Imm(0)                                           -> x0
     v605 LoadLocal { off=-102, kind=V128 }                -> d1
     v606 Imm(0)                                           -> x0
-    v607 VecBinop { op=And, lane=I64, lhs=v605, rhs=v586 } -> d0
+    v607 VecBinop { op=And, lane=I64, bytes=16, lhs=v605, rhs=v586 } -> d0
     v608 LocalAddr(-101)                                  -> x0
     v609 StoreLocal { off=-101, value=v607, kind=V128 }   -> -
     v610 LocalAddr(-101)                                  -> x0
@@ -3774,7 +3774,7 @@ fn ent_pc=533 n_params=2 variadic=false locals=5
     v982 Imm(0)                                           -> x0
     v983 LoadLocal { off=-102, kind=V128 }                -> d1
     v984 Imm(0)                                           -> x0
-    v985 VecBinop { op=And, lane=I64, lhs=v983, rhs=v957 } -> d0
+    v985 VecBinop { op=And, lane=I64, bytes=16, lhs=v983, rhs=v957 } -> d0
     v986 LocalAddr(-101)                                  -> x0
     v987 StoreLocal { off=-101, value=v985, kind=V128 }   -> -
     v988 LocalAddr(-101)                                  -> x0

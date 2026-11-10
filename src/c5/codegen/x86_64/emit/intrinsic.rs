@@ -238,16 +238,27 @@ pub(super) fn emit_x86_simd(
 /// immediate if any: `a` copied into the register the result is formed in,
 /// the result's own unless that holds `b`, then a scratch it is copied
 /// from. A commutative `op` whose result takes `b`'s register reads `a`
-/// into it instead. A spilled operand loads into an FP scratch.
+/// into it instead. A spilled operand loads into an FP scratch. Without
+/// `wide` the operands and result are the low 64 bits of their registers,
+/// spilled as 8 bytes.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn sse_binary(
     code: &mut Vec<u8>,
     mnem: &'static str,
     imm: Option<u8>,
     commutes: bool,
+    wide: bool,
     dst: Place,
     (a, b): (Place, Place),
     frame: Frame,
 ) -> Emit {
+    let load = |code: &mut Vec<u8>, p: Place, scratch: Reg| {
+        if wide {
+            materialize_v128(code, p, scratch, frame)
+        } else {
+            materialize_fp(code, p, scratch, frame)
+        }
+    };
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
@@ -267,7 +278,7 @@ pub(super) fn sse_binary(
         Ok(())
     };
     let source = |code: &mut Vec<u8>, p: Place| -> Emit<u8> {
-        match materialize_v128(code, p, Reg(src_x), frame) {
+        match load(code, p, Reg(src_x)) {
             Some(Reg(r)) => Ok(r),
             None => fail("x86 simd: a source has no place"),
         }
@@ -289,20 +300,28 @@ pub(super) fn sse_binary(
         Place::FpReg(r) if r == w => {}
         Place::FpReg(r) => emit_movapd_xmm_xmm(code, Reg(w), Reg(r)),
         p => {
-            if materialize_v128(code, p, Reg(w), frame).is_none_or(|r| r.0 != w) {
+            if load(code, p, Reg(w)).is_none_or(|r| r.0 != w) {
                 return fail("x86 simd: a source has no place");
             }
         }
     }
     run(code, x, w)?;
-    mirror_v128_dst(code, dst, Reg(w), frame);
+    if wide {
+        mirror_v128_dst(code, dst, Reg(w), frame);
+    } else {
+        match dst {
+            Place::FpReg(r) if r != w => emit_movapd_xmm_xmm(code, Reg(r), Reg(w)),
+            _ => fp_spill_dst_to_slot(code, dst, Reg(w), frame),
+        }
+    }
     Ok(())
 }
 
-/// `Inst::VecBinop`: the SSE instruction for the element-wise operation.
+/// `Inst::VecBinop`: the SSE instruction for the element-wise operation, an
+/// 8-byte vector in the low half of the xmm register.
 pub(super) fn emit_vec_binop(
     code: &mut Vec<u8>,
-    (op, lane): (super::super::ir::BinOp, super::super::ir::VecLane),
+    (op, lane, bytes): (super::super::ir::BinOp, super::super::ir::VecLane, u8),
     (lhs, rhs): (super::super::ir::ValueId, super::super::ir::ValueId),
     dst: Place,
     alloc: &Allocation,
@@ -346,6 +365,7 @@ pub(super) fn emit_vec_binop(
         mnem,
         None,
         commutes,
+        bytes == 16,
         dst,
         (place(lhs), place(rhs)),
         frame,
@@ -442,6 +462,7 @@ pub(super) fn emit_x86_simd_val(
                 row.mnem,
                 imm,
                 commutes,
+                true,
                 dst,
                 (place(0), place(1)),
                 frame,

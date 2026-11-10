@@ -3080,6 +3080,21 @@ v4i mix(v4i a, v4i b) { return (a + b) ^ (a - b); }\n";
             || format!("x86-64 {name}: a memory operand: {insns:x?}"),
         );
     }
+    // An 8-byte vector takes the 64-bit form: `add v0.4h, v0.4h, v1.4h`.
+    const HALF: &str = "typedef short v4h __attribute__((vector_size(8)));\n\
+v4h add4(v4h a, v4h b) { return a + b; }\n";
+    let add4 = a64(HALF, "add4");
+    m.expect(add4 == [0x0E61_8400, 0xD65F_03C0], || {
+        format!("aarch64 add4: {add4:08x?}")
+    });
+    // `_mm_add_pi16` in the low half of the xmm registers, as gcc 16 gives
+    // it: `paddw` and `ret`, from 22 instructions.
+    let m64 = x64(
+        "#include <mmintrin.h>\n\
+__m64 addw(__m64 a, __m64 b) { return _mm_add_pi16(a, b); }\n",
+        "addw",
+    );
+    m.expect(m64.len() == 2, || format!("x86-64 addw: {m64:x?}"));
     m.finish();
 }
 

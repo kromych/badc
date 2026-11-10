@@ -2179,42 +2179,10 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x38(%rbp), %rdi
                	leaq	-0x30(%rbp), %r8
-               	leaq	-0x8(%rbp), %rax
-               	movzbq	-0x38(%rbp), %rcx
-               	movzbq	-0x30(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x8(%rbp)
-               	movzbq	-0x37(%rbp), %rcx
-               	movzbq	-0x2f(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x7(%rbp)
-               	movzbq	-0x36(%rbp), %rcx
-               	movzbq	-0x2e(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x6(%rbp)
-               	movzbq	-0x35(%rbp), %rcx
-               	movzbq	-0x2d(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x5(%rbp)
-               	movzbq	-0x34(%rbp), %rcx
-               	movzbq	-0x2c(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x4(%rbp)
-               	movzbq	-0x33(%rbp), %rcx
-               	movzbq	-0x2b(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x3(%rbp)
-               	movzbq	-0x32(%rbp), %rcx
-               	movzbq	-0x2a(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x2(%rbp)
-               	movzbq	-0x31(%rbp), %rcx
-               	movzbq	-0x29(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movb	%cl, -0x1(%rbp)
-               	leaq	-0x28(%rbp), %rcx
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
+               	movsd	-0x38(%rbp), %xmm0
+               	movsd	-0x30(%rbp), %xmm1
+               	paddb	%xmm1, %xmm0
+               	movsd	%xmm0, -0x28(%rbp)
                	xorl	%eax, %eax
                	leaq	-0x8(%rbp), %rcx
                	movzbq	(%rdi,%rax), %rdx

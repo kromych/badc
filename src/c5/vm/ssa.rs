@@ -1741,9 +1741,27 @@ fn run_inst<H: Host>(
         }
         // The -O rewrite producing it never reaches the VM.
         Inst::X86SimdVal { .. } => "X86SimdVal",
-        Inst::VecBinop { op, lane, lhs, rhs } => {
-            let r = vec_binop(*op, *lane, frame.v128(*lhs)?, frame.v128(*rhs)?);
-            frame.set_v128(v, r);
+        Inst::VecBinop {
+            op,
+            lane,
+            bytes,
+            lhs,
+            rhs,
+        } => {
+            if *bytes == 8 {
+                // The 8-byte operands are the bits of their registers.
+                let wide = |x: i64| {
+                    let mut b = [0u8; 16];
+                    b[..8].copy_from_slice(&x.to_le_bytes());
+                    b
+                };
+                let (a, c) = (frame.regs[*lhs as usize], frame.regs[*rhs as usize]);
+                let r = vec_binop(*op, *lane, wide(a), wide(c));
+                frame.regs[v as usize] = i64::from_le_bytes(r[..8].try_into().unwrap());
+            } else {
+                let r = vec_binop(*op, *lane, frame.v128(*lhs)?, frame.v128(*rhs)?);
+                frame.set_v128(v, r);
+            }
             return Ok(());
         }
         Inst::InlineAsm { asm, args } => {

@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v20  LocalAddr(-244)                                  -> x0
     v21  LoadLocal { off=-243, kind=V128 }                -> d0
     v22  LoadLocal { off=-244, kind=V128 }                -> d1
-    v23  VecBinop { op=Fadd, lane=F32, lhs=v21, rhs=v22 } -> d0
+    v23  VecBinop { op=Fadd, lane=F32, bytes=16, lhs=v21, rhs=v22 } -> d0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
     v26  LocalAddr(-247)                                  -> x1
@@ -141,7 +141,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v219 LocalAddr(-244)                                  -> x0
     v220 LoadLocal { off=-243, kind=V128 }                -> d0
     v221 LoadLocal { off=-244, kind=V128 }                -> d1
-    v222 VecBinop { op=Fsub, lane=F32, lhs=v220, rhs=v221 } -> d0
+    v222 VecBinop { op=Fsub, lane=F32, bytes=16, lhs=v220, rhs=v221 } -> d0
     v223 Imm(0)                                           -> x0
     v224 Imm(0)                                           -> x0
     v225 LocalAddr(-248)                                  -> x1
@@ -256,7 +256,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v339 LocalAddr(-244)                                  -> x0
     v340 LoadLocal { off=-243, kind=V128 }                -> d0
     v341 LoadLocal { off=-244, kind=V128 }                -> d1
-    v342 VecBinop { op=Fmul, lane=F32, lhs=v340, rhs=v341 } -> d0
+    v342 VecBinop { op=Fmul, lane=F32, bytes=16, lhs=v340, rhs=v341 } -> d0
     v343 Imm(0)                                           -> x0
     v344 Imm(0)                                           -> x0
     v345 LocalAddr(-249)                                  -> x1
@@ -371,7 +371,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v459 LocalAddr(-244)                                  -> x0
     v460 LoadLocal { off=-243, kind=V128 }                -> d0
     v461 LoadLocal { off=-244, kind=V128 }                -> d1
-    v462 VecBinop { op=Fdiv, lane=F32, lhs=v460, rhs=v461 } -> d0
+    v462 VecBinop { op=Fdiv, lane=F32, bytes=16, lhs=v460, rhs=v461 } -> d0
     v463 Imm(0)                                           -> x0
     v464 Imm(0)                                           -> x0
     v465 LocalAddr(-250)                                  -> x1
@@ -486,7 +486,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v579 LocalAddr(-246)                                  -> x0
     v580 LoadLocal { off=-245, kind=V128 }                -> d0
     v581 LoadLocal { off=-246, kind=V128 }                -> d1
-    v582 VecBinop { op=Fadd, lane=F64, lhs=v580, rhs=v581 } -> d0
+    v582 VecBinop { op=Fadd, lane=F64, bytes=16, lhs=v580, rhs=v581 } -> d0
     v583 Imm(0)                                           -> x0
     v584 Imm(0)                                           -> x0
     v585 LocalAddr(-251)                                  -> x1
@@ -567,7 +567,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v665 LocalAddr(-246)                                  -> x0
     v666 LoadLocal { off=-245, kind=V128 }                -> d0
     v667 LoadLocal { off=-246, kind=V128 }                -> d1
-    v668 VecBinop { op=Fsub, lane=F64, lhs=v666, rhs=v667 } -> d0
+    v668 VecBinop { op=Fsub, lane=F64, bytes=16, lhs=v666, rhs=v667 } -> d0
     v669 Imm(0)                                           -> x0
     v670 Imm(0)                                           -> x0
     v671 LocalAddr(-252)                                  -> x1
@@ -648,7 +648,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v751 LocalAddr(-246)                                  -> x0
     v752 LoadLocal { off=-245, kind=V128 }                -> d0
     v753 LoadLocal { off=-246, kind=V128 }                -> d1
-    v754 VecBinop { op=Fmul, lane=F64, lhs=v752, rhs=v753 } -> d0
+    v754 VecBinop { op=Fmul, lane=F64, bytes=16, lhs=v752, rhs=v753 } -> d0
     v755 Imm(0)                                           -> x0
     v756 Imm(0)                                           -> x0
     v757 LocalAddr(-253)                                  -> x1
@@ -729,7 +729,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v837 LocalAddr(-246)                                  -> x0
     v838 LoadLocal { off=-245, kind=V128 }                -> d0
     v839 LoadLocal { off=-246, kind=V128 }                -> d1
-    v840 VecBinop { op=Fdiv, lane=F64, lhs=v838, rhs=v839 } -> d0
+    v840 VecBinop { op=Fdiv, lane=F64, bytes=16, lhs=v838, rhs=v839 } -> d0
     v841 Imm(0)                                           -> x0
     v842 Imm(0)                                           -> x0
     v843 LocalAddr(-254)                                  -> x1
@@ -1692,7 +1692,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1835 LocalAddr(-244)                                  -> x1
     v1836 LoadLocal { off=-243, kind=V128 }                -> d0
     v1837 LoadLocal { off=-244, kind=V128 }                -> d1
-    v1838 VecBinop { op=Fmul, lane=F32, lhs=v1836, rhs=v1837 } -> d0
+    v1838 VecBinop { op=Fmul, lane=F32, bytes=16, lhs=v1836, rhs=v1837 } -> d0
     v1839 Imm(0)                                           -> x1
     v1840 Imm(0)                                           -> x1
     v1841 LocalAddr(-259)                                  -> x2
@@ -1706,7 +1706,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1849 LocalAddr(-244)                                  -> x0
     v1850 LoadLocal { off=-260, kind=V128 }                -> d0
     v1851 LoadLocal { off=-244, kind=V128 }                -> d1
-    v1852 VecBinop { op=Fmul, lane=F32, lhs=v1850, rhs=v1851 } -> d0
+    v1852 VecBinop { op=Fmul, lane=F32, bytes=16, lhs=v1850, rhs=v1851 } -> d0
     v1853 Imm(0)                                           -> x0
     v1854 Imm(0)                                           -> x0
     v1855 Imm(0)                                           -> x0
@@ -1744,7 +1744,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1892 LocalAddr(-244)                                  -> x1
     v1893 LoadLocal { off=-243, kind=V128 }                -> d0
     v1894 LoadLocal { off=-244, kind=V128 }                -> d1
-    v1895 VecBinop { op=Fadd, lane=F32, lhs=v1893, rhs=v1894 } -> d0
+    v1895 VecBinop { op=Fadd, lane=F32, bytes=16, lhs=v1893, rhs=v1894 } -> d0
     v1896 Imm(0)                                           -> x1
     v1897 Imm(0)                                           -> x1
     v1898 LocalAddr(-261)                                  -> x2
@@ -1758,7 +1758,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1906 LocalAddr(-244)                                  -> x0
     v1907 LoadLocal { off=-262, kind=V128 }                -> d0
     v1908 LoadLocal { off=-244, kind=V128 }                -> d1
-    v1909 VecBinop { op=Fadd, lane=F32, lhs=v1907, rhs=v1908 } -> d0
+    v1909 VecBinop { op=Fadd, lane=F32, bytes=16, lhs=v1907, rhs=v1908 } -> d0
     v1910 Imm(0)                                           -> x0
     v1911 Imm(0)                                           -> x0
     v1912 Imm(0)                                           -> x0
@@ -1796,7 +1796,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1949 LocalAddr(-246)                                  -> x1
     v1950 LoadLocal { off=-245, kind=V128 }                -> d0
     v1951 LoadLocal { off=-246, kind=V128 }                -> d1
-    v1952 VecBinop { op=Fdiv, lane=F64, lhs=v1950, rhs=v1951 } -> d0
+    v1952 VecBinop { op=Fdiv, lane=F64, bytes=16, lhs=v1950, rhs=v1951 } -> d0
     v1953 Imm(0)                                           -> x1
     v1954 Imm(0)                                           -> x1
     v1955 LocalAddr(-263)                                  -> x2
@@ -1810,7 +1810,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1963 LocalAddr(-246)                                  -> x0
     v1964 LoadLocal { off=-264, kind=V128 }                -> d0
     v1965 LoadLocal { off=-246, kind=V128 }                -> d1
-    v1966 VecBinop { op=Fdiv, lane=F64, lhs=v1964, rhs=v1965 } -> d0
+    v1966 VecBinop { op=Fdiv, lane=F64, bytes=16, lhs=v1964, rhs=v1965 } -> d0
     v1967 Imm(0)                                           -> x0
     v1968 Imm(0)                                           -> x0
     v1969 Imm(0)                                           -> x0
@@ -2156,7 +2156,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v2260 LocalAddr(-244)                                  -> x9
     v2261 LoadLocal { off=-243, kind=V128 }                -> d0
     v2262 LoadLocal { off=-244, kind=V128 }                -> d1
-    v2263 VecBinop { op=Fadd, lane=F32, lhs=v2261, rhs=v2262 } -> d0
+    v2263 VecBinop { op=Fadd, lane=F32, bytes=16, lhs=v2261, rhs=v2262 } -> d0
     v2264 LocalAddr(-272)                                  -> x0
     v2265 StoreLocal { off=-272, value=v2263, kind=V128 }  -> -
     v2266 Imm(1073741824)                                  -> x0 [f32]
@@ -2182,7 +2182,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v2286 LocalAddr(-243)                                  -> x0
     v2287 LoadLocal { off=-273, kind=V128 }                -> d0
     v2288 LoadLocal { off=-243, kind=V128 }                -> d1
-    v2289 VecBinop { op=Fsub, lane=F32, lhs=v2287, rhs=v2288 } -> d0
+    v2289 VecBinop { op=Fsub, lane=F32, bytes=16, lhs=v2287, rhs=v2288 } -> d0
     v2290 Imm(0)                                           -> x0
     v2291 Imm(0)                                           -> x0
     v2292 LocalAddr(-269)                                  -> x0

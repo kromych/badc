@@ -3755,7 +3755,7 @@ fn ent_pc=768 n_params=3 variadic=false locals=0
     v83  Imm(0)                                           -> x1
     v84  LoadLocal { off=-87, kind=V128 }                 -> d0
     v85  Imm(0)                                           -> x1
-    v86  VecBinop { op=And, lane=I64, lhs=v84, rhs=v64 }  -> d0
+    v86  VecBinop { op=And, lane=I64, bytes=16, lhs=v84, rhs=v64 } -> d0
     v87  Imm(0)                                           -> x1
     v88  Imm(0)                                           -> x1
     v89  LifetimeEnd(0)                                   -> -
@@ -3847,7 +3847,7 @@ fn ent_pc=768 n_params=3 variadic=false locals=0
     v175 Imm(0)                                           -> x1
     v176 LoadLocal { off=-87, kind=V128 }                 -> d1
     v177 Imm(0)                                           -> x1
-    v178 VecBinop { op=And, lane=I64, lhs=v176, rhs=v156 } -> d1
+    v178 VecBinop { op=And, lane=I64, bytes=16, lhs=v176, rhs=v156 } -> d1
     v179 Imm(0)                                           -> x1
     v180 Imm(0)                                           -> x1
     v181 LifetimeEnd(0)                                   -> -
@@ -4313,7 +4313,7 @@ fn ent_pc=772 n_params=3 variadic=false locals=0
     v66  Imm(0)                                           -> x1
     v67  Imm(0)                                           -> x1
     v68  Imm(0)                                           -> x1
-    v69  VecBinop { op=Xor, lane=I64, lhs=v33, rhs=v64 }  -> d0
+    v69  VecBinop { op=Xor, lane=I64, bytes=16, lhs=v33, rhs=v64 } -> d0
     v70  Imm(0)                                           -> x1
     v71  Imm(0)                                           -> x1
     v72  Imm(0)                                           -> x1
@@ -4383,7 +4383,7 @@ fn ent_pc=772 n_params=3 variadic=false locals=0
     v136 Imm(0)                                           -> x1
     v137 Imm(0)                                           -> x1
     v138 Imm(0)                                           -> x1
-    v139 VecBinop { op=Xor, lane=I64, lhs=v102, rhs=v134 } -> d1
+    v139 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v102, rhs=v134 } -> d1
     v140 Imm(0)                                           -> x1
     v141 Imm(0)                                           -> x1
     v142 Imm(0)                                           -> x1

@@ -1786,7 +1786,18 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::DotBytes(_)
         | Sem::DotWords(_)
         | Sem::TernLog
-        | Sem::CmpPred(..) => false,
+        | Sem::CmpPred(..)
+        | Sem::HalvingAdd(..)
+        | Sem::HalvingSub(..)
+        | Sem::AbsDiff(..)
+        | Sem::BitClear
+        | Sem::OrNot
+        | Sem::CmpGe(_)
+        | Sem::CmpHi(_)
+        | Sem::CmpHs(_)
+        | Sem::CmpTst(_)
+        | Sem::PairMax(..)
+        | Sem::PairMin(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
@@ -1816,7 +1827,7 @@ fn floating_rows_compute_in_the_environment() {
             a
         }
     }
-    for op in x86_simd::OPS {
+    for op in x86_simd::OPS.iter().chain(crate::c5::aarch64_simd::OPS) {
         let (mut env, a) = (Counting(0), [0x3f; 16]);
         let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some();
         let scalar = simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();

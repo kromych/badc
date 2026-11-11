@@ -503,7 +503,8 @@ pub(super) fn has_builtin(name: &str, target: Target) -> bool {
         Some(b) => !matches!(b.supply, Supply::Library(_)),
         None => {
             library_alias(name).is_some()
-                || (target.is_x86_64() && crate::c5::x86_simd::lookup(name).is_some())
+                || crate::c5::simd::lookup(name)
+                    .is_some_and(|op| crate::c5::simd::on_target(op, target))
         }
     }
 }

@@ -565,7 +565,3 @@ pub(crate) const OPS: &[SimdOp] = &[
 pub(crate) fn lookup(name: &str) -> Option<u32> {
     OPS.iter().position(|o| o.name == name).map(|i| i as u32)
 }
-
-pub(crate) fn get(index: u32) -> &'static SimdOp {
-    &OPS[index as usize]
-}

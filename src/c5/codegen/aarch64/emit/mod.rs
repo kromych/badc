@@ -65,6 +65,7 @@ mod inline_asm;
 mod inst;
 mod intrinsic;
 mod mem;
+mod simd;
 #[cfg(test)]
 mod tests;
 
@@ -77,6 +78,7 @@ use inline_asm::*;
 use inst::*;
 use intrinsic::*;
 use mem::*;
+use simd::*;
 
 pub(crate) use arith::{binop_imm_materializes, branch_fuses, cmp_imm12, compare_fuses};
 pub(crate) use frame::{

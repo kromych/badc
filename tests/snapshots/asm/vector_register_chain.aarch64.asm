@@ -78,8 +78,8 @@ Disassembly of section .text:
                	sshr	v1.16b, v16.16b, #0x7
                	ldr	q16, [sp, #0x50]
                	shl	v2.16b, v16.16b, #0x1
-               	ldr	q16, [sp, #0x30]
-               	and	v1.16b, v1.16b, v16.16b
+               	ldr	q17, [sp, #0x30]
+               	and	v1.16b, v1.16b, v17.16b
                	eor	v1.16b, v2.16b, v1.16b
                	eor	v16.16b, v1.16b, v0.16b
                	str	q16, [sp, #0x50]

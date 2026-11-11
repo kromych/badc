@@ -1,4 +1,5 @@
 mod aarch64_isa;
+mod aarch64_simd;
 mod asm;
 mod ast;
 mod attr;

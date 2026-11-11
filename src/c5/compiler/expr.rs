@@ -360,15 +360,15 @@ impl Compiler {
     /// `(` already consumed. Operand count and kinds come from the table
     /// row; the immediate operand of the forms that take one must be an
     /// integer constant expression.
-    fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
+    fn parse_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
+        use super::super::simd;
         use super::super::simd::{Form, Ret, Sem};
-        use super::super::x86_simd;
-        let row = x86_simd::get(op);
-        if !self.target.is_x86_64() {
+        let row = simd::get(op);
+        if !simd::on_target(op, self.target) {
             return Err(self.compile_err(
                 Code::UNSUPPORTED,
-                format!("`{name}` requires an x86 target"),
+                format!("`{name}` requires an {} target", simd::arch(op)),
             ));
         }
         let mut args: Vec<ExprId> = Vec::new();
@@ -1653,7 +1653,7 @@ impl Compiler {
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
                 let name = self.symbols[id_idx].name.clone();
-                self.parse_x86_simd_builtin(op, &name)
+                self.parse_simd_builtin(op, &name)
             }
             Some(BuiltinCall::MemTransfer(op)) => {
                 let name = self.symbols[id_idx].name.clone();
@@ -1770,7 +1770,7 @@ impl Compiler {
             return Some(BuiltinCall::MemTransfer(op));
         }
         if not_real_fn {
-            if let Some(op) = super::super::x86_simd::lookup(name) {
+            if let Some(op) = super::super::simd::lookup(name) {
                 return Some(BuiltinCall::Simd(op));
             }
             if let Some(op) = mem_transfer_op(name) {

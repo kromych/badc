@@ -143,14 +143,14 @@ Disassembly of section .text:
                	eor	v7.16b, v7.16b, v13.16b
                	eor	v6.16b, v6.16b, v14.16b
                	eor	v5.16b, v5.16b, v15.16b
-               	ldr	q16, [sp, #0x70]
-               	eor	v4.16b, v4.16b, v16.16b
-               	ldr	q16, [sp, #0x60]
-               	eor	v3.16b, v3.16b, v16.16b
-               	ldr	q16, [sp, #0x50]
-               	eor	v2.16b, v2.16b, v16.16b
-               	ldr	q16, [sp, #0x40]
-               	eor	v1.16b, v1.16b, v16.16b
+               	ldr	q17, [sp, #0x70]
+               	eor	v4.16b, v4.16b, v17.16b
+               	ldr	q17, [sp, #0x60]
+               	eor	v3.16b, v3.16b, v17.16b
+               	ldr	q17, [sp, #0x50]
+               	eor	v2.16b, v2.16b, v17.16b
+               	ldr	q17, [sp, #0x40]
+               	eor	v1.16b, v1.16b, v17.16b
                	eor	v19.16b, v19.16b, v28.16b
                	eor	v7.16b, v7.16b, v29.16b
                	eor	v6.16b, v6.16b, v30.16b

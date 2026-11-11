@@ -4018,8 +4018,7 @@ fn run_x86_simd(
     args: &[ValueId],
 ) -> Result<(), C5Error> {
     use crate::c5::simd::{self, Form};
-    use crate::c5::x86_simd;
-    let row = x86_simd::get(op);
+    let row = simd::get(op);
     if row.bytes >= 32 || row.form.is_opmask() {
         return run_x86_simd_wide(mem, frame, row, imm, args);
     }
@@ -4064,8 +4063,13 @@ fn run_x86_simd(
         }
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
-            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
-                .unwrap_or_else(|| simd::eval(row.sem, &a, &b, imm8, 0));
+            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8).unwrap_or_else(|| {
+                if n == 8 {
+                    simd::eval64(row.sem, &a, &b, imm8, 0)
+                } else {
+                    simd::eval(row.sem, &a, &b, imm8, 0)
+                }
+            });
             mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::V | Form::VI => {

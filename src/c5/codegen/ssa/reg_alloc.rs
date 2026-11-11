@@ -3659,7 +3659,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
                 .filter(|o| o.width == 16)
                 .map_or(VecWidth::Scalar, |_| VecWidth::V128),
             Inst::SimdVal { op, .. } => {
-                let row = crate::c5::x86_simd::get(*op);
+                let row = crate::c5::simd::get(*op);
                 if row.form.returns_vector() {
                     VecWidth::of_bytes(row.ret_bytes())
                 } else {
@@ -3791,7 +3791,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         SimdVal { op, .. } => {
-            if crate::c5::x86_simd::get(*op).form.returns_vector() {
+            if crate::c5::simd::get(*op).form.returns_vector() {
                 ResultKind::Fp
             } else {
                 ResultKind::Int

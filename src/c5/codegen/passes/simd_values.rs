@@ -16,8 +16,8 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, StoreKind, ValueId};
+use crate::c5::simd;
 use crate::c5::simd::Form;
-use crate::c5::x86_simd;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for f in funcs {
@@ -77,7 +77,7 @@ fn run_one(func: &mut FunctionSsa) {
             let Inst::Simd { op, imm, ref args } = func.insts[v as usize] else {
                 continue;
             };
-            let row = x86_simd::get(op);
+            let row = simd::get(op);
             let args = args.clone();
             // An MMX form's vectors are the 64 bits of their registers.
             let kinds = |bytes: u8| match bytes {

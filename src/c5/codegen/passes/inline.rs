@@ -54,7 +54,7 @@ use crate::c5::ir::{
     AsmConstraint, BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
 };
-use crate::c5::x86_simd;
+use crate::c5::simd;
 
 /// Outer candidacy fixpoint cap: re-evaluating candidacy after each
 /// substitution pass lets a helper that became a leaf inline on the
@@ -1174,7 +1174,7 @@ fn is_inline_candidate(
                     stores[0] = Some((*dst, 0, *size))
                 }
                 Inst::Simd { op, args, .. } => {
-                    for (k, (i, width)) in x86_simd::get(*op).stores().enumerate() {
+                    for (k, (i, width)) in simd::get(*op).stores().enumerate() {
                         stores[k] = args.get(i).map(|&a| (a, 0, width as i64));
                     }
                 }
@@ -1316,7 +1316,7 @@ fn is_inline_candidate(
             // slot is the only reproducible write.
             Inst::Simd { op, args, .. } => {
                 let reproducible = match redirect_slot {
-                    Some(rs) => x86_simd::get(*op)
+                    Some(rs) => simd::get(*op)
                         .stores()
                         .all(|(i, _)| args.get(i).is_some_and(|&a| addr_is_slot(func, a, rs))),
                     None => false,
@@ -2216,7 +2216,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::Intrinsic { .. } => true,
         // The stores a SIMD instruction performs are the ones the table
         // names, each through an operand address.
-        Inst::Simd { op, args, .. } => x86_simd::get(*op)
+        Inst::Simd { op, args, .. } => simd::get(*op)
             .stores()
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)

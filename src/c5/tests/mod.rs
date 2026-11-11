@@ -19,6 +19,7 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token};
 use super::{C5Error, Compiler, Program, Vm};
 
+mod aarch64_simd;
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.

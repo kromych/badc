@@ -1,10 +1,13 @@
 /* AArch64 Advanced SIMD (NEON) intrinsics of the Arm C Language Extensions:
- * inline-asm wrappers over the instruction the ACLE maps each to, vector
- * operands in the `w` class, or short C over the vector extension for lane
- * accesses and compositions. A family is instantiated over the rows of the
- * element types it is defined on. Forms with a lane or immediate operand
- * are macros: the operand is a range-checked integer constant expression
- * that reaches the template as an `i` operand.
+ * a call of the compiler's row of the instruction the ACLE maps each to
+ * (`__builtin_neon_<insn>_<arrangement>`), which the optimizer and the
+ * interpreter evaluate; an inline-asm wrapper over the instruction, vector
+ * operands in the `w` class, where no row exists yet; or short C over the
+ * vector extension for lane accesses and compositions. A family is
+ * instantiated over the rows of the element types it is defined on. Forms
+ * with a lane or immediate operand are macros: the operand is a
+ * range-checked integer constant expression that reaches the template as
+ * an `i` operand.
  *
  * Types: [u]int{8,16,32,64}, poly{8,16,64} and float{32,64} vectors of 64
  * and 128 bits, poly128_t, the x2 pairs of the 8-, 16- and 32-bit lanes and
@@ -119,6 +122,19 @@ typedef struct uint8x16x4_t {
 #define __BADC_NEON_PICK_p(s, u) u
 /* The kind's instruction over three operands in arrangement A. */
 #define __BADC_NEON_K3(k, si, ui, A) __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), A, A, A)
+/* The compiler's row of the instruction a builtin stem names, in
+ * arrangement A; its result is read as the vector R. B2R swaps the
+ * operands. */
+#define __BADC_NEON_B(stem, A) __BADC_NEON_B_(stem, A)
+#define __BADC_NEON_B_(stem, A) stem##_##A
+#define __BADC_NEON_B2(name, R, T, U, k, si, ui, A)                       \
+    static inline R name(T __a, U __b) {                                  \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b); \
+    }
+#define __BADC_NEON_B2R(name, R, T, U, k, si, ui, A)                      \
+    static inline R name(T __a, U __b) {                                  \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__b, __a); \
+    }
 
 /* One instruction into R; FN3 accumulates into __a, FROMR reads an `r`. */
 #define __BADC_NEON_FN1(name, R, T, tmpl)                                 \
@@ -356,28 +372,28 @@ __BADC_NEON_ALL(__BADC_NEON_F_BSL, _)
 
 /* Lane-wise integer operations; a 64-bit lane takes the d scalar form. */
 #define __BADC_NEON_F_BIN(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)       \
-    __BADC_NEON_FN2(op##_##sfx, D, D, D, __BADC_NEON_K3(k, si, ui, AD))   \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, Q, __BADC_NEON_K3(k, si, ui, AQ))
+    __BADC_NEON_B2(op##_##sfx, D, D, D, k, si, ui, AD)                    \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_BINQ(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)      \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, Q, __BADC_NEON_K3(k, si, ui, AQ))
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_ACC(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)       \
     __BADC_NEON_FN3(op##_##sfx, D, D, D, __BADC_NEON_K3(k, si, ui, AD))   \
     __BADC_NEON_FN3(op##q_##sfx, Q, Q, Q, __BADC_NEON_K3(k, si, ui, AQ))
-__BADC_NEON_INT(__BADC_NEON_F_BIN, vadd, "add", "add")
-__BADC_NEON_INT(__BADC_NEON_F_BIN, vsub, "sub", "sub")
-__BADC_NEON_INT(__BADC_NEON_F_BIN, vqadd, "sqadd", "uqadd")
-__BADC_NEON_INT(__BADC_NEON_F_BIN, vqsub, "sqsub", "uqsub")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmul, "mul", "mul")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhadd, "shadd", "uhadd")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vrhadd, "srhadd", "urhadd")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhsub, "shsub", "uhsub")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vabd, "sabd", "uabd")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmax, "smax", "umax")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmin, "smin", "umin")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpadd, "addp", "addp")
-__BADC_NEON_I64(__BADC_NEON_F_BINQ, vpadd, "addp", "addp")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmax, "smaxp", "umaxp")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmin, "sminp", "uminp")
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vadd, __builtin_neon_add, __builtin_neon_add)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vsub, __builtin_neon_sub, __builtin_neon_sub)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vqadd, __builtin_neon_sqadd, __builtin_neon_uqadd)
+__BADC_NEON_INT(__BADC_NEON_F_BIN, vqsub, __builtin_neon_sqsub, __builtin_neon_uqsub)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmul, __builtin_neon_mul, __builtin_neon_mul)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhadd, __builtin_neon_shadd, __builtin_neon_uhadd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vrhadd, __builtin_neon_srhadd, __builtin_neon_urhadd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vhsub, __builtin_neon_shsub, __builtin_neon_uhsub)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vabd, __builtin_neon_sabd, __builtin_neon_uabd)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmax, __builtin_neon_smax, __builtin_neon_umax)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vmin, __builtin_neon_smin, __builtin_neon_umin)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpadd, __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_I64(__BADC_NEON_F_BINQ, vpadd, __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmax, __builtin_neon_smaxp, __builtin_neon_umaxp)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmin, __builtin_neon_sminp, __builtin_neon_uminp)
 __BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmla, "mla", "mla")
 __BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmls, "mls", "mls")
 __BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vaba, "saba", "uaba")
@@ -391,17 +407,17 @@ __BADC_NEON_FN2(vmul_p8, poly8x8_t, poly8x8_t, poly8x8_t, "pmul %0.8b, %1.8b, %2
 __BADC_NEON_FN2(vmulq_p8, poly8x16_t, poly8x16_t, poly8x16_t, "pmul %0.16b, %1.16b, %2.16b")
 
 /* Bitwise operations over the bytes of any integer vector. */
-#define __BADC_NEON_F_LOGIC(op, insn, sfx, k, E, D, Q, ...)               \
-    __BADC_NEON_FN2(op##_##sfx, D, D, D, __BADC_NEON_I3(insn, 8b, 8b, 8b)) \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, Q, __BADC_NEON_I3(insn, 16b, 16b, 16b))
+#define __BADC_NEON_F_LOGIC(op, stem, sfx, k, E, D, Q, ...)               \
+    __BADC_NEON_B2(op##_##sfx, D, D, D, s, stem, stem, 8b)                \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, s, stem, stem, 16b)
 #define __BADC_NEON_F_LOGIC1(op, insn, sfx, k, E, D, Q, ...)              \
     __BADC_NEON_FN1(op##_##sfx, D, D, __BADC_NEON_I2(insn, 8b, 8b))       \
     __BADC_NEON_FN1(op##q_##sfx, Q, Q, __BADC_NEON_I2(insn, 16b, 16b))
-__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vand, "and")
-__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorr, "orr")
-__BADC_NEON_INT(__BADC_NEON_F_LOGIC, veor, "eor")
-__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vbic, "bic")
-__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorn, "orn")
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vand, __builtin_neon_and)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorr, __builtin_neon_orr)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, veor, __builtin_neon_eor)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vbic, __builtin_neon_bic)
+__BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorn, __builtin_neon_orn)
 __BADC_NEON_INT_8_32(__BADC_NEON_F_LOGIC1, vmvn, "mvn")
 __BADC_NEON_R_p8(__BADC_NEON_F_LOGIC1, vmvn, "mvn")
 __BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, "cnt")
@@ -409,25 +425,23 @@ __BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, "cnt")
 /* All-ones lanes where the relation holds; vcle and vclt swap the operands
  * of vcge and vcgt. vshl, vrshl and vqshl shift by a signed lane count. */
 #define __BADC_NEON_F_CMP(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
-    __BADC_NEON_FN2(op##_##sfx, UD, D, D, __BADC_NEON_K3(k, si, ui, AD))  \
-    __BADC_NEON_FN2(op##q_##sfx, UQ, Q, Q, __BADC_NEON_K3(k, si, ui, AQ))
+    __BADC_NEON_B2(op##_##sfx, UD, D, D, k, si, ui, AD)                   \
+    __BADC_NEON_B2(op##q_##sfx, UQ, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_CMPR(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...) \
-    __BADC_NEON_FN2(op##_##sfx, UD, D, D,                                 \
-                    __BADC_NEON_I3R(__BADC_NEON_PICK(k, si, ui), AD, AD, AD)) \
-    __BADC_NEON_FN2(op##q_##sfx, UQ, Q, Q,                                \
-                    __BADC_NEON_I3R(__BADC_NEON_PICK(k, si, ui), AQ, AQ, AQ))
+    __BADC_NEON_B2R(op##_##sfx, UD, D, D, k, si, ui, AD)                  \
+    __BADC_NEON_B2R(op##q_##sfx, UQ, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_SHL(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, SD, SQ) \
     __BADC_NEON_FN2(op##_##sfx, D, D, SD, __BADC_NEON_K3(k, si, ui, AD))  \
     __BADC_NEON_FN2(op##q_##sfx, Q, Q, SQ, __BADC_NEON_K3(k, si, ui, AQ))
-__BADC_NEON_INT(__BADC_NEON_F_CMP, vceq, "cmeq", "cmeq")
-__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vceq, "cmeq", "cmeq")
-__BADC_NEON_R_p64(__BADC_NEON_F_CMP, vceq, "cmeq", "cmeq")
-__BADC_NEON_INT(__BADC_NEON_F_CMP, vcge, "cmge", "cmhs")
-__BADC_NEON_INT(__BADC_NEON_F_CMP, vcgt, "cmgt", "cmhi")
-__BADC_NEON_INT(__BADC_NEON_F_CMPR, vcle, "cmge", "cmhs")
-__BADC_NEON_INT(__BADC_NEON_F_CMPR, vclt, "cmgt", "cmhi")
-__BADC_NEON_INT(__BADC_NEON_F_CMP, vtst, "cmtst", "cmtst")
-__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vtst, "cmtst", "cmtst")
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_R_p64(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vcge, __builtin_neon_cmge, __builtin_neon_cmhs)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vcgt, __builtin_neon_cmgt, __builtin_neon_cmhi)
+__BADC_NEON_INT(__BADC_NEON_F_CMPR, vcle, __builtin_neon_cmge, __builtin_neon_cmhs)
+__BADC_NEON_INT(__BADC_NEON_F_CMPR, vclt, __builtin_neon_cmgt, __builtin_neon_cmhi)
+__BADC_NEON_INT(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
+__BADC_NEON_R_p8(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
 __BADC_NEON_INT(__BADC_NEON_F_SHL, vshl, "sshl", "ushl")
 __BADC_NEON_INT(__BADC_NEON_F_SHL, vrshl, "srshl", "urshl")
 __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, "sqshl", "uqshl")

@@ -8,6 +8,38 @@
 
 use super::token::Ty;
 
+/// The first op id of the AArch64 rows; the x86 rows number from 0, so one
+/// id names a row of either table.
+pub(crate) const A64_BASE: u32 = 1 << 16;
+
+/// The row an op id names.
+pub(crate) fn get(op: u32) -> &'static SimdOp {
+    match op.checked_sub(A64_BASE) {
+        Some(i) => &super::aarch64_simd::OPS[i as usize],
+        None => &super::x86_simd::OPS[op as usize],
+    }
+}
+
+/// The op id of the SIMD builtin `name` of any target, or `None`.
+pub(crate) fn lookup(name: &str) -> Option<u32> {
+    super::x86_simd::lookup(name)
+        .or_else(|| super::aarch64_simd::lookup(name).map(|i| i + A64_BASE))
+}
+
+/// The architecture whose instruction an op id's row names.
+pub(crate) fn arch(op: u32) -> &'static str {
+    if op >= A64_BASE { "AArch64" } else { "x86" }
+}
+
+/// Whether `target` runs the instruction an op id's row names.
+pub(crate) fn on_target(op: u32, target: crate::c5::Target) -> bool {
+    if op >= A64_BASE {
+        target.is_aarch64()
+    } else {
+        target.is_x86_64()
+    }
+}
+
 /// Operand and result shape. `Shift` takes an immediate count when the
 /// operand is a constant expression and the low quad of a register
 /// otherwise; the byte-granular shift has the immediate form only.
@@ -96,6 +128,17 @@ pub(crate) enum Ret {
 }
 
 impl Ret {
+    /// Width in bytes of a vector result's lanes; 0 for a scalar or void one.
+    pub(crate) fn lane_bytes(self) -> u8 {
+        match self.lane_ty() {
+            Some(Ty::Char) => 1,
+            Some(Ty::Short) => 2,
+            Some(Ty::Int | Ty::Float) => 4,
+            Some(_) => 8,
+            None => 0,
+        }
+    }
+
     /// Lane type of a vector result; `None` for a scalar or void one.
     pub(crate) fn lane_ty(self) -> Option<Ty> {
         match self {
@@ -247,6 +290,29 @@ pub(crate) enum Sem {
     /// Each 128-bit half is the half of either source, or zero, that the
     /// immediate's nibble selects (`vperm2i128`).
     Perm2x128,
+    /// Lane-wise `(a + b) >> 1` of the signed (`true`) or unsigned lanes,
+    /// rounded up when the second flag is set (`shadd`, `urhadd`).
+    HalvingAdd(u8, bool, bool),
+    /// Lane-wise `(a - b) >> 1`, signed when `true` (`shsub`, `uhsub`).
+    HalvingSub(u8, bool),
+    /// Lane-wise `|a - b|`, signed when `true` (`sabd`, `uabd`).
+    AbsDiff(u8, bool),
+    /// `a & !b` (`bic`).
+    BitClear,
+    /// `a | !b` (`orn`).
+    OrNot,
+    /// A lane of ones where signed `a >= b` holds (`cmge`).
+    CmpGe(u8),
+    /// A lane of ones where unsigned `a > b` holds (`cmhi`).
+    CmpHi(u8),
+    /// A lane of ones where unsigned `a >= b` holds (`cmhs`).
+    CmpHs(u8),
+    /// A lane of ones where `a & b` is nonzero (`cmtst`).
+    CmpTst(u8),
+    /// The larger or the smaller lane of each adjacent pair, signed when
+    /// `true`, the first operand's pairs low (`smaxp`, `uminp`).
+    PairMax(u8, bool),
+    PairMin(u8, bool),
 }
 
 impl Sem {
@@ -268,6 +334,9 @@ impl Sem {
                 | Sem::Or
                 | Sem::Xor
                 | Sem::CmpEq(_)
+                | Sem::HalvingAdd(..)
+                | Sem::AbsDiff(..)
+                | Sem::CmpTst(_)
         )
     }
 }
@@ -632,6 +701,35 @@ fn clmul(a: u64, b: u64) -> (u64, u64) {
 /// for the forms that take none) and `count` the shift count in the units
 /// the instruction takes: bits for the lane shifts, bytes for the
 /// whole-register pair.
+/// Lane `i` of `a` and of `b`, signed or unsigned, widened so a sum or a
+/// difference of two 64-bit lanes is exact.
+fn wide_lanes(a: &[u8; 16], b: &[u8; 16], w: u8, i: usize, signed: bool) -> (i128, i128) {
+    if signed {
+        (i128::from(slane(a, w, i)), i128::from(slane(b, w, i)))
+    } else {
+        (i128::from(lane(a, w, i)), i128::from(lane(b, w, i)))
+    }
+}
+
+/// [`eval`] over 8-byte operands, the low halves of `a` and `b`. A pairwise
+/// form reads the two operands as one: its result is the 16-byte form's
+/// over `a` and `b` side by side.
+pub(crate) fn eval64(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) -> [u8; 16] {
+    let pairwise = matches!(
+        sem,
+        Sem::HAdd(..) | Sem::HSub(..) | Sem::PairMax(..) | Sem::PairMin(..)
+    );
+    let mut o = if pairwise {
+        let mut ab = *a;
+        ab[8..].copy_from_slice(&b[..8]);
+        eval(sem, &ab, &[0u8; 16], imm, count)
+    } else {
+        eval(sem, a, b, imm, count)
+    };
+    o[8..].fill(0);
+    o
+}
+
 pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) -> [u8; 16] {
     let mut o = [0u8; 16];
     match sem {
@@ -665,7 +763,53 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         }
         Sem::Avg(w) => {
             for i in 0..16 / w as usize {
-                set_lane(&mut o, w, i, (lane(a, w, i) + lane(b, w, i) + 1) >> 1);
+                let sum = u128::from(lane(a, w, i)) + u128::from(lane(b, w, i)) + 1;
+                set_lane(&mut o, w, i, (sum >> 1) as u64);
+            }
+        }
+        Sem::HalvingAdd(w, signed, round) => {
+            for i in 0..16 / w as usize {
+                let (x, y) = wide_lanes(a, b, w, i, signed);
+                set_lane(
+                    &mut o,
+                    w,
+                    i,
+                    ((x + y + i128::from(round)) >> 1) as u64 & mask(w),
+                );
+            }
+        }
+        Sem::HalvingSub(w, signed) => {
+            for i in 0..16 / w as usize {
+                let (x, y) = wide_lanes(a, b, w, i, signed);
+                set_lane(&mut o, w, i, ((x - y) >> 1) as u64 & mask(w));
+            }
+        }
+        Sem::AbsDiff(w, signed) => {
+            for i in 0..16 / w as usize {
+                let (x, y) = wide_lanes(a, b, w, i, signed);
+                set_lane(&mut o, w, i, (x - y).unsigned_abs() as u64 & mask(w));
+            }
+        }
+        Sem::BitClear => {
+            for i in 0..16 {
+                o[i] = a[i] & !b[i];
+            }
+        }
+        Sem::OrNot => {
+            for i in 0..16 {
+                o[i] = a[i] | !b[i];
+            }
+        }
+        Sem::CmpGe(w) | Sem::CmpHi(w) | Sem::CmpHs(w) | Sem::CmpTst(w) => {
+            for i in 0..16 / w as usize {
+                let (x, y) = (lane(a, w, i), lane(b, w, i));
+                let holds = match sem {
+                    Sem::CmpGe(_) => slane(a, w, i) >= slane(b, w, i),
+                    Sem::CmpHi(_) => x > y,
+                    Sem::CmpHs(_) => x >= y,
+                    _ => x & y != 0,
+                };
+                set_lane(&mut o, w, i, if holds { mask(w) } else { 0 });
             }
         }
         Sem::Min(w, signed) | Sem::Max(w, signed) => {
@@ -696,16 +840,12 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::AddSat(w, signed) | Sem::SubSat(w, signed) => {
             let bits = 8 * w as u32;
             let (lo, hi) = if signed {
-                (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+                (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
             } else {
-                (0, (1i64 << bits) - 1)
+                (0, (1i128 << bits) - 1)
             };
             for i in 0..16 / w as usize {
-                let (x, y) = if signed {
-                    (slane(a, w, i), slane(b, w, i))
-                } else {
-                    (lane(a, w, i) as i64, lane(b, w, i) as i64)
-                };
+                let (x, y) = wide_lanes(a, b, w, i, signed);
                 let r = if matches!(sem, Sem::AddSat(..)) {
                     x + y
                 } else {
@@ -877,6 +1017,20 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     r = r.clamp(-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1);
                 }
                 set_lane(&mut o, w, i, r as u64 & mask(w));
+            }
+        }
+        Sem::PairMax(w, signed) | Sem::PairMin(w, signed) => {
+            let pairs = 8 / w as usize;
+            for i in 0..2 * pairs {
+                let src = if i < pairs { a } else { b };
+                let k = 2 * (i % pairs);
+                let less = if signed {
+                    slane(src, w, k) < slane(src, w, k + 1)
+                } else {
+                    lane(src, w, k) < lane(src, w, k + 1)
+                };
+                let first = less == matches!(sem, Sem::PairMin(..));
+                set_lane(&mut o, w, i, lane(src, w, if first { k } else { k + 1 }));
             }
         }
         Sem::MulHrs => {

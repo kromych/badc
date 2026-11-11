@@ -355,7 +355,7 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         Simd { op, imm, args } => format!(
             "Simd {{ op={}, imm={imm:?}, args=[{}] }}",
-            crate::c5::x86_simd::get(*op).name,
+            crate::c5::simd::get(*op).name,
             fmt_value_list(args),
         ),
         VecBinop {
@@ -392,7 +392,7 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         SimdVal { op, imm, args } => format!(
             "SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
-            crate::c5::x86_simd::get(*op).name,
+            crate::c5::simd::get(*op).name,
             fmt_value_list(args),
         ),
         Intrinsic { kind, args } => format!(

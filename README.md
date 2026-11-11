@@ -30,6 +30,9 @@ library.
 > * `badc` was bad when the project started, and the name stuck.
 > * `--dump-ssa` prints each function's SSA IR and the register allocator's
 >   placement of each value to stderr before lowering.
+> * `--dump-records` prints the size, alignment and member offsets of each
+>   tagged structure and union, and of each typedef naming one, as laid out
+>   for `--target`.
 
 ## Contents
 

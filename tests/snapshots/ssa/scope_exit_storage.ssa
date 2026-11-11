@@ -170,10 +170,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=2
     v29  LocalAddr(-208)                                  -> x0
     v30  Imm(7)                                           -> x6
     v31  Call { target_pc=1, args=[v10, v30], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v32  Extend { value=v31, kind=I32 }                   -> x0
+    v32  Extend { value=v31, kind=I32 }                   -> x1
     v33  Imm(0)                                           -> x1
     v34  Imm(1)                                           -> x2
-    v35  Select { cond=v32, a=v33, b=v34, kind=I64 }      -> x3
+    v35  Select { cond=v31, a=v33, b=v34, kind=I64 }      -> x3
     terminator Jmp(b3)
   block 3  start_pc=0
     v43  Copy { value=v35, fp=false }                     -> x0
@@ -202,10 +202,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=2
     v20  Imm(9)                                           -> x0
     v21  Imm(9)                                           -> x6
     v22  Call { target_pc=1, args=[v18, v21], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v23  Extend { value=v22, kind=I32 }                   -> x0
+    v23  Extend { value=v22, kind=I32 }                   -> x1
     v24  Imm(0)                                           -> x1
     v25  Imm(3)                                           -> x2
-    v26  Select { cond=v23, a=v24, b=v25, kind=I64 }      -> x0
+    v26  Select { cond=v22, a=v24, b=v25, kind=I64 }      -> x0
     terminator Jmp(b6)
   block 6  start_pc=0
     v89  Copy { value=v26, fp=false }                     -> x1
@@ -233,10 +233,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=2
     v62  Imm(8)                                           -> x0
     v63  Imm(8)                                           -> x6
     v64  Call { target_pc=1, args=[v57, v63], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v65  Extend { value=v64, kind=I32 }                   -> x0
+    v65  Extend { value=v64, kind=I32 }                   -> x1
     v66  Imm(0)                                           -> x1
     v67  Imm(2)                                           -> x2
-    v68  Select { cond=v65, a=v66, b=v67, kind=I64 }      -> x3
+    v68  Select { cond=v64, a=v66, b=v67, kind=I64 }      -> x3
     terminator Jmp(b10)
   block 10  start_pc=0
     v76  Copy { value=v68, fp=false }                     -> x0
@@ -323,10 +323,10 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v51  LocalAddr(-203)                                  -> x7
     v52  Imm(100)                                         -> x6
     v53  Call { target_pc=1, args=[v51, v52], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v54  Extend { value=v53, kind=I32 }                   -> x0
+    v54  Extend { value=v53, kind=I32 }                   -> x1
     v55  Imm(0)                                           -> x1
     v56  Imm(12)                                          -> x2
-    v57  Select { cond=v54, a=v55, b=v56, kind=I64 }      -> x0
+    v57  Select { cond=v53, a=v55, b=v56, kind=I64 }      -> x0
     terminator Jmp(b9)
   block 9  start_pc=0
     v62  Copy { value=v57, fp=false }                     -> x1
@@ -387,7 +387,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     terminator Return(v23)   (exit_acc=v23)
   block 5  start_pc=0
     v32  Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b10, fall=b6 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b10, fall=b6 }   (low word)   (exit_acc=v1)
   block 6  start_pc=0
     v44  LocalAddr(-205)                                  -> x7
     v45  Imm(140)                                         -> x6
@@ -408,10 +408,10 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v60  LocalAddr(-203)                                  -> x7
     v61  Imm(130)                                         -> x6
     v62  Call { target_pc=1, args=[v60, v61], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v63  Extend { value=v62, kind=I32 }                   -> x0
+    v63  Extend { value=v62, kind=I32 }                   -> x1
     v64  Imm(0)                                           -> x1
     v65  Imm(23)                                          -> x2
-    v66  Select { cond=v63, a=v64, b=v65, kind=I64 }      -> x0
+    v66  Select { cond=v62, a=v64, b=v65, kind=I64 }      -> x0
     terminator Jmp(b9)
   block 9  start_pc=0
     v71  Copy { value=v66, fp=false }                     -> x1
@@ -457,10 +457,10 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v8   LocalAddr(-202)                                  -> x7
     v9   Imm(150)                                         -> x6
     v10  Call { target_pc=1, args=[v8, v9], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x0
+    v11  Extend { value=v10, kind=I32 }                   -> x1
     v12  Imm(0)                                           -> x1
     v13  Imm(32)                                          -> x2
-    v14  Select { cond=v11, a=v12, b=v13, kind=I64 }      -> x0
+    v14  Select { cond=v10, a=v12, b=v13, kind=I64 }      -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
     v45  Copy { value=v14, fp=false }                     -> x1

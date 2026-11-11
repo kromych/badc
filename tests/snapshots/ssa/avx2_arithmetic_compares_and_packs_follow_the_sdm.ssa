@@ -2274,7 +2274,7 @@ fn ent_pc=1367 n_params=6 variadic=false locals=0
     v92  Imm(0)                                           -> x0
     v93  Extend { value=v28, kind=I32 }                   -> x0
     v94  Imm(0)                                           -> x0
-    terminator Bz { cond=v9, target=b25, fall=b17 }   (exit_acc=v9)
+    terminator Bz { cond=v9, target=b25, fall=b17 }   (low word)   (exit_acc=v9)
   block 17  start_pc=0
     v95  Imm(0)                                           -> x0
     v96  Imm(0)                                           -> x0

@@ -279,8 +279,7 @@ Disassembly of section .text:
 <pick>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movq	%rdi, %rax
                	movq	%rsi, %rdx

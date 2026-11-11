@@ -127,7 +127,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x3
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b2, fall=b1 }   (low word)   (exit_acc=v1)
   block 1  start_pc=0
     v6   LocalAddr(-137)                                  -> x7
     v7   Imm(528)                                         -> x6
@@ -171,7 +171,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x3
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v1)
   block 1  start_pc=0
     v6   LocalAddr(-138)                                  -> x7
     v7   Imm(528)                                         -> x6

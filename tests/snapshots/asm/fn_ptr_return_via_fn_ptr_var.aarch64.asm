@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ret
 
 <f>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ret

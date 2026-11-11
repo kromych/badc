@@ -358,8 +358,56 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
             };
             changed = true;
         }
+        // A zero test of a 32-bit parameter reads its low word, which holds
+        // the converted value whatever the register's upper half holds.
+        if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+            func.blocks[bidx].terminator
+            && narrow_param(func, cond)
+        {
+            if func.low_word_tests.len() < func.blocks.len() {
+                func.low_word_tests.resize(func.blocks.len(), false);
+            }
+            changed |= !func.low_word_tests[bidx];
+            func.low_word_tests[bidx] = true;
+        }
+    }
+    // A select tests its condition's low word the same way: a 32-bit
+    // parameter, or the operand of a 32-bit extension it alone reads.
+    for v in 0..func.insts.len() {
+        let Inst::Select { cond, .. } = func.insts[v] else {
+            continue;
+        };
+        let low = match func.insts[cond as usize] {
+            Inst::Extend {
+                value,
+                kind: LoadKind::I32 | LoadKind::U32,
+                ..
+            } if uses[cond as usize] == 1 => Some(value),
+            _ if narrow_param(func, cond) => Some(cond),
+            _ => None,
+        };
+        let Some(low) = low else { continue };
+        if let Inst::Select { cond, .. } = &mut func.insts[v] {
+            *cond = low;
+        }
+        if func.cmp32.len() < func.insts.len() {
+            func.cmp32.resize(func.insts.len(), false);
+        }
+        func.cmp32[v] = true;
+        changed = true;
     }
     changed
+}
+
+/// A 32-bit integer parameter, whose low word holds its value.
+fn narrow_param(func: &FunctionSsa, v: crate::c5::ir::ValueId) -> bool {
+    matches!(
+        func.insts.get(v as usize),
+        Some(Inst::ParamRef {
+            kind: crate::c5::ir::LoadKind::I32 | crate::c5::ir::LoadKind::U32,
+            ..
+        })
+    )
 }
 
 /// A branch on the low word of `x ^ y` that it alone reads tests whether

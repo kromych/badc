@@ -51,8 +51,7 @@ Disassembly of section .text:
                	retq
 
 <pick>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x1, (%rsi)
                	retq

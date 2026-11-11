@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <label_address>:
-               	movslq	%edi, %rdi
                	leaq	<rip>, %rax # <addr>
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	jmpq	*%rax
                	movl	$0x8, %eax

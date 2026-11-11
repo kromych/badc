@@ -71,13 +71,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xffffffff         // =4294967295
                	sxtw	x2, w2
-               	sxtw	x3, w3
                	cmp	w2, #0x8
                	b.lt	<addr>
                	sub	x4, x29, #0x8
                	ldr	x16, [x1]
                	str	x16, [x4]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	w0, w0
                	ldur	x4, [x29, #-0x8]
                	crc32cx	w0, w0, x4
@@ -94,7 +93,7 @@ Disassembly of section .text:
                	sub	x4, x29, #0x8
                	ldr	w16, [x1]
                	str	w16, [x4]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	w0, w0
                	ldur	w4, [x29, #-0x8]
                	crc32cw	w0, w0, w4
@@ -105,14 +104,14 @@ Disassembly of section .text:
                	sub	x4, x29, #0x8
                	ldrh	w16, [x1]
                	strh	w16, [x4]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	w0, w0
                	ldurh	w4, [x29, #-0x8]
                	crc32ch	w0, w0, w4
                	add	x1, x1, #0x2
                	sub	x2, x2, #0x2
                	cbz	x2, <addr>
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	w0, w0
                	ldrb	w1, [x1]
                	crc32cb	w0, w0, w1

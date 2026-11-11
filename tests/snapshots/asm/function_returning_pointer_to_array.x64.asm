@@ -112,8 +112,7 @@ Disassembly of section .text:
                	retq
 
 <sig>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	-<rip>, %rax # <addr>
                	retq

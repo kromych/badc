@@ -47,20 +47,18 @@ Disassembly of section .text:
                	ret
 
 <pick>:
-               	sxtw	x0, w0
                	fmov	d0, #2.50000000
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	d0, d0, d1, ne
                	ret
 
 <pickf>:
-               	sxtw	x0, w0
                	fmov	s0, #-0.25000000
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x3c]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	s0, s0, s1, ne
                	ret
 

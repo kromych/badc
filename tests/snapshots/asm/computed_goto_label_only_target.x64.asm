@@ -40,9 +40,8 @@ Disassembly of section .text:
                	retq
 
 <selected>:
-               	movslq	%esi, %rsi
                	leaq	<rip>, %rax # <addr>
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	jmpq	*%rax
                	movl	$0x19, %eax

@@ -144,7 +144,6 @@ Disassembly of section .text:
                	ret
 
 <round_to_double>:
-               	sxtw	x2, w2
                	sxtw	x3, w3
                	mov	x4, #0xb                // =11
                	mov	x5, #0xc                // =12
@@ -168,7 +167,7 @@ Disassembly of section .text:
                	lsr	x5, x1, x6
                	and	x7, x5, #0x1
                	mov	x5, #0x1                // =1
-               	cbnz	x2, <addr>
+               	cbnz	w2, <addr>
                	lsl	x2, x5, x6
                	sub	x2, x2, #0x1
                	and	x1, x1, x2

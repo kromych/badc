@@ -590,8 +590,7 @@ Disassembly of section .text:
                	ret
 
 <single>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adr	x0, <addr>
                	cmp	w1, #0x64
                	b.le	<addr>

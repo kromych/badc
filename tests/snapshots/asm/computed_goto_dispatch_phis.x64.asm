@@ -784,8 +784,7 @@ Disassembly of section .text:
                	retq
 
 <single>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	cmpl	$0x64, %esi

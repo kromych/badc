@@ -100,17 +100,15 @@ Disassembly of section .text:
                	ret
 
 <inc_unless>:
-               	sxtw	x1, w1
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cinc	x0, x0, eq
                	ret
 
 <scale>:
-               	sxtw	x0, w0
                	fmov	d1, #1.50000000
                	adrp	x16, <page>
                	ldr	d2, [x16, #0x20]
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	d1, d1, d2, ne
                	fmul	d0, d1, d0
                	ret

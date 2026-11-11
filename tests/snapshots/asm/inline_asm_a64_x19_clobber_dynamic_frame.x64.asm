@@ -88,7 +88,6 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
                	movl	$0x20, %eax
-               	movslq	%esi, %rsi
                	movq	$0x5, -0x1020(%rbp)
                	movq	$0x7, -0x1018(%rbp)
                	movq	$0xb, -0x1010(%rbp)
@@ -111,7 +110,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x20, %eax
                	jl	<addr>
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movq	-0x1020(%rbp), %rax
                	movq	-0x1018(%rbp), %rdx

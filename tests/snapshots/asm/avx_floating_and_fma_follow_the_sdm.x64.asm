@@ -275,11 +275,9 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	leave
                	retq
-               	movslq	%ecx, %rax
-               	movl	$0x1, %ecx
-               	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	movl	$0x1, %eax
+               	testl	%ecx, %ecx
+               	cmoveq	%rdx, %rax
                	leave
                	retq
                	leave
@@ -294,40 +292,36 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	leave
                	retq
-               	movslq	%ecx, %rax
+               	movl	$0x1, %eax
+               	testl	%ecx, %ecx
+               	cmoveq	%rdx, %rax
+               	testl	%eax, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	leave
+               	retq
+               	testl	%eax, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	leave
+               	retq
                	movl	$0x1, %ecx
-               	testq	%rax, %rax
-               	movq	%rdx, %rax
+               	testl	%edx, %edx
                	cmovneq	%rcx, %rax
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
                	leave
                	retq
-               	testl	%eax, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	leave
-               	retq
-               	movslq	%edx, %rcx
                	movl	$0x1, %edx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	cmovneq	%rdx, %rax
                	leave
                	retq
-               	movslq	%ecx, %rcx
-               	movl	$0x1, %edx
-               	testq	%rcx, %rcx
-               	cmovneq	%rdx, %rax
-               	leave
-               	retq
-               	movslq	%ecx, %rsi
-               	movl	$0x1, %ecx
+               	movl	$0x1, %esi
                	movslq	%edx, %rdx
-               	testq	%rsi, %rsi
-               	cmovneq	%rcx, %rdx
-               	testq	%rdx, %rdx
-               	cmovneq	%rcx, %rax
+               	testl	%ecx, %ecx
+               	movq	%rdx, %rcx
+               	cmovneq	%rsi, %rcx
+               	testq	%rcx, %rcx
+               	cmovneq	%rsi, %rax
                	leave
                	retq
                	xorl	%eax, %eax
@@ -371,7 +365,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
@@ -396,7 +389,7 @@ Disassembly of section .text:
                	shrq	$0x20, %rsi
                	movl	$0xc, %eax
                	movl	$0xb, %edx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	movq	%rdx, %r8
                	cmovneq	%rax, %r8
                	movl	%esi, %eax
@@ -412,7 +405,7 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x400000, %rax         # imm = 0x400000
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	movl	%eax, -0x10(%rbp)
                	leaq	-0x8(%rbp), %rax
@@ -429,7 +422,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
@@ -453,7 +445,7 @@ Disassembly of section .text:
                	shrq	$0x20, %rcx
                	movl	$0xb, %eax
                	movl	$0xa, %edx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	movq	%rdx, %r8
                	cmovneq	%rax, %r8
                	movl	%ecx, %eax
@@ -473,7 +465,7 @@ Disassembly of section .text:
                	movabsq	$0x8000000000000, %r11  # imm = 0x8000000000000
                	orq	%r11, %rax
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	movq	%rax, -0x10(%rbp)
                	leaq	-0x8(%rbp), %rax

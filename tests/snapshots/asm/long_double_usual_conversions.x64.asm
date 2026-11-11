@@ -33,8 +33,7 @@ Disassembly of section .text:
                	movq	%r10, -0x20(%rbp)
                	movq	0x18(%rbp), %r10
                	movq	%r10, -0x18(%rbp)
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	fldt	-0x20(%rbp)
                	fstpl	-0x8(%rsp)

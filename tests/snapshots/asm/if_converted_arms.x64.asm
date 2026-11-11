@@ -129,15 +129,13 @@ Disassembly of section .text:
                	retq
 
 <inc_unless>:
-               	movslq	%esi, %rsi
                	leaq	0x1(%rdi), %rax
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	cmovneq	%rdi, %rax
                	retq
 
 <scale>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movabsq	$0x3ff8000000000000, %r11 # imm = 0x3FF8000000000000
                	movq	%r11, %xmm1

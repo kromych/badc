@@ -95,9 +95,8 @@ Disassembly of section .text:
                	ret
 
 <two_entries>:
-               	sxtw	x1, w1
                	mov	x2, #0x0                // =0
-               	cbz	x1, <addr>
+               	cbz	w1, <addr>
                	add	x1, x2, #0x3
                	add	x2, x2, #0x5
                	tst	x0, #0x1

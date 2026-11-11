@@ -167,7 +167,7 @@ Disassembly of section .text:
                	movl	$0xc, %esi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	leaq	-0x80(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -182,7 +182,7 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	movl	$0x4, %ecx
-               	testq	%rbx, %rbx
+               	testl	%ebx, %ebx
                	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave

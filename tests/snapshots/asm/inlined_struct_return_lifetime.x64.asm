@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%rdi, -0x30(%rbp)
-               	movslq	%esi, %rsi
                	movw	$0xa, <rip> # <addr>
                	movswq	<rip>, %rax # <addr>
                	testl	%eax, %eax
@@ -54,7 +53,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movq	-0x30(%rbp), %rax
                	movq	$0x4, (%rax)
@@ -88,7 +87,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x28, %rsp
                	pushq	%r12
-               	movslq	%edi, %rdi
                	leaq	<rip>, %rsi # <addr>
                	movw	$0xa, <rip> # <addr>
                	movswq	<rip>, %r12 # <addr>
@@ -114,7 +112,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %r12 # <addr>
                	movq	%r12, -0x20(%rbp)
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movq	$0x4, -0x18(%rbp)
                	movq	$0x5, -0x10(%rbp)

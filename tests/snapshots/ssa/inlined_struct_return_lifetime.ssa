@@ -93,7 +93,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b4, fall=b3 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b4, fall=b3 }   (low word)   (exit_acc=v1)
   block 3  start_pc=0
     v48  LoadLocal { off=2, kind=I64 }                    -> x0
     v49  Imm(0)                                           -> x1
@@ -236,7 +236,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=4
     v43  LocalAddr(-4)                                    -> x12
     v44  Imm(1)                                           -> x12
     v45  Imm(0)                                           -> x12
-    terminator Bz { cond=v1, target=b5, fall=b4 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b5, fall=b4 }   (low word)   (exit_acc=v1)
   block 4  start_pc=0
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0

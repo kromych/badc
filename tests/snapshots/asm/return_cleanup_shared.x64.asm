@@ -29,11 +29,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x8, %eax
                	leaq	<rip>, %rsi # <addr>
@@ -44,7 +42,7 @@ Disassembly of section .text:
                	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
                	leave
                	retq
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0x9, %eax
                	jmp	<addr>

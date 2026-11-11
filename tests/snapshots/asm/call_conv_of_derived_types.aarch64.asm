@@ -239,9 +239,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	sxtw	x2, w2
                	mov	x21, x1
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	adrp	x0, <page>
                	ldr	x2, [x0, #0x18]
                	mov	x0, x20

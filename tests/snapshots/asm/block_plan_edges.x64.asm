@@ -105,9 +105,8 @@ Disassembly of section .text:
                	retq
 
 <two_entries>:
-               	movslq	%esi, %rsi
                	xorl	%eax, %eax
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	leaq	0x3(%rax), %rcx
                	addq	$0x5, %rax

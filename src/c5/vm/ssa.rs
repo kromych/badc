@@ -1664,7 +1664,9 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::Select { cond, a, b, .. } => {
-            let pick = if frame.regs[*cond as usize] != 0 {
+            let c = frame.regs[*cond as usize];
+            let low_word = matches!(frame.func.cmp32.get(v as usize), Some(true));
+            let pick = if (if low_word { c as u32 as i64 } else { c }) != 0 {
                 a
             } else {
                 b

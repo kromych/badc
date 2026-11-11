@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v3   ParamRef(2, kind=F64)                            -> d0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v1)
   block 1  start_pc=0
     v6   LoadLocal { off=-6, kind=F80 }                   -> d0
     v7   Imm(0)                                           -> x0

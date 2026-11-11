@@ -584,8 +584,7 @@ Disassembly of section .text:
                	movq	%r10, -0x40(%rbp)
                	movq	0x18(%rbp), %r10
                	movq	%r10, -0x38(%rbp)
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	decq	%rdi
                	fldt	-0x40(%rbp)

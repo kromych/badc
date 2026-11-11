@@ -166,7 +166,6 @@ Disassembly of section .text:
                	retq
 
 <lane>:
-               	movslq	%ecx, %rcx
                	xorl	%eax, %eax
                	leaq	-0x1(%rsi), %r8
                	testl	%r8d, %r8d
@@ -181,7 +180,7 @@ Disassembly of section .text:
                	decq	%r8
                	testl	%r8d, %r8d
                	jge	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	cmpl	$0x8, %esi
                	jge	<addr>

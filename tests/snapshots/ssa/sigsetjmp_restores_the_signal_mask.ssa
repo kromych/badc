@@ -145,8 +145,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v117 CallExt { binding_idx=16, args=[v115, v115, v116], fp_arg_mask=0x0 } -> x0
     v118 LocalAddr(-16)                                   -> x7
     v119 Imm(12)                                          -> x6
-    v120 CallExt { binding_idx=15, args=[v118, v119], fp_arg_mask=0x0 } -> x0
-    v121 Extend { value=v120, kind=I32 }                  -> x3
+    v120 CallExt { binding_idx=15, args=[v118, v119], fp_arg_mask=0x0 } -> x3
+    v121 Extend { value=v120, kind=I32 }                  -> x0
     v122 LifetimeEnd(-16)                                 -> -
     v123 Extend { value=v121, kind=I32 }                  -> x0
     v124 Imm(0)                                           -> x0
@@ -165,7 +165,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=16
     v137 Imm(0)                                           -> x0
     v138 Imm(0)                                           -> x0
     v139 Imm(4)                                           -> x1
-    v140 Select { cond=v121, a=v138, b=v139, kind=I64 }   -> x0
+    v140 Select { cond=v120, a=v138, b=v139, kind=I64 }   -> x0
     terminator Jmp(b12)
   block 12  start_pc=0
     v145 Copy { value=v140, fp=false }                    -> x1

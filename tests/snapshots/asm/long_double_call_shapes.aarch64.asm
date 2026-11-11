@@ -3184,8 +3184,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x80
                	stur	q0, [x29, #-0x40]
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	sub	x0, x0, #0x1
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]

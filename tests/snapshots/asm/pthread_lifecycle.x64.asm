@@ -76,10 +76,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x800, %rsp            # imm = 0x800
-               	movslq	%edi, %rdi
                	movb	%dil, -0x800(%rbp)
                	movb	%dil, -0x1(%rbp)
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	decq	%rdi
                	callq	<addr>

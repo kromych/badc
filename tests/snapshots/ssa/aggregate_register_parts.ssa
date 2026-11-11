@@ -637,7 +637,7 @@ fn ent_pc=24 n_params=2 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (low word)   (exit_acc=v3)
   block 1  start_pc=0
     v9   Imm(0)                                           -> x0
     v10  LifetimeEnd(0)                                   -> -

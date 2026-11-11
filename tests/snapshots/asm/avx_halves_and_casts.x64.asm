@@ -29,8 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	-0x20(%rbp), %rax
                	vextracti128	$0x1, %ymm0, %xmm0
@@ -48,8 +47,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	(%rsp), %rax
                	vinserti128	$0x1, %xmm1, %ymm0, %ymm0

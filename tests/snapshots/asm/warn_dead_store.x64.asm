@@ -34,10 +34,9 @@ Disassembly of section .text:
                	retq
 
 <store_consumed_after_branch_is_silenced>:
-               	movslq	%edi, %rdi
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmovneq	%rcx, %rax
                	retq
 

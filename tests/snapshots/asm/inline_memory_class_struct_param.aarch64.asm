@@ -83,10 +83,9 @@ Disassembly of section .text:
                	ret
 
 <use_pick>:
-               	sxtw	x2, w2
                	ldr	x0, [x0, #0x10]
                	ldr	x1, [x1, #0x18]
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	csel	x0, x0, x1, ne
                	ret
 

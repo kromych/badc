@@ -240,9 +240,8 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movslq	%edx, %rdx
                	movq	%rsi, %r12
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp

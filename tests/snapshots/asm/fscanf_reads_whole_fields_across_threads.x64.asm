@@ -85,7 +85,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	movslq	%edi, %r12
+               	movq	%rdi, %r12
                	movl	%r12d, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
                	movq	$0x0, <rip> # <addr>
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%ebx, %ebx
-               	testq	%r12, %r12
+               	testl	%r12d, %r12d
                	je	<addr>
                	movq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi

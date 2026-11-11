@@ -70,7 +70,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> [spill 0]
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (low word)   (exit_acc=v3)
   block 1  start_pc=0
     v10  InlineAsm { template="xorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\txorl %%edi, %%edi\n\txorq %%r8, %%r8\n\txorq %%r9, %%r9\n\txorq %%r10, %%r10\n\txorq %%r11, %%r11", ops=0, args=[] } -> -
     v11  InlineAsm { template="xorl %%ebx, %%ebx\n\txorq %%r12, %%r12\n\txorq %%r13, %%r13\n\txorq %%r14, %%r14\n\txorq %%r15, %%r15", ops=0, args=[] } -> -

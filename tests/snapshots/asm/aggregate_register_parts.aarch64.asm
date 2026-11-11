@@ -249,8 +249,7 @@ Disassembly of section .text:
 <pick>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x2, w2
-               	cbz	x2, <addr>
+               	cbz	w2, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x16, x1

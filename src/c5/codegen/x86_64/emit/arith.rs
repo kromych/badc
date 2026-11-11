@@ -85,7 +85,7 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
 pub(super) fn emit_select(
     code: &mut Vec<u8>,
     dst: Place,
-    (cond, a, b, kind): (u32, u32, u32, LoadKind),
+    (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -106,7 +106,12 @@ pub(super) fn emit_select(
         let Some(rc) = materialize_int(code, place_of(alloc, cond), SCRATCH_R10, frame) else {
             return fail("Select: condition not int reg / spill");
         };
-        emit_rr(code, Mnem::Test, 8, rc, rc);
+        let width = if super::super::passes::narrow::is_cmp32(&func.cmp32, v) {
+            4
+        } else {
+            8
+        };
+        emit_rr(code, Mnem::Test, width, rc, rc);
         FusedBranch::Jcc(Cc::Ne)
     };
     // `a` when `cc` holds, or PF is set under `parity`; else `b`.

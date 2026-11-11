@@ -518,7 +518,7 @@ pub(super) fn emit_inst(
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Select { cond, a, b, kind } => {
-            super::arith::emit_select(code, dst, (*cond, *a, *b, *kind), func, alloc, frame)
+            super::arith::emit_select(code, dst, (v, *cond, *a, *b, *kind), func, alloc, frame)
         }
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Fma {

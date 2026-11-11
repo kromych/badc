@@ -70,7 +70,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movslq	%esi, %rsi
                	leaq	-0x20(%rbp), %rax
                	movups	(%rdi), %xmm14
                	movups	%xmm14, (%rax)
@@ -81,7 +80,7 @@ Disassembly of section .text:
                	movq	%rdx, -0x10(%rbp)
                	movq	-0x20(%rbp), %rdx
                	movq	%rdx, -0x8(%rbp)
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	cmoveq	%rcx, %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax

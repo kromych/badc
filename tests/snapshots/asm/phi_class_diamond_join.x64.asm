@@ -26,12 +26,11 @@ Disassembly of section .text:
                	int3
 
 <test>:
-               	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
                	movslq	%esi, %rsi
+               	movslq	%edx, %rdx
                	leaq	0x1(%rsi), %rax
                	leaq	-0x1(%rdx), %rcx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	retq
 

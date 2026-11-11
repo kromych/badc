@@ -64,8 +64,7 @@ Disassembly of section .text:
                	retq
 
 <pick>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movabsq	$0x4004000000000000, %r11 # imm = 0x4004000000000000
                	movq	%r11, %xmm0
@@ -75,8 +74,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <pickf>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0xbe800000, %r11d      # imm = 0xBE800000
                	movq	%r11, %xmm0

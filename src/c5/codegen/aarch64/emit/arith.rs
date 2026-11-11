@@ -162,7 +162,11 @@ pub(super) fn emit_select(
             else {
                 return fail("Select: condition not int reg / spill");
             };
-            emit(code, enc_subs_imm(Reg::SP, rc, 0));
+            if super::super::passes::narrow::is_cmp32(&func.cmp32, v) {
+                emit(code, super::encode::enc_subs_imm_w(Reg::SP, rc, 0));
+            } else {
+                emit(code, enc_subs_imm(Reg::SP, rc, 0));
+            }
             Cond::Ne
         }
     };

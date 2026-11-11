@@ -20,10 +20,9 @@ Disassembly of section .text:
 <f>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	csel	x0, x1, x2, ne
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10

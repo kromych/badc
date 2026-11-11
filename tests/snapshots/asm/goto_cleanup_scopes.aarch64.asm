@@ -219,11 +219,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
                	stur	wzr, [x29, #-0x8]
                	stur	wzr, [x29, #-0x8]
                	stur	wzr, [x29, #-0x8]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x0, <page>
@@ -299,8 +298,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adr	x3, <addr>
                	stur	wzr, [x29, #-0x8]
                	stur	wzr, [x29, #-0x8]

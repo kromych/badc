@@ -64,19 +64,16 @@ Disassembly of section .text:
                	retq
 
 <pick>:
-               	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
-               	movslq	%esi, %rsi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	cmoveq	%rcx, %rax
                	retq
                	movl	$0x3, %eax
                	movl	$0x4, %ecx
-               	testq	%rdx, %rdx
+               	testl	%edx, %edx
                	cmoveq	%rcx, %rax
                	jmp	<addr>
 
@@ -166,12 +163,10 @@ Disassembly of section .text:
                	retq
 
 <route>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
                	xorl	%eax, %eax
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	cmpl	$0x3, %edx
                	jl	<addr>
@@ -255,8 +250,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <fork_at>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	$0x5, %ecx

@@ -189,9 +189,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r15
-               	movslq	%r8d, %r8
-               	movslq	%ecx, %r11
-               	movq	%r11, 0x40(%rsp)
+               	movq	%rcx, 0x40(%rsp)
                	movq	%rdx, %rbx
                	movq	%rsi, 0x48(%rsp)
                	movl	$0x8, %eax
@@ -271,10 +269,10 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	addq	%rdx, %rcx
                	movq	0x40(%rsp), %r10
-               	testq	%r10, %r10
+               	testl	%r10d, %r10d
                	movq	%rcx, %rdx
                	cmovneq	%rax, %rdx
-               	testq	%r8, %r8
+               	testl	%r8d, %r8d
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rbx, %rcx

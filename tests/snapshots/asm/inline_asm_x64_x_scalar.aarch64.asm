@@ -65,10 +65,9 @@ Disassembly of section .text:
                	fcmp	s0, s1
                	cset	x0, ne
                	add	x0, x1, x0
-               	sxtw	x1, w0
-               	mov	x2, #0x2a               // =42
-               	cmp	x1, #0x0
-               	csel	x0, x0, x2, ne
+               	mov	x1, #0x2a               // =42
+               	cmp	w0, #0x0
+               	csel	x0, x0, x1, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

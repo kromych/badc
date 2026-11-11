@@ -32,10 +32,9 @@ Disassembly of section .text:
 <f>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	movq	%rcx, %rdi
                	cmovneq	%rax, %rdi
                	popq	%rbp

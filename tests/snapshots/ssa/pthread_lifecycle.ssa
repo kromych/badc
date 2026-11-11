@@ -65,7 +65,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=256
     v12  Extend { value=v1, kind=I8 }                     -> x0
     v13  StoreLocal { off=-256, disp=2047, value=v1, kind=I8, volatile } -> -
     v14  Imm(0)                                           -> x0
-    terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
+    terminator Bz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v1)
   block 1  start_pc=0
     v15  Imm(0)                                           -> x0
     v16  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x7

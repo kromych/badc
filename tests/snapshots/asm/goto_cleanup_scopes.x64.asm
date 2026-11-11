@@ -202,11 +202,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
                	movl	$0x0, -0x8(%rbp)
                	movl	$0x0, -0x8(%rbp)
                	movl	$0x0, -0x8(%rbp)
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	movslq	<rip>, %rdx # <addr>
@@ -270,8 +269,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x0, -0x8(%rbp)

@@ -6748,7 +6748,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	sxtw	x20, w2
-               	sxtw	x21, w3
+               	mov	x21, x3
                	sub	x3, x29, #0x10
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
@@ -6760,7 +6760,7 @@ Disassembly of section .text:
                	asr	x2, x0, #3
                	mov	x0, x3
                	bl	<addr>
-               	cbz	x21, <addr>
+               	cbz	w21, <addr>
                	ldur	x4, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	sub	x0, x20, #0x1
@@ -6809,11 +6809,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	sxtw	x3, w3
                	stur	x0, [x29, #-0x70]
                	sub	x7, x29, #0x70
                	stur	x1, [x29, #-0x68]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x1, #0x1                // =1
                	mov	x8, #0x0                // =0
                	sub	x0, x2, #0x1
@@ -6843,7 +6842,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x60
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	cbz	x3, <addr>
+               	cbz	w3, <addr>
                	mov	x3, #0x1                // =1
                	mov	x6, #0x0                // =0
                	sub	x0, x2, #0x1
@@ -6937,11 +6936,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xa0
-               	sxtw	x5, w5
-               	sxtw	x6, w6
                	cmp	w2, #0x0
                	b.ge	<addr>
-               	cbz	x5, <addr>
+               	cbz	w5, <addr>
                	mov	x4, #0x1                // =1
                	mov	x8, #0x0                // =0
                	mvn	x3, x2
@@ -6998,7 +6995,7 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x60]
                	stur	xzr, [x29, #-0x58]
                	b	<addr>
-               	cbz	x6, <addr>
+               	cbz	w6, <addr>
                	orr	x5, x0, x1
                	cbnz	x5, <addr>
                	sub	x0, x29, #0x50

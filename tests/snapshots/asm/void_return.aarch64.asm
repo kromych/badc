@@ -40,8 +40,7 @@ Disassembly of section .text:
                	ret
 
 <pick>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	str	w0, [x1]
                	ret

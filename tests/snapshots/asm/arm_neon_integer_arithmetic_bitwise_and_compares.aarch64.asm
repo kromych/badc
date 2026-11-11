@@ -3930,7 +3930,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	sxtw	x20, w2
-               	sxtw	x21, w3
+               	mov	x21, x3
                	sub	x3, x29, #0x10
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
@@ -3942,7 +3942,7 @@ Disassembly of section .text:
                	asr	x2, x0, #3
                	mov	x0, x3
                	bl	<addr>
-               	cbz	x21, <addr>
+               	cbz	w21, <addr>
                	ldur	x4, [x29, #-0x10]
                	ldur	x1, [x29, #-0x8]
                	sub	x0, x20, #0x1

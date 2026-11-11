@@ -32,7 +32,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v5   BlockAddr(block=2)                               -> x0
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
-    terminator Bz { cond=v3, target=b3, fall=b1 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b3, fall=b1 }   (low word)   (exit_acc=v3)
   block 1  start_pc=0
     v8   Imm(0)                                           -> x1
     terminator GotoIndirect(v5)   (exit_acc=v5)

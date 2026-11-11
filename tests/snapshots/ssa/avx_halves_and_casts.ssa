@@ -10,7 +10,7 @@ fn ent_pc=1358 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    terminator Bz { cond=v2, target=b3, fall=b1 }   (exit_acc=v2)
+    terminator Bz { cond=v2, target=b3, fall=b1 }   (low word)   (exit_acc=v2)
   block 1  start_pc=0
     v7   Imm(0)                                           -> x0
     v8   LocalAddr(-10)                                   -> x0
@@ -49,7 +49,7 @@ fn ent_pc=1359 n_params=3 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    terminator Bz { cond=v3, target=b3, fall=b1 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b3, fall=b1 }   (low word)   (exit_acc=v3)
   block 1  start_pc=0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0

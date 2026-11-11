@@ -76,9 +76,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x220
                	str	x20, [sp]
-               	sxtw	x0, w0
                	mov	x20, x1
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	sub	x0, x29, #0x210
                	mov	x1, #0x210              // =528
                	mov	x2, x20
@@ -111,9 +110,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x220
                	str	x20, [sp]
-               	sxtw	x0, w0
                	mov	x20, x1
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	sub	x0, x29, #0x210
                	mov	x1, #0x210              // =528
                	add	x2, x20, #0x2

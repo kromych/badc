@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <report>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	neg	x1, x0
                	adr	x2, <addr>
                	adrp	x0, <page>

@@ -304,8 +304,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v142 Binop { op=add, lhs=v117, rhs=v140 }             -> x0
     v143 Extend { value=v142, kind=I32, nsw }             -> x1
     v144 Extend { value=v142, kind=I32 }                  -> x1
-    v145 Imm(42)                                          -> x2
-    v146 Select { cond=v144, a=v142, b=v145, kind=I64 }   -> x0
+    v145 Imm(42)                                          -> x1
+    v146 Select { cond=v142, a=v142, b=v145, kind=I64 }   -> x0
     terminator Jmp(b7)
   block 7  start_pc=0
     v151 Copy { value=v146, fp=false }                    -> x1

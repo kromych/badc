@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <maybe>:
-               	movslq	%edi, %rdi
                	movl	$0x1, %eax
                	movl	$0x2, %ecx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	retq
 
@@ -38,12 +37,11 @@ Disassembly of section .text:
                	retq
 
 <fp_maybe>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movabsq	$0x3ff8000000000000, %r11 # imm = 0x3FF8000000000000
                	movq	%r11, %xmm0
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	retq
                	movabsq	$0x4004000000000000, %r11 # imm = 0x4004000000000000
@@ -51,12 +49,11 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <f32_maybe>:
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x3e800000, %r11d      # imm = 0x3E800000
                	movq	%r11, %xmm0
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	retq
                	movl	$0x3f000000, %r11d      # imm = 0x3F000000
@@ -64,18 +61,16 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <narrow_maybe>:
-               	movslq	%edi, %rdi
                	movq	$-0x3, %rax
                	movl	$0x7, %ecx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	retq
 
 <u8_maybe>:
-               	movslq	%edi, %rdi
                	movl	$0xc8, %eax
                	movl	$0x9, %ecx
-               	testq	%rdi, %rdi
+               	testl	%edi, %edi
                	cmoveq	%rcx, %rax
                	retq
 

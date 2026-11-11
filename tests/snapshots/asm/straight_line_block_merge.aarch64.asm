@@ -52,18 +52,15 @@ Disassembly of section .text:
                	ret
 
 <pick>:
-               	sxtw	x0, w0
-               	sxtw	x2, w2
-               	sxtw	x1, w1
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	mov	x2, #0x2                // =2
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	csel	x0, x0, x2, ne
                	ret
                	mov	x0, #0x3                // =3
                	mov	x1, #0x4                // =4
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	csel	x0, x0, x1, ne
                	b	<addr>
 
@@ -147,11 +144,9 @@ Disassembly of section .text:
                	ret
 
 <route>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
                	mov	x3, #0x0                // =0
-               	cbz	x0, <addr>
-               	cbz	x1, <addr>
+               	cbz	w0, <addr>
+               	cbz	w1, <addr>
                	cmp	w2, #0x3
                	b.lt	<addr>
                	cmp	w2, #0x4
@@ -230,8 +225,7 @@ Disassembly of section .text:
                	b	<addr>
 
 <fork_at>:
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	adr	x0, <addr>
                	mov	x1, #0x5                // =5
                	br	x0

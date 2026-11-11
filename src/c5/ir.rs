@@ -2633,7 +2633,8 @@ pub(crate) struct FunctionSsa {
     pub f32_values: Vec<bool>,
     /// Per-value table, parallel to `insts`: the instruction is an
     /// integer comparison whose operands are read at 32 bits
-    /// (`super::codegen::passes::narrow`). Set once, after every pass
+    /// (`super::codegen::passes::narrow`), or a select that tests the low
+    /// 32 bits of its condition. Set once, after every pass
     /// that adds, removes or rewrites instructions; a shorter table is
     /// read as all-false, which is the 64-bit form.
     pub cmp32: Vec<bool>,

@@ -62,11 +62,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x800
-               	sxtw	x0, w0
                	and	x1, x0, #0xff
                	strb	w1, [sp]
                	sturb	w1, [x29, #-0x1]
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	sub	x0, x0, #0x1
                	bl	<addr>
                	ldrb	w1, [sp]

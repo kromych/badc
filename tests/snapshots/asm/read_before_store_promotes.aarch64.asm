@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <maybe>:
-               	sxtw	x0, w0
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	csel	x0, x1, x2, ne
                	ret
 
@@ -26,40 +25,36 @@ Disassembly of section .text:
                	ret
 
 <fp_maybe>:
-               	sxtw	x0, w0
                	movi	d0, #0000000000000000
                	fmov	d1, #1.50000000
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	d0, d1, d0, ne
                	fmov	d1, #2.50000000
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	d0, d0, d1, ne
                	ret
 
 <f32_maybe>:
-               	sxtw	x0, w0
                	movi	d0, #0000000000000000
                	fmov	s1, #0.25000000
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	s0, s1, s0, ne
                	fmov	s1, #0.50000000
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	fcsel	s0, s0, s1, ne
                	ret
 
 <narrow_maybe>:
-               	sxtw	x0, w0
                	mov	x1, #-0x3               // =-3
                	mov	x2, #0x7                // =7
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	csel	x0, x1, x2, ne
                	ret
 
 <u8_maybe>:
-               	sxtw	x0, w0
                	mov	x1, #0xc8               // =200
                	mov	x2, #0x9                // =9
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	csel	x0, x1, x2, ne
                	ret
 

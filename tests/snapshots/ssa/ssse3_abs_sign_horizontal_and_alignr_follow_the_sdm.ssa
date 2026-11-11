@@ -482,7 +482,7 @@ fn ent_pc=443 n_params=6 variadic=false locals=0
     v72  Imm(0)                                           -> x0
     v73  Extend { value=v20, kind=I32 }                   -> x0
     v74  Imm(0)                                           -> x0
-    terminator Bz { cond=v9, target=b22, fall=b14 }   (exit_acc=v9)
+    terminator Bz { cond=v9, target=b22, fall=b14 }   (low word)   (exit_acc=v9)
   block 14  start_pc=0
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0

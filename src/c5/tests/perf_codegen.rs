@@ -4362,6 +4362,28 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
+/// A select or a branch on an `int` parameter tests its low word, so the
+/// parameter takes no entry sign extension; one the function also reads
+/// at 64 bits keeps it.
+#[test]
+fn int_condition_is_tested_in_its_low_word() {
+    const SRC: &str = "long sel(long x, int c) { long r = x + 1; if (c) r = x; return r; }\n\
+long br(long x, int c) { if (c) return x; return x * 3; }\n\
+long both(long x, int c) { long y = c ? x : 5; return y + c; }\n";
+    let mut m = Misses::default();
+    for (name, extended) in [("sel", false), ("br", false), ("both", true)] {
+        let ws = a64(SRC, name);
+        m.expect(ws.iter().any(|&w| a64_is_sxtw(w)) == extended, || {
+            format!("aarch64 {name}: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(insns.iter().any(X64Insn::is_movsxd_rr) == extended, || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

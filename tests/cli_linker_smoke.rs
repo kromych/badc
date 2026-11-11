@@ -19971,6 +19971,7 @@ fn stack_arguments_cross_the_system_compiler_boundary() {
 // compiler boundary both ways: each side calls the other's callees through
 // 64-bit parameter types, an upper half set, then through their own types
 // with arguments its 64-bit arithmetic narrowed, a variadic `int` among them.
+// An `int` a select or a branch tests is tested in its low word.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn low_word_arguments_cross_the_system_compiler_boundary() {
@@ -19990,16 +19991,20 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
         static s64 pick(const s64 *t, int i) { return t[i]; }\n\
         static s64 byte(signed char c) { return c; }\n\
         static u64 half(unsigned short h) { return h; }\n\
+        static s64 choose(int c, s64 a, s64 b) { return c ? a : b; }\n\
+        static s64 gate(int c) { if (c) return 7; return 9; }\n\
         static s64 vsum(int n, ...)\n\
         { va_list ap; s64 s = 0; va_start(ap, n);\n\
           for (int i = 0; i < n; i++) s += (s64)va_arg(ap, int) * (i + 1);\n\
           va_end(ap); return s; }\n\
         struct fns { s64 (*widen_i)(int); u64 (*widen_u)(unsigned); u64 (*halve)(unsigned);\n\
           s64 (*sum)(int, int); s64 (*pick)(const s64 *, int); s64 (*byte)(signed char);\n\
-          u64 (*half)(unsigned short); s64 (*vsum)(int, ...); };\n\
+          u64 (*half)(unsigned short); s64 (*vsum)(int, ...); s64 (*choose)(int, s64, s64);\n\
+          s64 (*gate)(int); };\n\
         typedef u64 (*wide1)(u64);\n\
         typedef s64 (*wide2)(u64, u64);\n\
         typedef s64 (*wide_pick)(const s64 *, u64);\n\
+        typedef s64 (*wide_choose)(u64, s64, s64);\n\
         static const s64 table[8] = { 10, 11, 12, 13, 14, 15, 16, 17 };\n\
         static int drive(const struct fns *f, int base)\n\
         { volatile u64 vh = 0xdeadbeef00000004ULL, vn = 0x12345678fffffffcULL;\n\
@@ -20020,12 +20025,16 @@ fn low_word_arguments_cross_the_system_compiler_boundary() {
           if (f->vsum(3, (int)h, (int)n - 1, (signed char)(h + 0x81)) != -375) return base + 14;\n\
           if (f->vsum(9, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h, (int)n - 1, (int)h,\n\
                 (int)n - 1, (signed char)(h + 0x81)) != -1143) return base + 15;\n\
+          if (((wide_choose)f->choose)(h - 4, 1, 2) != 2) return base + 16;\n\
+          if (((wide_choose)f->choose)(h, 1, 2) != 1) return base + 17;\n\
+          if ((s64)((wide1)f->gate)(h - 4) != 9) return base + 18;\n\
+          if ((s64)((wide1)f->gate)(h) != 7) return base + 19;\n\
           return 0; }\n";
     drive_across_the_system_compiler(
         &cc,
         "low-word-args-interop",
         common,
-        "widen_i, widen_u, halve, sum, pick, byte, half, vsum",
+        "widen_i, widen_u, halve, sum, pick, byte, half, vsum, choose, gate",
     );
 }
 

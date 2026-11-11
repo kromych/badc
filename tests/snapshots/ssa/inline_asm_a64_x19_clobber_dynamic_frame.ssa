@@ -105,7 +105,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=516
     terminator Bz { cond=v53, target=b3, fall=b1 }   (exit_acc=v53)
   block 3  start_pc=0
     v21  Imm(0)                                           -> x0
-    terminator Bz { cond=v3, target=b5, fall=b4 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b5, fall=b4 }   (low word)   (exit_acc=v3)
   block 4  start_pc=0
     v25  LoadLocal { off=-516, kind=I64, volatile }       -> x0
     v26  LoadLocal { off=-515, kind=I64, volatile }       -> x2

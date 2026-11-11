@@ -2052,7 +2052,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             }
             Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (
                 is_compare_op(*op)
-                    && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(*op)),
+                    && (is_x86 || crate::c5::codegen::aarch64::emit::branch_fuses(*op)),
                 false,
             ),
             Some(inst) => {

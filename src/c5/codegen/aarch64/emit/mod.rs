@@ -78,7 +78,7 @@ use inst::*;
 use intrinsic::*;
 use mem::*;
 
-pub(crate) use arith::{binop_imm_materializes, cmp_imm12, compare_fuses};
+pub(crate) use arith::{binop_imm_materializes, branch_fuses, cmp_imm12, compare_fuses};
 pub(crate) use frame::{
     Frame, asm_site_bound_values, asm_site_write_masks, asm_staged_hints, compute_frame,
 };

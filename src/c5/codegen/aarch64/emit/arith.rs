@@ -795,6 +795,22 @@ pub(crate) fn compare_fuses(op: BinOp) -> bool {
     compare_cond(op).or_else(|| fp_compare_cond(op)).is_some()
 }
 
+/// Whether a comparison's flags decide a branch: one `b.cond`, or for
+/// `Fone` two ([`fp_compare_cond_pair`]).
+pub(crate) fn branch_fuses(op: BinOp) -> bool {
+    compare_fuses(op) || fp_compare_cond_pair(op, false).is_some()
+}
+
+/// The two conditions either of which takes a branch on `Fone` after
+/// `fcmp`, `less` (N) or `greater`; `negate`d, `equal` or unordered (V).
+pub(super) fn fp_compare_cond_pair(op: BinOp, negate: bool) -> Option<(Cond, Cond)> {
+    (crate::c5::ir::fp_relation(op) == BinOp::Fone).then_some(if negate {
+        (Cond::Eq, Cond::Vs)
+    } else {
+        (Cond::Mi, Cond::Gt)
+    })
+}
+
 /// The condition of an integer comparison's `cmp` + `cset`.
 pub(super) fn compare_cond(op: BinOp) -> Option<Cond> {
     Some(match op {

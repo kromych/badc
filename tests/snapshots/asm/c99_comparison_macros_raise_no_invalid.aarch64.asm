@@ -56,9 +56,8 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x38]
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbnz	x0, <addr>
+               	b.mi	<addr>
+               	b.gt	<addr>
                	ldur	d0, [x29, #-0x30]
                	ldur	d1, [x29, #-0x38]
                	fcmp	d0, d1
@@ -78,9 +77,8 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x38]
                	ldur	d1, [x29, #-0x38]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbnz	x0, <addr>
+               	b.mi	<addr>
+               	b.gt	<addr>
                	ldur	d0, [x29, #-0x38]
                	ldur	d1, [x29, #-0x38]
                	fcmp	d0, d1
@@ -116,15 +114,13 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x30]
                	ldur	d1, [x29, #-0x28]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbz	x0, <addr>
+               	b.eq	<addr>
+               	b.vs	<addr>
                	ldur	d0, [x29, #-0x30]
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbnz	x0, <addr>
+               	b.mi	<addr>
+               	b.gt	<addr>
                	ldur	d0, [x29, #-0x30]
                	ldur	d1, [x29, #-0x28]
                	fcmp	d0, d1
@@ -146,9 +142,8 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbz	x0, <addr>
+               	b.eq	<addr>
+               	b.vs	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -157,9 +152,8 @@ Disassembly of section .text:
                	scvtf	s0, x0
                	ldur	s1, [x29, #-0x10]
                	fcmp	s0, s1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbnz	x0, <addr>
+               	b.mi	<addr>
+               	b.gt	<addr>
                	ldursw	x0, [x29, #-0x8]
                	scvtf	s0, x0
                	ldur	s1, [x29, #-0x10]
@@ -192,9 +186,8 @@ Disassembly of section .text:
                	fneg	d0, d0
                	ldur	d1, [x29, #-0x20]
                	fcmp	d0, d1
-               	cset	x0, mi
-               	csinc	x0, x0, xzr, le
-               	cbnz	x0, <addr>
+               	b.mi	<addr>
+               	b.gt	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

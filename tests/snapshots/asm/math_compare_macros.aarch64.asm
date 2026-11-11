@@ -37,9 +37,8 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	fcmp	d0, d1
-               	cset	x1, mi
-               	csinc	x1, x1, xzr, le
-               	cbz	x1, <addr>
+               	b.eq	<addr>
+               	b.vs	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	fcmp	d0, d2

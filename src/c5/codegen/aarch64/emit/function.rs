@@ -1240,6 +1240,11 @@ impl FunctionEmitter<'_, '_> {
             self.emit_cond(block_idx, target, LocalBranchKind::Bcc(bcc));
             return self.branch_unless_next(block_idx, fall_through);
         }
+        if let Some((first, second)) = fused_branch_cond_pair(func, alloc, cond, negate) {
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(first));
+            self.emit_cond(block_idx, target, LocalBranchKind::Bcc(second));
+            return self.branch_unless_next(block_idx, fall_through);
+        }
         if let Some((value, bit)) = fused_bit_test(func, alloc, cond) {
             let place = place_of(alloc, value);
             let Some(rt) = materialize_int(self.cx.code, place, scratch.primary, frame) else {
@@ -2174,6 +2179,30 @@ pub(super) fn fused_branch_cond(
     };
     let positive = compare_cond(op).or_else(|| fp_compare_cond(op))?;
     Some(if negate { positive.flip() } else { positive })
+}
+
+/// The two `B.cond` conditions, either of which takes the branch, for a
+/// branch-fused comparison no single condition decides.
+fn fused_branch_cond_pair(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<(super::encode::Cond, super::encode::Cond)> {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    match func.insts.get(cond as usize)? {
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+            super::arith::fp_compare_cond_pair(*op, negate)
+        }
+        _ => None,
+    }
 }
 
 /// The value and bit a branch-fused one-bit mask tests (`tbz` / `tbnz`).

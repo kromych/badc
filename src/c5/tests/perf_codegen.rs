@@ -4404,6 +4404,29 @@ long zb(const signed char *p, long a, long b) { return !*p ? a : b; }\n";
     m.finish();
 }
 
+/// A branch on `islessgreater` reads the `fcmp` flags with two `b.cond`,
+/// one for each condition that takes it: no `cset` / `csinc` and no `cbz`.
+#[test]
+fn a64_islessgreater_branches_on_the_flags() {
+    const SRC: &str = "extern void hit(void);\n\
+void f(double a, double b) { if (__builtin_islessgreater(a, b)) hit(); }\n\
+void g(double a, double b) { if (!__builtin_islessgreater(a, b)) hit(); }\n";
+    // `b.cond`, and `csinc` (which `cset` is).
+    let bcond = |w: u32| w & 0xFF00_0010 == 0x5400_0000;
+    let csinc = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0400;
+    let cbz = |w: u32| w & 0x7E00_0000 == 0x3400_0000;
+    let mut m = Misses::default();
+    for name in ["f", "g"] {
+        let ws = a64(SRC, name);
+        m.expect(
+            ws.iter().filter(|&&w| bcond(w)).count() == 2
+                && !ws.iter().any(|&w| csinc(w) || cbz(w)),
+            || format!("{name}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

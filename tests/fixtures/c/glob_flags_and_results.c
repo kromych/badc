@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <glob.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -69,10 +70,14 @@ static int run(void) {
 }
 
 int main(void) {
-    snprintf(dir, sizeof dir, "/tmp/badc-glob-%d", (int)getpid());
+    // A directory of its own per run: runs in one process share a pid.
+    snprintf(dir, sizeof dir, "/tmp/badc-glob-XXXXXX");
+    if (!mkdtemp(dir)) {
+        return 1;
+    }
     char sub[128];
     path(sub, sizeof sub, "sub");
-    if (mkdir(dir, 0700) != 0 || create("b.txt") || create("a.txt") || mkdir(sub, 0700)) {
+    if (create("b.txt") || create("a.txt") || mkdir(sub, 0700)) {
         return 1;
     }
     int rc = run();

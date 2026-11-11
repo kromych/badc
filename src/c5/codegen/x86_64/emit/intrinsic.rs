@@ -2471,9 +2471,9 @@ fn emit_x86_simd_val_wide(
 
 /// The 128-bit part of wide register `v` holding byte `off`, extracted into
 /// xmm `scratch` (`vextracti128` / `vextracti32x4`), or `v` itself for a
-/// 16-byte vector; with the lane's offset within it.
+/// vector of 16 bytes or fewer; with the lane's offset within it.
 fn lane_part(code: &mut Vec<u8>, bytes: u8, v: u8, off: u8, scratch: u8) -> Emit<(u8, u8)> {
-    if bytes == 16 {
+    if bytes <= 16 {
         return Ok((v, off));
     }
     let mnem = if bytes == 64 {
@@ -2504,8 +2504,10 @@ pub(super) fn emit_vec_extract(
     use crate::c5::ir::AsmRegSize;
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let w = VecWidth::of_bytes(bytes);
-    let src = match w {
-        VecWidth::V128 => materialize_v128(code, place_of(alloc, vec), Reg(sa), frame),
+    // An 8-byte vector is the low quad of its xmm register.
+    let src = match (w, bytes) {
+        (_, 8) => materialize_fp(code, place_of(alloc, vec), Reg(sa), frame),
+        (VecWidth::V128, _) => materialize_v128(code, place_of(alloc, vec), Reg(sa), frame),
         _ => materialize_wide(code, w, place_of(alloc, vec), Reg(sa), frame),
     };
     let Some(src) = src else {
@@ -2604,6 +2606,8 @@ pub(super) fn emit_vec_insert(
     let mirror = |code: &mut Vec<u8>, rd: u8| {
         if bytes > 16 {
             mirror_wide_dst(code, w, dst, Reg(rd), frame);
+        } else if bytes == 8 {
+            super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
         } else {
             mirror_v128_dst(code, dst, Reg(rd), frame);
         }
@@ -2687,13 +2691,14 @@ pub(super) fn emit_vec_insert(
     // one leaves it as it is.
     let base = place_of(alloc, vec);
     if !matches!(base, Place::None) {
-        let got = match w {
-            VecWidth::V128 => materialize_v128(code, base, Reg(rd), frame),
+        let got = match (w, bytes) {
+            (_, 8) => materialize_fp(code, base, Reg(rd), frame),
+            (VecWidth::V128, _) => materialize_v128(code, base, Reg(rd), frame),
             _ => materialize_wide(code, w, base, Reg(rd), frame),
         };
         match got {
             Some(r) if r.0 == rd => {}
-            Some(r) if w == VecWidth::V128 => emit_movapd_xmm_xmm(code, Reg(rd), r),
+            Some(r) if w == VecWidth::V128 || bytes == 8 => emit_movapd_xmm_xmm(code, Reg(rd), r),
             Some(r) => emit_wide_mov(code, w, Reg(rd), r),
             None => return fail("VecInsert: vector has no place"),
         }

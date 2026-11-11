@@ -62,21 +62,16 @@ Disassembly of section .text:
 <b8_ops>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	d0, [x29, #-0x18]
-               	stur	d1, [x29, #-0x10]
-               	ldur	d0, [x29, #-0x18]
-               	ldur	d1, [x29, #-0x10]
-               	add	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x18]
-               	ldur	x1, [x29, #-0x10]
+               	sub	sp, sp, #0x10
+               	add	v2.8b, v0.8b, v1.8b
+               	mov	x0, v0.d[0]
+               	mov	x1, v1.d[0]
                	orr	x0, x0, x1
-               	ldur	x1, [x29, #-0x8]
+               	mov	x1, v2.d[0]
                	eor	x0, x1, x0
                	stur	x0, [x29, #-0x8]
                	ldur	d0, [x29, #-0x8]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -90,11 +85,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sub	v2.2s, v0.2s, v1.2s
-               	stur	d2, [x29, #-0x10]
                	add	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x10]
-               	ldur	x1, [x29, #-0x8]
+               	mov	x0, v2.d[0]
+               	mov	x1, v0.d[0]
                	and	x0, x0, x1
                	stur	x0, [x29, #-0x8]
                	ldur	d0, [x29, #-0x8]

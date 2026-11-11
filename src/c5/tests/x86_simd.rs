@@ -2462,3 +2462,34 @@ fn the_vector_operators_take_the_rows() {
         );
     }
 }
+
+/// A lane of an 8-byte vector is read and written in its xmm register, as
+/// a 16-byte vector's is.
+#[cfg(feature = "full")]
+#[test]
+fn an_8_byte_vector_lane_stays_in_its_register() {
+    use crate::{NativeOptions, Target};
+    let src = "typedef short v4h __attribute__((vector_size(8)));\n\
+         int loc(v4h a, v4h b) { v4h v = a + b; return v[3]; }\n\
+         v4h setl(v4h a, v4h b, short x) { v4h v = a + b; v[2] = x; return v; }\n\
+         int main(void) { return 0; }";
+    let program = super::compile_str_bare_for(src, Target::LinuxX64);
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native for linux-x64");
+    // The opcode and the lane immediate, in either VEX form: the registers
+    // are the allocator's.
+    let has = |op: u8, imm: u8| {
+        bytes
+            .windows(5)
+            .any(|w| w[0] == 0xc5 && w[2] == op && w[4] == imm)
+            || bytes
+                .windows(6)
+                .any(|w| w[0] == 0xc4 && w[3] == op && w[5] == imm)
+    };
+    assert!(has(0xc5, 3), "vpextrw $3 not in the emitted code");
+    assert!(has(0xc4, 2), "vpinsrw $2 not in the emitted code");
+}

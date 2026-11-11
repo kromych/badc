@@ -566,19 +566,10 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
     _Static_assert((__n) >= 0 && (__n) < (int)(__lanes), "lane index out of range")
 #define __BADC_NEON_NLANES(__v) (sizeof(__v) / sizeof((__v)[0]))
 #define __BADC_NEON_GETI(T, g, e, __v, __n) __extension__({               \
-    T __lv = (__v);                                                       \
-    __typeof__(__lv[0]) __le;                                             \
-    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
-    __asm__("umov %" g "0, %1." e "[%2]" : "=r"(__le) : "w"(__lv), "i"(__n)); \
-    __le;                                                                 \
+    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES((T){0}));                    \
+    ((T)(__v))[__n];                                                      \
 })
-#define __BADC_NEON_GETF(T, e, __v, __n) __extension__({                  \
-    T __lv = (__v);                                                       \
-    __typeof__(__lv[0]) __le;                                             \
-    __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__lv));                      \
-    __asm__("mov %" e "0, %1." e "[%2]" : "=w"(__le) : "w"(__lv), "i"(__n)); \
-    __le;                                                                 \
-})
+#define __BADC_NEON_GETF(T, e, __v, __n) __BADC_NEON_GETI(T, "", e, __v, __n)
 #define __BADC_NEON_SETI(T, g, e, __x, __v, __n) __extension__({          \
     T __lv = (__v);                                                       \
     __typeof__(__lv[0]) __lx = (__x);                                     \

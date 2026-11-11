@@ -282,3 +282,32 @@ fn the_interpreter_runs_the_reductions() {
         "a failing group sets its bit in the exit code"
     );
 }
+
+/// A lane of an 8-byte vector is read and written in its register, as a
+/// 16-byte vector's is: `smov` and `ins` on the D register.
+#[cfg(feature = "full")]
+#[test]
+fn an_8_byte_vector_lane_stays_in_its_register() {
+    use crate::{NativeOptions, Target};
+    let src = "typedef short v4h __attribute__((vector_size(8)));\n\
+        int loc(v4h a, v4h b) { v4h v = a + b; return v[3]; }\n\
+        v4h setl(v4h a, v4h b, short x) { v4h v = a + b; v[2] = x; return v; }\n\
+        int main(void) { return 0; }";
+    let program = super::compile_str_bare_for(src, Target::LinuxAarch64);
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native for linux-aarch64");
+    for (word, what) in [
+        (0x4e0e_2c00u32, "smov x0, v0.h[3]"),
+        (0x4e0a_1c00, "mov v0.h[2], w0"),
+    ] {
+        let needle = word.to_le_bytes();
+        assert!(
+            bytes.windows(4).any(|w| w == needle),
+            "{what}: expected {word:#010x} in the emitted code"
+        );
+    }
+}

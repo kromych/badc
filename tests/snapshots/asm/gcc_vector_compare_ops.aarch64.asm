@@ -180,13 +180,12 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x28]
                	cmhi	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldursb	x0, [x29, #-0x8]
+               	smov	x0, v0.b[0]
                	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.ne	<addr>
-               	ldursb	x0, [x29, #-0x7]
-               	cbz	w0, <addr>
+               	smov	x0, v0.b[1]
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10

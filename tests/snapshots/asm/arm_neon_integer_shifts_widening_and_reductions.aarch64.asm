@@ -6018,16 +6018,10 @@ Disassembly of section .text:
                	ret
 
 <w_vaddv_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	addp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vaddvq_s32>:
@@ -6038,16 +6032,10 @@ Disassembly of section .text:
                	ret
 
 <w_vaddlv_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	saddlp	v0.1d, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
+               	mov	x1, v0.d[0]
                	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vaddlvq_s32>:
@@ -6058,16 +6046,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmaxv_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	smaxp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmaxvq_s32>:
@@ -6078,16 +6060,10 @@ Disassembly of section .text:
                	ret
 
 <w_vminv_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sminp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vminvq_s32>:
@@ -6098,16 +6074,10 @@ Disassembly of section .text:
                	ret
 
 <w_vaddv_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	addp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vaddvq_u32>:
@@ -6118,16 +6088,10 @@ Disassembly of section .text:
                	ret
 
 <w_vaddlv_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	uaddlp	v0.1d, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
+               	mov	x1, v0.d[0]
                	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vaddlvq_u32>:
@@ -6138,16 +6102,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmaxv_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	umaxp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmaxvq_u32>:
@@ -6158,16 +6116,10 @@ Disassembly of section .text:
                	ret
 
 <w_vminv_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	uminp	v0.2s, v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	smov	x1, v0.s[0]
                	str	w1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vminvq_u32>:

@@ -65,7 +65,7 @@ Disassembly of section .text:
                	mov	w0, v0.s[1]
                	mov	x17, #0x605             // =1541
                	movk	x17, #0x807, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20

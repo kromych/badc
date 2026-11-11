@@ -313,40 +313,43 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     terminator Return(v35)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=b8_ops
-fn ent_pc=7 n_params=2 variadic=false locals=3
+fn ent_pc=7 n_params=2 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=F64)                   -> d0
     v1   ParamPart(1, part=0, kind=F64)                   -> d1
     v2   Imm(0)                                           -> x0
-    v3   StoreLocal { off=-3, value=v0, kind=F64 }        -> -
+    v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   StoreLocal { off=-2, value=v1, kind=F64 }        -> -
+    v5   Imm(0)                                           -> x0
     v6   AllocaInit(0)                                    -> -
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   LoadLocal { off=-3, kind=F64 }                   -> d0
-    v10  LoadLocal { off=-2, kind=F64 }                   -> d1
-    v11  VecBinop { op=Add, lane=I8, bytes=8, lhs=v9, rhs=v10 } -> d0
+    v9   Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  VecBinop { op=Add, lane=I8, bytes=8, lhs=v0, rhs=v1 } -> d2
     v12  Imm(0)                                           -> x0
-    v13  StoreLocal { off=-1, value=v11, kind=F64 }       -> -
+    v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v18  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v19  Binop { op=or, lhs=v17, rhs=v18 }                -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Imm(0)                                           -> x1
-    v22  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v23  Imm(0)                                           -> x2
-    v24  Binop { op=xor, lhs=v22, rhs=v19 }               -> x0
-    v25  StoreLocal { off=-1, value=v24, kind=I64 }       -> -
-    v26  LifetimeEnd(-2)                                  -> -
-    v27  LifetimeEnd(-3)                                  -> -
-    v28  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v29  AggParts { desc=0, parts=[v28], fp_mask=0x1 }    -> -
-    terminator Return(v29)   (exit_acc=v21)
+    v17  Imm(0)                                           -> x0
+    v18  VecExtract { vec=v0, off=0, kind=I64, bytes=8 }  -> x0
+    v19  Imm(0)                                           -> x1
+    v20  VecExtract { vec=v1, off=0, kind=I64, bytes=8 }  -> x1
+    v21  Binop { op=or, lhs=v18, rhs=v20 }                -> x0
+    v22  Imm(0)                                           -> x1
+    v23  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x1
+    v25  VecExtract { vec=v11, off=0, kind=I64, bytes=8 } -> x1
+    v26  Imm(0)                                           -> x2
+    v27  Binop { op=xor, lhs=v25, rhs=v21 }               -> x0
+    v28  StoreLocal { off=-1, value=v27, kind=I64 }       -> -
+    v29  LifetimeEnd(0)                                   -> -
+    v30  LifetimeEnd(0)                                   -> -
+    v31  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v32  AggParts { desc=0, parts=[v31], fp_mask=0x1 }    -> -
+    terminator Return(v32)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=h8_ops
 fn ent_pc=8 n_params=2 variadic=false locals=0
@@ -379,7 +382,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=0
     terminator Return(v23)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=i8_ops
-fn ent_pc=9 n_params=2 variadic=false locals=2
+fn ent_pc=9 n_params=2 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=F64)                   -> d0
@@ -395,67 +398,79 @@ fn ent_pc=9 n_params=2 variadic=false locals=2
     v10  Imm(0)                                           -> x0
     v11  VecBinop { op=Sub, lane=I32, bytes=8, lhs=v0, rhs=v1 } -> d2
     v12  Imm(0)                                           -> x0
-    v13  StoreLocal { off=-2, value=v11, kind=F64 }       -> -
+    v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  VecBinop { op=Add, lane=I32, bytes=8, lhs=v0, rhs=v1 } -> d0
     v19  Imm(0)                                           -> x0
-    v20  StoreLocal { off=-1, value=v18, kind=F64 }       -> -
+    v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v23  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v24  Binop { op=and, lhs=v22, rhs=v23 }               -> x0
-    v25  StoreLocal { off=-1, value=v24, kind=I64 }       -> -
-    v26  LifetimeEnd(0)                                   -> -
-    v27  LifetimeEnd(0)                                   -> -
-    v28  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v29  AggParts { desc=0, parts=[v28], fp_mask=0x1 }    -> -
-    terminator Return(v29)   (exit_acc=v21)
+    v22  Imm(0)                                           -> x0
+    v23  VecExtract { vec=v11, off=0, kind=I64, bytes=8 } -> x0
+    v24  Imm(0)                                           -> x1
+    v25  VecExtract { vec=v18, off=0, kind=I64, bytes=8 } -> x1
+    v26  Binop { op=and, lhs=v23, rhs=v25 }               -> x0
+    v27  StoreLocal { off=-1, value=v26, kind=I64 }       -> -
+    v28  LifetimeEnd(0)                                   -> -
+    v29  LifetimeEnd(0)                                   -> -
+    v30  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v31  AggParts { desc=0, parts=[v30], fp_mask=0x1 }    -> -
+    terminator Return(v31)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=f8_ops
-fn ent_pc=10 n_params=2 variadic=false locals=2
+fn ent_pc=10 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=F64)                   -> d0
     v1   ParamPart(1, part=0, kind=F64)                   -> d1
-    v2   LocalAddr(-1)                                    -> x0
-    v3   StoreLocal { off=-1, value=v0, kind=F64 }        -> -
-    v4   LocalAddr(-2)                                    -> x0
-    v5   StoreLocal { off=-2, value=v1, kind=F64 }        -> -
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
     v6   AllocaInit(0)                                    -> -
-    v7   LocalAddr(-1)                                    -> x0
-    v8   LocalAddr(-2)                                    -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v11  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
-    v12  Binop { op=fsub, lhs=v10, rhs=v11 }              -> d2 [f32]
-    v13  Imm(0)                                           -> x0
-    v14  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
-    v15  LoadLocal { off=-1, disp=4, kind=F32 }           -> d3 [f32]
-    v16  BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x0
-    v17  LoadLocal { off=-2, disp=4, kind=F32 }           -> d1 [f32]
-    v18  Binop { op=fsub, lhs=v15, rhs=v17 }              -> d3 [f32]
-    v19  Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  VecExtract { vec=v0, off=0, kind=F32, bytes=8 }  -> d2 [f32]
+    v12  Imm(0)                                           -> x0
+    v13  VecExtract { vec=v1, off=0, kind=F32, bytes=8 }  -> d3 [f32]
+    v14  Binop { op=fsub, lhs=v11, rhs=v13 }              -> d2 [f32]
+    v15  Imm(0)                                           -> x0
+    v16  Imm(4)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    v18  VecExtract { vec=v0, off=4, kind=F32, bytes=8 }  -> d0 [f32]
+    v19  Imm(4)                                           -> x0
     v20  Imm(0)                                           -> x0
-    v21  LocalAddr(-2)                                    -> x0
-    v22  LocalAddr(-1)                                    -> x0
-    v23  Imm(0)                                           -> x0 [f32]
-    v24  LoadLocal { off=-2, kind=F32 }                   -> d4 [f32]
-    v25  Binop { op=fdiv, lhs=v12, rhs=v11 }              -> d2 [f32]
-    v26  StoreLocal { off=-1, value=v25, kind=F32 }       -> -
+    v21  VecExtract { vec=v1, off=4, kind=F32, bytes=8 }  -> d3 [f32]
+    v22  Binop { op=fsub, lhs=v18, rhs=v21 }              -> d0 [f32]
+    v23  Imm(0)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0 [f32]
-    v28  BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x0
-    v29  LoadLocal { off=-2, disp=4, kind=F32 }           -> d0 [f32]
-    v30  Binop { op=fdiv, lhs=v18, rhs=v17 }              -> d0 [f32]
-    v31  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
-    v32  StoreLocal { off=-1, disp=4, value=v30, kind=F32 } -> -
-    v33  LifetimeEnd(-2)                                  -> -
-    v34  LifetimeEnd(-1)                                  -> -
-    v35  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v36  AggParts { desc=0, parts=[v35], fp_mask=0x1 }    -> -
-    terminator Return(v36)   (exit_acc=v2)
+    v28  Imm(0)                                           -> x0
+    v29  VecExtract { vec=v1, off=0, kind=F32, bytes=8 }  -> d3 [f32]
+    v30  Binop { op=fdiv, lhs=v14, rhs=v29 }              -> d2 [f32]
+    v31  Imm(0)                                           -> x0
+    v32  VecInsert { vec=v31, value=v30, off=0, kind=F32, bytes=8 } -> d2
+    v33  Imm(0)                                           -> x0
+    v34  Imm(0)                                           -> x0 [f32]
+    v35  Imm(4)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  VecExtract { vec=v1, off=4, kind=F32, bytes=8 }  -> d1 [f32]
+    v38  Binop { op=fdiv, lhs=v22, rhs=v37 }              -> d0 [f32]
+    v39  Imm(4)                                           -> x0
+    v40  Imm(0)                                           -> x0
+    v41  VecInsert { vec=v32, value=v38, off=4, kind=F32, bytes=8 } -> d0
+    v42  Imm(0)                                           -> x0
+    v43  LifetimeEnd(0)                                   -> -
+    v44  LifetimeEnd(0)                                   -> -
+    v45  Imm(0)                                           -> x0
+    v46  AggParts { desc=0, parts=[v41], fp_mask=0x1 }    -> -
+    terminator Return(v46)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=main
 fn ent_pc=11 n_params=0 variadic=false locals=9

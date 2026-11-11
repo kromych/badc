@@ -115,17 +115,13 @@ Disassembly of section .text:
 <b8_ops>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movsd	%xmm0, -0x18(%rbp)
-               	movsd	%xmm1, -0x10(%rbp)
-               	movsd	-0x18(%rbp), %xmm0
-               	movsd	-0x10(%rbp), %xmm1
-               	paddb	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movq	-0x10(%rbp), %rcx
+               	subq	$0x10, %rsp
+               	movapd	%xmm0, %xmm2
+               	paddb	%xmm1, %xmm2
+               	vmovq	%xmm0, %rax
+               	vmovq	%xmm1, %rcx
                	orq	%rcx, %rax
-               	movq	-0x8(%rbp), %rcx
+               	vmovq	%xmm2, %rcx
                	xorq	%rcx, %rax
                	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm0
@@ -145,11 +141,9 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movapd	%xmm0, %xmm2
                	psubd	%xmm1, %xmm2
-               	movsd	%xmm2, -0x10(%rbp)
                	paddd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
-               	movq	-0x8(%rbp), %rcx
+               	vmovq	%xmm2, %rax
+               	vmovq	%xmm0, %rcx
                	andq	%rcx, %rax
                	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm0
@@ -157,23 +151,22 @@ Disassembly of section .text:
                	retq
 
 <f8_ops>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	%xmm0, -0x8(%rbp)
-               	movsd	%xmm1, -0x10(%rbp)
-               	movss	-0x8(%rbp), %xmm1
-               	movss	-0x10(%rbp), %xmm0
-               	vsubss	%xmm0, %xmm1, %xmm2
-               	movss	-0x4(%rbp), %xmm3
-               	movss	-0xc(%rbp), %xmm1
-               	subss	%xmm1, %xmm3
-               	divss	%xmm0, %xmm2
-               	movss	%xmm2, -0x8(%rbp)
-               	vdivss	%xmm1, %xmm3, %xmm0
-               	movss	%xmm0, -0x4(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
+               	vpermilps	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0,0,0]
+               	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
+               	subss	%xmm3, %xmm2
+               	vpermilps	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0,0,0]
+               	vpermilps	$0x1, %xmm1, %xmm3 # xmm3 = xmm1[1,0,0,0]
+               	subss	%xmm3, %xmm0
+               	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
+               	divss	%xmm3, %xmm2
+               	xorl	%eax, %eax
+               	vmovd	%xmm2, %r11d
+               	vmovd	%r11d, %xmm2
+               	vpermilps	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0,0,0]
+               	divss	%xmm1, %xmm0
+               	vmovd	%xmm0, %r11d
+               	movapd	%xmm2, %xmm0
+               	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
                	retq
 
 <main>:

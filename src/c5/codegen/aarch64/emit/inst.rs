@@ -807,12 +807,14 @@ fn emit_vec_extract(
     scratch: &ScratchPool,
 ) -> Emit {
     use super::encode::{enc_dup_elem_scalar, enc_smov_gen, enc_umov_gen};
-    if bytes != 16 {
-        return fail("VecExtract: only 16-byte vectors");
-    }
+    // An 8-byte vector's lanes are the low ones of its D register's.
     let place = place_of(alloc, vec);
-    let Some(qn) = materialize_v128(code, place, frame.fp_scratch[0], frame, scratch.primary)
-    else {
+    let qn = match bytes {
+        16 => materialize_v128(code, place, frame.fp_scratch[0], frame, scratch.primary),
+        8 => materialize_fp(code, place, frame.fp_scratch[0], frame),
+        _ => return fail("VecExtract: only 8- and 16-byte vectors"),
+    };
+    let Some(qn) = qn else {
         return fail("VecExtract: vector has no place");
     };
     let esize = match kind {
@@ -858,9 +860,17 @@ fn emit_vec_insert(
     (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
 ) -> Emit {
     use super::encode::{enc_ins_elem, enc_ins_gen};
-    if bytes != 16 {
-        return fail("VecInsert: only 16-byte vectors");
+    if bytes != 16 && bytes != 8 {
+        return fail("VecInsert: only 8- and 16-byte vectors");
     }
+    // The result at the vector's width: an 8-byte one is its D register.
+    let propagate = |code: &mut Vec<u8>, qd: u8| {
+        if bytes == 16 {
+            propagate_v128(code, frame, dst, qd, scratch.primary);
+        } else {
+            store_spilled_fp(code, frame, dst, qd);
+        }
+    };
     let esize = match kind {
         StoreKind::F64 | StoreKind::I64 => 8,
         StoreKind::F32 | StoreKind::I32 => 4,
@@ -899,13 +909,17 @@ fn emit_vec_insert(
                 (false, _) => super::encode::enc_fmov_w_to_s(qd, Reg(src)),
             },
         );
-        propagate_v128(code, frame, dst, qd, scratch.primary);
+        propagate(code, qd);
         return Ok(());
     }
     // An undefined vector leaves the register as it is.
     let base = place_of(alloc, vec);
     if !matches!(base, Place::None) {
-        let Some(qn) = materialize_v128(code, base, qd, frame, scratch.secondary) else {
+        let qn = match bytes {
+            16 => materialize_v128(code, base, qd, frame, scratch.secondary),
+            _ => materialize_fp(code, base, qd, frame),
+        };
+        let Some(qn) = qn else {
             return fail("VecInsert: vector has no place");
         };
         if qn != qd {
@@ -920,7 +934,7 @@ fn emit_vec_insert(
             enc_ins_gen(qd, esize, index, Reg(src))
         },
     );
-    propagate_v128(code, frame, dst, qd, scratch.primary);
+    propagate(code, qd);
     Ok(())
 }
 

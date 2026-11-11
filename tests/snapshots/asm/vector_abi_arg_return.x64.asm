@@ -138,17 +138,17 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
                	movl	$0x1, %edi
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, -0x10(%rbp)
                	movl	$0x64, %edi
                	vzeroupper
                	callq	<addr>
-               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x10(%rbp), %xmm14
                	psubb	%xmm14, %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0x63, %eax
@@ -202,88 +202,105 @@ Disassembly of section .text:
                	vpextrb	$0xf, %xmm0, %eax
                	cmpl	$0x63, %eax
                	jne	<addr>
-               	movb	$0x1, -0x10(%rbp)
-               	movb	$0x28, -0x8(%rbp)
-               	movb	$0x2, -0xf(%rbp)
-               	movb	$0x29, -0x7(%rbp)
-               	movb	$0x3, -0xe(%rbp)
-               	movb	$0x2a, -0x6(%rbp)
-               	movb	$0x4, -0xd(%rbp)
-               	movb	$0x2b, -0x5(%rbp)
-               	movb	$0x5, -0xc(%rbp)
-               	movb	$0x2c, -0x4(%rbp)
-               	movb	$0x6, -0xb(%rbp)
-               	movb	$0x2d, -0x3(%rbp)
-               	movb	$0x7, -0xa(%rbp)
-               	movb	$0x2e, -0x2(%rbp)
-               	movb	$0x8, -0x9(%rbp)
-               	movb	$0x2f, -0x1(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	movsd	-0x10(%rbp), %xmm1
-               	psubb	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movzbq	-0x8(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm0
+               	vpinsrb	$0x0, %eax, %xmm0, %xmm0
+               	movl	$0x28, %eax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm1
+               	vpinsrb	$0x0, %eax, %xmm1, %xmm1
+               	movl	$0x2, %edi
+               	vpinsrb	$0x1, %edi, %xmm0, %xmm0
+               	movl	$0x29, %eax
+               	vpinsrb	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x3, %eax
+               	vpinsrb	$0x2, %eax, %xmm0, %xmm0
+               	movl	$0x2a, %ecx
+               	vpinsrb	$0x2, %ecx, %xmm1, %xmm1
+               	movl	$0x4, %ecx
+               	vpinsrb	$0x3, %ecx, %xmm0, %xmm0
+               	movl	$0x2b, %ecx
+               	vpinsrb	$0x3, %ecx, %xmm1, %xmm1
+               	movl	$0x5, %ecx
+               	vpinsrb	$0x4, %ecx, %xmm0, %xmm0
+               	movl	$0x2c, %ecx
+               	vpinsrb	$0x4, %ecx, %xmm1, %xmm1
+               	movl	$0x6, %ecx
+               	vpinsrb	$0x5, %ecx, %xmm0, %xmm0
+               	movl	$0x2d, %ecx
+               	vpinsrb	$0x5, %ecx, %xmm1, %xmm1
+               	movl	$0x7, %ecx
+               	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
+               	movl	$0x2e, %ecx
+               	vpinsrb	$0x6, %ecx, %xmm1, %xmm1
+               	movl	$0x8, %ecx
+               	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
+               	movl	$0x2f, %ecx
+               	vpinsrb	$0x7, %ecx, %xmm1, %xmm1
+               	movapd	%xmm1, %xmm15
+               	psubb	%xmm0, %xmm15
+               	movapd	%xmm15, %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	je	<addr>
-               	movl	$0x2, %eax
+               	movq	%rdi, %rax
                	vzeroupper
                	leave
                	retq
-               	movzbq	-0x7(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x1, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x6(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x2, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x5(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x3, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x4(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x4, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x3(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x5, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x2(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x6, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	movzbq	-0x1(%rbp), %rax
-               	cmpl	$0x27, %eax
+               	vpextrb	$0x7, %xmm0, %ecx
+               	cmpl	$0x27, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm0
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm1
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm0
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm1
                	addps	%xmm1, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	movl	$0x41300000, %eax       # imm = 0x41300000
-               	movq	%rax, %xmm15
+               	movl	$0x41300000, %ecx       # imm = 0x41300000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	movl	$0x41b00000, %eax       # imm = 0x41B00000
-               	movq	%rax, %xmm15
+               	movl	$0x41b00000, %ecx       # imm = 0x41B00000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x2, %xmm0, %xmm1 # xmm1 = xmm0[2,0,0,0]
-               	movl	$0x42040000, %eax       # imm = 0x42040000
-               	movq	%rax, %xmm15
+               	movl	$0x42040000, %ecx       # imm = 0x42040000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	movl	$0x42300000, %eax       # imm = 0x42300000
-               	movq	%rax, %xmm15
+               	movl	$0x42300000, %ecx       # imm = 0x42300000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movl	$0x3, %eax
                	vzeroupper
                	leave
                	retq
-               	movl	$0x2, %edi
                	vzeroupper
                	callq	<addr>
                	movapd	%xmm0, %xmm15
@@ -368,11 +385,11 @@ Disassembly of section .text:
                	movl	$0x32, %edi
                	vzeroupper
                	callq	<addr>
-               	movups	%xmm0, -0x20(%rbp)
+               	movups	%xmm0, -0x10(%rbp)
                	movl	$0xa, %edi
                	vzeroupper
                	callq	<addr>
-               	movups	-0x20(%rbp), %xmm14
+               	movups	-0x10(%rbp), %xmm14
                	vpextrb	$0x0, %xmm14, %eax
                	vpextrb	$0x0, %xmm0, %ecx
                	subq	%rcx, %rax

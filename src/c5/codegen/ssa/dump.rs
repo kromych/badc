@@ -353,8 +353,8 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "AtomicStore {{ addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
         ),
-        X86Simd { op, imm, args } => format!(
-            "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
+        Simd { op, imm, args } => format!(
+            "Simd {{ op={}, imm={imm:?}, args=[{}] }}",
             crate::c5::x86_simd::get(*op).name,
             fmt_value_list(args),
         ),
@@ -390,8 +390,8 @@ fn fmt_inst(inst: &Inst) -> String {
             "Select {{ cond=v{cond}, a=v{a}, b=v{b}, kind={} }}",
             fmt_load_kind(*kind)
         ),
-        X86SimdVal { op, imm, args } => format!(
-            "X86SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
+        SimdVal { op, imm, args } => format!(
+            "SimdVal {{ op={}, imm={imm:?}, args=[{}] }}",
             crate::c5::x86_simd::get(*op).name,
             fmt_value_list(args),
         ),

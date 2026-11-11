@@ -2683,8 +2683,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // where the handler, entered with no edge from the region, reads
         // the last value the region stored.
         if target.is_x86_64() {
-            pipeline.run("passes::x86_simd_values::run", &mut ssa_funcs, |funcs| {
-                super::super::passes::x86_simd_values::run(funcs);
+            pipeline.run("passes::simd_values::run", &mut ssa_funcs, |funcs| {
+                super::super::passes::simd_values::run(funcs);
             });
         }
         pipeline.run("ssa::vector_slots::run", &mut ssa_funcs, |funcs| {

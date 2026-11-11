@@ -1,11 +1,11 @@
 //! x86 SIMD instructions on values.
 //!
 //! The walker lowers each `__builtin_ia32_*` call to an
-//! [`Inst::X86Simd`] that reads its 128-bit operands through their
+//! [`Inst::Simd`] that reads its 128-bit operands through their
 //! addresses and writes its result through the destination's, so every
 //! vector the intrinsics pass along lives in memory. This pass, run under
 //! `-O` ahead of `vector_slots`, reads each 128-bit operand with a `V128`
-//! load, makes the instruction an [`Inst::X86SimdVal`] defining the result,
+//! load, makes the instruction an [`Inst::SimdVal`] defining the result,
 //! and stores the result through the destination address: the objects are
 //! then accessed whole, `vector_slots` and `mem2reg` promote them, and the
 //! values stay in xmm registers. A load or store form becomes the `V128`
@@ -16,7 +16,8 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, StoreKind, ValueId};
-use crate::c5::x86_simd::{self, Form};
+use crate::c5::simd::Form;
+use crate::c5::x86_simd;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for f in funcs {
@@ -73,7 +74,7 @@ fn run_one(func: &mut FunctionSsa) {
     let mut memory: Vec<(ValueId, Inst)> = Vec::new();
     for block in &func.blocks {
         for v in block.inst_range.clone() {
-            let Inst::X86Simd { op, imm, ref args } = func.insts[v as usize] else {
+            let Inst::Simd { op, imm, ref args } = func.insts[v as usize] else {
                 continue;
             };
             let row = x86_simd::get(op);
@@ -148,7 +149,7 @@ fn run_one(func: &mut FunctionSsa) {
     };
     for (v, op, imm, srcs) in rewrites {
         let args = srcs.into_iter().map(new_id).collect();
-        func.insts[rewrite.remap[v as usize] as usize] = Inst::X86SimdVal { op, imm, args };
+        func.insts[rewrite.remap[v as usize] as usize] = Inst::SimdVal { op, imm, args };
     }
     for (v, mut inst) in memory {
         inst.for_each_operand_mut(|o| {

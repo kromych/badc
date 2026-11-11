@@ -373,8 +373,8 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::AtomicLoad { .. }
         | Inst::AtomicStore { .. }
         | Inst::Intrinsic { .. }
-        | Inst::X86Simd { .. }
-        | Inst::X86SimdVal { .. }
+        | Inst::Simd { .. }
+        | Inst::SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecExtract { .. }
@@ -1386,7 +1386,7 @@ pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] 
     {
         return [false; FP_SCRATCH_COUNT];
     }
-    let simd = func.insts.iter().any(|i| matches!(i, Inst::X86Simd { .. }));
+    let simd = func.insts.iter().any(|i| matches!(i, Inst::Simd { .. }));
     let fp_work = simd || func.insts.iter().any(produces_fp_result);
     let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
     [fp_work, fp_work, fma]
@@ -1812,7 +1812,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::StoreIndexed { .. }
             | Inst::SegLoad { .. }
             | Inst::SegStore { .. }
-            | Inst::X86SimdVal { .. }
+            | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }
@@ -1851,7 +1851,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
+            | Inst::Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
@@ -3658,7 +3658,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
                 .find(|o| o.value && o.is_output)
                 .filter(|o| o.width == 16)
                 .map_or(VecWidth::Scalar, |_| VecWidth::V128),
-            Inst::X86SimdVal { op, .. } => {
+            Inst::SimdVal { op, .. } => {
                 let row = crate::c5::x86_simd::get(*op);
                 if row.form.returns_vector() {
                     VecWidth::of_bytes(row.ret_bytes())
@@ -3780,7 +3780,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 | StoreKind::V512,
             ..
         } => ResultKind::Fp,
-        X86Simd { .. } => ResultKind::None,
+        Simd { .. } => ResultKind::None,
         VecBinop { .. } | VecInsert { .. } => ResultKind::Fp,
         VecExtract { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::V128 => ResultKind::Fp,
@@ -3790,7 +3790,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
-        X86SimdVal { op, .. } => {
+        SimdVal { op, .. } => {
             if crate::c5::x86_simd::get(*op).form.returns_vector() {
                 ResultKind::Fp
             } else {

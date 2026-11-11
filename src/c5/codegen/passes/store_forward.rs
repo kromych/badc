@@ -484,7 +484,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
-                | Inst::X86SimdVal { .. }
+                | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
@@ -597,7 +597,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
-                | Inst::X86Simd { .. }
+                | Inst::Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();
@@ -901,7 +901,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::TlsAddr(_)
                 | Inst::LifetimeEnd(_)
                 | Inst::Binop { .. }
-                | Inst::X86SimdVal { .. }
+                | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
@@ -946,7 +946,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
-                | Inst::X86Simd { .. }
+                | Inst::Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();

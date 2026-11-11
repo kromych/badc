@@ -913,9 +913,9 @@ impl FpEnv {
 
 /// The x86 SIMD rows' lanes compute in the program's environment, as its
 /// scalar operations do.
-impl crate::c5::x86_simd::FloatEnv for FpEnv {
-    fn arith(&mut self, op: crate::c5::x86_simd::FOp, a: u64, b: u64, single: bool) -> u64 {
-        use crate::c5::x86_simd::FOp;
+impl crate::c5::simd::FloatEnv for FpEnv {
+    fn arith(&mut self, op: crate::c5::simd::FOp, a: u64, b: u64, single: bool) -> u64 {
+        use crate::c5::simd::FOp;
         let f = if single { BINARY32 } else { BINARY64 };
         match op {
             FOp::Add => self.add(a, b, f),

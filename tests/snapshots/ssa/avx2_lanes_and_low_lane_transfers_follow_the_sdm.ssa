@@ -621,14 +621,14 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v530 Imm(0)                                           -> x0
     v531 Imm(0)                                           -> x0
     v532 Imm(0)                                           -> x0
-    v533 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v5] } -> d0
+    v533 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v5] } -> d0
     v534 Imm(0)                                           -> x0
     v535 Imm(0)                                           -> x0
     v536 Imm(0)                                           -> x0
     v537 Imm(0)                                           -> x0
     v538 Imm(0)                                           -> x0
     v539 Imm(0)                                           -> x0
-    v540 X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v533, v15] } -> [spill 8]
+    v540 SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v533, v15] } -> [spill 8]
     v541 Imm(0)                                           -> x0
     v542 Imm(0)                                           -> x0
     v543 Imm(0)                                           -> x0
@@ -665,7 +665,7 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v600 Imm(0)                                           -> x0
     v601 Imm(0)                                           -> x0
     v602 Copy { value=v540, fp=true }                     -> d0
-    v603 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v602] } -> d1
+    v603 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v602] } -> d1
     v604 Imm(0)                                           -> x0
     v605 LocalAddr(-171)                                  -> x0
     v606 Imm(0)                                           -> x0
@@ -673,7 +673,7 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v608 Imm(0)                                           -> x0
     v609 Imm(0)                                           -> x0
     v610 Imm(0)                                           -> x0
-    v611 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v602] } -> d0
+    v611 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v602] } -> d0
     v612 Imm(0)                                           -> x0
     v613 LocalAddr(-171)                                  -> x0
     v614 BinopI { op=add, lhs=v597, rhs_imm=16 }          -> x0
@@ -1537,12 +1537,12 @@ fn ent_pc=1363 n_params=3 variadic=false locals=0
     v181 Imm(0)                                           -> x2
     v182 Imm(0)                                           -> x2
     v183 Imm(0)                                           -> x2
-    v184 X86SimdVal { op=__builtin_ia32_pcmpeqw256, imm=None, args=[v172, v141] } -> d1
+    v184 SimdVal { op=__builtin_ia32_pcmpeqw256, imm=None, args=[v172, v141] } -> d1
     v185 Imm(0)                                           -> x2
     v186 Imm(0)                                           -> x2
     v187 Imm(0)                                           -> x2
     v188 Imm(0)                                           -> x2
-    v189 X86SimdVal { op=__builtin_ia32_pmovmskb256, imm=None, args=[v184] } -> x2
+    v189 SimdVal { op=__builtin_ia32_pmovmskb256, imm=None, args=[v184] } -> x2
     v190 Imm(0)                                           -> x8
     v191 Extend { value=v189, kind=I32 }                  -> x8
     v192 Extend { value=v189, kind=I32 }                  -> x8
@@ -1862,7 +1862,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v140 Imm(0)                                           -> x0
     v141 Imm(0)                                           -> x0
     v142 Imm(0)                                           -> x0
-    v143 X86SimdVal { op=__builtin_ia32_pcmpeqb256, imm=None, args=[v26, v34] } -> d2
+    v143 SimdVal { op=__builtin_ia32_pcmpeqb256, imm=None, args=[v26, v34] } -> d2
     v144 Imm(0)                                           -> x0
     v145 Imm(0)                                           -> x0
     v146 LocalAddr(-283)                                  -> x0
@@ -1874,7 +1874,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
     v154 Imm(0)                                           -> x0
-    v155 X86SimdVal { op=__builtin_ia32_pcmpeqw256, imm=None, args=[v26, v34] } -> d2
+    v155 SimdVal { op=__builtin_ia32_pcmpeqw256, imm=None, args=[v26, v34] } -> d2
     v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x0
     v158 LocalAddr(-283)                                  -> x0
@@ -1886,7 +1886,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v164 Imm(0)                                           -> x0
     v165 Imm(0)                                           -> x0
     v166 Imm(0)                                           -> x0
-    v167 X86SimdVal { op=__builtin_ia32_pcmpeqd256, imm=None, args=[v26, v34] } -> d2
+    v167 SimdVal { op=__builtin_ia32_pcmpeqd256, imm=None, args=[v26, v34] } -> d2
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
     v170 LocalAddr(-283)                                  -> x0
@@ -1898,7 +1898,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v176 Imm(0)                                           -> x0
     v177 Imm(0)                                           -> x0
     v178 Imm(0)                                           -> x0
-    v179 X86SimdVal { op=__builtin_ia32_pcmpeqq256, imm=None, args=[v26, v34] } -> d2
+    v179 SimdVal { op=__builtin_ia32_pcmpeqq256, imm=None, args=[v26, v34] } -> d2
     v180 Imm(0)                                           -> x0
     v181 Imm(0)                                           -> x0
     v182 LocalAddr(-283)                                  -> x0
@@ -2114,7 +2114,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v397 Imm(0)                                           -> x0
     v398 Imm(0)                                           -> x0
     v399 Imm(0)                                           -> x0
-    v400 X86SimdVal { op=__builtin_ia32_andnotsi256, imm=None, args=[v26, v34] } -> d2
+    v400 SimdVal { op=__builtin_ia32_andnotsi256, imm=None, args=[v26, v34] } -> d2
     v401 Imm(0)                                           -> x0
     v402 Imm(0)                                           -> x0
     v403 LocalAddr(-284)                                  -> x0
@@ -2276,7 +2276,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v575 Imm(0)                                           -> x0
     v576 Imm(0)                                           -> x0
     v577 Imm(0)                                           -> x0
-    v578 X86SimdVal { op=__builtin_ia32_pmovmskb256, imm=None, args=[v26] } -> x0
+    v578 SimdVal { op=__builtin_ia32_pmovmskb256, imm=None, args=[v26] } -> x0
     v579 Imm(0)                                           -> x2
     v580 Extend { value=v578, kind=I32 }                  -> x2
     v581 Extend { value=v578, kind=I32 }                  -> x2

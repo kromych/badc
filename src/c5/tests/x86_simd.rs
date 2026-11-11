@@ -6,7 +6,8 @@
 //! `llvm-mc --triple=x86_64 --show-encoding` over the AT&T spelling in
 //! each comment.
 
-use crate::c5::x86_simd::{self, Sem};
+use crate::c5::simd::{self, Sem};
+use crate::c5::x86_simd;
 
 /// Vector typedefs the sources below operate on, matching the bundled
 /// `<emmintrin.h>` set.
@@ -1207,44 +1208,44 @@ fn lane_arithmetic_and_logic_match_the_instruction() {
     let a = v([1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0]);
     let b = v([10, 0, 0, 0, 20, 0, 0, 0, 30, 0, 0, 0, 40, 0, 0, 0]);
     assert_eq!(
-        x86_simd::eval(Sem::Add(4), &a, &b, 0, 0),
+        simd::eval(Sem::Add(4), &a, &b, 0, 0),
         v([11, 0, 0, 0, 22, 0, 0, 0, 33, 0, 0, 0, 44, 0, 0, 0])
     );
     // Doubleword addition does not carry between lanes.
     let hi = v([0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let one = v([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(x86_simd::eval(Sem::Add(4), &hi, &one, 0, 0), [0u8; 16]);
+    assert_eq!(simd::eval(Sem::Add(4), &hi, &one, 0, 0), [0u8; 16]);
     // Quadword addition does.
     let q = v([0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(
-        x86_simd::eval(Sem::Add(8), &q, &one, 0, 0),
+        simd::eval(Sem::Add(8), &q, &one, 0, 0),
         v([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     );
-    assert_eq!(x86_simd::eval(Sem::Xor, &a, &a, 0, 0), [0u8; 16]);
+    assert_eq!(simd::eval(Sem::Xor, &a, &a, 0, 0), [0u8; 16]);
     assert_eq!(
-        x86_simd::eval(Sem::And, &a, &b, 0, 0),
+        simd::eval(Sem::And, &a, &b, 0, 0),
         v([0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0])
     );
     assert_eq!(
-        x86_simd::eval(Sem::Or, &a, &b, 0, 0),
+        simd::eval(Sem::Or, &a, &b, 0, 0),
         v([11, 0, 0, 0, 22, 0, 0, 0, 31, 0, 0, 0, 44, 0, 0, 0])
     );
     // A quadword compare sets all bits of the equal lane.
-    let eq = x86_simd::eval(Sem::CmpEq(8), &a, &a, 0, 0);
+    let eq = simd::eval(Sem::CmpEq(8), &a, &a, 0, 0);
     assert_eq!(eq, [0xffu8; 16]);
     // The complement-and takes the first operand complemented.
     assert_eq!(
-        x86_simd::eval(Sem::AndNot, &[0x0f; 16], &[0x33; 16], 0, 0),
+        simd::eval(Sem::AndNot, &[0x0f; 16], &[0x33; 16], 0, 0),
         [0x30u8; 16]
     );
     // A signed compare orders the negative lane below the positive one.
     let neg = v([0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let gt = x86_simd::eval(Sem::CmpGt(4), &one, &neg, 0, 0);
+    let gt = simd::eval(Sem::CmpGt(4), &one, &neg, 0, 0);
     assert_eq!(&gt[..4], &[0xff, 0xff, 0xff, 0xff]);
-    let gt = x86_simd::eval(Sem::CmpGt(4), &neg, &one, 0, 0);
+    let gt = simd::eval(Sem::CmpGt(4), &neg, &one, 0, 0);
     assert_eq!(&gt[..4], &[0, 0, 0, 0]);
     // The byte compare is per byte, not per doubleword.
-    let gt = x86_simd::eval(Sem::CmpGt(1), &b, &a, 0, 0);
+    let gt = simd::eval(Sem::CmpGt(1), &b, &a, 0, 0);
     assert_eq!(&gt[..5], &[0xff, 0, 0, 0, 0xff]);
 }
 
@@ -1252,14 +1253,14 @@ fn lane_arithmetic_and_logic_match_the_instruction() {
 fn shifts_zero_a_lane_shifted_past_its_width() {
     let a = v([0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(
-        x86_simd::eval(Sem::Shl(2), &a, &[0; 16], 0, 4),
+        simd::eval(Sem::Shl(2), &a, &[0; 16], 0, 4),
         v([0xf0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     );
-    assert_eq!(x86_simd::eval(Sem::Shr(2), &a, &[0; 16], 0, 16), [0u8; 16]);
+    assert_eq!(simd::eval(Sem::Shr(2), &a, &[0; 16], 0, 16), [0u8; 16]);
     // The byte shift counts bytes and fills from the low end.
     let b = v([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     assert_eq!(
-        x86_simd::eval(Sem::ShlBytes, &b, &[0; 16], 0, 4),
+        simd::eval(Sem::ShlBytes, &b, &[0; 16], 0, 4),
         v([0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
     );
 }
@@ -1269,21 +1270,21 @@ fn shuffles_select_the_lanes_the_immediate_names() {
     let a = v([0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
     // 0x93 = lanes (2,1,0,3): the rotate ChaCha20 uses.
     assert_eq!(
-        x86_simd::eval(Sem::ShufD, &a, &[0; 16], 0x93, 0),
+        simd::eval(Sem::ShufD, &a, &[0; 16], 0x93, 0),
         v([3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0])
     );
     // The word shuffles leave the other half alone.
     let w = v([0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0]);
-    let lo = x86_simd::eval(Sem::ShufLo, &w, &[0; 16], 0x1b, 0);
+    let lo = simd::eval(Sem::ShufLo, &w, &[0; 16], 0x1b, 0);
     assert_eq!(&lo[8..], &w[8..]);
     assert_eq!(&lo[..8], &[3, 0, 2, 0, 1, 0, 0, 0]);
-    let hi = x86_simd::eval(Sem::ShufHi, &w, &[0; 16], 0x1b, 0);
+    let hi = simd::eval(Sem::ShufHi, &w, &[0; 16], 0x1b, 0);
     assert_eq!(&hi[..8], &w[..8]);
     assert_eq!(&hi[8..], &[7, 0, 6, 0, 5, 0, 4, 0]);
     // The byte shuffle zeroes a byte whose index has bit 7 set.
     let data = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     let mask = v([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0x80]);
-    let sh = x86_simd::eval(Sem::ShufB, &data, &mask, 0, 0);
+    let sh = simd::eval(Sem::ShufB, &data, &mask, 0, 0);
     assert_eq!(
         sh,
         v([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0])
@@ -1292,11 +1293,11 @@ fn shuffles_select_the_lanes_the_immediate_names() {
     let x = v([1, 1, 1, 1, 1, 1, 1, 1, 9, 9, 9, 9, 9, 9, 9, 9]);
     let y = v([2, 2, 2, 2, 2, 2, 2, 2, 8, 8, 8, 8, 8, 8, 8, 8]);
     assert_eq!(
-        x86_simd::eval(Sem::UnpackLo(8), &x, &y, 0, 0),
+        simd::eval(Sem::UnpackLo(8), &x, &y, 0, 0),
         v([1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2])
     );
     assert_eq!(
-        x86_simd::eval(Sem::UnpackHi(8), &x, &y, 0, 0),
+        simd::eval(Sem::UnpackHi(8), &x, &y, 0, 0),
         v([9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8])
     );
 }
@@ -1310,13 +1311,13 @@ fn interleaves_alternate_the_lanes_of_one_half() {
         0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e,
         0x8f,
     ]);
-    let lo = x86_simd::eval(Sem::UnpackLo(1), &a, &b, 0, 0);
+    let lo = simd::eval(Sem::UnpackLo(1), &a, &b, 0, 0);
     assert_eq!(&lo[..6], &[0, 0x80, 1, 0x81, 2, 0x82]);
-    let hi = x86_simd::eval(Sem::UnpackHi(1), &a, &b, 0, 0);
+    let hi = simd::eval(Sem::UnpackHi(1), &a, &b, 0, 0);
     assert_eq!(&hi[..6], &[8, 0x88, 9, 0x89, 10, 0x8a]);
-    let lo = x86_simd::eval(Sem::UnpackLo(2), &a, &b, 0, 0);
+    let lo = simd::eval(Sem::UnpackLo(2), &a, &b, 0, 0);
     assert_eq!(&lo[..8], &[0, 1, 0x80, 0x81, 2, 3, 0x82, 0x83]);
-    let hi = x86_simd::eval(Sem::UnpackHi(4), &a, &b, 0, 0);
+    let hi = simd::eval(Sem::UnpackHi(4), &a, &b, 0, 0);
     assert_eq!(&hi[..8], &[8, 9, 10, 11, 0x88, 0x89, 0x8a, 0x8b]);
 }
 
@@ -1333,10 +1334,10 @@ fn packs_saturate_into_the_narrower_lane() {
         0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4, 0xfe, 0xd4,
         0xfe,
     ]);
-    let s = x86_simd::eval(Sem::PackSigned(2), &a, &b, 0, 0);
+    let s = simd::eval(Sem::PackSigned(2), &a, &b, 0, 0);
     assert_eq!(&s[..8], &[0x7f; 8]);
     assert_eq!(&s[8..], &[0x80; 8]);
-    let u = x86_simd::eval(Sem::PackUnsigned(2), &a, &b, 0, 0);
+    let u = simd::eval(Sem::PackUnsigned(2), &a, &b, 0, 0);
     assert_eq!(&u[..8], &[0xff; 8]);
     assert_eq!(&u[8..], &[0; 8]);
     // A doubleword source saturates into a word: 70000 -> 0x7fff.
@@ -1344,11 +1345,11 @@ fn packs_saturate_into_the_narrower_lane() {
         0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01, 0x00, 0x70, 0x11, 0x01,
         0x00,
     ]);
-    let d = x86_simd::eval(Sem::PackSigned(4), &big, &big, 0, 0);
+    let d = simd::eval(Sem::PackSigned(4), &big, &big, 0, 0);
     assert_eq!(&d[..4], &[0xff, 0x7f, 0xff, 0x7f]);
     // A lane already in range passes through.
     let small = v([7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0]);
-    let p = x86_simd::eval(Sem::PackSigned(4), &small, &small, 0, 0);
+    let p = simd::eval(Sem::PackSigned(4), &small, &small, 0, 0);
     assert_eq!(p, v([7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0, 7, 0]));
 }
 
@@ -1360,27 +1361,27 @@ fn word_products_split_and_sum() {
         0x34, 0x12, 0x00, 0x10, 0x00, 0xf0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
     let three = v([3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0]);
-    let lo = x86_simd::eval(Sem::MulLo(2), &a, &three, 0, 0);
+    let lo = simd::eval(Sem::MulLo(2), &a, &three, 0, 0);
     // 0x1234 * 3 = 0x369c; 0x1000 * 3 = 0x3000.
     assert_eq!(&lo[..4], &[0x9c, 0x36, 0x00, 0x30]);
-    let hi = x86_simd::eval(Sem::MulHi(2, true), &a, &three, 0, 0);
+    let hi = simd::eval(Sem::MulHi(2, true), &a, &three, 0, 0);
     // 0x1234 * 3 fits in a word, so the high half is zero; -4096 * 3 =
     // -12288, whose high half is the sign.
     assert_eq!(&hi[..2], &[0, 0]);
     assert_eq!(&hi[4..6], &[0xff, 0xff]);
     // Each doubleword is a[2i]*b[2i] + a[2i+1]*b[2i+1]: 0x1234*3 +
     // 0x1000*3 = 0x669c.
-    let madd = x86_simd::eval(Sem::MulAddWords, &a, &three, 0, 0);
+    let madd = simd::eval(Sem::MulAddWords, &a, &three, 0, 0);
     assert_eq!(&madd[..4], &[0x9c, 0x66, 0, 0]);
     // The signed extreme wraps within the doubleword, as the
     // instruction does: (-32768 * -32768) * 2 = 2^31.
     let m = v([0x00, 0x80, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let w = x86_simd::eval(Sem::MulAddWords, &m, &m, 0, 0);
+    let w = simd::eval(Sem::MulAddWords, &m, &m, 0, 0);
     assert_eq!(&w[..4], &[0x00, 0x00, 0x00, 0x80]);
     // `pmulhuw` reads the lanes unsigned: 0xf000 * 3 = 0x2d000.
-    let hu = x86_simd::eval(Sem::MulHi(2, false), &a, &three, 0, 0);
+    let hu = simd::eval(Sem::MulHi(2, false), &a, &three, 0, 0);
     assert_eq!(&hu[4..6], &[0x02, 0x00]);
-    let hu = x86_simd::eval(Sem::MulHi(2, false), &[0xff; 16], &[0xff; 16], 0, 0);
+    let hu = simd::eval(Sem::MulHi(2, false), &[0xff; 16], &[0xff; 16], 0, 0);
     assert_eq!(&hu[..2], &[0xfe, 0xff]);
 }
 
@@ -1391,37 +1392,37 @@ fn ssse3_lanes_follow_the_instruction() {
     let a = v([
         0x80, 0x7f, 0xff, 0x00, 0x00, 0x80, 0x05, 0x00, 1, 2, 3, 4, 5, 6, 7, 8,
     ]);
-    let abs = x86_simd::eval(Sem::Abs(1), &a, &[0; 16], 0, 0);
+    let abs = simd::eval(Sem::Abs(1), &a, &[0; 16], 0, 0);
     assert_eq!(&abs[..4], &[0x80, 0x7f, 0x01, 0x00]);
-    let abs = x86_simd::eval(Sem::Abs(2), &a, &[0; 16], 0, 0);
+    let abs = simd::eval(Sem::Abs(2), &a, &[0; 16], 0, 0);
     assert_eq!(&abs[4..8], &[0x00, 0x80, 0x05, 0x00]);
     let s = v([0xff, 0x00, 0x01, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let sign = x86_simd::eval(Sem::Sign(1), &a, &s, 0, 0);
+    let sign = simd::eval(Sem::Sign(1), &a, &s, 0, 0);
     // -(-128) wraps to -128; a zero selector zeroes; a positive one keeps.
     assert_eq!(&sign[..4], &[0x80, 0x00, 0xff, 0x00]);
     // Words of `a`: 0x7f80, 0x00ff, 0x8000, 0x0005.
-    let h = x86_simd::eval(Sem::HAdd(2, false), &a, &a, 0, 0);
+    let h = simd::eval(Sem::HAdd(2, false), &a, &a, 0, 0);
     assert_eq!(&h[..4], &[0x7f, 0x80, 0x05, 0x80]);
-    let hs = x86_simd::eval(Sem::HAdd(2, true), &a, &a, 0, 0);
+    let hs = simd::eval(Sem::HAdd(2, true), &a, &a, 0, 0);
     assert_eq!(&hs[..4], &[0xff, 0x7f, 0x05, 0x80]);
-    let d = x86_simd::eval(Sem::HSub(2, true), &a, &a, 0, 0);
+    let d = simd::eval(Sem::HSub(2, true), &a, &a, 0, 0);
     // 0x7f80 - 0x00ff = 0x7e81; -32768 - 5 saturates to -32768.
     assert_eq!(&d[..4], &[0x81, 0x7e, 0x00, 0x80]);
-    let z = x86_simd::eval(Sem::HAdd(4, false), &[0; 16], &a, 0, 0);
+    let z = simd::eval(Sem::HAdd(4, false), &[0; 16], &a, 0, 0);
     assert_eq!(&z[..8], &[0; 8]);
     // 0x00ff7f80 + 0x00058000 = 0x0104ff80.
     assert_eq!(&z[8..12], &[0x80, 0xff, 0x04, 0x01]);
     // -32768 * -32768 rounds to 0x8000; 0x4000 * 0x4000 to 0x2000.
     let m = v([0x00, 0x80, 0x00, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let r = x86_simd::eval(Sem::MulHrs, &m, &m, 0, 0);
+    let r = simd::eval(Sem::MulHrs, &m, &m, 0, 0);
     assert_eq!(&r[..4], &[0x00, 0x80, 0x00, 0x20]);
     let lo = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     let hi = [0xaa; 16];
-    let al = x86_simd::eval(Sem::AlignR, &hi, &lo, 14, 0);
+    let al = simd::eval(Sem::AlignR, &hi, &lo, 14, 0);
     assert_eq!(&al[..4], &[14, 15, 0xaa, 0xaa]);
-    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[11], 0xaa);
-    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[12], 0);
-    assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 32, 0), [0; 16]);
+    assert_eq!(simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[11], 0xaa);
+    assert_eq!(simd::eval(Sem::AlignR, &hi, &lo, 20, 0)[12], 0);
+    assert_eq!(simd::eval(Sem::AlignR, &hi, &lo, 32, 0), [0; 16]);
 }
 
 /// PMOVSX / PMOVZX, PMULDQ, the immediate blends and PCMPGTQ.
@@ -1430,41 +1431,41 @@ fn sse41_lanes_follow_the_instruction() {
     let a = v([
         0x80, 0x7f, 0xff, 0x01, 0, 0, 0, 0x80, 9, 9, 9, 9, 0xfe, 0xff, 0xff, 0xff,
     ]);
-    let sx = x86_simd::eval(Sem::Extend(1, 2, true), &a, &[0; 16], 0, 0);
+    let sx = simd::eval(Sem::Extend(1, 2, true), &a, &[0; 16], 0, 0);
     assert_eq!(&sx[..8], &[0x80, 0xff, 0x7f, 0x00, 0xff, 0xff, 0x01, 0x00]);
-    let zx = x86_simd::eval(Sem::Extend(1, 2, false), &a, &[0; 16], 0, 0);
+    let zx = simd::eval(Sem::Extend(1, 2, false), &a, &[0; 16], 0, 0);
     assert_eq!(&zx[..8], &[0x80, 0x00, 0x7f, 0x00, 0xff, 0x00, 0x01, 0x00]);
     // Doubleword 1 is 0x80000000: sign-extended to the second quadword.
-    let dq = x86_simd::eval(Sem::Extend(4, 8, true), &a, &[0; 16], 0, 0);
+    let dq = simd::eval(Sem::Extend(4, 8, true), &a, &[0; 16], 0, 0);
     assert_eq!(&dq[8..], &[0, 0, 0, 0x80, 0xff, 0xff, 0xff, 0xff]);
-    let bq = x86_simd::eval(Sem::Extend(1, 8, false), &a, &[0; 16], 0, 0);
+    let bq = simd::eval(Sem::Extend(1, 8, false), &a, &[0; 16], 0, 0);
     assert_eq!(
         bq,
         v([0x80, 0, 0, 0, 0, 0, 0, 0, 0x7f, 0, 0, 0, 0, 0, 0, 0])
     );
     // Doublewords 0 and 2: 0x01ff7f80 * 3, 0x09090909 * -2 (unsigned 0xfffffffe).
     let b = v([3, 0, 0, 0, 0, 0, 0, 0, 0xfe, 0xff, 0xff, 0xff, 0, 0, 0, 0]);
-    let m = x86_simd::eval(Sem::MulEven(true), &a, &b, 0, 0);
+    let m = simd::eval(Sem::MulEven(true), &a, &b, 0, 0);
     assert_eq!(&m[..8], &0x05fe_7e80u64.to_le_bytes());
     assert_eq!(&m[8..], &0xffff_ffff_eded_edeeu64.to_le_bytes());
-    let u = x86_simd::eval(Sem::MulEven(false), &a, &b, 0, 0);
+    let u = simd::eval(Sem::MulEven(false), &a, &b, 0, 0);
     assert_eq!(&u[8..], &0x0909_0908_eded_edeeu64.to_le_bytes());
     let ones = [0xff; 16];
-    let bw = x86_simd::eval(Sem::Blend(2), &[0; 16], &ones, 0xa5, 0);
+    let bw = simd::eval(Sem::Blend(2), &[0; 16], &ones, 0xa5, 0);
     assert_eq!(
         bw,
         v([
             0xff, 0xff, 0, 0, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 0xff, 0xff
         ])
     );
-    let bd = x86_simd::eval(Sem::Blend(8), &[0; 16], &ones, 2, 0);
+    let bd = simd::eval(Sem::Blend(8), &[0; 16], &ones, 2, 0);
     assert_eq!(&bd[..8], &[0; 8]);
     assert_eq!(&bd[8..], &[0xff; 8]);
     // 1 > 0, but -1 is not, which an unsigned compare would give.
     let c = v([
         1, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     ]);
-    let gt = x86_simd::eval(Sem::CmpGt(8), &c, &[0; 16], 0, 0);
+    let gt = simd::eval(Sem::CmpGt(8), &c, &[0; 16], 0, 0);
     assert_eq!(&gt[..8], &[0xff; 8]);
     assert_eq!(&gt[8..], &[0; 8]);
 }
@@ -1474,18 +1475,18 @@ fn sse41_lanes_follow_the_instruction() {
 fn averages_and_extremes_read_the_lanes_as_the_instruction_does() {
     let a = v([0xff, 0, 1, 2, 0xff, 0xff, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0]);
     let b = v([0xff, 1, 1, 5, 0x01, 0x00, 0, 0x7f, 0, 0, 0, 0, 0, 0, 0, 0]);
-    let avg = x86_simd::eval(Sem::Avg(1), &a, &b, 0, 0);
+    let avg = simd::eval(Sem::Avg(1), &a, &b, 0, 0);
     assert_eq!(&avg[..4], &[0xff, 1, 1, 4]);
     // 0xffff and 0x0001 average to 0x8000.
-    let avg = x86_simd::eval(Sem::Avg(2), &a, &b, 0, 0);
+    let avg = simd::eval(Sem::Avg(2), &a, &b, 0, 0);
     assert_eq!(&avg[4..6], &[0x00, 0x80]);
     // Byte 7: 0x80 is 128 unsigned and -128 signed.
-    assert_eq!(x86_simd::eval(Sem::Min(1, false), &a, &b, 0, 0)[7], 0x7f);
-    assert_eq!(x86_simd::eval(Sem::Max(1, false), &a, &b, 0, 0)[7], 0x80);
+    assert_eq!(simd::eval(Sem::Min(1, false), &a, &b, 0, 0)[7], 0x7f);
+    assert_eq!(simd::eval(Sem::Max(1, false), &a, &b, 0, 0)[7], 0x80);
     // Word 2 (bytes 4-5): 0xffff is -1 signed, below 0x0001.
-    let min = x86_simd::eval(Sem::Min(2, true), &a, &b, 0, 0);
+    let min = simd::eval(Sem::Min(2, true), &a, &b, 0, 0);
     assert_eq!(&min[4..6], &[0xff, 0xff]);
-    let max = x86_simd::eval(Sem::Max(2, true), &a, &b, 0, 0);
+    let max = simd::eval(Sem::Max(2, true), &a, &b, 0, 0);
     assert_eq!(&max[4..6], &[0x01, 0x00]);
 }
 
@@ -1496,16 +1497,16 @@ fn the_arithmetic_shift_propagates_the_sign() {
     let neg = v([
         0xf0, 0xff, 0xf0, 0xff, 0xf0, 0xff, 0xf0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
-    let r = x86_simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 2);
+    let r = simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 2);
     assert_eq!(&r[..4], &[0xfc, 0xff, 0xfc, 0xff]);
     assert_eq!(&r[8..10], &[0, 0]);
-    let r = x86_simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 99);
+    let r = simd::eval(Sem::Sar(2), &neg, &[0; 16], 0, 99);
     assert_eq!(&r[..4], &[0xff, 0xff, 0xff, 0xff]);
     // The same bytes as doublewords: 0xfff0fff0 >> 4 = 0xffff0fff.
-    let r = x86_simd::eval(Sem::Sar(4), &neg, &[0; 16], 0, 4);
+    let r = simd::eval(Sem::Sar(4), &neg, &[0; 16], 0, 4);
     assert_eq!(&r[..4], &[0xff, 0x0f, 0xff, 0xff]);
     // The unsigned shift of the same lanes does not.
-    let r = x86_simd::eval(Sem::Shr(2), &neg, &[0; 16], 0, 2);
+    let r = simd::eval(Sem::Shr(2), &neg, &[0; 16], 0, 2);
     assert_eq!(&r[..2], &[0xfc, 0x3f]);
 }
 
@@ -1514,36 +1515,30 @@ fn the_arithmetic_shift_propagates_the_sign() {
 fn the_whole_register_shifts_fill_with_zero() {
     let a = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     assert_eq!(
-        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 3),
+        simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 3),
         v([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 0, 0])
     );
-    assert_eq!(
-        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 16),
-        [0u8; 16]
-    );
-    assert_eq!(
-        x86_simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 255),
-        [0u8; 16]
-    );
+    assert_eq!(simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 16), [0u8; 16]);
+    assert_eq!(simd::eval(Sem::ShrBytes, &a, &[0; 16], 0, 255), [0u8; 16]);
 }
 
 /// The byte sign bits, lane `i` at bit `i`.
 #[test]
 fn the_sign_mask_reads_one_bit_per_byte() {
-    assert_eq!(x86_simd::eval_movemask(&[0x80; 16]), 0xffff);
-    assert_eq!(x86_simd::eval_movemask(&[0x7f; 16]), 0);
+    assert_eq!(simd::eval_movemask(&[0x80; 16]), 0xffff);
+    assert_eq!(simd::eval_movemask(&[0x7f; 16]), 0);
     let mut a = [0u8; 16];
     a[0] = 0x80;
     a[15] = 0xff;
-    assert_eq!(x86_simd::eval_movemask(&a), 0x8001);
+    assert_eq!(simd::eval_movemask(&a), 0x8001);
 }
 
 #[test]
 fn element_access_reads_and_writes_the_named_lane() {
     let a = v([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-    assert_eq!(x86_simd::eval_extract(&a, 2, 1), 0x0302);
-    assert_eq!(x86_simd::eval_extract(&a, 4, 3), 0x0f0e_0d0c);
-    let set = x86_simd::eval_insert(&a, 4, 1, 0xdead_beef);
+    assert_eq!(simd::eval_extract(&a, 2, 1), 0x0302);
+    assert_eq!(simd::eval_extract(&a, 4, 3), 0x0f0e_0d0c);
+    let set = simd::eval_insert(&a, 4, 1, 0xdead_beef);
     assert_eq!(&set[4..8], &[0xef, 0xbe, 0xad, 0xde]);
     assert_eq!(&set[..4], &a[..4]);
 }
@@ -1556,13 +1551,13 @@ fn carryless_multiply_selects_its_quadwords() {
     let mut b = [0u8; 16];
     a[0] = 2;
     b[0] = 2;
-    assert_eq!(x86_simd::eval(Sem::ClMul, &a, &b, 0x00, 0)[0], 4);
+    assert_eq!(simd::eval(Sem::ClMul, &a, &b, 0x00, 0)[0], 4);
     // 0x11 takes the high quads, which are zero here.
-    assert_eq!(x86_simd::eval(Sem::ClMul, &a, &b, 0x11, 0), [0u8; 16]);
+    assert_eq!(simd::eval(Sem::ClMul, &a, &b, 0x11, 0), [0u8; 16]);
     // 0b11 * 0b11 = 0b101 with carries suppressed.
     a[0] = 3;
     b[0] = 3;
-    assert_eq!(x86_simd::eval(Sem::ClMul, &a, &b, 0x00, 0)[0], 5);
+    assert_eq!(simd::eval(Sem::ClMul, &a, &b, 0x00, 0)[0], 5);
 }
 
 /// AES-128 over the FIPS-197 appendix C.1 known answer, run through the
@@ -1580,22 +1575,22 @@ fn aes_128_reproduces_the_published_known_answer() {
             .into_iter()
             .enumerate()
         {
-            let t2 = x86_simd::eval(Sem::AesKeygen, &t1, &Z, rcon, 0);
-            let t2 = x86_simd::eval(Sem::ShufD, &t2, &Z, 0xff, 0);
-            let mut t3 = x86_simd::eval(Sem::ShlBytes, &t1, &Z, 0, 4);
-            t1 = x86_simd::eval(Sem::Xor, &t1, &t3, 0, 0);
-            t3 = x86_simd::eval(Sem::ShlBytes, &t3, &Z, 0, 4);
-            t1 = x86_simd::eval(Sem::Xor, &t1, &t3, 0, 0);
-            t3 = x86_simd::eval(Sem::ShlBytes, &t3, &Z, 0, 4);
-            t1 = x86_simd::eval(Sem::Xor, &t1, &t3, 0, 0);
-            t1 = x86_simd::eval(Sem::Xor, &t1, &t2, 0, 0);
+            let t2 = simd::eval(Sem::AesKeygen, &t1, &Z, rcon, 0);
+            let t2 = simd::eval(Sem::ShufD, &t2, &Z, 0xff, 0);
+            let mut t3 = simd::eval(Sem::ShlBytes, &t1, &Z, 0, 4);
+            t1 = simd::eval(Sem::Xor, &t1, &t3, 0, 0);
+            t3 = simd::eval(Sem::ShlBytes, &t3, &Z, 0, 4);
+            t1 = simd::eval(Sem::Xor, &t1, &t3, 0, 0);
+            t3 = simd::eval(Sem::ShlBytes, &t3, &Z, 0, 4);
+            t1 = simd::eval(Sem::Xor, &t1, &t3, 0, 0);
+            t1 = simd::eval(Sem::Xor, &t1, &t2, 0, 0);
             ks[i + 1] = t1;
         }
         ks
     }
     const Z: [u8; 16] = [0u8; 16];
     let ks = expand(hex("000102030405060708090a0b0c0d0e0f"));
-    let mut m = x86_simd::eval(
+    let mut m = simd::eval(
         Sem::Xor,
         &hex("00112233445566778899aabbccddeeff"),
         &ks[0],
@@ -1603,17 +1598,17 @@ fn aes_128_reproduces_the_published_known_answer() {
         0,
     );
     for k in ks.iter().take(10).skip(1) {
-        m = x86_simd::eval(Sem::AesEnc, &m, k, 0, 0);
+        m = simd::eval(Sem::AesEnc, &m, k, 0, 0);
     }
-    m = x86_simd::eval(Sem::AesEncLast, &m, &ks[10], 0, 0);
+    m = simd::eval(Sem::AesEncLast, &m, &ks[10], 0, 0);
     assert_eq!(m, hex("69c4e0d86a7b0430d8cdb78070b4c55a"));
 
-    let mut d = x86_simd::eval(Sem::Xor, &m, &ks[10], 0, 0);
+    let mut d = simd::eval(Sem::Xor, &m, &ks[10], 0, 0);
     for k in ks.iter().take(10).skip(1).rev() {
-        let dk = x86_simd::eval(Sem::AesImc, k, &Z, 0, 0);
-        d = x86_simd::eval(Sem::AesDec, &d, &dk, 0, 0);
+        let dk = simd::eval(Sem::AesImc, k, &Z, 0, 0);
+        d = simd::eval(Sem::AesDec, &d, &dk, 0, 0);
     }
-    d = x86_simd::eval(Sem::AesDecLast, &d, &ks[0], 0, 0);
+    d = simd::eval(Sem::AesDecLast, &d, &ks[0], 0, 0);
     assert_eq!(d, hex("00112233445566778899aabbccddeeff"));
 }
 
@@ -1624,7 +1619,7 @@ fn aes_128_reproduces_the_published_known_answer() {
 #[test]
 fn the_key_schedule_helper_matches_the_expansion() {
     let k = hex("2b7e151628aed2a6abf7158809cf4f3c");
-    let out = x86_simd::eval(Sem::AesKeygen, &k, &[0u8; 16], 0x01, 0);
+    let out = simd::eval(Sem::AesKeygen, &k, &[0u8; 16], 0x01, 0);
     assert_eq!(&out[12..], &[0x8b, 0x84, 0xeb, 0x01]);
     // The low doubleword is SubWord(w[1]) with no rotate and no round
     // constant: w[1] = 28aed2a6 maps through the S-box to 34e4b524.
@@ -1795,8 +1790,8 @@ fn floating_rows_compute_in_the_environment() {
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
-    impl x86_simd::FloatEnv for Counting {
-        fn arith(&mut self, _: x86_simd::FOp, a: u64, _: u64, _: bool) -> u64 {
+    impl simd::FloatEnv for Counting {
+        fn arith(&mut self, _: simd::FOp, a: u64, _: u64, _: bool) -> u64 {
             self.0 += 1;
             a
         }
@@ -1823,8 +1818,8 @@ fn floating_rows_compute_in_the_environment() {
     }
     for op in x86_simd::OPS {
         let (mut env, a) = (Counting(0), [0x3f; 16]);
-        let packed = x86_simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some();
-        let scalar = x86_simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
+        let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some();
+        let scalar = simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
         assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
         assert_eq!(env.0 > 0, floating(op.sem), "{}", op.name);
     }

@@ -15,7 +15,7 @@ fn ent_pc=1358 n_params=2 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   LocalAddr(-10)                                   -> x0
     v9   Imm(0)                                           -> x1
-    v10  X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v0] } -> d0
+    v10  SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v0] } -> d0
     v11  StoreLocal { off=-10, value=v10, kind=V128 }     -> -
     v12  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v8)
@@ -30,7 +30,7 @@ fn ent_pc=1358 n_params=2 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  LocalAddr(-11)                                   -> x0
     v15  Imm(0)                                           -> x1
-    v16  X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v0] } -> d0
+    v16  SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v0] } -> d0
     v17  StoreLocal { off=-11, value=v16, kind=V128 }     -> -
     v18  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v14)
@@ -56,7 +56,7 @@ fn ent_pc=1359 n_params=3 variadic=false locals=0
     v12  LocalAddr(-16)                                   -> x0
     v13  Imm(0)                                           -> x1
     v14  Imm(0)                                           -> x1
-    v15  X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v0, v1] } -> d0
+    v15  SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v0, v1] } -> d0
     v16  StoreLocal { off=-16, value=v15, kind=V256 }     -> -
     v17  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v12)
@@ -74,7 +74,7 @@ fn ent_pc=1359 n_params=3 variadic=false locals=0
     v20  LocalAddr(-17)                                   -> x0
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
-    v23  X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(0), args=[v0, v1] } -> d0
+    v23  SimdVal { op=__builtin_ia32_insert128i256, imm=Some(0), args=[v0, v1] } -> d0
     v24  StoreLocal { off=-17, value=v23, kind=V256 }     -> -
     v25  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v20)
@@ -90,18 +90,18 @@ fn ent_pc=1360 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v0] } -> d1
+    v7   SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v0] } -> d1
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
-    v13  X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v0] } -> d0
+    v13  SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v0] } -> d0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v7, v13] } -> d0
+    v18  SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v7, v13] } -> d0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
@@ -116,13 +116,13 @@ fn ent_pc=1360 n_params=1 variadic=false locals=0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
-    v33  X86SimdVal { op=__builtin_ia32_punpckhqdq128, imm=None, args=[v18, v18] } -> d1
+    v33  SimdVal { op=__builtin_ia32_punpckhqdq128, imm=None, args=[v18, v18] } -> d1
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
-    v39  X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v18, v33] } -> d0
+    v39  SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v18, v33] } -> d0
     v40  Imm(0)                                           -> x0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
@@ -134,12 +134,12 @@ fn ent_pc=1360 n_params=1 variadic=false locals=0
     v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
-    v51  X86SimdVal { op=__builtin_ia32_pshufd, imm=Some(177), args=[v39] } -> d1
+    v51  SimdVal { op=__builtin_ia32_pshufd, imm=Some(177), args=[v39] } -> d1
     v52  Imm(0)                                           -> x0
     v53  Imm(0)                                           -> x0
     v54  Imm(0)                                           -> x0
     v55  Imm(0)                                           -> x0
-    v56  X86SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v39, v51] } -> d0
+    v56  SimdVal { op=__builtin_ia32_paddd128, imm=None, args=[v39, v51] } -> d0
     v57  Imm(0)                                           -> x0
     v58  Imm(0)                                           -> x0
     v59  Imm(0)                                           -> x0
@@ -451,7 +451,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v281 LocalAddr(-316)                                  -> x0
     v282 Imm(0)                                           -> x0
     v283 LoadLocal { off=-316, kind=V256 }                -> d0
-    v284 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v283] } -> d0
+    v284 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v283] } -> d0
     v285 Imm(0)                                           -> x0
     v286 Imm(0)                                           -> x0
     v287 Imm(0)                                           -> x0
@@ -622,7 +622,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v436 Imm(0)                                           -> x0
     v437 Imm(0)                                           -> x0
     v438 Imm(0)                                           -> x0
-    v439 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v434] } -> d0
+    v439 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v434] } -> d0
     v440 Imm(0)                                           -> x0
     v441 Imm(0)                                           -> x0
     v442 LifetimeEnd(0)                                   -> -
@@ -686,7 +686,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v494 LocalAddr(-316)                                  -> x0
     v495 Imm(0)                                           -> x0
     v496 LoadLocal { off=-316, kind=V256 }                -> d0
-    v497 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v496] } -> d0
+    v497 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v496] } -> d0
     v498 Imm(0)                                           -> x0
     v499 Imm(0)                                           -> x0
     v500 Imm(0)                                           -> x0
@@ -698,14 +698,14 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v506 Imm(0)                                           -> x0
     v507 Imm(0)                                           -> x0
     v508 Imm(0)                                           -> x0
-    v509 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v497] } -> d0
+    v509 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v497] } -> d0
     v510 Imm(0)                                           -> x0
     v511 Imm(0)                                           -> x0
     v512 Imm(0)                                           -> x0
     v513 Imm(0)                                           -> x0
     v514 Imm(0)                                           -> x0
     v515 Imm(0)                                           -> x0
-    v516 X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v509, v501] } -> d0
+    v516 SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v509, v501] } -> d0
     v517 Imm(0)                                           -> x0
     v518 LifetimeEnd(0)                                   -> -
     v519 LifetimeEnd(0)                                   -> -
@@ -773,14 +773,14 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v575 Imm(0)                                           -> x0
     v576 Imm(0)                                           -> x0
     v577 Imm(0)                                           -> x0
-    v578 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v573] } -> d1
+    v578 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v573] } -> d1
     v579 Imm(0)                                           -> x0
     v580 Imm(0)                                           -> x0
     v581 Imm(0)                                           -> x0
     v582 Imm(0)                                           -> x0
     v583 Imm(0)                                           -> x0
     v584 Imm(0)                                           -> x0
-    v585 X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v578, v573] } -> d0
+    v585 SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v578, v573] } -> d0
     v586 Imm(0)                                           -> x0
     v587 LifetimeEnd(0)                                   -> -
     v588 Imm(0)                                           -> x0
@@ -1171,7 +1171,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v963 Imm(0)                                           -> x1
     v964 Imm(0)                                           -> x1
     v965 Imm(0)                                           -> x1
-    v966 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v955] } -> d0
+    v966 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v955] } -> d0
     v967 Imm(0)                                           -> x1
     v968 Imm(0)                                           -> x1
     v969 Imm(0)                                           -> x1
@@ -1218,7 +1218,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1006 Imm(0)                                           -> x0
     v1007 Imm(0)                                           -> x0
     v1008 Imm(0)                                           -> x0
-    v1009 X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(0), args=[v955, v1003] } -> d0
+    v1009 SimdVal { op=__builtin_ia32_insert128i256, imm=Some(0), args=[v955, v1003] } -> d0
     v1010 Imm(0)                                           -> x0
     v1011 Imm(0)                                           -> x0
     v1012 Imm(0)                                           -> x0
@@ -1289,7 +1289,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1071 Imm(0)                                           -> x0
     v1072 Imm(0)                                           -> x0
     v1073 Copy { value=v955, fp=true }                     -> d0
-    v1074 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d1
+    v1074 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d1
     v1075 Imm(0)                                           -> x0
     v1076 Imm(0)                                           -> x0
     v1077 LifetimeEnd(0)                                   -> -
@@ -1304,7 +1304,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1086 Imm(0)                                           -> x0
     v1087 Imm(0)                                           -> x0
     v1088 Imm(0)                                           -> x0
-    v1089 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d2
+    v1089 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d2
     v1090 Imm(0)                                           -> x0
     v1091 Imm(0)                                           -> x0
     v1092 LifetimeEnd(0)                                   -> -
@@ -1315,25 +1315,25 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1097 Imm(0)                                           -> x0
     v1098 Imm(0)                                           -> x0
     v1099 Imm(0)                                           -> x0
-    v1100 X86SimdVal { op=__builtin_ia32_addps, imm=None, args=[v1074, v1089] } -> d1
+    v1100 SimdVal { op=__builtin_ia32_addps, imm=None, args=[v1074, v1089] } -> d1
     v1101 Imm(0)                                           -> x0
     v1102 Imm(0)                                           -> x0
     v1103 Imm(0)                                           -> x0
     v1104 Imm(0)                                           -> x0
     v1105 Imm(0)                                           -> x0
-    v1106 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1073] } -> d2
+    v1106 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1073] } -> d2
     v1107 Imm(0)                                           -> x0
     v1108 Imm(0)                                           -> x0
     v1109 Imm(0)                                           -> x0
     v1110 Imm(0)                                           -> x0
     v1111 Imm(0)                                           -> x0
-    v1112 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1073] } -> d3
+    v1112 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1073] } -> d3
     v1113 Imm(0)                                           -> x0
     v1114 Imm(0)                                           -> x0
     v1115 Imm(0)                                           -> x0
     v1116 Imm(0)                                           -> x0
     v1117 Imm(0)                                           -> x0
-    v1118 X86SimdVal { op=__builtin_ia32_addps, imm=None, args=[v1106, v1112] } -> d2
+    v1118 SimdVal { op=__builtin_ia32_addps, imm=None, args=[v1106, v1112] } -> d2
     v1119 Imm(0)                                           -> x0
     v1120 Imm(0)                                           -> x0
     v1121 Imm(0)                                           -> x0
@@ -1345,14 +1345,14 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1127 Imm(0)                                           -> x0
     v1128 Imm(0)                                           -> x0
     v1129 Imm(0)                                           -> x0
-    v1130 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v1100] } -> d1
+    v1130 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v1100] } -> d1
     v1131 Imm(0)                                           -> x0
     v1132 Imm(0)                                           -> x0
     v1133 Imm(0)                                           -> x0
     v1134 Imm(0)                                           -> x0
     v1135 Imm(0)                                           -> x0
     v1136 Imm(0)                                           -> x0
-    v1137 X86SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v1130, v1118] } -> d1
+    v1137 SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v1130, v1118] } -> d1
     v1138 Imm(0)                                           -> x0
     v1139 LifetimeEnd(0)                                   -> -
     v1140 LifetimeEnd(0)                                   -> -
@@ -1598,7 +1598,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1348 Imm(0)                                           -> x0
     v1349 Imm(0)                                           -> x0
     v1350 Imm(0)                                           -> x0
-    v1351 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d0
+    v1351 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1073] } -> d0
     v1352 Imm(0)                                           -> x0
     v1353 Imm(0)                                           -> x0
     v1354 LifetimeEnd(0)                                   -> -
@@ -1663,7 +1663,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1423 Imm(0)                                           -> x0
     v1424 Imm(0)                                           -> x0
     v1425 Imm(0)                                           -> x0
-    v1426 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1411] } -> d1
+    v1426 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1411] } -> d1
     v1427 Imm(0)                                           -> x0
     v1428 Imm(0)                                           -> x0
     v1429 Imm(0)                                           -> x0
@@ -1719,7 +1719,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1473 Imm(0)                                           -> x0
     v1474 Imm(0)                                           -> x0
     v1475 Imm(0)                                           -> x0
-    v1476 X86SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1411] } -> d0
+    v1476 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v1411] } -> d0
     v1477 Imm(0)                                           -> x0
     v1478 Imm(0)                                           -> x0
     v1479 LifetimeEnd(0)                                   -> -
@@ -1738,7 +1738,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1492 Imm(0)                                           -> x0
     v1493 Imm(0)                                           -> x0
     v1494 Imm(0)                                           -> x0
-    v1495 X86SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v1476] } -> d0
+    v1495 SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v1476] } -> d0
     v1496 Imm(0)                                           -> x0
     v1497 Imm(0)                                           -> x0
     v1498 LifetimeEnd(0)                                   -> -

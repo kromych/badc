@@ -439,12 +439,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v206 Imm(0)                                           -> x0
     v207 Imm(0)                                           -> x0
     v208 Imm(0)                                           -> x0
-    v209 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v152, v202] } -> d0
+    v209 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v152, v202] } -> d0
     v210 Imm(0)                                           -> x0
     v211 Imm(0)                                           -> x0
     v212 Imm(0)                                           -> x0
     v213 Imm(0)                                           -> x0
-    v214 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v209] } -> x0
+    v214 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v209] } -> x0
     v215 Imm(0)                                           -> x2
     v216 Extend { value=v214, kind=I32 }                  -> x2
     v217 Extend { value=v214, kind=I32 }                  -> x2
@@ -599,12 +599,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v362 Imm(0)                                           -> x1
     v363 Imm(0)                                           -> x1
     v364 Imm(0)                                           -> x1
-    v365 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v307, v358] } -> d0
+    v365 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v307, v358] } -> d0
     v366 Imm(0)                                           -> x1
     v367 Imm(0)                                           -> x1
     v368 Imm(0)                                           -> x1
     v369 Imm(0)                                           -> x1
-    v370 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v365] } -> x1
+    v370 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v365] } -> x1
     v371 Imm(0)                                           -> x2
     v372 Extend { value=v370, kind=I32 }                  -> x2
     v373 Extend { value=v370, kind=I32 }                  -> x2
@@ -813,12 +813,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v572 Imm(0)                                           -> x0
     v573 Imm(0)                                           -> x0
     v574 Imm(0)                                           -> x0
-    v575 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v517, v568] } -> d0
+    v575 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v517, v568] } -> d0
     v576 Imm(0)                                           -> x0
     v577 Imm(0)                                           -> x0
     v578 Imm(0)                                           -> x0
     v579 Imm(0)                                           -> x0
-    v580 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v575] } -> x0
+    v580 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v575] } -> x0
     v581 Imm(0)                                           -> x1
     v582 Extend { value=v580, kind=I32 }                  -> x1
     v583 Extend { value=v580, kind=I32 }                  -> x1
@@ -891,12 +891,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v646 Imm(0)                                           -> x0
     v647 Imm(0)                                           -> x0
     v648 Imm(0)                                           -> x0
-    v649 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v599, v642] } -> d0
+    v649 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v599, v642] } -> d0
     v650 Imm(0)                                           -> x0
     v651 Imm(0)                                           -> x0
     v652 Imm(0)                                           -> x0
     v653 Imm(0)                                           -> x0
-    v654 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v649] } -> x0
+    v654 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v649] } -> x0
     v655 Imm(0)                                           -> x1
     v656 Extend { value=v654, kind=I32 }                  -> x1
     v657 Extend { value=v654, kind=I32 }                  -> x1
@@ -969,12 +969,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v720 Imm(0)                                           -> x0
     v721 Imm(0)                                           -> x0
     v722 Imm(0)                                           -> x0
-    v723 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v673, v716] } -> d0
+    v723 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v673, v716] } -> d0
     v724 Imm(0)                                           -> x0
     v725 Imm(0)                                           -> x0
     v726 Imm(0)                                           -> x0
     v727 Imm(0)                                           -> x0
-    v728 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v723] } -> x0
+    v728 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v723] } -> x0
     v729 Imm(0)                                           -> x1
     v730 Extend { value=v728, kind=I32 }                  -> x1
     v731 Extend { value=v728, kind=I32 }                  -> x1
@@ -1047,12 +1047,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v794 Imm(0)                                           -> x0
     v795 Imm(0)                                           -> x0
     v796 Imm(0)                                           -> x0
-    v797 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v747, v790] } -> d0
+    v797 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v747, v790] } -> d0
     v798 Imm(0)                                           -> x0
     v799 Imm(0)                                           -> x0
     v800 Imm(0)                                           -> x0
     v801 Imm(0)                                           -> x0
-    v802 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v797] } -> x0
+    v802 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v797] } -> x0
     v803 Imm(0)                                           -> x1
     v804 Extend { value=v802, kind=I32 }                  -> x1
     v805 Extend { value=v802, kind=I32 }                  -> x1
@@ -1125,12 +1125,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v868 Imm(0)                                           -> x0
     v869 Imm(0)                                           -> x0
     v870 Imm(0)                                           -> x0
-    v871 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v821, v864] } -> d0
+    v871 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v821, v864] } -> d0
     v872 Imm(0)                                           -> x0
     v873 Imm(0)                                           -> x0
     v874 Imm(0)                                           -> x0
     v875 Imm(0)                                           -> x0
-    v876 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v871] } -> x0
+    v876 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v871] } -> x0
     v877 Imm(0)                                           -> x1
     v878 Extend { value=v876, kind=I32 }                  -> x1
     v879 Extend { value=v876, kind=I32 }                  -> x1
@@ -1544,12 +1544,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1283 Imm(0)                                           -> x0
     v1284 Imm(0)                                           -> x0
     v1285 Imm(0)                                           -> x0
-    v1286 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1226, v1279] } -> d0
+    v1286 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1226, v1279] } -> d0
     v1287 Imm(0)                                           -> x0
     v1288 Imm(0)                                           -> x0
     v1289 Imm(0)                                           -> x0
     v1290 Imm(0)                                           -> x0
-    v1291 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1286] } -> x0
+    v1291 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1286] } -> x0
     v1292 Imm(0)                                           -> x1
     v1293 Extend { value=v1291, kind=I32 }                 -> x1
     v1294 Extend { value=v1291, kind=I32 }                 -> x1
@@ -1828,12 +1828,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1563 Imm(0)                                           -> x0
     v1564 Imm(0)                                           -> x0
     v1565 Imm(0)                                           -> x0
-    v1566 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1509, v1559] } -> d0
+    v1566 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1509, v1559] } -> d0
     v1567 Imm(0)                                           -> x0
     v1568 Imm(0)                                           -> x0
     v1569 Imm(0)                                           -> x0
     v1570 Imm(0)                                           -> x0
-    v1571 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1566] } -> x0
+    v1571 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1566] } -> x0
     v1572 Imm(0)                                           -> x1
     v1573 Extend { value=v1571, kind=I32 }                 -> x1
     v1574 Extend { value=v1571, kind=I32 }                 -> x1
@@ -2121,12 +2121,12 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1852 Imm(0)                                           -> x0
     v1853 Imm(0)                                           -> x0
     v1854 Imm(0)                                           -> x0
-    v1855 X86SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1797, v1848] } -> d0
+    v1855 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1797, v1848] } -> d0
     v1856 Imm(0)                                           -> x0
     v1857 Imm(0)                                           -> x0
     v1858 Imm(0)                                           -> x0
     v1859 Imm(0)                                           -> x0
-    v1860 X86SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1855] } -> x0
+    v1860 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1855] } -> x0
     v1861 Imm(0)                                           -> x1
     v1862 Extend { value=v1860, kind=I32 }                 -> x1
     v1863 Extend { value=v1860, kind=I32 }                 -> x1

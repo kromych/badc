@@ -11018,7 +11018,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v349 Imm(0)                                           -> x0
     v350 Imm(0)                                           -> x0
     v351 Imm(0)                                           -> x0
-    v352 X86SimdVal { op=__builtin_ia32_blendps, imm=Some(0), args=[v323, v327] } -> d0
+    v352 SimdVal { op=__builtin_ia32_blendps, imm=Some(0), args=[v323, v327] } -> d0
     v353 Imm(0)                                           -> x0
     v354 Imm(0)                                           -> x0
     v355 Imm(0)                                           -> x0
@@ -11089,7 +11089,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v408 Imm(0)                                           -> x0
     v409 Imm(0)                                           -> x0
     v410 Imm(0)                                           -> x0
-    v411 X86SimdVal { op=__builtin_ia32_blendps, imm=Some(5), args=[v323, v327] } -> d0
+    v411 SimdVal { op=__builtin_ia32_blendps, imm=Some(5), args=[v323, v327] } -> d0
     v412 Imm(0)                                           -> x0
     v413 Imm(0)                                           -> x0
     v414 Imm(0)                                           -> x0
@@ -11159,7 +11159,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v466 Imm(0)                                           -> x0
     v467 Imm(0)                                           -> x0
     v468 Imm(0)                                           -> x0
-    v469 X86SimdVal { op=__builtin_ia32_blendps, imm=Some(10), args=[v323, v327] } -> d0
+    v469 SimdVal { op=__builtin_ia32_blendps, imm=Some(10), args=[v323, v327] } -> d0
     v470 Imm(0)                                           -> x0
     v471 Imm(0)                                           -> x0
     v472 Imm(0)                                           -> x0
@@ -11229,7 +11229,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v524 Imm(0)                                           -> x0
     v525 Imm(0)                                           -> x0
     v526 Imm(0)                                           -> x0
-    v527 X86SimdVal { op=__builtin_ia32_blendps, imm=Some(15), args=[v323, v327] } -> d0
+    v527 SimdVal { op=__builtin_ia32_blendps, imm=Some(15), args=[v323, v327] } -> d0
     v528 Imm(0)                                           -> x0
     v529 Imm(0)                                           -> x0
     v530 Imm(0)                                           -> x0
@@ -11299,7 +11299,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v582 Imm(0)                                           -> x0
     v583 Imm(0)                                           -> x0
     v584 Imm(0)                                           -> x0
-    v585 X86SimdVal { op=__builtin_ia32_blendps, imm=Some(9), args=[v323, v327] } -> d0
+    v585 SimdVal { op=__builtin_ia32_blendps, imm=Some(9), args=[v323, v327] } -> d0
     v586 Imm(0)                                           -> x0
     v587 Imm(0)                                           -> x0
     v588 Imm(0)                                           -> x0
@@ -11489,7 +11489,7 @@ fn ent_pc=518 n_params=0 variadic=false locals=10
     v720 Imm(0)                                           -> x0
     v721 Imm(0)                                           -> x0
     v722 Imm(0)                                           -> x0
-    v723 X86SimdVal { op=__builtin_ia32_blendpd, imm=Some(2), args=[v323, v327] } -> d0
+    v723 SimdVal { op=__builtin_ia32_blendpd, imm=Some(2), args=[v323, v327] } -> d0
     v724 Imm(0)                                           -> x0
     v725 Imm(0)                                           -> x0
     v726 Imm(0)                                           -> x0

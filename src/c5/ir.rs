@@ -579,7 +579,7 @@ pub(crate) enum Inst {
     /// continue with the sources: an address for a 128-bit operand, the
     /// value itself for a pointer or integer one. Defines no SSA value --
     /// the result is written through the destination address.
-    X86Simd {
+    Simd {
         op: u32,
         imm: Option<u8>,
         args: Vec<ValueId>,
@@ -628,12 +628,12 @@ pub(crate) enum Inst {
         kind: LoadKind,
         bytes: u8,
     },
-    /// [`Inst::X86Simd`] on values, as `passes::x86_simd_values` rewrites
+    /// [`Inst::Simd`] on values, as `passes::simd_values` rewrites
     /// it under `-O`: `args` are the sources, a 128-bit operand as a `V128`
     /// value and an integer one as itself, and the instruction defines its
     /// result, a `V128` value for a row returning a vector and an integer
     /// otherwise. Never a load, a store or `rdrand`.
-    X86SimdVal {
+    SimdVal {
         op: u32,
         imm: Option<u8>,
         args: Vec<ValueId>,
@@ -786,7 +786,7 @@ impl Inst {
                 | Inst::ParamPart { .. }
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
-                | Inst::X86SimdVal { .. }
+                | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
@@ -819,7 +819,7 @@ impl Inst {
                 | Inst::AtomicLoad { .. }
                 | Inst::AtomicStore { .. }
                 | Inst::Intrinsic { .. }
-                | Inst::X86Simd { .. }
+                | Inst::Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::AllocaInit(_)
                 | Inst::LifetimeEnd(_)
@@ -893,8 +893,8 @@ impl Inst {
             Inst::AtomicLoad { .. } => "AtomicLoad",
             Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
-            Inst::X86Simd { .. } => "X86Simd",
-            Inst::X86SimdVal { .. } => "X86SimdVal",
+            Inst::Simd { .. } => "Simd",
+            Inst::SimdVal { .. } => "SimdVal",
             Inst::VecBinop { .. } => "VecBinop",
             Inst::VecInsert { .. } => "VecInsert",
             Inst::VecExtract { .. } => "VecExtract",
@@ -996,8 +996,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::X86SimdVal { args, .. } => {
+            | Inst::Simd { args, .. }
+            | Inst::SimdVal { args, .. } => {
                 for &a in args {
                     f(a);
                 }
@@ -1131,8 +1131,8 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
-            | Inst::X86Simd { args, .. }
-            | Inst::X86SimdVal { args, .. } => {
+            | Inst::Simd { args, .. }
+            | Inst::SimdVal { args, .. } => {
                 for a in args {
                     f(a);
                 }
@@ -3061,8 +3061,8 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
-            | Inst::X86SimdVal { .. }
+            | Inst::Simd { .. }
+            | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }

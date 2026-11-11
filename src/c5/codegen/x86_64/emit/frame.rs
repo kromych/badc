@@ -183,7 +183,7 @@ pub(crate) fn compute_frame(
             .iter()
             .any(|&w| w >= super::ssa::reg_alloc::VecWidth::V256)
             || func.insts.iter().any(|i| match i {
-                Inst::X86Simd { op, .. } | Inst::X86SimdVal { op, .. } => {
+                Inst::Simd { op, .. } | Inst::SimdVal { op, .. } => {
                     crate::c5::x86_simd::get(*op).bytes >= 32
                 }
                 _ => false,

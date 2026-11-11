@@ -172,7 +172,7 @@ impl<'a> Walker<'a> {
                 let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
                 self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
             }
-            Expr::X86Simd { op, args, imm, .. } => {
+            Expr::Simd { op, args, imm, .. } => {
                 let (op, imm) = (*op, *imm);
                 let args = args.clone();
                 self.walk_x86_simd(b, op, &args, imm)

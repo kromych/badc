@@ -1173,7 +1173,7 @@ fn is_inline_candidate(
                 Inst::Mcpy { dst, size, .. } | Inst::Mzero { dst, size, .. } => {
                     stores[0] = Some((*dst, 0, *size))
                 }
-                Inst::X86Simd { op, args, .. } => {
+                Inst::Simd { op, args, .. } => {
                     for (k, (i, width)) in x86_simd::get(*op).stores().enumerate() {
                         stores[k] = args.get(i).map(|&a| (a, 0, width as i64));
                     }
@@ -1222,7 +1222,7 @@ fn is_inline_candidate(
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. }
             // Travels with its statement, admitted below on the reloc path.
-            | Inst::X86SimdVal { .. }
+            | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }
@@ -1314,7 +1314,7 @@ fn is_inline_candidate(
             // its pointer operand. Each store takes `Store`'s gate: on the
             // flat path with an aggregate in play, the redirected result
             // slot is the only reproducible write.
-            Inst::X86Simd { op, args, .. } => {
+            Inst::Simd { op, args, .. } => {
                 let reproducible = match redirect_slot {
                     Some(rs) => x86_simd::get(*op)
                         .stores()
@@ -2216,7 +2216,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::Intrinsic { .. } => true,
         // The stores a SIMD instruction performs are the ones the table
         // names, each through an operand address.
-        Inst::X86Simd { op, args, .. } => x86_simd::get(*op)
+        Inst::Simd { op, args, .. } => x86_simd::get(*op)
             .stores()
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
@@ -2245,7 +2245,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Bswap { .. }
         | Inst::BitCount { .. }
         | Inst::FpCast { .. }
-        | Inst::X86SimdVal { .. }
+        | Inst::SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecExtract { .. }

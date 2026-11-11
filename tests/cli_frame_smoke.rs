@@ -1036,7 +1036,7 @@ fn simd_wrappers_inline_at_opt() {
     assert!(!chain.contains(" Call {"), "chain keeps a call:\n{chain}");
     for op in ["paddd128", "pxor128", "pshufb128", "psubd128"] {
         assert!(
-            chain.contains(&format!("X86SimdVal {{ op=__builtin_ia32_{op},")),
+            chain.contains(&format!("SimdVal {{ op=__builtin_ia32_{op},")),
             "chain lacks {op}:\n{chain}"
         );
     }

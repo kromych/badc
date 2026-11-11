@@ -1,6 +1,6 @@
 use super::*;
 
-/// `Inst::X86Simd`: load the 128-bit operands into the FP scratches, run
+/// `Inst::Simd`: load the 128-bit operands into the FP scratches, run
 /// the instruction the table row names, and write the result through the
 /// destination address. The operands are memory-resident and only 8-byte
 /// aligned, so every transfer is an unaligned `movdqu`.
@@ -14,7 +14,8 @@ pub(super) fn emit_x86_simd(
 ) -> Emit {
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::Form;
+    use crate::c5::x86_simd;
     if x86_simd::get(op).bytes >= 32 || x86_simd::get(op).form.is_opmask() {
         return emit_x86_simd_wide(code, op, imm, args, alloc, frame);
     }
@@ -447,7 +448,7 @@ pub(super) fn wide_binary(
     Ok(())
 }
 
-/// `Inst::X86SimdVal`: the instruction on the operands' registers, a
+/// `Inst::SimdVal`: the instruction on the operands' registers, a
 /// spilled operand loaded into an FP scratch. A vector result is formed in
 /// its own register unless that holds the second source, then in a scratch
 /// it is copied from; an integer result goes to its register or through
@@ -463,7 +464,8 @@ pub(super) fn emit_x86_simd_val(
 ) -> Emit {
     use super::asm::{Concrete, XMM_BASE};
     use crate::c5::ir::AsmRegSize;
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::Form;
+    use crate::c5::x86_simd;
     let row = x86_simd::get(op);
     if row.bytes >= 32 || row.form.is_opmask() {
         return emit_x86_simd_val_wide(code, op, imm, args, dst, alloc, frame);
@@ -1994,7 +1996,7 @@ fn wide_operands(
     d: u8,
 ) -> alloc::vec::Vec<super::asm::Concrete> {
     use super::asm::Concrete;
-    use crate::c5::x86_simd::{Form, Sem};
+    use crate::c5::simd::{Form, Sem};
     let reg = |n: u8| wide_reg(row.bytes, n);
     let src = |s: WideSrc| match s {
         WideSrc::Reg(n) => reg(n),
@@ -2132,7 +2134,8 @@ fn emit_x86_simd_wide(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::Form;
+    use crate::c5::x86_simd;
     let row = x86_simd::get(op);
     let w = VecWidth::of_bytes(row.bytes);
     let (src_x, dst_x) = (frame.fp_scratch[0], frame.fp_scratch[1]);
@@ -2315,7 +2318,8 @@ fn emit_x86_simd_val_wide(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::Form;
+    use crate::c5::x86_simd;
     let row = x86_simd::get(op);
     let w = VecWidth::of_bytes(row.bytes);
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);

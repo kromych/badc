@@ -3383,7 +3383,7 @@ int mask(const __m256i *p) { return _mm256_movemask_epi8(_mm256_shuffle_epi8(p[0
     m.finish();
 }
 
-/// SSE intrinsics keep their vectors in xmm registers (`X86SimdVal`): a
+/// SSE intrinsics keep their vectors in xmm registers (`SimdVal`): a
 /// round loop over four `__m128i` parameters makes no memory access, as
 /// with gcc 16. Each intrinsic read its operands from the frame and wrote
 /// its result back, 85 instructions where it is now 19.

@@ -1061,7 +1061,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1040 Imm(0)                                           -> x0
     v1041 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1042 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1043 X86SimdVal { op=__builtin_ia32_paddsb, imm=None, args=[v1041, v1042] } -> d0
+    v1043 SimdVal { op=__builtin_ia32_paddsb, imm=None, args=[v1041, v1042] } -> d0
     v1044 StoreLocal { off=-1, value=v1043, kind=F64 }     -> -
     v1045 Imm(0)                                           -> x0
     v1046 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1135,7 +1135,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1112 Imm(0)                                           -> x0
     v1113 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1114 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1115 X86SimdVal { op=__builtin_ia32_paddusb, imm=None, args=[v1113, v1114] } -> d0
+    v1115 SimdVal { op=__builtin_ia32_paddusb, imm=None, args=[v1113, v1114] } -> d0
     v1116 StoreLocal { off=-1, value=v1115, kind=F64 }     -> -
     v1117 Imm(0)                                           -> x0
     v1118 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1189,7 +1189,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1162 Imm(0)                                           -> x0
     v1163 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1164 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1165 X86SimdVal { op=__builtin_ia32_psubusw, imm=None, args=[v1163, v1164] } -> d0
+    v1165 SimdVal { op=__builtin_ia32_psubusw, imm=None, args=[v1163, v1164] } -> d0
     v1166 StoreLocal { off=-1, value=v1165, kind=F64 }     -> -
     v1167 Imm(0)                                           -> x0
     v1168 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1235,7 +1235,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1206 Imm(0)                                           -> x0
     v1207 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1208 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1209 X86SimdVal { op=__builtin_ia32_psubsw, imm=None, args=[v1207, v1208] } -> d0
+    v1209 SimdVal { op=__builtin_ia32_psubsw, imm=None, args=[v1207, v1208] } -> d0
     v1210 StoreLocal { off=-1, value=v1209, kind=F64 }     -> -
     v1211 Imm(0)                                           -> x0
     v1212 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1285,7 +1285,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1254 Imm(0)                                           -> x0
     v1255 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1256 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1257 X86SimdVal { op=__builtin_ia32_paddusw, imm=None, args=[v1255, v1256] } -> d0
+    v1257 SimdVal { op=__builtin_ia32_paddusw, imm=None, args=[v1255, v1256] } -> d0
     v1258 StoreLocal { off=-1, value=v1257, kind=F64 }     -> -
     v1259 Imm(0)                                           -> x0
     v1260 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1358,7 +1358,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1325 Imm(0)                                           -> x0
     v1326 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1327 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1328 X86SimdVal { op=__builtin_ia32_psubsb, imm=None, args=[v1326, v1327] } -> d0
+    v1328 SimdVal { op=__builtin_ia32_psubsb, imm=None, args=[v1326, v1327] } -> d0
     v1329 StoreLocal { off=-1, value=v1328, kind=F64 }     -> -
     v1330 Imm(0)                                           -> x0
     v1331 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1386,7 +1386,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1349 Imm(0)                                           -> x0
     v1350 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1351 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1352 X86SimdVal { op=__builtin_ia32_pmaddwd, imm=None, args=[v1350, v1351] } -> d0
+    v1352 SimdVal { op=__builtin_ia32_pmaddwd, imm=None, args=[v1350, v1351] } -> d0
     v1353 StoreLocal { off=-1, value=v1352, kind=F64 }     -> -
     v1354 Imm(0)                                           -> x0
     v1355 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1431,7 +1431,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1392 Imm(0)                                           -> x0
     v1393 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1394 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1395 X86SimdVal { op=__builtin_ia32_pmaddwd, imm=None, args=[v1393, v1394] } -> d0
+    v1395 SimdVal { op=__builtin_ia32_pmaddwd, imm=None, args=[v1393, v1394] } -> d0
     v1396 StoreLocal { off=-1, value=v1395, kind=F64 }     -> -
     v1397 Imm(0)                                           -> x0
     v1398 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1485,7 +1485,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1442 Imm(0)                                           -> x0
     v1443 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1444 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1445 X86SimdVal { op=__builtin_ia32_pmulhw, imm=None, args=[v1443, v1444] } -> d0
+    v1445 SimdVal { op=__builtin_ia32_pmulhw, imm=None, args=[v1443, v1444] } -> d0
     v1446 StoreLocal { off=-1, value=v1445, kind=F64 }     -> -
     v1447 Imm(0)                                           -> x0
     v1448 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -1530,7 +1530,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v1485 Imm(0)                                           -> x0
     v1486 LoadLocal { off=-7, kind=F64 }                   -> d0
     v1487 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1488 X86SimdVal { op=__builtin_ia32_pmullw, imm=None, args=[v1486, v1487] } -> d0
+    v1488 SimdVal { op=__builtin_ia32_pmullw, imm=None, args=[v1486, v1487] } -> d0
     v1489 StoreLocal { off=-1, value=v1488, kind=F64 }     -> -
     v1490 Imm(0)                                           -> x0
     v1491 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -2092,7 +2092,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v2029 Imm(0)                                           -> x2
     v2030 LoadLocal { off=-2, kind=F64 }                   -> d0
     v2031 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v2032 X86SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v2030, v2031] } -> d0
+    v2032 SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v2030, v2031] } -> d0
     v2033 StoreLocal { off=-1, value=v2032, kind=F64 }     -> -
     v2034 Imm(0)                                           -> x2
     v2035 LoadLocal { off=-1, kind=I64 }                   -> x2
@@ -2112,7 +2112,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v2052 Imm(0)                                           -> x0
     v2053 LoadLocal { off=-2, kind=F64 }                   -> d0
     v2054 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v2055 X86SimdVal { op=__builtin_ia32_pcmpgtd, imm=None, args=[v2053, v2054] } -> d0
+    v2055 SimdVal { op=__builtin_ia32_pcmpgtd, imm=None, args=[v2053, v2054] } -> d0
     v2056 StoreLocal { off=-1, value=v2055, kind=F64 }     -> -
     v2057 Imm(0)                                           -> x0
     v2058 LoadLocal { off=-1, kind=I64 }                   -> x0
@@ -2160,7 +2160,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=8
     v2098 Imm(0)                                           -> x0
     v2099 LoadLocal { off=-2, kind=F64 }                   -> d0
     v2100 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v2101 X86SimdVal { op=__builtin_ia32_pcmpgtb, imm=None, args=[v2099, v2100] } -> d0
+    v2101 SimdVal { op=__builtin_ia32_pcmpgtb, imm=None, args=[v2099, v2100] } -> d0
     v2102 StoreLocal { off=-1, value=v2101, kind=F64 }     -> -
     v2103 Imm(0)                                           -> x0
     v2104 LoadLocal { off=-1, kind=I64 }                   -> x0

@@ -362,7 +362,8 @@ impl Compiler {
     /// integer constant expression.
     fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
-        use super::super::x86_simd::{self, Form, Ret, Sem};
+        use super::super::simd::{Form, Ret, Sem};
+        use super::super::x86_simd;
         let row = x86_simd::get(op);
         if !self.target.is_x86_64() {
             return Err(self.compile_err(
@@ -490,7 +491,7 @@ impl Compiler {
             None => Ty::Int as i64,
         };
         let pos = self.ast_src_pos();
-        let id = self.ast.push_expr(Expr::X86Simd { op, args, imm, ty }, pos);
+        let id = self.ast.push_expr(Expr::Simd { op, args, imm, ty }, pos);
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())

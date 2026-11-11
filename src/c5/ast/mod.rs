@@ -546,7 +546,7 @@ pub(crate) enum Expr {
     /// source order, with a constant immediate or shift count already
     /// removed and folded into `imm`. `ty` is the result type -- a 16-byte
     /// vector or `int`.
-    X86Simd {
+    Simd {
         op: u32,
         args: Vec<ExprId>,
         imm: Option<u8>,
@@ -1068,7 +1068,7 @@ macro_rules! visit_data_offsets {
                 | Expr::VlaSizeof { .. }
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
-                | Expr::X86Simd { .. }
+                | Expr::Simd { .. }
                 | Expr::MsIntrinsic { .. }
                 | Expr::MemTransfer { .. } => {}
             }
@@ -1388,7 +1388,7 @@ macro_rules! plain_ty_expr {
             | Expr::VlaBase { ty: $t, .. }
             | Expr::StmtExpr { ty: $t, .. }
             | Expr::CheckedArith { ty: $t, .. }
-            | Expr::X86Simd { ty: $t, .. }
+            | Expr::Simd { ty: $t, .. }
             | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
     };

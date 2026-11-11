@@ -487,8 +487,8 @@ pub(super) fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
-        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
-        Inst::X86SimdVal { op, imm, args } => {
+        Inst::Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
+        Inst::SimdVal { op, imm, args } => {
             emit_x86_simd_val(code, *op, *imm, args, dst, alloc, frame)
         }
         Inst::VecBinop {

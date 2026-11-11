@@ -1758,12 +1758,12 @@ fn run_inst<H: Host>(
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
         }
-        Inst::X86Simd { op, imm, args } => {
+        Inst::Simd { op, imm, args } => {
             run_x86_simd(mem, frame, *op, *imm, args)?;
             return Ok(());
         }
         // The -O rewrites producing these never reach the VM.
-        Inst::X86SimdVal { .. } => "X86SimdVal",
+        Inst::SimdVal { .. } => "SimdVal",
         Inst::VecInsert { .. } => "VecInsert",
         Inst::VecExtract { .. } => "VecExtract",
         Inst::VecBinop {
@@ -4017,7 +4017,8 @@ fn run_x86_simd(
     imm: Option<u8>,
     args: &[ValueId],
 ) -> Result<(), C5Error> {
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::{self, Form};
+    use crate::c5::x86_simd;
     let row = x86_simd::get(op);
     if row.bytes >= 32 || row.form.is_opmask() {
         return run_x86_simd_wide(mem, frame, row, imm, args);
@@ -4063,14 +4064,14 @@ fn run_x86_simd(
         }
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
-            let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
-                .unwrap_or_else(|| x86_simd::eval(row.sem, &a, &b, imm8, 0));
+            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8)
+                .unwrap_or_else(|| simd::eval(row.sem, &a, &b, imm8, 0));
             mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::V | Form::VI => {
             let a = read(mem, reg(1))?;
-            let out = x86_simd::eval_float(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8)
-                .unwrap_or_else(|| x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
+            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8)
+                .unwrap_or_else(|| simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
             mem.write_bytes(reg(0), &out)?;
         }
         Form::Shift => {
@@ -4081,7 +4082,7 @@ fn run_x86_simd(
                 Some(n) => n as u64,
                 None => frame.regs[args[2] as usize] as u64,
             };
-            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], 0, count);
+            let out = simd::eval(row.sem, &a, &[0u8; 16], 0, count);
             mem.write_bytes(reg(0), &out)?;
         }
         Form::Load => {
@@ -4095,23 +4096,23 @@ fn run_x86_simd(
         Form::ToInt => {
             let a = read(mem, reg(1))?;
             let bits = 8 * u32::from(row.int_width);
-            let x = x86_simd::eval_to_int(&mut mem.fp, row.sem, &a, bits).unwrap_or(0);
+            let x = simd::eval_to_int(&mut mem.fp, row.sem, &a, bits).unwrap_or(0);
             mem.write_bytes(reg(0), &x.to_le_bytes()[..row.int_width as usize])?;
         }
         Form::Extract => {
             let a = read(mem, reg(1))?;
-            let x = x86_simd::eval_extract(&a, row.int_width, imm8);
+            let x = simd::eval_extract(&a, row.int_width, imm8);
             mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
         }
         Form::MoveMask => {
             let a = read(mem, reg(1))?;
-            let x = x86_simd::eval_movemask(&a);
+            let x = simd::eval_movemask(&a);
             mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
         }
         Form::Insert => {
             let a = read(mem, reg(1))?;
             let x = frame.regs[args[2] as usize] as u64;
-            let out = x86_simd::eval_insert(&a, row.int_width, imm8, x);
+            let out = simd::eval_insert(&a, row.int_width, imm8, x);
             mem.write_bytes(reg(0), &out)?;
         }
         Form::RdRand => {
@@ -4127,7 +4128,7 @@ fn run_x86_simd(
 }
 
 /// [`run_x86_simd`] for an AVX2 or AVX-512 form over 32- or 64-byte vectors
-/// ([`crate::c5::x86_simd::eval_wide`]).
+/// ([`crate::c5::simd::eval_wide`]).
 fn run_x86_simd_wide(
     mem: &mut Memory,
     frame: &mut Frame<'_>,
@@ -4135,7 +4136,7 @@ fn run_x86_simd_wide(
     imm: Option<u8>,
     args: &[ValueId],
 ) -> Result<(), C5Error> {
-    use crate::c5::x86_simd::{self, Form};
+    use crate::c5::simd::{self, Form};
     let n = usize::from(row.bytes);
     let operand = |i: usize| -> Result<usize, C5Error> {
         args.get(i)
@@ -4149,7 +4150,7 @@ fn run_x86_simd_wide(
     };
     let (imm8, zero) = (imm.unwrap_or(0), [0u8; 64]);
     let eval = |a: &[u8; 64], b: &[u8; 64], c: &[u8; 64], count: u64| {
-        x86_simd::eval_wide(row.sem, (a, b, c), imm8, count, n)
+        simd::eval_wide(row.sem, (a, b, c), imm8, count, n)
     };
     let out = match row.form {
         Form::Vv | Form::VvI => {
@@ -4160,7 +4161,7 @@ fn run_x86_simd_wide(
             let mut float = true;
             for k in (0..n).step_by(16) {
                 let part = |v: &[u8; 64]| -> [u8; 16] { v[k..k + 16].try_into().unwrap() };
-                match x86_simd::eval_float(&mut mem.fp, row.sem, &part(&a), &part(&b), imm8) {
+                match simd::eval_float(&mut mem.fp, row.sem, &part(&a), &part(&b), imm8) {
                     Some(o) => out[k..k + 16].copy_from_slice(&o),
                     None => float = false,
                 }
@@ -4202,7 +4203,7 @@ fn run_x86_simd_wide(
         }
         Form::CmpMask => {
             let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
-            let m = x86_simd::eval_cmp_mask(row.sem, &a, &b, imm8, n);
+            let m = simd::eval_cmp_mask(row.sem, &a, &b, imm8, n);
             mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
             return Ok(());
         }
@@ -4240,7 +4241,7 @@ fn run_x86_simd_wide(
             let a = read(mem, operand(1)?)?;
             let mut m = 0u64;
             for k in (0..n).step_by(16) {
-                m |= x86_simd::eval_movemask(a[k..k + 16].try_into().unwrap()) << k;
+                m |= simd::eval_movemask(a[k..k + 16].try_into().unwrap()) << k;
             }
             mem.write_bytes(operand(0)?, &(m as i64).to_le_bytes())?;
             return Ok(());

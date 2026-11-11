@@ -96,7 +96,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. }
         | Inst::BitField { .. }
-        | Inst::X86SimdVal { .. }
+        | Inst::SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecExtract { .. }
@@ -139,7 +139,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::AtomicLoad { .. }
         | Inst::AtomicStore { .. }
         | Inst::Intrinsic { .. }
-        | Inst::X86Simd { .. }
+        | Inst::Simd { .. }
         | Inst::InlineAsm { .. }
         | Inst::RetPart { .. }
         | Inst::AsmOut { .. }

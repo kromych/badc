@@ -268,7 +268,8 @@ impl<'a> Walker<'a> {
         args: &[ExprId],
         imm: Option<u8>,
     ) -> Result<ValueId, WalkError> {
-        use crate::c5::x86_simd::{self, Form, Ret};
+        use crate::c5::simd::{Form, Ret};
+        use crate::c5::x86_simd;
         let row = x86_simd::get(op);
         let form = row.form;
         let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);

@@ -879,7 +879,7 @@ fn walk_block(
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }
-            | Inst::X86SimdVal { .. }
+            | Inst::SimdVal { .. }
             | Inst::Phi { .. } => {}
             // Calls, atomics, asm, indexed / segment stores,
             // intrinsics, alloca bookkeeping: may write memory the

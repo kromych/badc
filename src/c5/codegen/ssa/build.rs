@@ -1928,7 +1928,7 @@ impl SsaBuilder {
     /// to pick the right lowering. Conservative: invalidate the
     /// CSE cache -- setjmp / longjmp move control across the
     /// block, va_start / va_arg may write through caller buffers.
-    /// `Inst::X86Simd` -- one x86 SIMD instruction. Writes through the
+    /// `Inst::Simd` -- one x86 SIMD instruction. Writes through the
     /// destination address in `args[0]`, so the local caches are cleared.
     pub(crate) fn vec_binop(
         &mut self,
@@ -1947,7 +1947,7 @@ impl SsaBuilder {
 
     pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::X86Simd { op, imm, args })
+        self.push(Inst::Simd { op, imm, args })
     }
 
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {

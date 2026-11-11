@@ -14,14 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <msf>:
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, x1
                	ret
 
 <svf>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x0, x1
                	ret
 
@@ -31,12 +29,10 @@ Disassembly of section .text:
 
 <msf6>:
                	add	x0, x0, x1, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x3, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x4, x17
+               	add	x1, x4, x4, lsl #2
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x5, x17
@@ -45,12 +41,10 @@ Disassembly of section .text:
 
 <svf6>:
                	sub	x0, x0, x1, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	sub	x0, x0, x3, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x4, x17
+               	add	x1, x4, x4, lsl #2
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x5, x17

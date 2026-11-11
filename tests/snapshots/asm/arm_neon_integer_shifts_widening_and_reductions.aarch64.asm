@@ -7216,8 +7216,7 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x288]
                	mov	x17, #0x7               // =7
                	mul	x3, x16, x17
-               	mov	x17, #0x5               // =5
-               	mul	x4, x0, x17
+               	add	x4, x0, x0, lsl #2
                	add	x3, x3, x4
                	lsl	x4, x20, #1
                	add	x4, x4, #0x5

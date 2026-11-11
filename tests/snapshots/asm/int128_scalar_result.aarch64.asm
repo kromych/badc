@@ -229,8 +229,7 @@ Disassembly of section .text:
                	cset	x2, lo
                	and	x1, x1, x2
                	orr	x0, x0, x1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
+               	add	x1, x0, x0, lsl #1
                	cmp	w1, #0x3
                	b.ne	<addr>
                	eor	x1, x22, x23
@@ -238,8 +237,7 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	cmp	x1, #0x0
                	cset	x2, eq
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	cbz	w2, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x30]

@@ -31,35 +31,27 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	mov	x17, #0x3               // =3
-               	mul	x20, x1, x17
+               	add	x20, x1, x1, lsl #1
                	ldrsw	x1, [x0, #0x4]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x21, x1, #0x1
                	ldrsw	x1, [x0, #0x8]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x22, x1, #0x2
                	ldrsw	x1, [x0, #0xc]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x23, x1, #0x3
                	ldrsw	x1, [x0, #0x10]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x24, x1, #0x4
                	ldrsw	x1, [x0, #0x14]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x25, x1, #0x5
                	ldrsw	x1, [x0, #0x18]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x26, x1, #0x6
                	ldrsw	x0, [x0, #0x1c]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x27, x0, #0x7
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -70,56 +62,48 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x2, [x0]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	mov	x3, #0x1                // =1
                	cmp	w20, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0x4]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x1
                	orr	x3, x1, #0x2
                	cmp	w21, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0x8]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x2
                	orr	x3, x1, #0x4
                	cmp	w22, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0xc]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x3
                	orr	x3, x1, #0x8
                	cmp	w23, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0x10]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x4
                	orr	x3, x1, #0x10
                	cmp	w24, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0x14]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x5
                	orr	x3, x1, #0x20
                	cmp	w25, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x2, [x0, #0x18]
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x6
                	orr	x3, x1, #0x40
                	cmp	w26, w2
                	csel	x1, x3, x1, ne
                	ldrsw	x0, [x0, #0x1c]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x7
                	orr	x2, x1, #0x80
                	cmp	w27, w0
@@ -148,84 +132,64 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0, #0x40]
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #2
                	add	x1, x1, #0x1
                	ldrsw	x2, [x0, #0x44]
-               	mov	x17, #0x5               // =5
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #2
                	add	x2, x2, #0x2
                	ldrsw	x3, [x0, #0x48]
-               	mov	x17, #0x5               // =5
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #2
                	add	x3, x3, #0x3
                	ldrsw	x4, [x0, #0x4c]
-               	mov	x17, #0x5               // =5
-               	mul	x4, x4, x17
+               	add	x4, x4, x4, lsl #2
                	add	x4, x4, #0x4
                	ldrsw	x5, [x0, #0x50]
-               	mov	x17, #0x5               // =5
-               	mul	x5, x5, x17
+               	add	x5, x5, x5, lsl #2
                	add	x5, x5, #0x5
                	ldrsw	x6, [x0, #0x54]
-               	mov	x17, #0x5               // =5
-               	mul	x6, x6, x17
+               	add	x6, x6, x6, lsl #2
                	add	x6, x6, #0x6
                	ldrsw	x7, [x0, #0x58]
-               	mov	x17, #0x5               // =5
-               	mul	x7, x7, x17
+               	add	x7, x7, x7, lsl #2
                	add	x7, x7, #0x7
                	ldrsw	x8, [x0, #0x5c]
-               	mov	x17, #0x5               // =5
-               	mul	x8, x8, x17
+               	add	x8, x8, x8, lsl #2
                	add	x8, x8, #0x8
                	ldrsw	x9, [x0, #0x60]
-               	mov	x17, #0x5               // =5
-               	mul	x9, x9, x17
+               	add	x9, x9, x9, lsl #2
                	add	x9, x9, #0x9
                	ldrsw	x10, [x0, #0x64]
-               	mov	x17, #0x5               // =5
-               	mul	x10, x10, x17
+               	add	x10, x10, x10, lsl #2
                	add	x10, x10, #0xa
                	ldrsw	x11, [x0, #0x68]
-               	mov	x17, #0x5               // =5
-               	mul	x11, x11, x17
+               	add	x11, x11, x11, lsl #2
                	add	x11, x11, #0xb
                	ldrsw	x12, [x0, #0x6c]
-               	mov	x17, #0x5               // =5
-               	mul	x12, x12, x17
+               	add	x12, x12, x12, lsl #2
                	add	x12, x12, #0xc
                	ldrsw	x13, [x0, #0x70]
-               	mov	x17, #0x5               // =5
-               	mul	x13, x13, x17
+               	add	x13, x13, x13, lsl #2
                	add	x13, x13, #0xd
                	ldrsw	x14, [x0, #0x74]
-               	mov	x17, #0x5               // =5
-               	mul	x14, x14, x17
+               	add	x14, x14, x14, lsl #2
                	add	x14, x14, #0xe
                	ldrsw	x15, [x0, #0x78]
-               	mov	x17, #0x5               // =5
-               	mul	x15, x15, x17
+               	add	x15, x15, x15, lsl #2
                	add	x15, x15, #0xf
                	ldrsw	x20, [x0, #0x7c]
-               	mov	x17, #0x5               // =5
-               	mul	x20, x20, x17
+               	add	x20, x20, x20, lsl #2
                	add	x20, x20, #0x10
                	ldrsw	x21, [x0, #0x80]
-               	mov	x17, #0x5               // =5
-               	mul	x21, x21, x17
+               	add	x21, x21, x21, lsl #2
                	add	x21, x21, #0x11
                	ldrsw	x22, [x0, #0x84]
-               	mov	x17, #0x5               // =5
-               	mul	x22, x22, x17
+               	add	x22, x22, x22, lsl #2
                	add	x22, x22, #0x12
                	ldrsw	x23, [x0, #0x88]
-               	mov	x17, #0x5               // =5
-               	mul	x23, x23, x17
+               	add	x23, x23, x23, lsl #2
                	add	x23, x23, #0x13
                	ldrsw	x0, [x0, #0x8c]
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, #0x14
                	adrp	x24, <page>
                	add	x1, x1, x2

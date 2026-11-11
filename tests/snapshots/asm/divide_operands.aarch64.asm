@@ -64,8 +64,7 @@ Disassembly of section .text:
 <six>:
                	sdiv	x2, x0, x1
                	add	x0, x2, x0, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, #0x5
                	add	x0, x0, #0xe

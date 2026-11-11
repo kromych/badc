@@ -36,8 +36,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x22, x21, x17
+               	add	x22, x21, x21, lsl #1
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
@@ -238,8 +237,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x22, x21, x17
+               	add	x22, x21, x21, lsl #1
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
@@ -292,8 +290,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x22, x21, x17
+               	add	x22, x21, x21, lsl #1
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
@@ -334,8 +331,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x22, x21, x17
+               	add	x22, x21, x21, lsl #1
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
@@ -384,8 +380,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x22, x21, x17
+               	add	x22, x21, x21, lsl #1
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
@@ -436,8 +431,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x17, #0x3               // =3
-               	mul	x21, x22, x17
+               	add	x21, x22, x22, lsl #1
                	mov	x1, #0x0                // =0
                	mov	x4, #0xc                // =12
                	cmp	x1, x22

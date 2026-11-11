@@ -235,20 +235,18 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x4000, lsl #16
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	mov	x2, #0x7fffffff         // =2147483647
                	stur	w2, [x29, #-0x68]
-               	ldr	x1, [x5, x0, lsl #3]
+               	ldr	x1, [x4, x0, lsl #3]
                	sxtw	x1, w1
-               	mul	x3, x1, x4
+               	add	x3, x1, x1, lsl #30
                	asr	x3, x3, #61
                	add	x3, x3, x3, lsr #63
-               	ldursw	x6, [x29, #-0x68]
-               	sdiv	w6, w1, w6
-               	cmp	w3, w6
+               	ldursw	x5, [x29, #-0x68]
+               	sdiv	w5, w1, w5
+               	cmp	w3, w5
                	b.ne	<addr>
                	msub	x2, x3, x2, x1
                	ldursw	x3, [x29, #-0x68]
@@ -291,21 +289,19 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	movk	x4, #0x4000, lsl #16
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	mov	x2, #-0x7fffffff        // =-2147483647
                	stur	w2, [x29, #-0x58]
-               	ldr	x1, [x5, x0, lsl #3]
+               	ldr	x1, [x4, x0, lsl #3]
                	sxtw	x1, w1
-               	mul	x3, x1, x4
+               	add	x3, x1, x1, lsl #30
                	asr	x3, x3, #61
                	add	x3, x3, x3, lsr #63
                	neg	x3, x3
-               	ldursw	x6, [x29, #-0x58]
-               	sdiv	w6, w1, w6
-               	cmp	w3, w6
+               	ldursw	x5, [x29, #-0x58]
+               	sdiv	w5, w1, w5
+               	cmp	w3, w5
                	b.ne	<addr>
                	msub	x2, x3, x2, x1
                	ldursw	x3, [x29, #-0x58]

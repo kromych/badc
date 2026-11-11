@@ -239,8 +239,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w21, #0xc
                	b.ge	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x21, x17
+               	add	x1, x21, x21, lsl #1
                	add	x1, x1, #0x2
                	sxtw	x3, w1
                	add	x2, x20, #0x1

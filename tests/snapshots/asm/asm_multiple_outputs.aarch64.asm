@@ -142,8 +142,7 @@ Disassembly of section .text:
                	add	x1, x1, x22
                	add	x1, x1, x23
                	add	x1, x1, x24
-               	mov	x17, #0x3               // =3
-               	mul	x2, x20, x17
+               	add	x2, x20, x20, lsl #1
                	add	x1, x1, x2
                	add	x1, x1, x21
                	add	x0, x1, x0

@@ -113,16 +113,15 @@ Disassembly of section .text:
                	stp	x16, x17, [x4, #0x10]
                	ldp	x16, x17, [x0, #0x20]
                	stp	x16, x17, [x4, #0x20]
-               	mov	x5, #0x3                // =3
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	mul	x2, x0, x5
+               	add	x2, x0, x0, lsl #1
                	add	x2, x2, #0x1
                	ldr	x3, [x4, x0, lsl #3]
-               	madd	x6, x3, x2, x1
+               	madd	x5, x3, x2, x1
                	sub	x1, x1, x2
                	cmp	x3, #0x0
-               	csel	x1, x6, x1, gt
+               	csel	x1, x5, x1, gt
                	add	x0, x0, #0x1
                	cmp	w0, #0x6
                	b.lt	<addr>

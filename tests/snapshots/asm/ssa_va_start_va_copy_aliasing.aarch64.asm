@@ -184,8 +184,7 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	sub	x2, x29, #0x40
                	sub	x2, x29, #0x20
-               	mov	x17, #0x11              // =17
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #4
                	add	x0, x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

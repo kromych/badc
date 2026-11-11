@@ -47,8 +47,7 @@ Disassembly of section .text:
                	ldar	w0, [x2]
                	b	<addr>
                	mov	x0, x1
-               	mov	x17, #0x3               // =3
-               	mul	x3, x0, x17
+               	add	x3, x0, x0, lsl #1
                	mov	x1, x0
                	casal	w1, w3, [x2]
                	cmp	w1, w0
@@ -403,12 +402,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x9c40             // =40000
+               	mov	x2, #0x9c40             // =40000
                	mov	x1, #0x1                // =1
-               	mul	x1, x1, x2
+               	add	x1, x1, x1, lsl #1
                	add	x0, x0, #0x1
-               	cmp	w0, w3
+               	cmp	w0, w2
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

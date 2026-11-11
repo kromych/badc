@@ -51,8 +51,7 @@ Disassembly of section .text:
                	movk	x17, #0xcccc, lsl #16
                	mul	x3, x2, x17
                	lsr	x3, x3, #34
-               	mov	x17, #0x5               // =5
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #2
                	sub	x2, x2, x3
                	and	x0, x0, #0xffffffffffffff80
                	orr	x0, x0, x2
@@ -567,8 +566,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x50]
                	ldr	w1, [x0, #0x50]
                	sbfx	x2, x1, #0, #7
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	and	x2, x2, #0x7f
                	and	x1, x1, #0xffffffffffffff80
                	orr	x1, x1, x2
@@ -686,8 +684,7 @@ Disassembly of section .text:
                	str	w2, [x0, #0x8]
                	ldr	w2, [x0, #0x8]
                	ubfx	x3, x2, #7, #5
-               	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #1
                	and	x3, x3, #0x1f
                	and	x2, x2, #0xfffffffffffff07f
                	orr	x2, x2, x3, lsl #7
@@ -724,8 +721,7 @@ Disassembly of section .text:
                	add	x3, x3, #0x1
                	str	w3, [x0, #0xb8]
                	ldr	w3, [x1, #0x4]
-               	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #1
                	str	w3, [x1, #0x4]
                	ldrsw	x3, [x0, #0xb8]
                	add	x3, x3, #0x1

@@ -66,8 +66,7 @@ Disassembly of section .text:
                	movk	x17, #0xf, lsl #16
                	mul	x1, x1, x17
                	add	x0, x0, x1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x3
                	ret

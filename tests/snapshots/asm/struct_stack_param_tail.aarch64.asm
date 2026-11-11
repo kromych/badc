@@ -28,13 +28,12 @@ Disassembly of section .text:
 <sum_bytes>:
                	mov	x3, x0
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x3                // =3
                	mov	x2, x0
                	cmp	w0, w1
                	b.ge	<addr>
-               	mul	x2, x2, x4
-               	ldrb	w5, [x3, x0]
-               	add	x2, x2, x5
+               	add	x2, x2, x2, lsl #1
+               	ldrb	w4, [x3, x0]
+               	add	x2, x2, x4
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>

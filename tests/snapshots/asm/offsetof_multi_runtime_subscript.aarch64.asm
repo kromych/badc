@@ -69,18 +69,17 @@ Disassembly of section .text:
                	cmp	w1, #0x5
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
-               	mov	x4, #0x3                // =3
-               	mov	x5, #0x18               // =24
+               	mov	x4, #0x18               // =24
                	mov	x0, #0x0                // =0
-               	mul	x2, x1, x4
+               	add	x2, x1, x1, lsl #1
                	add	x2, x2, x0
                	lsl	x2, x2, #1
                	lsl	x3, x2, #2
-               	add	x6, x3, #0x48
-               	mul	x3, x1, x5
+               	add	x5, x3, #0x48
+               	mul	x3, x1, x4
                	add	x3, x3, x0, lsl #3
-               	add	x7, x3, #0x48
-               	cmp	x7, x6
+               	add	x6, x3, #0x48
+               	cmp	x6, x5
                	b.ne	<addr>
                	add	x2, x2, #0x1
                	lsl	x2, x2, #2
@@ -116,24 +115,23 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.lt	<addr>
                	mov	x4, #0x0                // =0
-               	mov	x5, #0x3                // =3
-               	mov	x6, #0xc                // =12
-               	mov	x7, #0x34               // =52
+               	mov	x5, #0xc                // =12
+               	mov	x6, #0x34               // =52
                	mov	x0, #0x0                // =0
-               	mul	x3, x4, x7
+               	mul	x3, x4, x6
                	add	x1, x3, #0xac
-               	mul	x2, x0, x5
-               	add	x8, x1, x2, lsl #2
-               	mul	x9, x0, x6
-               	add	x3, x3, x9
-               	add	x9, x3, #0xac
-               	cmp	x9, x8
+               	add	x2, x0, x0, lsl #1
+               	add	x7, x1, x2, lsl #2
+               	mul	x8, x0, x5
+               	add	x3, x3, x8
+               	add	x8, x3, #0xac
+               	cmp	x8, x7
                	b.ne	<addr>
-               	add	x8, x2, #0x1
-               	add	x8, x1, x8, lsl #2
-               	add	x9, x3, #0x4
-               	add	x9, x9, #0xac
-               	cmp	x9, x8
+               	add	x7, x2, #0x1
+               	add	x7, x1, x7, lsl #2
+               	add	x8, x3, #0x4
+               	add	x8, x8, #0xac
+               	cmp	x8, x7
                	b.ne	<addr>
                	add	x2, x2, #0x2
                	add	x1, x1, x2, lsl #2

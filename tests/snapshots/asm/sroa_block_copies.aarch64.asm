@@ -78,8 +78,7 @@ Disassembly of section .text:
 
 <padded_copy>:
                	and	x3, x1, #0xff
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	strb	w3, [x0]
                	strb	wzr, [x0, #0x1]
                	strh	wzr, [x0, #0x2]
@@ -176,8 +175,7 @@ Disassembly of section .text:
                	ret
 
 <take>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, x1
                	ret
 
@@ -552,8 +550,7 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.ne	<addr>
                	ldr	x0, [sp, #0x50]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x20, x17
+               	add	x1, x20, x20, lsl #1
                	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
@@ -617,8 +614,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x228
                	mov	x1, x20
                	bl	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x20, x17
+               	add	x1, x20, x20, lsl #1
                	sub	x1, x1, #0x3
                	cmp	x0, x1
                	b.eq	<addr>
@@ -630,8 +626,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x218
                	mov	x1, x20
                	bl	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x20, x17
+               	add	x1, x20, x20, lsl #1
                	add	x1, x1, #0x4
                	cmp	x0, x1
                	b.ne	<addr>
@@ -717,13 +712,11 @@ Disassembly of section .text:
                	str	x20, [sp, #0x118]
                	lsl	x0, x20, #1
                	str	x0, [sp, #0x120]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x20, x17
+               	add	x0, x20, x20, lsl #1
                	str	x0, [sp, #0x128]
                	lsl	x0, x20, #2
                	str	x0, [sp, #0x130]
-               	mov	x17, #0x5               // =5
-               	mul	x0, x20, x17
+               	add	x0, x20, x20, lsl #2
                	str	x0, [sp, #0x138]
                	mov	x17, #0x6               // =6
                	mul	x0, x20, x17
@@ -733,8 +726,7 @@ Disassembly of section .text:
                	str	x0, [sp, #0x148]
                	lsl	x0, x20, #3
                	str	x0, [sp, #0x150]
-               	mov	x17, #0x9               // =9
-               	mul	x0, x20, x17
+               	add	x0, x20, x20, lsl #3
                	str	x0, [sp, #0x158]
                	mov	x17, #0xa               // =10
                	mul	x0, x20, x17

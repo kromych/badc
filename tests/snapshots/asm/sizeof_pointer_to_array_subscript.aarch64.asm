@@ -338,8 +338,7 @@ Disassembly of section .text:
                	mov	x6, x9
                	b	<addr>
                	mov	x5, x8
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, #0x3c
                	add	x0, x0, x5
                	ret
@@ -350,8 +349,7 @@ Disassembly of section .text:
                	mov	x5, x10
                	b	<addr>
                	mov	x5, x11
-               	mov	x17, #0x5               // =5
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #2
                	add	x0, x0, #0x28
                	add	x0, x0, x5
                	ret

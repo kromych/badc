@@ -46,8 +46,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x8
                	str	x1, [x20, #0x50]
                	ldr	x1, [x1]
-               	mov	x17, #0x5               // =5
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #2
                	add	x1, x2, x1
                	bl	<addr>
                	ldr	x1, [x20, #0x50]
@@ -2882,8 +2881,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x17, #0x5               // =5
-               	mul	x2, x22, x17
+               	add	x2, x22, x22, lsl #2
                	add	x2, x1, x2
                	mov	x1, x25
                	bl	<addr>

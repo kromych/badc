@@ -46,14 +46,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	ldrsh	x8, [x29, #0x18]
                	ldrsw	x9, [x29, #0x20]
-               	mov	x17, #0x3               // =3
-               	mul	x8, x8, x17
+               	add	x8, x8, x8, lsl #1
                	sub	x9, x9, #0x1
                	ldrsb	x10, [x29, #0x10]
                	cmp	w10, #0x0
                	csel	x8, x8, x9, gt
-               	mov	x17, #0x5               // =5
-               	mul	x8, x8, x17
+               	add	x8, x8, x8, lsl #2
                	sxtw	x8, w8
                	add	x6, x6, x8
                	ldrsb	x8, [x29, #0x10]

@@ -25,8 +25,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	cmp	x3, x2
                	cset	x0, eq
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	strb	w0, [x1, #0x38]
                	sxtb	x0, w0
                	cbz	w0, <addr>

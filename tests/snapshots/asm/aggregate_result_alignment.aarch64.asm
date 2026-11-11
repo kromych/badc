@@ -97,8 +97,7 @@ Disassembly of section .text:
                	ldrb	w0, [sp, #0x7f]
                	add	x0, x21, x0
                	and	x1, x20, #0xff
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	sub	x0, x0, x1
                	b	<addr>
 

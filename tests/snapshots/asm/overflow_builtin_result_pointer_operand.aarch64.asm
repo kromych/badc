@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <scaled>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	ret
 
@@ -76,8 +75,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	str	x3, [x1, #0x50]
-               	mov	x17, #0x5               // =5
-               	mul	x2, x0, x17
+               	add	x2, x0, x0, lsl #2
                	str	x2, [x3]
                	cmp	x0, #0x0
                	cset	x4, eq

@@ -92,14 +92,13 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	csel	x1, x1, x2, gt
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x3                // =3
                	cmp	w0, w1
                	b.ge	<addr>
-               	sub	x3, x29, #0xa0
-               	mul	x4, x0, x2
-               	add	x4, x4, #0x1
-               	sxtw	x4, w4
-               	str	x4, [x3, x0, lsl #3]
+               	sub	x2, x29, #0xa0
+               	add	x3, x0, x0, lsl #1
+               	add	x3, x3, #0x1
+               	sxtw	x3, w3
+               	str	x3, [x2, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>
@@ -144,11 +143,10 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1
-               	mov	x3, #0x3                // =3
-               	mul	x4, x1, x3
-               	add	x4, x4, #0x1
-               	sxtw	x4, w4
-               	madd	x2, x1, x4, x2
+               	add	x3, x1, x1, lsl #1
+               	add	x3, x3, #0x1
+               	sxtw	x3, w3
+               	madd	x2, x1, x3, x2
                	add	x1, x1, #0x1
                	cmp	w1, #0x14
                	b.lt	<addr>

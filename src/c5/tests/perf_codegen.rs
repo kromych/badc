@@ -4448,6 +4448,30 @@ long g(void) { long a[2]; a[0] = 1; a[1] = 2; return use(a); }\n";
     assert!(g.iter().filter(|&&w| store(w)).count() >= 2, "{g:08x?}");
 }
 
+/// A multiply by `2^k + 1` is one `add xd, xn, xn, lsl #k` on AArch64,
+/// with no constant to build and no `mul`.
+#[test]
+fn a64_multiply_by_power_of_two_plus_one_is_a_shifted_add() {
+    const SRC: &str = "long m3(long x) { return x * 3; }\n\
+long m9(long x) { return x * 9; }\n\
+int m33(int x) { return x * 33; }\n";
+    let mul = |w: u32| w & 0x7FE0_FC00 == 0x1B00_7C00;
+    let movz = |w: u32| w & 0x7F80_0000 == 0x5280_0000;
+    let mut m = Misses::default();
+    for (name, k) in [("m3", 1), ("m9", 3), ("m33", 5)] {
+        let ws = a64(SRC, name);
+        // `add xd, xn, xn, lsl #k`: rn == rm.
+        let shifted_add = |w: u32| {
+            w & 0xFFE0_0000 == 0x8B00_0000 && (w >> 10) & 63 == k && (w >> 5) & 31 == (w >> 16) & 31
+        };
+        m.expect(
+            ws.iter().any(|&w| shifted_add(w)) && !ws.iter().any(|&w| mul(w) || movz(w)),
+            || format!("{name}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

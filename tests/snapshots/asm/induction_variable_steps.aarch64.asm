@@ -95,23 +95,22 @@ Disassembly of section .text:
 <cross_zero>:
                	mov	x1, #-0x25              // =-37
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x5                // =5
-               	mov	x4, #0x5556             // =21846
-               	movk	x4, #0x5555, lsl #16
-               	mov	x5, #0x6667             // =26215
-               	movk	x5, #0x6666, lsl #16
+               	mov	x3, #0x5556             // =21846
+               	movk	x3, #0x5555, lsl #16
+               	mov	x4, #0x6667             // =26215
+               	movk	x4, #0x6666, lsl #16
                	mul	x2, x1, x1
-               	sub	x6, x2, x1, asr #1
-               	mul	x2, x1, x4
+               	sub	x5, x2, x1, asr #1
+               	mul	x2, x1, x3
                	asr	x2, x2, #32
                	add	x2, x2, x2, lsr #63
-               	add	x6, x6, x2
-               	mul	x2, x1, x5
+               	add	x5, x5, x2
+               	mul	x2, x1, x4
                	asr	x2, x2, #33
                	add	x2, x2, x2, lsr #63
-               	mul	x2, x2, x3
+               	add	x2, x2, x2, lsl #2
                	sub	x2, x1, x2
-               	add	x2, x6, x2
+               	add	x2, x5, x2
                	add	x0, x0, x2
                	add	x1, x1, #0x1
                	cmp	w1, #0x29
@@ -445,11 +444,10 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x1, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	mov	x2, #0x0                // =0
-               	mul	x2, x2, x3
-               	ldrsw	x4, [x20, x1, lsl #2]
-               	add	x2, x2, x4
+               	add	x2, x2, x2, lsl #1
+               	ldrsw	x3, [x20, x1, lsl #2]
+               	add	x2, x2, x3
                	add	x1, x1, #0x1
                	cmp	w1, #0x40
                	b.lt	<addr>

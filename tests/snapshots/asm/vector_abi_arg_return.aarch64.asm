@@ -480,12 +480,11 @@ Disassembly of section .text:
                	sub	x1, x29, #0xa0
                	stur	q0, [x29, #-0xa0]
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x9                // =9
-               	ldrb	w3, [x1, x0]
-               	add	x4, x0, #0x1
-               	mul	x4, x4, x2
-               	and	x4, x4, #0xff
-               	cmp	w3, w4
+               	ldrb	w2, [x1, x0]
+               	add	x3, x0, #0x1
+               	add	x3, x3, x3, lsl #3
+               	and	x3, x3, #0xff
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

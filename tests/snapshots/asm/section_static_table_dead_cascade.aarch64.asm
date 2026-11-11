@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <used_setup>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <live_setup>:

@@ -16,8 +16,7 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	ldr	x2, [x0, #0x18]
-               	mov	x17, #0x5               // =5
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #2
                	add	x0, x2, #0x1
                	add	x1, x1, x2, lsl #1
                	add	x3, x2, #0x7
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x1, x2, x17
                	add	x1, x1, #0x9
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x8, x0, x1
                	mov	x4, #0x0                // =0
                	mov	x1, #0x1                // =1
@@ -57,11 +55,9 @@ Disassembly of section .text:
                	csel	x1, x7, x4, lo
                	csel	x0, x6, x0, lo
                	cbnz	w1, <addr>
-               	mov	x17, #0x5               // =5
-               	mul	x0, x3, x17
+               	add	x0, x3, x3, lsl #2
                	add	x8, x8, x0
-               	mov	x17, #0x5               // =5
-               	mul	x1, x2, x17
+               	add	x1, x2, x2, lsl #2
                	add	x0, x2, #0x1
                	add	x1, x1, x2, lsl #1
                	add	x3, x2, #0x7

@@ -75,23 +75,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x5, #0x3                // =3
-               	mov	x6, #0x18               // =24
+               	mov	x5, #0x18               // =24
                	mov	x2, #0x0                // =0
                	mov	x0, x2
                	sub	x4, x29, #0x90
-               	mul	x3, x1, x6
-               	add	x7, x4, x3
+               	mul	x3, x1, x5
+               	add	x6, x4, x3
                	lsl	x4, x0, #3
-               	add	x7, x7, x4
-               	mul	x8, x1, x5
-               	add	x8, x8, x0
-               	add	x8, x8, #0x1
-               	sxtw	x8, w8
-               	scvtf	d1, x8
-               	str	d1, [x7]
-               	sub	x7, x29, #0x48
-               	add	x3, x7, x3
+               	add	x6, x6, x4
+               	add	x7, x1, x1, lsl #1
+               	add	x7, x7, x0
+               	add	x7, x7, #0x1
+               	sxtw	x7, w7
+               	scvtf	d1, x7
+               	str	d1, [x6]
+               	sub	x6, x29, #0x48
+               	add	x3, x6, x3
                	add	x3, x3, x4
                	cmp	w1, w0
                	fmov	d17, x2

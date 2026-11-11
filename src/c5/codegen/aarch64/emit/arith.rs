@@ -874,7 +874,14 @@ pub(super) fn binop_imm_peephole(
         BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
         BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
-        BinOp::Mul => pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        // `x * (2^k + 1)` is `x + (x << k)`.
+        BinOp::Mul => pow2_shift
+            .map(|s| super::encode::enc_lsl_imm(rd, rn, s))
+            .or_else(|| {
+                let k = (imm > 2 && (imm_u64 - 1).is_power_of_two())
+                    .then(|| (imm_u64 - 1).trailing_zeros())?;
+                Some(super::encode::enc_add_reg_lsl(rd, rn, rn, k))
+            }),
         BinOp::Add => imm12
             .map(|v| enc_add_imm(rd, rn, v))
             .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v)))

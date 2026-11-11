@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <ext>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	ret
 
@@ -180,8 +179,7 @@ Disassembly of section .text:
                	add	x0, x0, x24
                	add	x0, x0, x25
                	add	x0, x0, x23
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x26, x0, #0x1
                	mov	x0, x20
                	mov	x5, x23
@@ -192,8 +190,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x17, #0x64              // =100
                	mul	x1, x26, x17
-               	mov	x17, #0x3               // =3
-               	mul	x2, x26, x17
+               	add	x2, x26, x26, lsl #1
                	add	x2, x2, #0x1
                	add	x1, x1, x2
                	add	x1, x1, x20

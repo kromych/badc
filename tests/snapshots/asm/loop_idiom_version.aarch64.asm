@@ -29,8 +29,7 @@ Disassembly of section .text:
                	movk	x17, #0xaaaa, lsl #16
                	mul	x1, x1, x17
                	lsr	x1, x1, #33
-               	mov	x17, #0x3               // =3
-               	mul	x2, x1, x17
+               	add	x2, x1, x1, lsl #1
                	cmp	x0, x2
                	b.lo	<addr>
                	mov	x0, x20
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	movk	x17, #0xaaaa, lsl #16
                	mul	x0, x1, x17
                	lsr	x0, x0, #33
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x20, x20, x0
                	add	x21, x21, x0
                	sub	x22, x1, x0

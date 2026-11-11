@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <make_pair>:
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
+               	add	x1, x0, x0, lsl #1
                	add	x1, x1, #0x1
                	adrp	x2, <page>
                	ldrsw	x3, [x2, #0x30]

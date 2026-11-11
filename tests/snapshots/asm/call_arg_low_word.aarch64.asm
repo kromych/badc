@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <scale>:
                	mov	w0, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <widen>:

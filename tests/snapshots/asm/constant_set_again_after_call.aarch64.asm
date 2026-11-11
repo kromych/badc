@@ -164,8 +164,7 @@ Disassembly of section .text:
                	mov	x21, x20
                	mov	x0, x20
                	bl	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x3
                	add	x21, x21, x0
                	add	x20, x20, #0x1

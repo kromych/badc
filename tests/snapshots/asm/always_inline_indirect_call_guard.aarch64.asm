@@ -33,8 +33,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	mov	w0, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	str	x0, [x2]
                	mov	x0, #0x0                // =0
                	ret
@@ -49,8 +48,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	w0, w1
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	str	x0, [x2]
                	mov	x0, #0x0                // =0
                	ret
@@ -63,14 +61,12 @@ Disassembly of section .text:
                	movk	x17, #0x5555, lsl #16
                	mul	x4, x0, x17
                	lsr	x4, x4, #32
-               	mov	x17, #0x3               // =3
-               	mul	x4, x4, x17
+               	add	x4, x4, x4, lsl #1
                	sub	x0, x0, x4
                	ldr	x0, [x3, x0, lsl #3]
                	br	x0
                	mov	w0, w1
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	str	x0, [x2]
                	mov	x0, #0x0                // =0
                	ret
@@ -82,8 +78,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x0, x1, #0x1
                	mov	w0, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	str	x0, [x2]
                	mov	x0, #0x0                // =0
                	b	<addr>

@@ -67,8 +67,7 @@ Disassembly of section .text:
                	ret
 
 <pair>:
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
+               	add	x1, x0, x0, lsl #1
                	ret
 
 <fixed>:
@@ -90,8 +89,7 @@ Disassembly of section .text:
                	movk	x17, #0x1, lsl #16
                	mul	x0, x20, x17
                	stur	w0, [x29, #-0x20]
-               	mov	x17, #0x100000001       // =4294967297
-               	mul	x0, x20, x17
+               	add	x0, x20, x20, lsl #32
                	stur	x0, [x29, #-0x18]
                	scvtf	s0, x20
                	fmov	s1, #0.50000000
@@ -376,8 +374,7 @@ Disassembly of section .text:
                	cmp	w3, #0x8
                	b.lt	<addr>
                	ldur	x0, [x29, #-0x18]
-               	mov	x17, #0x100000001       // =4294967297
-               	mul	x1, x20, x17
+               	add	x1, x20, x20, lsl #32
                	add	x1, x1, x4
                	cmp	x0, x1
                	b.eq	<addr>
@@ -526,8 +523,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x19, sp
                	sxtw	x20, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x20, x17
+               	add	x0, x20, x20, lsl #1
                	stur	w0, [x29, #-0x20]
                	lsl	x0, x20, #40
                	stur	x0, [x29, #-0x18]
@@ -573,8 +569,7 @@ Disassembly of section .text:
                	fadd	d1, d1, d0
                	stur	d1, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x20]
-               	mov	x17, #0x3               // =3
-               	mul	x1, x20, x17
+               	add	x1, x20, x20, lsl #1
                	add	x2, x20, #0x3
                	and	x2, x2, #0xff
                	add	x1, x1, x2
@@ -1058,8 +1053,7 @@ Disassembly of section .text:
                	cmp	x0, x3
                	b.ne	<addr>
                	add	x0, x20, x2
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x20               // =32

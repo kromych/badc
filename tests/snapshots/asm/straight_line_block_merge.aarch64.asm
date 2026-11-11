@@ -68,8 +68,7 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x17, #0x3               // =3
-               	mul	x2, x0, x17
+               	add	x2, x0, x0, lsl #1
                	add	x20, x2, #0x1
                	cmp	w0, #0x3
                	b.ge	<addr>
@@ -294,8 +293,7 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.eq	<addr>
                	mov	x20, #0x2               // =2
-               	mov	x17, #0x3               // =3
-               	mul	x0, x22, x17
+               	add	x0, x22, x22, lsl #1
                	add	x0, x0, #0x1
                	cmp	w22, #0x3
                	cset	x1, lt

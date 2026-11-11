@@ -15,13 +15,12 @@ Disassembly of section .text:
 
 <fill>:
                	mov	x3, #0x0                // =0
-               	mov	x4, #0x3                // =3
                	cmp	w3, w1
                	b.ge	<addr>
-               	mul	x5, x3, x4
-               	add	x5, x2, x5
-               	and	x5, x5, #0xff
-               	strb	w5, [x0, x3]
+               	add	x4, x3, x3, lsl #1
+               	add	x4, x2, x4
+               	and	x4, x4, #0xff
+               	strb	w4, [x0, x3]
                	add	x3, x3, #0x1
                	cmp	w3, w1
                	b.lt	<addr>
@@ -34,14 +33,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
                	mov	x3, #0x0                // =0
-               	mov	x4, #0x3                // =3
                	cmp	w3, w1
                	b.ge	<addr>
-               	ldrb	w5, [x0, x3]
-               	mul	x6, x3, x4
-               	add	x6, x2, x6
-               	and	x6, x6, #0xff
-               	cmp	w5, w6
+               	ldrb	w4, [x0, x3]
+               	add	x5, x3, x3, lsl #1
+               	add	x5, x2, x5
+               	and	x5, x5, #0xff
+               	cmp	w4, w5
                	b.ne	<addr>
                	add	x3, x3, #0x1
                	cmp	w3, w1

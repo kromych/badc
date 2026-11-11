@@ -59,8 +59,7 @@ Disassembly of section .text:
                	cmp	w1, w21
                	b.lt	<addr>
                	lsl	x20, x12, #2
-               	mov	x17, #0x3               // =3
-               	mul	x24, x20, x17
+               	add	x24, x20, x20, lsl #1
                	add	x17, x24, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x15, sp
@@ -157,8 +156,7 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x27
-               	mov	x17, #0x3               // =3
-               	mul	x0, x2, x17
+               	add	x0, x2, x2, lsl #1
                	udiv	x0, x0, x2
                	mul	x26, x0, x2
                	add	x17, x26, #0xf
@@ -230,8 +228,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x17, #0x3               // =3
-               	mul	x7, x12, x17
+               	add	x7, x12, x12, lsl #1
                	sxtw	x11, w7
                	lsl	x11, x11, #2
                	cmp	x24, x11
@@ -277,8 +274,7 @@ Disassembly of section .text:
                	cmp	w1, #0x2a
                	b.ne	<addr>
                	add	x1, x6, x5, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x4, x4, x17
+               	add	x4, x4, x4, lsl #1
                	add	x1, x1, x4
                	ldr	x1, [x1, #0x8]
                	cmp	x1, #0xe7

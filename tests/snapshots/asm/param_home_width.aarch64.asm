@@ -15,11 +15,10 @@ Disassembly of section .text:
 
 <step_u8>:
                	mov	x2, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	cmp	w2, w1
                	b.ge	<addr>
                	and	x0, x0, #0xff
-               	mul	x0, x0, x3
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	add	x2, x2, #0x1
                	cmp	w2, w1
@@ -29,11 +28,10 @@ Disassembly of section .text:
 
 <step_u16>:
                	mov	x2, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	cmp	w2, w1
                	b.ge	<addr>
                	and	x0, x0, #0xffff
-               	mul	x0, x0, x3
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	add	x2, x2, #0x1
                	cmp	w2, w1
@@ -43,10 +41,9 @@ Disassembly of section .text:
 
 <step_u32>:
                	mov	x2, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	cmp	w2, w1
                	b.ge	<addr>
-               	mul	x0, x0, x3
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, #0x1
                	add	x2, x2, #0x1
                	cmp	w2, w1

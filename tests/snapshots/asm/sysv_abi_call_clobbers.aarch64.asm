@@ -271,12 +271,10 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	csel	x0, x1, x0, ne
                	add	x1, x21, x22, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x2, x23, x17
+               	add	x2, x23, x23, lsl #1
                	add	x1, x1, x2
                	add	x1, x1, x24, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x2, x25, x17
+               	add	x2, x25, x25, lsl #2
                	add	x1, x1, x2
                	mov	x17, #0x6               // =6
                	mul	x2, x26, x17

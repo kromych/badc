@@ -25,8 +25,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x20]
                	mov	x17, #0xc               // =12
                	mul	x2, x1, x17
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	sxtw	x1, w1
                	lsl	x1, x1, #2
                	cmp	x2, x1

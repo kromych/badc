@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <rsub>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x1, x0
                	ret
 

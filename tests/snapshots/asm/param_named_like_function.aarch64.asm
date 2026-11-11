@@ -20,8 +20,7 @@ Disassembly of section .text:
                	ret
 
 <tfi>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <main>:

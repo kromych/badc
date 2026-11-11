@@ -47,8 +47,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sxth	x0, w0
                	mov	x17, #-0x7e             // =-126
                	cmp	w0, w17

@@ -266,8 +266,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
                	stur	x1, [x29, #-0x8]
-               	mov	x17, #0x3               // =3
-               	mul	x20, x2, x17
+               	add	x20, x2, x2, lsl #1
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

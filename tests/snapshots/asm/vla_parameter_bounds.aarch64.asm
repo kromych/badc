@@ -75,10 +75,8 @@ Disassembly of section .text:
 <mixed>:
                	sxtw	x0, w0
                	lsl	x2, x0, #2
-               	mov	x17, #0x3               // =3
-               	mul	x3, x2, x17
-               	mov	x17, #0x3               // =3
-               	mul	x4, x0, x17
+               	add	x3, x2, x2, lsl #1
+               	add	x4, x0, x0, lsl #1
                	sxtw	x4, w4
                	lsl	x4, x4, #2
                	cmp	x3, x4

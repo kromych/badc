@@ -45,8 +45,7 @@ Disassembly of section .text:
                	mov	x0, #-0x1               // =-1
                	ret
                	add	x0, x3, x6, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
+               	add	x1, x1, x1, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x13, lsl #2
                	ret

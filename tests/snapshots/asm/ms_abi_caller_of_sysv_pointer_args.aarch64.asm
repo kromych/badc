@@ -18,19 +18,16 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x8, <page>
                	add	x8, x8, <lo12>
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	add	x0, x0, x1
                	str	x0, [x8]
                	adrp	x0, <page>
                	str	x2, [x0, #0xb0]
                	str	x3, [x8, #0x10]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x4, x17
+               	add	x0, x4, x4, lsl #1
                	add	x0, x0, x5
                	str	x0, [x8, #0x18]
-               	mov	x17, #0x3               // =3
-               	mul	x0, x6, x17
+               	add	x0, x6, x6, lsl #1
                	add	x0, x0, x7
                	str	x0, [x8, #0x20]
                	ldr	w0, [x29, #0x10]
@@ -53,8 +50,7 @@ Disassembly of section .text:
                	stur	x3, [x29, #-0x30]
                	mov	x3, #0x2                // =2
                	stur	x3, [x29, #-0x28]
-               	mov	x17, #0x9               // =9
-               	mul	x3, x4, x17
+               	add	x3, x4, x4, lsl #3
                	add	x3, x3, #0x2
                	sub	x4, x29, #0x20
                	stp	xzr, xzr, [x4]
@@ -125,8 +121,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x2, [x0]
                	add	x3, x21, #0x1
-               	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #1
                	add	x3, x3, #0x2
                	cmp	x2, x3
                	b.ne	<addr>
@@ -137,15 +132,13 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.ne	<addr>
                	ldr	x2, [x0, #0x10]
-               	mov	x17, #0x9               // =9
-               	mul	x3, x22, x17
+               	add	x3, x22, x22, lsl #3
                	add	x3, x3, #0x2
                	cmp	x2, x3
                	b.eq	<addr>
                	orr	x1, x1, #0x2
                	add	x2, x20, #0x1
-               	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
+               	add	x2, x2, x2, lsl #1
                	add	x2, x2, #0x5
                	orr	x3, x1, #0x4
                	ldr	x4, [x0, #0x18]
@@ -153,8 +146,7 @@ Disassembly of section .text:
                	csel	x1, x3, x1, ne
                	ldr	x2, [x0, #0x20]
                	add	x3, x23, #0x1
-               	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
+               	add	x3, x3, x3, lsl #1
                	add	x3, x3, #0x6
                	cmp	x2, x3
                	b.ne	<addr>

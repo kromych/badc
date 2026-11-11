@@ -92,10 +92,9 @@ Disassembly of section .text:
 
 <self_loop>:
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x3                // =3
                	mov	x1, x0
-               	mul	x3, x0, x2
-               	add	x1, x1, x3
+               	add	x2, x0, x0, lsl #1
+               	add	x1, x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lo	<addr>

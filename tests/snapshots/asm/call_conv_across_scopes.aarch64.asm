@@ -76,12 +76,10 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	add	x0, x0, x20
                	add	x0, x0, x21, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x22, x17
+               	add	x1, x22, x22, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x23, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x24, x17
+               	add	x1, x24, x24, lsl #2
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x25, x17
@@ -106,8 +104,7 @@ Disassembly of section .text:
                	ret
 
 <times3>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	ret
 
 <fcl>:

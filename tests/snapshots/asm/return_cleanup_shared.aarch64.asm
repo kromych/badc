@@ -184,8 +184,7 @@ Disassembly of section .text:
                	mov	x1, #0x4                // =4
                	cmp	w0, #0x4
                	b.ne	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x0, x1, x17
+               	add	x0, x1, x1, lsl #1
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x1, <page>

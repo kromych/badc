@@ -533,12 +533,10 @@ Disassembly of section .text:
                	add	x0, x16, x0
                	add	x0, x0, x20
                	add	x0, x0, x21, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x1, x22, x17
+               	add	x1, x22, x22, lsl #1
                	add	x0, x0, x1
                	add	x0, x0, x23, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x1, x24, x17
+               	add	x1, x24, x24, lsl #2
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x25, x17
@@ -547,8 +545,7 @@ Disassembly of section .text:
                	mul	x1, x26, x17
                	add	x0, x0, x1
                	add	x0, x0, x27, lsl #3
-               	mov	x17, #0x9               // =9
-               	mul	x1, x28, x17
+               	add	x1, x28, x28, lsl #3
                	add	x0, x0, x1
                	ldr	x16, [sp, #0x78]
                	mov	x17, #0xa               // =10

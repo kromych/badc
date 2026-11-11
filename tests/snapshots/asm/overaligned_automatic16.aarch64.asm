@@ -136,8 +136,7 @@ Disassembly of section .text:
                	mul	x0, x20, x17
                	asr	x0, x0, #32
                	add	x0, x0, x0, lsr #63
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x20, x0
                	add	x0, x1, x0, lsl #3
                	str	x20, [x0]
@@ -155,8 +154,7 @@ Disassembly of section .text:
                	mul	x0, x20, x17
                	asr	x0, x0, #32
                	add	x0, x0, x0, lsr #63
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	add	x0, x0, x0, lsl #1
                	sub	x0, x20, x0
                	add	x0, x1, x0, lsl #3
                	ldr	x0, [x0]

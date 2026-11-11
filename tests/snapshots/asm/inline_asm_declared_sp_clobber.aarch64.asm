@@ -27,8 +27,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x90]
                	add	x29, sp, #0x90
                	add	x21, x0, #0x1
-               	mov	x17, #0x3               // =3
-               	mul	x22, x0, x17
+               	add	x22, x0, x0, lsl #1
                	mov	x17, #0x55              // =85
                	eor	x23, x0, x17
                	mul	x24, x0, x0
@@ -53,8 +52,7 @@ Disassembly of section .text:
                	mov	x17, #0x7777            // =30583
                	eor	x16, x0, x17
                	stur	x16, [x29, #-0x28]
-               	mov	x17, #0x11              // =17
-               	mul	x16, x0, x17
+               	add	x16, x0, x0, lsl #4
                	stur	x16, [x29, #-0x30]
                	mov	x17, #0x3039            // =12345
                	add	x16, x0, x17
@@ -70,12 +68,10 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x0, x20, x0
                	add	x1, x21, x22, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x2, x23, x17
+               	add	x2, x23, x23, lsl #1
                	add	x1, x1, x2
                	add	x1, x1, x24, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x2, x25, x17
+               	add	x2, x25, x25, lsl #2
                	add	x1, x1, x2
                	mov	x17, #0x6               // =6
                	mul	x2, x26, x17
@@ -85,8 +81,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	add	x1, x1, x28, lsl #3
                	ldur	x16, [x29, #-0x8]
-               	mov	x17, #0x9               // =9
-               	mul	x2, x16, x17
+               	add	x2, x16, x16, lsl #3
                	add	x1, x1, x2
                	ldur	x16, [x29, #-0x10]
                	mov	x17, #0xa               // =10
@@ -133,8 +128,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x90]
                	add	x29, sp, #0x90
                	add	x21, x0, #0x1
-               	mov	x17, #0x3               // =3
-               	mul	x22, x0, x17
+               	add	x22, x0, x0, lsl #1
                	mov	x17, #0x55              // =85
                	eor	x23, x0, x17
                	mul	x24, x0, x0
@@ -159,8 +153,7 @@ Disassembly of section .text:
                	mov	x17, #0x7777            // =30583
                	eor	x16, x0, x17
                	str	x16, [sp, #0x68]
-               	mov	x17, #0x11              // =17
-               	mul	x16, x0, x17
+               	add	x16, x0, x0, lsl #4
                	str	x16, [sp, #0x60]
                	mov	x17, #0x3039            // =12345
                	add	x16, x0, x17
@@ -175,12 +168,10 @@ Disassembly of section .text:
                	bl	<addr>
                	add	x0, x20, x0
                	add	x1, x21, x22, lsl #1
-               	mov	x17, #0x3               // =3
-               	mul	x2, x23, x17
+               	add	x2, x23, x23, lsl #1
                	add	x1, x1, x2
                	add	x1, x1, x24, lsl #2
-               	mov	x17, #0x5               // =5
-               	mul	x2, x25, x17
+               	add	x2, x25, x25, lsl #2
                	add	x1, x1, x2
                	mov	x17, #0x6               // =6
                	mul	x2, x26, x17
@@ -190,8 +181,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	add	x1, x1, x28, lsl #3
                	ldr	x16, [sp, #0x88]
-               	mov	x17, #0x9               // =9
-               	mul	x2, x16, x17
+               	add	x2, x16, x16, lsl #3
                	add	x1, x1, x2
                	ldr	x16, [sp, #0x80]
                	mov	x17, #0xa               // =10
@@ -236,16 +226,14 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x18]
-               	mov	x17, #0x5               // =5
-               	mul	x21, x1, x17
+               	add	x21, x1, x1, lsl #2
                	ldr	x1, [x0, #0x18]
                	mov	x17, #0x99              // =153
                	eor	x22, x1, x17
                	ldr	x1, [x0, #0x18]
                	add	x23, x1, #0x4d
                	ldr	x1, [x0, #0x18]
-               	mov	x17, #0x3               // =3
-               	mul	x24, x1, x17
+               	add	x24, x1, x1, lsl #1
                	ldr	x20, [x0, #0x18]
                	mov	x0, x20
                	bl	<addr>

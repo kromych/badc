@@ -65,43 +65,37 @@ Disassembly of section .text:
                	mov	x0, x1
                	add	x8, x2, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x2, x17
+               	add	x8, x2, x2, lsl #1
                	add	x0, x0, x8
                	eor	x8, x2, x0, lsr #3
                	sub	x0, x0, x8
                	add	x8, x3, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x3, x17
+               	add	x8, x3, x3, lsl #1
                	add	x0, x0, x8
                	eor	x8, x3, x0, lsr #3
                	sub	x0, x0, x8
                	add	x8, x4, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x4, x17
+               	add	x8, x4, x4, lsl #1
                	add	x0, x0, x8
                	eor	x8, x4, x0, lsr #3
                	sub	x0, x0, x8
                	add	x8, x5, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x5, x17
+               	add	x8, x5, x5, lsl #1
                	add	x0, x0, x8
                	eor	x8, x5, x0, lsr #3
                	sub	x0, x0, x8
                	add	x8, x6, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x6, x17
+               	add	x8, x6, x6, lsl #1
                	add	x0, x0, x8
                	eor	x8, x6, x0, lsr #3
                	sub	x0, x0, x8
                	add	x8, x7, x1
                	eor	x0, x0, x8
-               	mov	x17, #0x3               // =3
-               	mul	x8, x7, x17
+               	add	x8, x7, x7, lsl #1
                	add	x0, x0, x8
                	eor	x8, x7, x0, lsr #3
                	sub	x0, x0, x8
@@ -198,29 +192,25 @@ Disassembly of section .text:
                	mov	w0, w0
                	add	x2, x25, x0
                	eor	x1, x1, x2
-               	mov	x17, #0x3               // =3
-               	mul	x2, x25, x17
+               	add	x2, x25, x25, lsl #1
                	add	x1, x1, x2
                	eor	x2, x25, x1, lsr #3
                	sub	x1, x1, x2
                	add	x2, x26, x0
                	eor	x1, x1, x2
-               	mov	x17, #0x3               // =3
-               	mul	x2, x26, x17
+               	add	x2, x26, x26, lsl #1
                	add	x1, x1, x2
                	eor	x2, x26, x1, lsr #3
                	sub	x1, x1, x2
                	add	x2, x27, x0
                	eor	x1, x1, x2
-               	mov	x17, #0x3               // =3
-               	mul	x2, x27, x17
+               	add	x2, x27, x27, lsl #1
                	add	x1, x1, x2
                	eor	x2, x27, x1, lsr #3
                	sub	x1, x1, x2
                	add	x2, x28, x0
                	eor	x1, x1, x2
-               	mov	x17, #0x3               // =3
-               	mul	x2, x28, x17
+               	add	x2, x28, x28, lsl #1
                	add	x1, x1, x2
                	eor	x2, x28, x1, lsr #3
                	sub	x2, x1, x2
@@ -230,29 +220,25 @@ Disassembly of section .text:
                	mov	w1, w0
                	add	x3, x21, x1
                	eor	x2, x2, x3
-               	mov	x17, #0x3               // =3
-               	mul	x3, x21, x17
+               	add	x3, x21, x21, lsl #1
                	add	x2, x2, x3
                	eor	x3, x21, x2, lsr #3
                	sub	x2, x2, x3
                	add	x3, x22, x1
                	eor	x2, x2, x3
-               	mov	x17, #0x3               // =3
-               	mul	x3, x22, x17
+               	add	x3, x22, x22, lsl #1
                	add	x2, x2, x3
                	eor	x3, x22, x2, lsr #3
                	sub	x2, x2, x3
                	add	x3, x23, x1
                	eor	x2, x2, x3
-               	mov	x17, #0x3               // =3
-               	mul	x3, x23, x17
+               	add	x3, x23, x23, lsl #1
                	add	x2, x2, x3
                	eor	x3, x23, x2, lsr #3
                	sub	x2, x2, x3
                	add	x1, x24, x1
                	eor	x1, x2, x1
-               	mov	x17, #0x3               // =3
-               	mul	x2, x24, x17
+               	add	x2, x24, x24, lsl #1
                	add	x1, x1, x2
                	eor	x2, x24, x1, lsr #3
                	sub	x1, x1, x2

@@ -3105,6 +3105,19 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
             super::super::passes::store_forward::run(funcs);
         });
+        // The stores the forwarding left to slots nothing reads go; the
+        // slots lose their frame location.
+        pipeline.run("passes::dead_slot_stores::run", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
+                let freed = super::super::passes::dead_slot_stores::run(f);
+                if !freed.is_empty() {
+                    promoted_local_slots
+                        .entry(f.ent_pc)
+                        .or_default()
+                        .extend(freed);
+                }
+            }
+        });
         // The merges above can leave an operation reading one value twice,
         // or a constant, and a branch it decides.
         pipeline.run(

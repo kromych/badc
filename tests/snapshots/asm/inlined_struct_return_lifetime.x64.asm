@@ -26,42 +26,34 @@ Disassembly of section .text:
                	int3
 
 <returned_twice>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorl	%eax, %eax
                	movw	$0xa, <rip> # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, -0x8(%rbp)
-               	leave
                	retq
 
 <one_of_two>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
+               	subq	$0x20, %rsp
+               	movq	%rdi, -0x20(%rbp)
                	movw	$0xa, <rip> # <addr>
                	movswq	<rip>, %rax # <addr>
                	testl	%eax, %eax
                	jg	<addr>
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
                	testl	%esi, %esi
                	je	<addr>
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	movq	$0x4, (%rax)
                	movq	$0x5, 0x8(%rax)
                	movq	$0x6, 0x10(%rax)
                	leave
                	retq
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)

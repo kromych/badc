@@ -10,6 +10,7 @@ pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
 pub(crate) mod copy_elide;
 pub(crate) mod cse;
+pub(crate) mod dead_slot_stores;
 pub(crate) mod divmod_const;
 pub(crate) mod divmod_pair;
 pub(crate) mod drop_redundant_extend;

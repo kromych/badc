@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     terminator Jmp(b1)   (exit_acc=v11)
   block 1  start_pc=0
     v17  ImmData(24)                                      -> x1
-    v18  StoreLocal { off=-1, value=v17, kind=I64 }       -> -
+    v18  Imm(0)                                           -> x1
     v19  LocalAddr(-1)                                    -> x1
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1
@@ -82,7 +82,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     terminator Return(v25)   (exit_acc=v25)
   block 2  start_pc=0
     v36  ImmData(24)                                      -> x0
-    v37  StoreLocal { off=-1, value=v36, kind=I64 }       -> -
+    v37  Imm(0)                                           -> x0
     v38  LocalAddr(-1)                                    -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0

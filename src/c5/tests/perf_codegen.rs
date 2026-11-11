@@ -4432,6 +4432,22 @@ void g(double a, double b) { if (!__builtin_islessgreater(a, b)) hit(); }\n";
     m.finish();
 }
 
+/// A store to a local nothing reads once the forwarding replaced its load
+/// goes, and the frame with it; a local whose address a call receives
+/// keeps its stores.
+#[test]
+fn a64_store_to_a_local_nothing_reads_goes() {
+    const SRC: &str = "int f(void) { int a; int *p; a = 100; p = &a; *p = 200; return a; }\n\
+long use(long *);\n\
+long g(void) { long a[2]; a[0] = 1; a[1] = 2; return use(a); }\n";
+    // The A64 stores: the loads-and-stores group with the load bit clear.
+    let store = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && w & 0x0040_0000 == 0;
+    let f = a64(SRC, "f");
+    assert!(!f.iter().any(|&w| store(w)), "{f:08x?}");
+    let g = a64(SRC, "g");
+    assert!(g.iter().filter(|&&w| store(w)).count() >= 2, "{g:08x?}");
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

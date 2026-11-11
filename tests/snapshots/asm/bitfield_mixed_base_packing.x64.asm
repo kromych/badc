@@ -45,8 +45,6 @@ Disassembly of section .text:
                	andq	$-0xc1, %rcx
                	orq	$0xc0, %rcx
                	movb	%cl, -0x9(%rbp)
-               	movl	$0xdeadbeef, -0x8(%rbp) # imm = 0xDEADBEEF
-               	movb	$-0x55, -0x4(%rbp)
                	movl	-0x10(%rbp), %edx
                	andq	$0x7fffffff, %rdx       # imm = 0x7FFFFFFF
                	cmpl	$0x7fffffff, %edx       # imm = 0x7FFFFFFF

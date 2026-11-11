@@ -14,10 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <many>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	wzr, [x29, #-0x8]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x2, <page>
@@ -37,8 +33,6 @@ Disassembly of section .text:
                	strb	w5, [x2, x4]
                	ldrsw	x1, [x1, #0x50]
                	strb	wzr, [x2, x1]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	w0, #0x2
                	b.eq	<addr>
@@ -77,17 +71,11 @@ Disassembly of section .text:
                	strb	w4, [x2, x3]
                	ldrsw	x1, [x1, #0x50]
                	strb	w0, [x2, x1]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <nested>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
                	cmp	w1, #0x1
                	b.ne	<addr>
                	mov	x2, x0
@@ -112,8 +100,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x1, #0x50]
                	strb	w0, [x3, x1]
                	add	x0, x2, #0xa
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x2, x1, #0x1
                	cmp	w1, #0x2
@@ -151,15 +137,9 @@ Disassembly of section .text:
                	ldrsw	x1, [x1, #0x50]
                	strb	w0, [x3, x1]
                	mov	x0, x2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <lists>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	wzr, [x29, #-0x8]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x2, <page>
@@ -182,10 +162,7 @@ Disassembly of section .text:
                	strb	w4, [x2, x3]
                	ldrsw	x0, [x0, #0x50]
                	strb	wzr, [x2, x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	wzr, [x29, #-0x8]
                	cmp	w0, #0x2
                	b.ne	<addr>
                	adrp	x2, <page>

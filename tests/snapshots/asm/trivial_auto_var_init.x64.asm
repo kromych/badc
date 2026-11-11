@@ -86,24 +86,11 @@ Disassembly of section .text:
                	retq
 
 <scalar_double>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorl	%eax, %eax
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp)
-               	leave
                	retq
 
 <scalar_float>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	$0x0, -0x8(%rbp)
-               	leave
                	retq
 
 <scalar_long_double>:
@@ -276,12 +263,7 @@ Disassembly of section .text:
                	retq
 
 <addressed_int>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	leave
                	retq
 
 <opted_out>:

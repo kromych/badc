@@ -555,7 +555,7 @@ fn covers(spans: &[(i64, i64)], size: i64) -> bool {
     at >= size
 }
 
-fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
+pub(super) fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
     use crate::c5::ir::StoreKind::*;
     match kind {
         I8 => 1,

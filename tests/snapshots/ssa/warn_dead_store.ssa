@@ -50,7 +50,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
-    v2   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
+    v2   Imm(0)                                           -> x0
     v3   LocalAddr(-1)                                    -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
@@ -114,7 +114,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v15  Imm(9)                                           -> x0
     v16  Imm(9)                                           -> x0
     v17  Imm(1)                                           -> x0
-    v18  StoreLocal { off=-1, value=v17, kind=I32 }       -> -
+    v18  Imm(0)                                           -> x0
     v19  LocalAddr(-1)                                    -> x0
     v20  Imm(1)                                           -> x0
     v21  Imm(1)                                           -> x0

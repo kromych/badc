@@ -20,7 +20,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v3   Imm(0)                                           -> x0
     v4   Imm(8)                                           -> x0
     v5   Imm(8)                                           -> x0
-    v6   StoreLocal { off=-1, value=v5, kind=I32 }        -> -
+    v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(100)                                         -> x0

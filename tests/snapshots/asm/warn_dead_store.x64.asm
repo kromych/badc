@@ -41,12 +41,7 @@ Disassembly of section .text:
                	retq
 
 <address_escapes_silences>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1, -0x8(%rbp)
                	movl	$0x1, %eax
-               	leave
                	retq
 
 <block_local_dies>:
@@ -59,10 +54,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x1, -0x8(%rbp)
                	movl	$0xe, %eax
-               	leave
                	retq

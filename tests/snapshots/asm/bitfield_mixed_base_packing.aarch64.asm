@@ -33,11 +33,6 @@ Disassembly of section .text:
                	and	x1, x1, #0xffffffffffffff3f
                	orr	x1, x1, #0xc0
                	sturb	w1, [x29, #-0x9]
-               	mov	x2, #0xbeef             // =48879
-               	movk	x2, #0xdead, lsl #16
-               	stur	w2, [x29, #-0x8]
-               	mov	x2, #0xab               // =171
-               	sturb	w2, [x29, #-0x4]
                	ldur	w2, [x29, #-0x10]
                	and	x2, x2, #0x7fffffff
                	mov	x17, #0x7fffffff        // =2147483647

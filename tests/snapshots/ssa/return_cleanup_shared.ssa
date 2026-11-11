@@ -9,7 +9,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   Imm(7)                                           -> x0
-    v6   StoreLocal { off=-1, value=v5, kind=I32 }        -> -
+    v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     terminator Bz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v1)
   block 1  start_pc=0
@@ -31,7 +31,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v22  Binop { op=add, lhs=v17, rhs=v19 }               -> x7
     v23  StoreIndexed { base=v17, index=v19, scale=1, value=v16, kind=I8 } -> -
     v24  Imm(-1)                                          -> x1
-    v25  StoreLocal { off=-1, value=v24, kind=I32 }       -> -
+    v25  Imm(0)                                           -> x1
     v26  Extend { value=v13, kind=I32 }                   -> x1
     v27  Extend { value=v13, kind=I32 }                   -> x1
     terminator Return(v13)   (exit_acc=v13)
@@ -62,7 +62,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(1)                                           -> x0
-    v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
+    v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x0
     terminator Bnz { cond=v1, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
@@ -80,13 +80,13 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v17  Binop { op=add, lhs=v12, rhs=v14 }               -> x6
     v18  StoreIndexed { base=v12, index=v14, scale=1, value=v11, kind=I8 } -> -
     v19  Imm(-1)                                          -> x0
-    v20  StoreLocal { off=-1, value=v19, kind=I32 }       -> -
+    v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(10)                                          -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 2  start_pc=0
     v23  Imm(2)                                           -> x0
-    v24  StoreLocal { off=-1, value=v23, kind=I32 }       -> -
+    v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
     v26  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0
     v27  Imm(3)                                           -> x0
@@ -107,7 +107,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v49  Binop { op=add, lhs=v44, rhs=v46 }               -> x7
     v50  StoreIndexed { base=v44, index=v46, scale=1, value=v43, kind=I8 } -> -
     v51  Imm(-2)                                          -> x1
-    v52  StoreLocal { off=-1, value=v51, kind=I32 }       -> -
+    v52  Imm(0)                                           -> x1
     v53  LocalAddr(-1)                                    -> x1
     v54  Imm(97)                                          -> x1
     v55  Imm(97)                                          -> x2
@@ -119,7 +119,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v61  Binop { op=add, lhs=v56, rhs=v58 }               -> x7
     v62  StoreIndexed { base=v56, index=v58, scale=1, value=v55, kind=I8 } -> -
     v63  Imm(-1)                                          -> x1
-    v64  StoreLocal { off=-1, value=v63, kind=I32 }       -> -
+    v64  Imm(0)                                           -> x1
     v65  Extend { value=v30, kind=I32 }                   -> x1
     v66  Extend { value=v30, kind=I32 }                   -> x1
     terminator Return(v30)   (exit_acc=v30)
@@ -132,9 +132,9 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(1)                                           -> x0
-    v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
+    v4   Imm(0)                                           -> x0
     v5   Imm(5)                                           -> x0
-    v6   StoreLocal { off=-1, value=v5, kind=I32 }        -> -
+    v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x1
     terminator Bnz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v8)
@@ -165,7 +165,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v32  Binop { op=add, lhs=v17, rhs=v29 }               -> x7
     v33  StoreIndexed { base=v17, index=v29, scale=1, value=v26, kind=I8 } -> -
     v34  Imm(-1)                                          -> x1
-    v35  StoreLocal { off=-1, value=v34, kind=I32 }       -> -
+    v35  Imm(0)                                           -> x1
     v36  Extend { value=v13, kind=I32 }                   -> x1
     v37  Extend { value=v13, kind=I32 }                   -> x1
     terminator Return(v13)   (exit_acc=v13)
@@ -211,7 +211,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v72  Binop { op=add, lhs=v46, rhs=v69 }               -> x7
     v73  StoreIndexed { base=v46, index=v69, scale=1, value=v66, kind=I8 } -> -
     v74  Imm(-1)                                          -> x1
-    v75  StoreLocal { off=-1, value=v74, kind=I32 }       -> -
+    v75  Imm(0)                                           -> x1
     v76  Extend { value=v58, kind=I32 }                   -> x1
     v77  Extend { value=v58, kind=I32 }                   -> x1
     terminator Return(v58)   (exit_acc=v58)
@@ -226,7 +226,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=1
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   StoreLocal { off=-1, value=v5, kind=I32 }        -> -
+    v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x0
     terminator Bnz { cond=v1, target=b3, fall=b1 }   (low word)   (exit_acc=v8)
@@ -247,7 +247,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=1
     v22  Binop { op=add, lhs=v17, rhs=v19 }               -> x6
     v23  StoreIndexed { base=v17, index=v19, scale=1, value=v16, kind=I8 } -> -
     v24  Imm(-2)                                          -> x0
-    v25  StoreLocal { off=-1, value=v24, kind=I32 }       -> -
+    v25  Imm(0)                                           -> x0
     terminator Return
   block 3  start_pc=0
     v12  Imm(0)                                           -> x0
@@ -276,7 +276,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=1
     v43  Binop { op=add, lhs=v38, rhs=v40 }               -> x6
     v44  StoreIndexed { base=v38, index=v40, scale=1, value=v37, kind=I8 } -> -
     v45  Imm(-2)                                          -> x0
-    v46  StoreLocal { off=-1, value=v45, kind=I32 }       -> -
+    v46  Imm(0)                                           -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=pairs
@@ -369,7 +369,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   StoreLocal { off=-1, value=v3, kind=I32 }        -> -
+    v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(1)                                           -> x0

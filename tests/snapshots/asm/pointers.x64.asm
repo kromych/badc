@@ -26,11 +26,5 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x64, -0x8(%rbp)
-               	movl	$0xc8, -0x8(%rbp)
                	movl	$0xc8, %eax
-               	leave
                	retq

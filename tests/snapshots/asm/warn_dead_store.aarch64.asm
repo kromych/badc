@@ -29,13 +29,7 @@ Disassembly of section .text:
                	ret
 
 <address_escapes_silences>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <block_local_dies>:
@@ -48,12 +42,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
                	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

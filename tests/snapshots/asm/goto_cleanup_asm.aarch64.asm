@@ -14,12 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <by_asm>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	stur	wzr, [x29, #-0x8]
-               	stur	wzr, [x29, #-0x8]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	cmp	w0, #0x2
@@ -68,8 +63,6 @@ Disassembly of section .text:
                	strb	w3, [x1, x2]
                	ldrsw	x0, [x0, #0x40]
                	strb	wzr, [x1, x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

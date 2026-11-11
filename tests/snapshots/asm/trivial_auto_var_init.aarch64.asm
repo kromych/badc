@@ -77,25 +77,11 @@ Disassembly of section .text:
                	ret
 
 <scalar_double>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
-               	stur	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <scalar_float>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	stur	wzr, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <scalar_long_double>:
@@ -265,13 +251,7 @@ Disassembly of section .text:
                	ret
 
 <addressed_int>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <opted_out>:

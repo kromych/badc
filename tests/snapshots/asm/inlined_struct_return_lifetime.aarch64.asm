@@ -14,18 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <returned_twice>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	mov	x2, #0xa                // =10
                	strh	w2, [x1, #0x30]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	stur	x1, [x29, #-0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <one_of_two>:

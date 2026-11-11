@@ -335,7 +335,7 @@ impl Compiler {
     }
 
     /// A definition's own list: reported at the definition, and only when
-    /// no earlier declaration gave the function a prototype, as gcc does.
+    /// no earlier declaration gave the function a prototype.
     pub(super) fn claim_unprototyped_list(&mut self, params: &ParsedParams) {
         if let Some(id) = params.unprototyped {
             self.unprototyped_lists.retain(|&(i, ..)| i != id);

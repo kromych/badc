@@ -126,13 +126,13 @@ pub(crate) struct Symbol {
     /// match and the spelling diagnostics use -- while every emitted
     /// symbol and relocation uses [`Symbol::link_name`].
     ///
-    /// The label is the assembler name, taken as written: gcc and clang
-    /// emit it with no target user-label prefix. badc carries names
-    /// undecorated through the compiler and the linker, so ELF and PE
-    /// emit exactly the label. The Mach-O writer adds its leading
-    /// underscore where it decorates today -- the `--shared` dynamic
-    /// export table -- so a renamed symbol is exported there as
-    /// `_<label>`; nothing else on that path decorates.
+    /// The label is the assembler name, taken as written, with no
+    /// target user-label prefix. badc carries names undecorated through
+    /// the compiler and the linker, so ELF and PE emit exactly the
+    /// label. The Mach-O writer adds its leading underscore where it
+    /// decorates today -- the `--shared` dynamic export table -- so a
+    /// renamed symbol is exported there as `_<label>`; nothing else on
+    /// that path decorates.
     pub asm_name: Option<String>,
     /// Shadow slot for `asm_name` (see `h_class`). An inner binding
     /// that reuses the name starts with no rename of its own.
@@ -199,7 +199,7 @@ pub(crate) struct Symbol {
     pub no_stack_protector: bool,
 
     /// `__attribute__((noinline))` seen on any declaration of the name.
-    /// Sticky like `is_constructor`: gcc binds the attribute to the
+    /// Sticky like `is_constructor`: the attribute binds to the
     /// function, so a prototype carrying it holds the later definition
     /// out of line, and a declaration of one name never speaks for the
     /// next declaration in the file.
@@ -313,8 +313,8 @@ pub(crate) struct Symbol {
 
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
-    /// does not make it a constant expression, but GCC and common practice
-    /// fold its value; the constant-expression evaluator reads the value
+    /// does not make it a constant expression, but common practice folds
+    /// its value; the constant-expression evaluator reads the value
     /// back from the object's `.data` storage when this is set, so
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
@@ -504,9 +504,9 @@ pub(crate) struct Symbol {
     /// [`inline_definition`].
     pub saw_noninline_decl: bool,
     /// A definition in this unit spelled without `inline`. Under the
-    /// GNU89 model an `extern inline` body is inline-only, and gcc's
-    /// gnu_inline contract lets the same unit provide the ordinary
-    /// definition; that definition is the external one.
+    /// GNU89 model an `extern inline` body is inline-only, and the same
+    /// unit may provide the ordinary definition; that definition is the
+    /// external one.
     pub saw_noninline_def: bool,
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
@@ -595,7 +595,7 @@ pub(crate) struct Symbol {
     /// final at parse time, so a constant subscript of the literal may
     /// fold by reading them back (which is not extended to named
     /// objects: `const int t[3]` indexed is not an integer constant
-    /// expression, matching gcc / clang).
+    /// expression).
     pub is_compound_literal: bool,
 
     /// Set beside `is_compound_literal` for the array of a string literal,
@@ -689,7 +689,7 @@ pub(crate) struct BindingInfo {
     /// True if the declaration was parsed in the primary source or a
     /// header its directory, `-iquote` or `-I` supplied; false in a
     /// bundled or system header, whose bindings the unused-symbol
-    /// diagnostics do not report, as gcc and clang skip system headers.
+    /// diagnostics do not report.
     pub decl_in_user_source: bool,
 
     /// The declaration's position among the unit's declarations, the order
@@ -856,7 +856,7 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
     }
     let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
     if gnu89 {
-        // GCC's `gnu_inline` contract: `extern inline` is used only for
+        // The GNU89 `gnu_inline` rules: `extern inline` is used only for
         // inlining, a declaration spelling `inline` without `extern`
         // cancels that back to a standalone definition, and an ordinary
         // definition in the same unit is the external one.

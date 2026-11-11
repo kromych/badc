@@ -1,8 +1,7 @@
 //! Mach-O spells the C identifier `f` as the symbol `_f`; badc's names carry
 //! the C spelling. A Mach-O symbol without the underscore (an asm label
-//! `"x"`, a label `x:`) leads with [`RAW`], as clang marks an asm label in its
-//! IR. The Mach-O writer and readers and assembly's output convert; ELF and
-//! PE names are the symbols as written.
+//! `"x"`, a label `x:`) leads with [`RAW`]. The Mach-O writer and readers and
+//! assembly's output convert; ELF and PE names are the symbols as written.
 
 use alloc::borrow::Cow;
 

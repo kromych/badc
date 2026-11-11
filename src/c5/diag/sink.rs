@@ -13,7 +13,7 @@ use crate::c5::error::C5Error;
 /// pragmas, keeps the ones that survive, and counts the errors.
 ///
 /// A raised warning does not unwind: the sink counts it and the caller
-/// asks at a phase boundary, which is what `-Werror` does in gcc.
+/// asks at a phase boundary.
 #[derive(Clone, Default, Debug)]
 pub struct Sink {
     config: Config,

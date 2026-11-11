@@ -26,7 +26,7 @@ pub(crate) enum ScalarKind {
     F80,
     /// IEEE binary128 `long double` (AAPCS64 ELF).
     F128,
-    /// A GCC `vector_size` value. Both ABIs classify a vector by its
+    /// A GNU C `vector_size` value. Both ABIs classify a vector by its
     /// whole width rather than by its lanes, so the flattening stops at
     /// the vector and the leaf's size is the vector's own.
     Vector,
@@ -134,7 +134,7 @@ pub(crate) enum RegClass {
     /// A whole 32-byte vector register: System V SSE followed by three
     /// SSEUP eightbytes, a ymm register once AVX is enabled (psABI 3.2.3),
     /// which the x86-64 baseline always is. A named argument and a result
-    /// only; an unnamed argument goes in memory, as gcc passes it.
+    /// only; an unnamed argument goes in memory.
     Vector256,
     /// The top of the x87 register stack, `st(0)`: System V AMD64 3.2.3
     /// returns an X87 + X87UP pair there, a sole `long double`. No argument
@@ -235,7 +235,7 @@ pub(crate) fn is_narrow_vector(desc: &AggDesc) -> bool {
     desc.vector && desc.size < 8
 }
 
-/// `(element, lane)` byte widths of a narrow vector clang returns with its
+/// `(element, lane)` byte widths of a narrow vector returned with its
 /// elements widened to equal lanes of d0: one of integer elements, more
 /// than one. Any other narrow vector returns as its bytes in the low bytes
 /// of v0.
@@ -965,8 +965,8 @@ mod tests {
         // The flattening keeps a vector whole exactly where a calling
         // convention has a rule for it. Below 64 bits neither does, so a
         // 4-byte vector reaches the classifier as its lanes and takes a
-        // general-purpose register, where gcc places it; above 128 bits
-        // neither does either, and the size rules send it to memory.
+        // general-purpose register; above 128 bits neither does either, and
+        // the size rules send it to memory.
         assert!(is_abi_vector_width(16));
         assert!(is_abi_vector_width(8));
         assert!(!is_abi_vector_width(4));
@@ -983,9 +983,8 @@ mod tests {
     #[test]
     fn sysv_single_fp_vector_is_memory_class() {
         // `float` / `double` with a `vector_size` of its own width, bare or
-        // beside a `float`: System V MEMORY, as gcc places it. AAPCS64 keeps
-        // the 4-byte one a composite in a general-purpose register, and
-        // Win64 goes by size.
+        // beside a `float`: System V MEMORY. AAPCS64 keeps the 4-byte one a
+        // composite in a general-purpose register, and Win64 goes by size.
         let single = |kind, size| FlatField {
             single_fp_vector: true,
             ..ff(0, size, kind)
@@ -1014,9 +1013,9 @@ mod tests {
     #[test]
     fn aapcs64_narrow_vectors_return_in_a_simd_register() {
         // A bare vector narrower than 8 bytes passes as a 32-bit integer and
-        // returns in v0, as clang places it: a `float` or a single element as
-        // its bytes in the low bytes, several integer elements widened to
-        // equal lanes of d0. A struct holding one keeps the general registers.
+        // returns in v0: a `float` or a single element as its bytes in the
+        // low bytes, several integer elements widened to equal lanes of d0.
+        // A struct holding one keeps the general registers.
         let lane = FlatField {
             single_fp_vector: true,
             ..ff(0, 4, ScalarKind::F32)
@@ -1108,8 +1107,8 @@ mod tests {
     #[test]
     fn a_vector_member_makes_its_eightbyte_sse() {
         // System V classes the eightbyte a 64-bit vector occupies SSE and
-        // the one holding the trailing `int` INTEGER, in either order --
-        // gcc delivers `struct { u8x8 v; int i; }` in xmm0 and rdi.
+        // the one holding the trailing `int` INTEGER, in either order:
+        // `struct { u8x8 v; int i; }` passes in xmm0 and rdi.
         let f = [ff(0, 8, ScalarKind::Vector), ff(8, 4, ScalarKind::Int)];
         assert_eq!(
             classify_aggregate(&desc(16, &f), sysv(), false),

@@ -478,7 +478,7 @@ mod tests {
     }
 
     /// `bti c` and the patchable-entry NOPs ahead of the frame take a `nop`
-    /// code each, as clang's `.seh_nop`, before or without `pac_sign_lr`.
+    /// code each (`.seh_nop`), before or without `pac_sign_lr`.
     #[test]
     fn landing_pad_and_entry_nops_take_nop_codes() {
         let frame = [0xA9BF_7BFD, 0x9100_03FD];

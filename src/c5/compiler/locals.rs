@@ -795,7 +795,7 @@ impl Compiler {
             }
             self.ast_emit_static_local_decl(d.loc_idx as u32);
         } else {
-            // TR 18037 5.1.2 (GCC named address spaces): an object
+            // TR 18037 5.1.2 (GNU C named address spaces): an object
             // in `__seg_gs` / `__seg_fs` needs static storage; a
             // frame slot has no segment.
             if super::types::segment_of_object_ty(d.ty).is_some() {
@@ -1451,7 +1451,7 @@ impl Compiler {
         ty: i64,
         array_size: i64,
     ) -> Result<(), C5Error> {
-        // A `&&label` element (GCC labels as values) is a link-time
+        // A `&&label` element (GNU C labels as values) is a link-time
         // constant: the data image gets a label relocation, as it
         // does for `&func`. Only a genuinely non-constant element
         // alongside one still needs stores at the declaration point.
@@ -1667,7 +1667,7 @@ impl Compiler {
         let mut assigns: alloc::vec::Vec<super::super::ast::ExprId> = alloc::vec::Vec::new();
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
-            // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GCC
+            // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GNU C
             // range form `[a ... b] = ...`. Sets the write cursor; a
             // range fills every slot in `[a, b]` with the same value.
             let mut range_end = i;
@@ -2199,7 +2199,7 @@ impl Compiler {
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if self.lex.tk != Token::Assign {
-            // GCC zero-length array `T x[0]`: a complete type holding no
+            // GNU C zero-length array `T x[0]`: a complete type holding no
             // elements, so `sizeof` is 0. Used by compile-time-assert
             // idioms such as `char ok[-offsetof(type, f)]` and by
             // conditionally-empty buffers whose guards read
@@ -2951,7 +2951,7 @@ impl Compiler {
                 needs_runtime = true;
                 saw_any = true;
             } else if self.lex.tk == Token::Lan && !scan.ends_operand() {
-                // `&&label` (GCC labels as values). The block address is a
+                // `&&label` (GNU C labels as values). The block address is a
                 // link-time constant, so the element does not force the
                 // runtime path. The binary logical AND shares the
                 // spelling; only an operand can precede that one.

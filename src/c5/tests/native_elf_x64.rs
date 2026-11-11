@@ -1572,8 +1572,7 @@ int main(void) { return pick(); }\n";
 
 /// The same override under `-O`: the weak body is small enough to inline,
 /// but a weak definition is replaceable, so the call has to stay out of
-/// line for the linker to bind it to the strong definition. gcc and clang
-/// keep the call for the same reason.
+/// line for the linker to bind it to the strong definition.
 #[test]
 fn weak_definition_overridden_by_strong_under_optimize() {
     use crate::{CompileOptions, Program};

@@ -545,7 +545,7 @@ fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
 /// `vzeroupper` ahead of a call or return out of a body holding 256- or
 /// 512-bit values ([`Frame::wide_regs`]), unless an argument or the result
 /// is a vector that wide in its register (`wide_live`), whose upper bits it
-/// would clear; gcc leaves the instruction out there too.
+/// would clear.
 pub(super) fn clear_upper(code: &mut Vec<u8>, frame: Frame, wide_live: bool) {
     if frame.wide_regs && !wide_live {
         super::encode::emit_vzeroupper(code);

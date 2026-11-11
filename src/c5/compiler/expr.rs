@@ -83,7 +83,7 @@ impl Compiler {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
         // A Microsoft sized suffix names the type outright; `i8` is plain
-        // `char`, as clang types it.
+        // `char`, as `__int8` is.
         let sized = match self.lex.int_suffix_width {
             8 if !is_unsigned => {
                 return super::types::plain_char_ty(self.lex.char_signed);
@@ -139,8 +139,7 @@ impl Compiler {
             }
             if rank >= 2 {
                 // C99 6.4.4.1p5 lists no unsigned type for a decimal constant; one
-                // past the widest signed type takes the unsigned type of that rank,
-                // as gcc and clang do.
+                // past the widest signed type takes the unsigned type of that rank.
                 is_unsigned = is_unsigned || allow_unsigned_fallback || fits(sizes[rank], false);
                 break;
             }
@@ -207,7 +206,7 @@ impl Compiler {
         }
     }
 
-    /// A GCC atomic builtin's value operand, converted to the type of the
+    /// An atomic builtin's value operand, converted to the type of the
     /// object it is stored into or combined with (C11 7.17.7).
     fn gcc_atomic_value(
         &mut self,
@@ -250,7 +249,7 @@ impl Compiler {
         Ok(self.convert_operand(bytes, elem_ty))
     }
 
-    /// Fetch a required GCC-builtin operand or report an arity error.
+    /// Fetch a required builtin operand or report an arity error.
     fn require_gcc_arg(
         &self,
         a: Option<super::super::ast::ExprId>,
@@ -360,7 +359,7 @@ impl Compiler {
     /// Parse an x86 SIMD builtin call (`__builtin_ia32_*`), the opening
     /// `(` already consumed. Operand count and kinds come from the table
     /// row; the immediate operand of the forms that take one must be an
-    /// integer constant expression, as it does in gcc.
+    /// integer constant expression.
     fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
         use super::super::x86_simd::{self, Form, Ret, Sem};
@@ -445,14 +444,14 @@ impl Compiler {
                     format!("`{name}` last argument must be an integer constant expression"),
                 ));
             };
-            // PALIGNR's builtin counts bits, as gcc's does.
+            // gcc's PALIGNR builtin counts bits.
             let n = if row.sem == Sem::AlignR { n / 8 } else { n };
             imm = Some(n as u8);
             args.truncate(last);
         } else if row.form == Form::Shift {
             // The byte-granular shifts encode a byte count while their
-            // builtins take bits, as gcc's do; they have no register-count
-            // form, so the operand must be constant.
+            // builtins take bits; they have no register-count form, so the
+            // operand must be constant.
             let bits_per_unit = if matches!(row.sem, Sem::ShlBytes | Sem::ShrBytes) {
                 8
             } else {
@@ -497,13 +496,12 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse a GCC memory-transfer builtin (`__builtin_memcpy`,
+    /// Parse a memory-transfer builtin (`__builtin_memcpy`,
     /// `__builtin_memmove`, `__builtin_memset`) with the opening `(`
     /// already consumed. A byte count that is an integer constant
     /// expression within the expansion cap builds the inline-expansion
     /// node; any other count builds a call to the library function of
-    /// the same name -- the split gcc makes between an expanded and a
-    /// called transfer. The decision is per call site, so one declined
+    /// the same name. The decision is per call site, so one declined
     /// count in a translation unit does not withdraw the expansion from
     /// the rest.
     fn parse_mem_transfer_builtin(
@@ -1111,7 +1109,7 @@ impl Compiler {
         self.require_operands(op, false, lhs_ty, rhs_ty)
     }
 
-    /// Result type of a GCC vector-extension binary operation, or `None` when
+    /// Result type of a GNU C vector-extension binary operation, or `None` when
     /// the operand pair is not one. `+ - * / %`, `& | ^` and the shifts take
     /// two vectors of the same byte width and the same element width and
     /// kind, or a vector against a scalar that broadcasts to every lane.
@@ -1161,7 +1159,7 @@ impl Compiler {
         Some(vec_ty)
     }
 
-    /// Result type of a GCC vector-extension comparison, or `None` when
+    /// Result type of a vector-extension comparison, or `None` when
     /// the operand pair is not one. The operand rule is the arithmetic
     /// one; the result is a vector of the same byte width whose elements
     /// are the signed integer type of the operands' element width, each
@@ -1181,7 +1179,7 @@ impl Compiler {
 
     /// Comparison opcode flavor for a vector operand pair: floating by
     /// the element type; between two integer vectors unsigned when either
-    /// element is (6.3.1.8 common type, as gcc compares); against a
+    /// element is (the 6.3.1.8 common type); against a
     /// broadcast scalar the vector's element decides, since the scalar
     /// converts to it first.
     fn vector_compare_op(
@@ -1295,7 +1293,7 @@ impl Compiler {
     /// The lvalue and type for a `++` / `--` operand that cannot use the
     /// generic trailing-load rewrite and must build `Expr::PreInc` /
     /// `Expr::PostInc` directly: a bitfield member (its load is a
-    /// shift-and-mask sequence, not one scalar load) and the GCC 128-bit
+    /// shift-and-mask sequence, not one scalar load) and the 128-bit
     /// integer (its lvalue's value is its address, so there is no
     /// trailing load at all).
     fn direct_inc_lvalue(&self) -> Option<(super::super::ast::ExprId, i64)> {
@@ -1431,9 +1429,8 @@ impl Compiler {
             self.emit_int_constant(v, Ty::Int as i64);
             Ok(())
         } else if let Some(v) = self.try_fold_strlen_builtin()? {
-            // Likewise the length of a literal, which gcc folds at every
-            // optimization level; folding it here lets a `sizeof` over it see a
-            // constant.
+            // Likewise the length of a literal, folded at every optimization
+            // level so a `sizeof` over it sees a constant.
             let ty = self.size_t_ty();
             self.emit_int_constant(v.as_int(), ty);
             Ok(())
@@ -1574,7 +1571,7 @@ impl Compiler {
     }
 
     fn parse_offsetof_expr(&mut self) -> Result<(), C5Error> {
-        // A constant unless a designator subscript is a runtime value (GCC
+        // A constant unless a designator subscript is a runtime value (GNU C
         // extension), which the parser emitted onto the accumulator.
         self.next()?;
         match self.parse_builtin_offsetof(true)? {
@@ -1592,7 +1589,7 @@ impl Compiler {
 
     fn parse_func_name(&mut self) -> Result<(), C5Error> {
         // C99 6.4.2.2: `__func__` is `static const char[]` in the data
-        // segment; `__FUNCTION__` / `__PRETTY_FUNCTION__` are the GCC aliases.
+        // segment; `__FUNCTION__` / `__PRETTY_FUNCTION__` are the GNU C aliases.
         let offset = self.intern_func_name();
         self.emit_data_imm(offset);
         self.next()?;
@@ -1649,7 +1646,7 @@ impl Compiler {
             return self.parse_intrinsic_call(id_idx, kind as i64);
         }
         // A diagnostic about the call names it as written, `__builtin_strlen`
-        // where that binds `strlen`, as gcc and clang do.
+        // where that binds `strlen`.
         let spelled = self.symbols[id_idx].name.clone();
         let id_idx = self.bind_call_target(id_idx);
         match self.builtin_call(id_idx) {
@@ -1760,8 +1757,8 @@ impl Compiler {
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
         // The library `memcpy`, `memmove` and `memset` lower as their
-        // builtins, as gcc and clang treat them unless `-fno-builtin`; a
-        // definition in the unit, a fortified wrapper among them, is called.
+        // builtins unless `-fno-builtin`; a definition in the unit, a
+        // fortified wrapper among them, is called.
         if !not_real_fn
             && let Some(op) = library_mem_transfer_op(name)
             && !self.library_name_is_opaque(name)
@@ -2095,7 +2092,7 @@ impl Compiler {
         let at = self.site();
         self.expr(Token::Assign as i64)?;
         // C99 6.5.2.2p7: the operand converts as if by assignment to the
-        // builtin's parameter type, as gcc and clang check it.
+        // builtin's parameter type.
         let zero = self.value_is_null_pointer_constant();
         let lax = self.lax_vectors;
         if let Some(m) =
@@ -2196,7 +2193,7 @@ impl Compiler {
 
     /// C99 7.15.1.4p1: `va_start` reaches the variable arguments of the
     /// function it appears in, so that function's parameter list ends in
-    /// `...`. gcc and clang reject it anywhere else, in every spelling.
+    /// `...`. It is rejected anywhere else, in every spelling.
     pub(super) fn require_variadic_function(&self) -> Result<(), C5Error> {
         if self.current_func_variadic {
             return Ok(());
@@ -2280,7 +2277,7 @@ impl Compiler {
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
         // C99 7.15.1.1p2: the next argument arrived promoted, so a type the
-        // promotions change never matches it (clang's `-Wvarargs`).
+        // promotions change never matches it (`-Wvarargs`).
         if let Some(promoted) = super::types::argument_promotion(arg_ty).filter(|_| !is_pointer) {
             let t = super::types::format_type(arg_ty, &self.structs);
             let p = super::types::format_type(promoted, &self.structs);
@@ -2450,7 +2447,7 @@ impl Compiler {
             // type as `int` for every form.
             Ty::Int as i64
         } else if is_bswap {
-            // GCC types the result as the unsigned operand
+            // The result is the unsigned type of the operand
             // width: uint16_t / uint32_t / uint64_t.
             (match intr_kind {
                 Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
@@ -2749,7 +2746,7 @@ impl Compiler {
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
-            // backend passes the union, as GCC does.
+            // backend passes the union.
             self.convert_assign_rhs(member_ty);
             let slots = self.slots_of_type(want);
             let off = self.reserve_slots(slots);
@@ -2984,8 +2981,8 @@ impl Compiler {
 
     /// The `register` arrays (C99 6.3.2.1p3) converted since the parse was
     /// `since` entries in, not taken by a subscript or read whole by
-    /// `sizeof` or `typeof`: each takes the array's address, which gcc and
-    /// clang reject.
+    /// `sizeof` or `typeof`: each takes the array's address, which is
+    /// rejected.
     pub(super) fn check_register_decays(&mut self, since: usize) -> Result<(), C5Error> {
         match self.register_decays.get(since) {
             Some(&(_, sym, line)) => Err(self.register_address_err(sym, line)),
@@ -3141,7 +3138,7 @@ impl Compiler {
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
         }
-        // gcc's -Wstrict-prototypes passes over a cast's type name.
+        // `-Wstrict-prototypes` passes over a cast's type name.
         if self.lex.tk != '{' {
             self.unprototyped_lists.truncate(unprototyped);
         }
@@ -3169,7 +3166,7 @@ impl Compiler {
                 .filter(|f| f.ptr_depth >= 1 && !type_name.dims.is_empty())
                 .map(|f| (f.f.clone(), f.ptr_depth as i64));
             self.parse_block_compound_literal((type_name.ty, elem_fn), &type_name.dims)?;
-            // gcc answers unknown for a compound literal's object.
+            // `__builtin_object_size` answers unknown for a compound literal's object.
             self.pending.object_ref = None;
             if let Some(id) = self.ast_acc
                 && let Some((f, depth)) = self.type_name_fn(type_name)
@@ -3381,7 +3378,7 @@ impl Compiler {
     }
 
     fn parse_label_address(&mut self) -> Result<(), C5Error> {
-        // GCC labels as values: `&&label` is the label's address as
+        // GNU C labels as values: `&&label` is the label's address as
         // `void *`; a forward reference is interned and resolved by the
         // walker.
         let label = self.parse_label_addr_operand()?;
@@ -3532,7 +3529,7 @@ impl Compiler {
         }
     }
 
-    /// gcc's and clang's error for the address of a `register` object.
+    /// The error for the address of a `register` object (C99 6.5.3.2p1).
     fn register_address_err(&self, sym: usize, line: usize) -> C5Error {
         let name = &self.symbols[sym].name;
         let text = format!("address of `register` object `{name}` requested");
@@ -3566,7 +3563,7 @@ impl Compiler {
     /// scalar to a scalar, and no pointer to or from a floating type. GNU C
     /// adds a cast to the operand's own type, a union from a member's type,
     /// and a cast between a vector and a vector or an integer (not `_Bool`)
-    /// of the same size, which gcc and clang accept and no other.
+    /// of the same size, and no other.
     pub(super) fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
         let bare = |ty: i64| {
             super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
@@ -3621,7 +3618,7 @@ impl Compiler {
         self.next()?;
         self.expr(Token::Inc as i64)?;
         self.require_unary_operand("~", Category::Integer)?;
-        // GCC vector extension: `~v` is element-wise over an integer
+        // Vector extension: `~v` is element-wise over an integer
         // vector and the result keeps the vector type (no promotion).
         if is_vector_ty(&self.structs, self.ty) {
             let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
@@ -3687,7 +3684,7 @@ impl Compiler {
             self.expr(Token::Inc as i64)?;
             self.require_unary_operand("-", Category::Arithmetic)?;
             if is_vector_ty(&self.structs, self.ty) {
-                // GCC vector extension: `-v` is element-wise and the
+                // Vector extension: `-v` is element-wise and the
                 // result keeps the vector type (no promotion).
                 self.ast_apply_unary(super::super::ast::UnOp::Neg);
             } else if is_floating_scalar(self.ty) {
@@ -4214,7 +4211,7 @@ impl Compiler {
         // The lexer left the operator's token in `lex.ival`.
         let binop = self.lex.ival;
         let compound_lhs_ast = self.object_lvalue();
-        // GCC vector extension: `v OP= w` is `v = v OP w` (C99 6.5.16.2p3),
+        // Vector extension: `v OP= w` is `v = v OP w` (C99 6.5.16.2p3),
         // with the side-effect-free lvalue as both store target and
         // operand.
         if is_vector_ty(&self.structs, lhs_ty) && is_vector_binop_token(binop) {
@@ -5218,7 +5215,7 @@ impl Compiler {
         self.pending.last_array_decay_dims.clear();
         self.pending.last_array_decay_vla = None;
         let index = self.peek_constant_index();
-        // GCC vector extension: `v[i]` is lane `i`, an element-typed
+        // Vector extension: `v[i]` is lane `i`, an element-typed
         // lvalue; the vector's address is its value, as for an array.
         if is_vector_ty(&self.structs, lhs_ty) {
             let elem_ty = self.structs[struct_id_of(lhs_ty)].fields[0].ty;
@@ -5234,7 +5231,7 @@ impl Compiler {
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
         lhs_ty = base_ty;
-        // gcc subscripts a `register` array, either operand; clang rejects it.
+        // Subscripting a `register` array, as either operand, is accepted.
         self.take_register_decay(array_ast);
         self.take_register_decay(idx_ast);
         if self.lex.tk == ']' {
@@ -5469,7 +5466,7 @@ impl Compiler {
         // same segment.
         let obj_ty = if is_dot { lhs_ty } else { pointee_ty(lhs_ty) };
         // C11 6.5.2.3p5: a member of an atomic structure or union is not
-        // accessed atomically, which is undefined; refused, as clang does.
+        // accessed atomically, which is undefined; refused.
         if super::types::is_atomic_object_ty(obj_ty) {
             return Err(self.compile_err(
                 Code::INVALID_OPERANDS,
@@ -6011,7 +6008,7 @@ impl Compiler {
     /// 7.19), the keyword consumed; the designator is a member name and
     /// a chain of `.field` and `[index]` steps. Returns `Some(off)` for a
     /// constant offset. Under `allow_runtime` a non-constant subscript
-    /// (GCC extension) makes the offset a `size_t` value emitted onto the
+    /// (GNU C extension) makes the offset a `size_t` value emitted onto the
     /// accumulator, and `None` is returned.
     pub(super) fn parse_builtin_offsetof(
         &mut self,
@@ -6077,7 +6074,7 @@ impl Compiler {
                 match self.try_parse_constant_dim()? {
                     Some(idx) => offset += idx * stride,
                     None => {
-                        // GCC extension: a runtime array subscript contributes
+                        // A runtime array subscript contributes
                         // `(size_t)i * stride`; multiple runtime subscripts sum.
                         if !allow_runtime {
                             return Err(self.compile_err(
@@ -6673,7 +6670,7 @@ enum BinaryKind {
 }
 
 impl BinaryKind {
-    /// The opcode the GCC vector extension lowers element-wise; the
+    /// The opcode the vector extension lowers element-wise; the
     /// walker picks the signed, unsigned or floating flavor from the
     /// element type. `None` for an operator the extension does not take.
     fn vector_op(self) -> Option<super::super::ir::BinOp> {
@@ -7063,7 +7060,6 @@ fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
     Some((op, unsigned, rank))
 }
 
-/// The transfer kind of a GCC memory-transfer builtin name.
 /// The transfer a library function of `name` performs.
 fn library_mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
@@ -7075,6 +7071,7 @@ fn library_mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferO
     })
 }
 
+/// The transfer kind of a memory-transfer builtin name.
 fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
     Some(match name {

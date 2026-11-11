@@ -110,7 +110,7 @@ impl<'a> Walker<'a> {
                 Ok(true)
             }
             Stmt::AsmGoto(idx) => {
-                // GCC `asm goto`. Target 0 is the fall-through
+                // GNU C `asm goto`. Target 0 is the fall-through
                 // successor; the label blocks follow in label-list
                 // order. An edge leaving a scope goes through the exit
                 // block a `goto` to the label from here takes.
@@ -496,7 +496,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a GCC statement expression `({ ... })`. The items walk as
+    /// Lower a GNU C statement expression `({ ... })`. The items walk as
     /// `Stmt::Compound` does, but the value of the final
     /// expression-statement is the construct's value; a non-expression
     /// tail makes it void, lowered as an immediate 0. A label wrapping

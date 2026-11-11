@@ -16,8 +16,8 @@ fn main() {
 }
 
 /// A write to a closed pipe ends the process by `SIGPIPE`, as it ends a C
-/// program and gcc's compiler proper; the Rust runtime ignores the signal
-/// before `main`, which turns each such write into an error.
+/// program; the Rust runtime ignores the signal before `main`, which turns
+/// each such write into an error.
 #[cfg(unix)]
 fn restore_sigpipe() {
     unsafe extern "C" {

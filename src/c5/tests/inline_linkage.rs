@@ -25,17 +25,17 @@
 //! same translation unit"), and badc's code generation relies on it:
 //! `always_inline` is a warning rather than an error when the candidate
 //! filter declines it, and without `-O` the inliner takes `always_inline`
-//! calls alone, so dropping the body would leave undefined the calls gcc
-//! resolves by inlining them.
+//! calls alone, so dropping the body would leave undefined the calls the
+//! inliner declines.
 //!
 //! That license covers calls, not the address: `f` keeps external
 //! linkage, so C99 6.2.2p2 requires `&f` to denote one function across
 //! the program. The body is therefore emitted under the private name
 //! `f.inline`, which no C identifier can spell, and the identifier
 //! stays an undefined external reference that every address site
-//! relocates against. The address cells consequently agree with gcc and
-//! clang, and a program that takes the address without defining the
-//! function anywhere fails to link, as it does under both.
+//! relocates against. The address cells consequently agree with the
+//! reference table, and a program that takes the address without defining
+//! the function anywhere fails to link.
 
 use crate::c5::compiler::CompileOptions;
 use crate::c5::linker::{NativeSymSection, parse_native_elf};
@@ -280,7 +280,7 @@ fn c99_inline_model_is_the_default() {
 
 #[test]
 fn ordinary_definition_after_an_extern_inline_body_is_the_external_one() {
-    // gcc's gnu_inline contract: the extern-inline body serves only
+    // The GNU C gnu_inline contract: the extern-inline body serves only
     // inlining, and the same unit may provide the ordinary definition --
     // an extern gnu_inline wrapper in a header, the real definition in
     // the unit. The identifier must bind an external definition.
@@ -376,8 +376,8 @@ fn the_pe_targets_take_the_microsoft_inline_model() {
                 }
             }
         }
-        // A __forceinline call is inlined at both levels, as clang's is, so
-        // only the address emits the definition.
+        // A __forceinline call is inlined at both levels, so only the
+        // address emits the definition.
         let forced = "__forceinline int f(int x) { return x + 1; }\n";
         let called = alloc::format!("{forced}int g(int x) {{ return f(x); }}\n");
         let taken = alloc::format!("{forced}int (*p)(int) = f;\n");
@@ -428,7 +428,7 @@ fn gnu_inline_attribute_on_any_declaration_selects_the_model() {
 fn a_definitions_gnu_inline_does_not_reach_a_declaration_in_its_body() {
     // `gnu_inline` selects the GNU89 model for the function it names. The
     // prototype in `wrap`'s body names `f`, whose C99 `extern inline`
-    // definition is an external one (C99 6.7.4p7), as gcc gives it.
+    // definition is an external one (C99 6.7.4p7).
     let src = "extern inline __attribute__((__gnu_inline__)) int wrap(int x) {\n\
                    int f(int);\n\
                    return f(x) + 1;\n\
@@ -441,8 +441,7 @@ fn a_definitions_gnu_inline_does_not_reach_a_declaration_in_its_body() {
 fn an_inline_only_body_is_still_available_to_the_inliner() {
     // The out-of-line copy is dropped once every call is absorbed, and
     // an `always_inline` request is honored at every level even though
-    // the definition provides no external definition, as gcc and clang
-    // honor it.
+    // the definition provides no external definition.
     let src = "extern __attribute__((__gnu_inline__)) inline \
                __attribute__((always_inline)) int f(int x) { return x + 1; }\n\
                int g(int x) { return f(x); }\n";
@@ -527,8 +526,7 @@ fn an_inline_only_definitions_address_is_the_external_definition() {
     // C99 6.2.2p2: the identifier keeps external linkage, so the pointer
     // denotes the program's one definition of it. The address leaves an
     // undefined reference for the linker to satisfy from another unit,
-    // as it does under gcc and clang, in both models and at either
-    // optimization level.
+    // in both models and at either optimization level.
     let c99 = "inline int f(int x) { return x + 1; }\nint (*p)(int) = f;\n";
     let gnu89 = "extern inline int f(int x) { return x + 1; }\nint (*p)(int) = f;\n";
     for optimize in [false, true] {

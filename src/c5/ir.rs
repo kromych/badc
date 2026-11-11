@@ -72,7 +72,7 @@ pub(crate) enum Inst {
     /// unchanged so an FP-returning import stays correct.
     ImmExtCode(i64),
     /// Address of a basic block within the current function, as a
-    /// code pointer (GCC labels-as-values, `&&label`). The per-arch
+    /// code pointer (GNU C labels as values, `&&label`). The per-arch
     /// lowering materializes the block's native address with a
     /// PC-relative placeholder resolved against `pc_to_native` once
     /// the block offsets are final. The value is only stored, loaded,
@@ -325,7 +325,7 @@ pub(crate) enum Inst {
     /// needs one extra instruction to zero the upper bits.
     Bswap { value: ValueId, width: u8 },
     /// Count the bits of the low `width` bytes of `value` that `op` names
-    /// (`__builtin_clz` / `ctz` / `popcount`, GCC's builtins; C99 has no
+    /// (`__builtin_clz` / `ctz` / `popcount`, GNU C builtins; C99 has no
     /// operator). `width` is 4 or 8; operand bits above `width * 8` do not
     /// affect the result. A leading or trailing count of 0 is `width * 8`,
     /// so the result is in `0..=width * 8`, zero-extended to 64 bits.
@@ -630,7 +630,7 @@ pub(crate) enum Inst {
         imm: Option<u8>,
         args: Vec<ValueId>,
     },
-    /// GCC extended inline asm with operands (`asm(template : outputs :
+    /// GNU C extended inline asm with operands (`asm(template : outputs :
     /// inputs : clobbers)`). `asm` carries the template, per-operand
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
     /// and holds each operand's SSA value -- the destination address for
@@ -1279,7 +1279,7 @@ pub(crate) enum StoreKind {
     F64,
     /// f64 widened exactly to the x87 80-bit format and stored as 10
     /// bytes; the 6 padding bytes of the 16-byte object are left
-    /// untouched, as gcc's stores do.
+    /// untouched.
     F80,
     /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
     F128,
@@ -1620,7 +1620,7 @@ impl MemOrder {
     /// order `self` and failure order `failure`: it acquires when either
     /// does and releases when the success order does (C11 7.17.7.4p2).
     /// A failure order the standard excludes, release or acq_rel, makes
-    /// both seq_cst, as gcc does.
+    /// both seq_cst.
     pub(crate) fn with_failure(self, failure: MemOrder) -> Self {
         if matches!(failure, MemOrder::Release | MemOrder::AcqRel)
             || self == MemOrder::SeqCst
@@ -1711,7 +1711,7 @@ pub(crate) enum FpCastKind {
 }
 
 /// Register-name size for an inline-asm template `%`-reference, from a
-/// GCC operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
+/// GNU C operand-size modifier (`%b`/`%w`/`%k`/`%q` -> byte/word/long/quad
 /// sub-register name). Absent modifier defaults to the operand's width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AsmRegSize {
@@ -1740,7 +1740,7 @@ impl AsmRegSize {
     }
 }
 
-/// Constraint on one GCC extended-asm operand (x86_64 register classes).
+/// Constraint on one extended-asm operand (x86_64 register classes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AsmConstraint {
     /// Any allocatable general register (`r`, or the register arm of
@@ -1799,7 +1799,7 @@ pub(crate) enum AsmSeg {
     Fs,
 }
 
-/// One operand of a GCC extended-asm statement.
+/// One operand of an extended-asm statement.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AsmOperand {
     pub constraint: AsmConstraint,
@@ -1834,7 +1834,7 @@ pub(crate) struct AsmOperand {
     pub fp_limit: u8,
 }
 
-/// A parsed GCC extended-asm statement (`asm(template : outputs :
+/// A parsed GNU C extended-asm statement (`asm(template : outputs :
 /// inputs : clobbers)`). The template's `%N` / `%<size>N` references
 /// are substituted with the operands' assigned registers at emit time.
 #[derive(Debug, Clone)]
@@ -2131,7 +2131,7 @@ pub(crate) enum Terminator {
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
-    /// Indirect branch to a code address held in `target` (GCC
+    /// Indirect branch to a code address held in `target` (GNU C
     /// computed goto, `goto *expr`). The set of possible successor
     /// blocks is the function's `computed_goto_targets` (every block
     /// whose address is taken via `&&label`); the CFG treats this as
@@ -2144,7 +2144,7 @@ pub(crate) enum Terminator {
     /// The target list lives in [`FunctionSsa::jump_tables`]
     /// because `Terminator` is `Copy`.
     JumpTable { idx: ValueId, table: u32 },
-    /// GCC `asm goto`: the block's last instruction is an
+    /// GNU C `asm goto`: the block's last instruction is an
     /// `Inst::InlineAsm` whose template may branch to any listed C
     /// label. `jump_tables[table][0]` is the fall-through successor;
     /// entries 1.. are the label targets in label-list order (a
@@ -2391,7 +2391,7 @@ pub(crate) struct AggDesc {
 }
 
 /// A static-initializer data slot holding the address of a labeled
-/// code location in this function (GCC `&&label`). The label's address
+/// code location in this function (GNU C `&&label`). The label's address
 /// is a link-time constant, so the slot is filled by a relocation
 /// rather than by stores at the declaration point.
 #[derive(Debug, Clone, Copy)]
@@ -2440,20 +2440,18 @@ pub(crate) struct FunctionSsa {
     /// `__inline` / `__inline__` function specifier (C99 6.7.4) or
     /// `__attribute__((always_inline))`. The inliner measures these
     /// against a multiple of the `--inline-cap=N` body-size gate rather
-    /// than against the gate itself, matching the gcc / clang policy of
-    /// a higher single-function limit for a marked body and a lower
-    /// automatic one for a size-driven candidate.
+    /// than against the gate itself: a marked body has a higher limit
+    /// than a size-driven candidate.
     pub is_inline: bool,
     /// True if the function carried a *mandatory* inline request --
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
     /// opposed to the plain `inline` hint. Implies `is_inline`. No size
-    /// or frame budget applies to it, matching gcc and clang, which
-    /// report a diagnostic rather than silently declining. gcc's is an
-    /// error because its inliner admits nearly any callee shape; badc's
-    /// candidate filter is narrower, so an unhonoured request is a
-    /// warning -- an error would reject conforming programs over a
-    /// coverage gap. A plain `inline` that stays out of line is silent
-    /// (it is only a hint).
+    /// or frame budget applies to it, and an unhonored request is
+    /// diagnosed rather than silently declined. gcc makes that an error
+    /// because its inliner admits nearly any callee shape; badc's
+    /// candidate filter is narrower, so it is a warning -- an error would
+    /// reject conforming programs over a coverage gap. A plain `inline`
+    /// that stays out of line is silent (it is only a hint).
     pub is_always_inline: bool,
     /// True if the function carried `__attribute__((noinline))`. gcc's
     /// documented way to hold a body out of line, and what its
@@ -2496,7 +2494,7 @@ pub(crate) struct FunctionSsa {
     /// for the default text section. Placement is a contract consumers
     /// read (a linker script places by it, a reference check keys on it),
     /// so a body with one is only spliced into a caller placed
-    /// identically, as gcc does.
+    /// identically.
     pub section: Option<alloc::string::String>,
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.
@@ -2630,7 +2628,7 @@ pub(crate) struct FunctionSsa {
     pub indirect_result_slot: i64,
     /// Successor blocks of every `Terminator::GotoIndirect` in this
     /// function: each block whose address is taken via `&&label`
-    /// (GCC computed goto). The CFG, liveness, and the allocator
+    /// (GNU C computed goto). The CFG, liveness, and the allocator
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,

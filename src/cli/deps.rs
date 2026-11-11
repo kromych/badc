@@ -66,7 +66,7 @@ impl DepOptions {
         {
             return vec![badc::dep_escape(&o.to_string_lossy())];
         }
-        // gcc's default: the source's base name with its suffix
+        // The default target: the source's base name with its suffix
         // replaced by `.o`, directory components dropped.
         let base = source_basename(src);
         let stem = match base.rfind('.') {
@@ -87,9 +87,9 @@ pub(crate) fn source_basename(src: &str) -> String {
 }
 
 /// Render and write one translation unit's dependency rule. Returns
-/// `Err` after logging when the file cannot be written -- gcc treats a
-/// dependency file it cannot open as fatal, and a build system that
-/// asked for one and silently got none rebuilds wrongly forever.
+/// `Err` after logging when the file cannot be written -- a dependency
+/// file that cannot be opened is fatal, as a build system that asked for
+/// one and silently got none rebuilds wrongly forever.
 pub(crate) fn emit_deps(
     src: &str,
     records: &[badc::IncludeRecord],

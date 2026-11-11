@@ -16,7 +16,7 @@ impl<'a> Walker<'a> {
         child: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        // GCC vector extension: `-v` / `~v` are element-wise.
+        // GNU C vector extension: `-v` / `~v` are element-wise.
         if matches!(op, UnOp::Neg | UnOp::BitNot) && is_vector_ty(self.structs, ty) {
             return self.walk_vector_unary(b, op, child, ty);
         }

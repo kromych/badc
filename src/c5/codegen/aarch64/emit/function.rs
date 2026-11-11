@@ -561,7 +561,7 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// GCC computed goto: `br` through the address `Inst::BlockAddr`
+    /// GNU C computed goto: `br` through the address `Inst::BlockAddr`
     /// materialized.
     fn emit_goto_indirect(&mut self, target: super::super::ir::ValueId) -> Emit {
         let FnCtx {
@@ -641,7 +641,7 @@ impl FunctionEmitter<'_, '_> {
         }
         let mut from = self.snapshot.code;
         // The `-fpatchable-function-entry` NOPs follow the landing pad and
-        // precede the rest of the entry, as gcc orders them.
+        // precede the rest of the entry.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
             self.unwind.push(S::Nop);
@@ -1029,7 +1029,7 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// GCC `&&label`: an `ADR rd, .` placeholder, patched against the block's
+    /// GNU C `&&label`: an `ADR rd, .` placeholder, patched against the block's
     /// final offset by [`Self::patch_block_addrs`].
     fn emit_block_addr(
         &mut self,

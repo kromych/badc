@@ -1326,8 +1326,8 @@ fn automatic_lock_words_start_clear() {
     );
 }
 
-/// C11 6.2.7 (as gcc and clang), 6.7.2.1p5, 6.7.3p3, and 6.5.2.3p5, whose
-/// member access clang refuses.
+/// C11 6.2.7, 6.7.2.1p5, 6.7.3p3, and 6.5.2.3p5, whose undefined member
+/// access is refused.
 #[test]
 fn atomic_constraints_are_diagnosed() {
     let member = "accessing a member of an atomic structure or union";
@@ -1389,8 +1389,7 @@ fn atomic_operators_yield_their_values_under_the_interpreter() {
 
 /// gcc's generic `__atomic_load` and `__atomic_store` on an object of a
 /// size no instruction covers call the runtime's generic functions with
-/// the size and the order, as gcc and clang do; Windows, whose runtime has
-/// none, refuses them.
+/// the size and the order; Windows, whose runtime has none, refuses them.
 #[test]
 fn generic_load_and_store_of_an_odd_size_call_the_runtime() {
     use crate::c5::ir::Inst;

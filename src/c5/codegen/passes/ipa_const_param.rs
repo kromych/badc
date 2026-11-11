@@ -19,8 +19,7 @@
 //! Runs after unrolling and before inlining: a callee a splice absorbs
 //! gets the same constant by argument substitution, so what this
 //! reaches is the bodies that stay out of line -- where a guard written
-//! on the parameter would otherwise keep the call it guards. gcc covers
-//! the same shapes with interprocedural constant propagation.
+//! on the parameter would otherwise keep the call it guards.
 //!
 //! A rewritten `ParamRef` leaves the parameter's incoming register with
 //! no reader; `FunctionSsa::const_params` records that so the prologue

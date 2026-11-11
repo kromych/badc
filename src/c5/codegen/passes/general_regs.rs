@@ -1,7 +1,7 @@
 //! `-mno-sse` / `-mgeneral-regs-only` withhold the floating-point and
 //! SIMD registers. A `float` or `double` loaded only to be stored moves
-//! through a general register as an integer of its width, as gcc moves
-//! one; any other floating-point value a function computes is refused.
+//! through a general register as an integer of its width; any other
+//! floating-point value a function computes is refused.
 
 use crate::c5::codegen::ssa::reg_alloc::{compute_use_counts, produces_fp_result};
 use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};

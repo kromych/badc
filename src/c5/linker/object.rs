@@ -2948,8 +2948,8 @@ impl ShndxMap {
 
 /// Classification used to fold each section into the merged
 /// text / rodata / relro / data / bss / tls blob. `Text` covers
-/// `.text` and any `.text.<name>` clang/gcc `-ffunction-sections`
-/// emits; `RoData` covers reloc-free `.rodata*` and any other
+/// `.text` and any `.text.<name>` `-ffunction-sections` emits;
+/// `RoData` covers reloc-free `.rodata*` and any other
 /// allocatable non-writable non-executable payload; `RelRo` covers
 /// `.data.rel.ro*` and any read-only section a relocation targets --
 /// content the loader writes and the image then maps read-only under
@@ -3788,7 +3788,7 @@ mod tests {
         assert!(classify_section(".tls.odd", SHT_PROGBITS, A | 0x400, false).is_err());
     }
 
-    /// Clang/gcc `-ffunction-sections` shape: two `.text.<fn>`
+    /// The `-ffunction-sections` shape: two `.text.<fn>`
     /// sections, no unqualified `.text`. Each function symbol
     /// (STT_FUNC) names its own section index; the parser
     /// concatenates the section bytes in section-index order
@@ -3848,9 +3848,8 @@ mod tests {
         assert_eq!(r.addend, -4);
     }
 
-    /// Clang under `-fcommon` (the pre-clang-11 default and gcc's
-    /// default for C without `-fno-common`) emits uninitialised
-    /// global definitions (`int uninit;`) as STB_GLOBAL with
+    /// Under `-fcommon` an uninitialized global definition
+    /// (`int uninit;`) is emitted as STB_GLOBAL with
     /// `st_shndx = SHN_COMMON`: per ELF, `st_size` is the
     /// symbol's byte size and `st_value` is the requested
     /// alignment. The parser surfaces these as `Common` so the
@@ -3880,9 +3879,9 @@ mod tests {
         assert_eq!(s.value, 4, "alignment from st_value");
     }
 
-    /// `_Thread_local` storage: clang emits initialized TLS
-    /// variables into `.tdata` and zero-init ones into `.tbss`,
-    /// with STT_TLS symbols pointing at those sections. The
+    /// `_Thread_local` storage: initialized TLS variables are in
+    /// `.tdata` and zero-init ones in `.tbss`, with STT_TLS
+    /// symbols pointing at those sections. The
     /// parser concatenates `.tdata*` bytes into `tls_data`,
     /// counts the `.tbss*` extent past them into `tls_bss_size`,
     /// and surfaces symbols as `Tls` with the value rebased by the
@@ -3926,7 +3925,7 @@ mod tests {
         );
     }
 
-    /// Clang/gcc `-fdata-sections` shape: per-variable `.data.<var>`
+    /// The `-fdata-sections` shape: per-variable `.data.<var>`
     /// + `.bss.<var>` subsections, no unqualified `.data` / `.bss`.
     /// Each subsection's STT_OBJECT symbol points at its own
     /// section index; the parser concatenates the bytes (or

@@ -1,8 +1,8 @@
 //! `__declspec(dllimport)` / `__attribute__((dllimport))`: the entity lives in
 //! a DLL and the image reaches it through its import-address slot
-//! `__imp_<name>`, as MSVC, mingw-w64 gcc and clang do. The rules on
-//! redeclarations and misuse follow gcc's; a function definition marked
-//! dllimport is an error, as under clang and MSVC (C2491).
+//! `__imp_<name>`, the PE import convention. The rules on redeclarations and
+//! misuse follow gcc's; a function definition marked dllimport is an error
+//! (MSVC C2491).
 
 use super::super::diag::Code;
 use super::Compiler;

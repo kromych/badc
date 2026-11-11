@@ -265,12 +265,12 @@ fn dispatch(cli: Cli) {
     // only the assembler, whose encoder already follows `.code16` /
     // `.code32`. A C source under either is refused by name rather
     // than compiled as x86-64 into an EM_386 container. The
-    // preprocess-only modes are exempt from both restrictions, as they
-    // are in gcc: they emit no code, and their output is a function of
-    // the predefine set the flag selects.
+    // preprocess-only modes are exempt from both restrictions: they emit
+    // no code, and their output is a function of the predefine set the
+    // flag selects.
     if let Some(flag) = &cli.codegen.code_mode_flag {
-        // The flags name an x86 code model. gcc's AArch64 driver has no
-        // `-m32`, and badc has no AArch32 encoder or predefine set.
+        // The flags name an x86 code model. AArch64 has no `-m32`, and
+        // badc has no AArch32 encoder or predefine set.
         if !cli.target.is_x86_64() {
             eprint_diagnostic(format!(
                 "badc: error: `{flag}` selects an x86 code model; target is `{}`",
@@ -343,7 +343,7 @@ fn dispatch(cli: Cli) {
     {
         return dump_dependencies(&cli, &inputs, &stdin, d);
     }
-    // `-E` takes precedence, as in gcc; any other output is not written.
+    // `-E` takes precedence; any other output is not written.
     if cli.dump_records && cli.mode != Mode::DumpPp {
         return dump_records(&cli, &inputs, &stdin);
     }

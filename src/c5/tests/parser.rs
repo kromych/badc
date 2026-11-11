@@ -127,7 +127,7 @@ fn no_store_takes_a_member_of_a_value() {
 }
 
 /// C11 6.7.5p2: no alignment specifier in the declaration of a bit-field,
-/// whether it leads the member group or names one declarator of it; gcc's
+/// whether it leads the member group or names one declarator of it; the
 /// `aligned` attribute on a bit-field stays accepted.
 #[test]
 fn alignas_on_a_bit_field_is_diagnosed() {
@@ -161,8 +161,8 @@ fn alignas_on_a_bit_field_is_diagnosed() {
 
 /// GNU C requires the stack pointer to hold its value across an `asm`
 /// statement: listing it as clobbered, or writing an output bound to it,
-/// warns as gcc (`-Wdeprecated`) and clang (`-Winline-asm`) do. A template
-/// that only names sp is a stack switch the frame handling covers.
+/// warns. A template that only names sp is a stack switch the frame
+/// handling covers.
 #[test]
 fn an_asm_declared_to_change_sp_warns() {
     use crate::c5::Target;
@@ -197,7 +197,7 @@ fn an_asm_declared_to_change_sp_warns() {
         "void f(void *p) { __asm__ volatile(\"mov sp, %0\" : : \"r\"(p)); }",
         a64
     ));
-    // The warning names the statement's first line, as gcc's does.
+    // The warning names the statement's first line.
     let src = "void f(void) {\n  __asm__ volatile(\"sub sp, sp, #64\"\n    \"\"\n    ::: \"sp\");\n}\n\
                int main(void) { return 0; }\n";
     let lines: Vec<u32> = Compiler::with_options(src.to_string(), a64, Default::default())
@@ -215,7 +215,7 @@ fn an_asm_declared_to_change_sp_warns() {
 fn overaligned_automatic_beside_a_vla_compiles() {
     // The realigned region (alignment above 16) and a variable-length array
     // (C99 6.7.6.2) share a frame: the region is addressed from a base
-    // register while sp moves, as clang addresses it.
+    // register while sp moves.
     Compiler::new(
         "int use(void *, void *);\n\
          int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }\n\
@@ -684,8 +684,8 @@ fn fall_off_end_of_non_void_function_warns() {
     // C99 6.9.1p12: control reaching the closing brace of a
     // value-returning function with no `return value;` leaves the value
     // indeterminate. This is undefined behavior if the result is used,
-    // not a constraint violation, so it is a warning (matching gcc /
-    // clang) and the codegen synthesizes a `return 0`.
+    // not a constraint violation, so it is a warning and the codegen
+    // synthesizes a `return 0`.
     let prog = super::compile_str_bare_with_diags(
         "int f(int x) { if (x) return x; } int main(void) { return f(1); }",
         &["all"],
@@ -894,8 +894,8 @@ fn unresolved_goto_label() {
     expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
 }
 
-// GCC local labels (`__label__`). The accept/reject split below matches
-// gcc; clang differs on one case, noted at that test.
+// GNU C local labels (`__label__`). The accept/reject split below follows
+// gcc's; clang differs on one case, noted at that test.
 
 #[test]
 fn local_label_binds_within_its_block() {
@@ -957,8 +957,8 @@ fn address_of_local_label() {
 
 #[test]
 fn local_label_declared_but_unused() {
-    // gcc accepts a local label that is never referenced; clang rejects
-    // it. Follow gcc: the declaration alone constrains nothing.
+    // A local label that is never referenced is accepted (clang rejects
+    // it): the declaration alone constrains nothing.
     expect_compiles(
         "int main() { __label__ l; return 0; }",
         "an unreferenced `__label__` declaration",
@@ -1063,8 +1063,8 @@ fn local_label_declaration_after_a_nested_statement() {
 
 #[test]
 fn address_of_undefined_label() {
-    // gcc and clang both reject taking the address of a label that no
-    // statement defines.
+    // Taking the address of a label that no statement defines is an
+    // error.
     expect_compile_error(
         "int main() { void *p = &&nowhere; return p != 0; }",
         "unresolved label: nowhere",
@@ -1622,11 +1622,10 @@ fn case_labels_compare_in_the_promoted_controlling_type() {
 
 /// A GNU case range takes part in the distinctness C99 6.8.4.2p3 requires
 /// with every value it covers. A range whose bounds are out of order in the
-/// promoted type is empty: B3009 warns and the label is dropped, as gcc and
-/// clang drop it. A label value outside the range of the controlling
-/// expression's own type warns, B3008, as gcc's -Wswitch-outside-range does:
-/// it never matches, or its conversion to the promoted type discarded value
-/// bits. A sign reinterpretation at the same width does not warn.
+/// promoted type is empty: B3009 warns and the label is dropped. A label
+/// value outside the range of the controlling expression's own type warns,
+/// B3008 (`-Wswitch-outside-range`): it never matches, or its conversion to
+/// the promoted type discarded value bits. A sign reinterpretation at the same width does not warn.
 #[test]
 fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
     use crate::Target;
@@ -1760,7 +1759,7 @@ fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
 /// C99 6.7.5 and 6.7.6: a declarator, abstract or not, begins with `*`,
 /// `(`, `[` or an identifier, so a type qualifier cannot lead one: not
 /// inside a parenthesized declarator, not in a later declarator of a list,
-/// and not in a type name's group. gcc and clang reject each form; a
+/// and not in a type name's group. Each form is rejected; a
 /// calling-convention keyword and an attribute may still lead a group.
 #[test]
 fn a_type_qualifier_cannot_begin_a_declarator() {
@@ -1862,7 +1861,7 @@ fn a_parameter_array_size_is_evaluated_on_entry() {
     }
 }
 
-/// gcc's -Wswitch-bool: B3012 warns on a `switch` whose controlling
+/// `-Wswitch-bool`: B3012 warns on a `switch` whose controlling
 /// expression has a boolean value -- `_Bool`, or a comparison, `!`, `&&` or
 /// `||`, seen through a comma -- when a case label lies outside 0 and 1, or
 /// a `default` stands beside labels that cover both. A cast to another
@@ -1910,7 +1909,7 @@ fn a_switch_on_a_boolean_value_warns_for_a_label_it_cannot_take() {
     );
 }
 
-/// C99 6.2.1p4; a K&R declaration list's tags join the block, as gcc's do.
+/// C99 6.2.1p4; a K&R declaration list's tags join the block.
 #[test]
 fn a_definitions_parameter_tags_are_in_its_block() {
     use crate::Target;
@@ -1928,7 +1927,8 @@ fn a_definitions_parameter_tags_are_in_its_block() {
         .unwrap_or_else(|e| panic!("{e}"));
 }
 
-/// As gcc does, and clang under -Wvisibility.
+/// A tag a parameter list declares has prototype scope (C99 6.2.1p4), so
+/// each such declaration warns under `-Wvisibility`.
 #[test]
 fn a_tag_declared_in_a_parameter_list_is_reported() {
     use crate::Target;
@@ -2028,8 +2028,8 @@ fn valid_numeric_literals_still_compile() {
 /// for a windows-msvc triple: `[u]i8` ... `[u]i64` name `char` (unsigned
 /// `char`), `short`, `int` and `long long`, the value must fit the width
 /// and is read at the suffix's signedness, and `#if` takes them unchanged.
-/// clang accepts the unit and rejects the four erroneous constants; the
-/// other targets reject the suffixes, as gcc and clang do there.
+/// The four erroneous constants are rejected; the other targets reject the
+/// suffixes.
 #[test]
 fn microsoft_sized_integer_suffixes_type_the_constant_on_the_pe_targets() {
     use crate::c5::Target;
@@ -2292,7 +2292,7 @@ fn constructor_attribute_is_recorded() {
 #[test]
 fn constructor_attribute_on_prototype_reaches_definition() {
     // The attribute on a separate declaration merges onto the later
-    // definition, as gcc's composite type does, for the bare, priority
+    // definition, as part of the composite type, for the bare, priority
     // and destructor forms. A repeat on both declarations registers
     // once, and a static prototype-form constructor is not unused.
     let src = "
@@ -2338,7 +2338,7 @@ fn constructor_attribute_on_prototype_reaches_definition() {
 fn constructor_is_not_reported_unused() {
     // A `static` constructor / destructor has no in-source call site but
     // runs at startup / exit, so it must not draw the unused-function
-    // diagnostic (gcc / clang never warn on it).
+    // diagnostic.
     let prog = super::compile_str_bare_with_diags(
         "__attribute__((constructor)) static void a(void) {}\n\
          __attribute__((destructor)) static void b(void) {}\n\
@@ -2362,9 +2362,9 @@ fn constructor_is_not_reported_unused() {
     );
 }
 
-/// A `static` `main` is no program entry point: gcc 16 and clang 22 report
-/// it unused under `-Wall`, hosted or freestanding, and clang's `-Wmain`, on
-/// by default, flags each hosted `static` declaration of it. An external
+/// A `static` `main` is no program entry point: it is reported unused under
+/// `-Wall`, hosted or freestanding, and clang's `-Wmain`, on by default,
+/// flags each hosted `static` declaration of it. An external
 /// `main` draws neither. `-Wno-main` and `-Wno-unused-function` silence
 /// their rows.
 #[test]
@@ -2425,7 +2425,7 @@ fn a_report_about_a_function_points_at_its_definition() {
 
 #[test]
 fn asm_goto_accepts_output_operands() {
-    // GCC 11 `asm goto` outputs: valid on every exit path (the emitters
+    // GNU C `asm goto` outputs: valid on every exit path (the emitters
     // store outputs on the fall-through and each label trampoline).
     Compiler::new(
         "int f(int x) { int o; \
@@ -2450,7 +2450,7 @@ fn asm_goto_rejects_unknown_label_name() {
 }
 
 /// An asm statement's operand names and `asm goto` labels are one
-/// namespace, as gcc and clang have it: a repeat is an error.
+/// namespace: a repeat is an error.
 #[test]
 fn asm_repeated_operand_name_or_label_is_diagnosed() {
     for body in [
@@ -2592,7 +2592,7 @@ fn register_asm_binding_constraints() {
     // class, a bindable register for the target, automatic storage,
     // and (for the stack / frame pointer) read-only use.
     // Without `register` the suffix is an asm-label, which an automatic
-    // object has no symbol to carry; gcc ignores it with a warning.
+    // object has no symbol to carry; it is ignored with a warning.
     super::compile_str_bare("int main(void) { long x asm(\"rax\"); return 0; }");
     expect_compile_error(
         "int main(void) { register long x asm(\"nosuch\"); return (int)x; }",
@@ -2661,8 +2661,8 @@ fn register_asm_binding_target_specific_registers() {
 fn register_asm_binding_concatenates_adjacent_literals() {
     // C99 5.1.1.2 phase 6: the register-name operand of a register-asm
     // declarator joins adjacent string literals before resolving the
-    // register, matching gcc and clang. Macro-pasted headers spell the
-    // name in pieces, e.g. `asm("%" "rdx")`.
+    // register. Macro-pasted headers spell the name in pieces, e.g.
+    // `asm("%" "rdx")`.
     use super::super::codegen::Target;
     let x64 = Target::LinuxX64;
     let a64 = Target::LinuxAarch64;
@@ -2774,8 +2774,8 @@ fn file_scope_register_asm_binding() {
 }
 
 /// Windows and Darwin reserve x18, AAPCS64's platform register (Windows
-/// keeps the TEB pointer there), so a file-scope variable may name it, as
-/// gcc and clang allow, and a read is a move from x18 (`add x0, x18, #0`).
+/// keeps the TEB pointer there), so a file-scope variable may name it, and
+/// a read is a move from x18 (`add x0, x18, #0`).
 #[cfg(feature = "native-emit")]
 #[test]
 fn a_platform_register_variable_reads_x18() {
@@ -2801,8 +2801,8 @@ fn a_platform_register_variable_reads_x18() {
 
 #[test]
 fn a_file_scope_register_variable_names_the_reserved_platform_register() {
-    // clang refuses every register a function may allocate, x18 on Linux
-    // included, in the words badc uses.
+    // Every register a function may allocate is refused, x18 on Linux
+    // included.
     use crate::Target;
     // The 32-bit view.
     compile_for_target(
@@ -3163,9 +3163,9 @@ fn expect_compiles(src: &str, what: &str) {
 
 #[test]
 fn empty_declaration_accepted_where_gcc_accepts_it() {
-    // A stray `;` declares nothing. gcc and clang accept an empty
-    // declaration in a struct/union member list and at file scope
-    // (diagnosed only under `-pedantic`).
+    // A stray `;` declares nothing. An empty declaration in a struct/union
+    // member list and at file scope is accepted as an extension (diagnosed
+    // only under `-pedantic`).
     expect_compiles(
         "struct S { void *lock;; };\n\
          int main(void) { struct S s; s.lock = 0; return s.lock != 0; }",
@@ -3195,8 +3195,8 @@ fn empty_declaration_accepted_where_gcc_accepts_it() {
 
 #[test]
 fn empty_declaration_in_enum_list_rejected() {
-    // gcc and clang both reject a `;` in an enumerator list ("expected
-    // ',' or '}'"), so the member-list extension does not extend here.
+    // A `;` in an enumerator list is rejected ("expected ',' or '}'"):
+    // the member-list extension does not extend here.
     expect_syntax_error(
         "enum E { A;, B };\n\
          int main(void) { return A; }",
@@ -3252,8 +3252,8 @@ fn conditional_pointer_arm_result_type() {
 
 #[test]
 fn aggregate_with_no_named_member_is_zero_sized() {
-    // gcc and clang give a struct with no named member size 0 in C
-    // (C++ floors it at 1). The compile-time assertion idiom
+    // GNU C gives a struct with no named member size 0 (C++ floors it
+    // at 1). The compile-time assertion idiom
     // `sizeof(struct { int:-!!(e); })` depends on the 0.
     expect_compiles(
         "int main(void) { return sizeof(struct {}) + sizeof(struct { int : 0; }); }",
@@ -3264,7 +3264,7 @@ fn aggregate_with_no_named_member_is_zero_sized() {
 #[test]
 fn member_of_incomplete_aggregate_type_rejected() {
     // C99 6.7.2.1p2: a member has complete type; 6.7.5.2p1: so has the
-    // element of an array. gcc and clang reject both.
+    // element of an array.
     expect_compile_error(
         "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
         "incomplete type",
@@ -3327,7 +3327,7 @@ fn typedef_aligned_type_attribute_layout_linux_x64() {
 
 #[test]
 fn stack_pointer_register_variable_as_asm_operand() {
-    // GCC binds an `r` operand naming a register variable to that
+    // An `r` operand naming a register variable binds to that
     // register. The stack and frame pointers have no storage behind
     // them, so such an operand transfers no value: `"+r"` marks the
     // block as reading and disturbing the register rather than
@@ -3500,9 +3500,9 @@ fn block_typedef_redeclaration_rules() {
     );
 }
 
-/// GCC applies an aggregate's type attributes when they follow the keyword
-/// or the body; an `aligned` ahead of the keyword aligns the declared typedef
-/// name or object and leaves the aggregate's own alignment natural.
+/// An aggregate's type attributes apply when they follow the keyword or the
+/// body; an `aligned` ahead of the keyword aligns the declared typedef name
+/// or object and leaves the aggregate's own alignment natural.
 #[test]
 fn an_alignment_ahead_of_the_struct_keyword_aligns_the_declarators() {
     let src = "struct __attribute__((aligned(16))) A { int x; };\n\
@@ -3828,7 +3828,7 @@ fn incomplete_type_is_rejected_where_its_object_is_needed() {
             expect_compile_error_off_pe(&src, &msg.replace('@', tag));
         }
         // The lvalue itself stands where no value is read: its address, the
-        // type of it, and an asm memory operand, which gcc accepts.
+        // type of it, and an asm memory operand.
         expect_compiles(
             &"@; @ *p;\n\
               int main(void) { typeof(*p) *q = &*p; __asm__ volatile(\"\" : : \"m\"(*p)); return q != p; }"
@@ -3969,8 +3969,8 @@ fn multi_dim_compound_literal_dimension_constraints() {
     );
     // A const-qualified object is not an integer constant expression
     // (C99 6.6p6), so the dimension makes the literal variably sized,
-    // which 6.5.2.5p1 forbids; gcc rejects it, and the static-initializer
-    // path masks its const-object fold to match.
+    // which 6.5.2.5p1 forbids; the static-initializer path masks its
+    // const-object fold so it stays rejected.
     expect_compile_error(
         "int main(void) { const int h = 2; int *p = (int[h]){ 1, 2 }; return p[0]; }",
         "a compound literal may not have a variably modified type",
@@ -4118,8 +4118,7 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
     // C11 6.7.9p4: an object with static storage duration is initialized
     // by constant expressions, and a thread-local object's address is not
     // one -- it has no value until a thread's block is materialized, which
-    // is after image relocation. gcc rejects each of these with
-    // "initializer element is not constant".
+    // is after image relocation. Each of these is rejected.
     for src in [
         "__thread int tv = 7;\nint *p = &tv;",
         "__thread int tv = 7;\nint *p = &tv + 1;",
@@ -4161,8 +4160,9 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 
 #[test]
 fn visibility_takes_gccs_four_operands() {
-    // GCC `visibility` and `#pragma GCC visibility push`: default, hidden,
-    // internal or protected, kept as stated; another operand is refused.
+    // The `visibility` attribute and `#pragma GCC visibility push`:
+    // default, hidden, internal or protected, kept as stated; another
+    // operand is refused.
     use crate::c5::program::SymVisibility as V;
     let program = Compiler::new(
         "__attribute__((visibility(\"protected\"))) int p = 1;\n\
@@ -4315,9 +4315,8 @@ fn vector_headers_hold_against_an_attribute_macro() {
 fn a_named_section_holds_one_kind_of_definition() {
     // GNU `section`: the first definition in a section sets its kind --
     // code, writable data or read-only data -- and a definition of another
-    // kind is a section type conflict, as gcc reports it; a declaration
-    // places nothing. A `const` object a relocation writes sits with data
-    // of either kind.
+    // kind is a section type conflict; a declaration places nothing. A
+    // `const` object a relocation writes sits with data of either kind.
     let unit = |a: &str, b: &str| {
         format!(
             "int w0;\n__attribute__((section(\".tsec\"))) {a}\n\
@@ -4377,8 +4376,8 @@ fn derived_type_spellings_agree_and_a_cast_names_no_array() {
 #[test]
 fn a_comma_operator_of_constants_folds_to_its_right_operand() {
     // C99 6.6p3 keeps an evaluated comma out of a constant expression;
-    // gcc and clang accept one of constant operands (6.6p10), whose
-    // discarded operands may be cast to `void`. A `void` value is no
+    // one of constant operands is accepted (6.6p10), and its discarded
+    // operands may be cast to `void`. A `void` value is no
     // constant, and neither is a call.
     for src in [
         "enum { E = 1 ? 2 : (3, 4) }; int main(void) { return E - 2; }",
@@ -4507,7 +4506,7 @@ fn redeclarations_compare_the_function_types_pointers_lead_to() {
     ] {
         compile(src).unwrap_or_else(|e| panic!("{src}: {e}"));
     }
-    // The attribute is inert off x86-64, as clang reads it.
+    // The attribute is inert off x86-64.
     Compiler::with_target(
         "extern int (__attribute__((ms_abi)) **y)(int); extern int (**y)(int);\n\
          int main(void) { return 0; }\n"
@@ -4595,8 +4594,8 @@ fn static_local_array_initializer_over_bound_rejected() {
 
 /// C99 6.7.8p2: a string longer than the array, member or row it
 /// initializes is reported as `-Wexcess-initializers`, on by default, and
-/// truncated, as gcc and clang do, once for each literal; an exact fit
-/// leaves the terminator out silently (6.7.8p14).
+/// truncated, once for each literal; an exact fit leaves the terminator
+/// out silently (6.7.8p14).
 #[test]
 fn a_string_longer_than_its_array_warns_and_is_truncated() {
     let types = "#include <wchar.h>\n\
@@ -4911,8 +4910,8 @@ fn the_include_hint_names_a_header_declaring_the_name_on_the_target() {
 #[test]
 fn an_address_constant_initializes_only_an_object_that_holds_it() {
     // A static object narrower than a pointer, a floating one and a
-    // bit-field have no relocation for an address; gcc and clang reject
-    // each, where the relocation used to overrun the object.
+    // bit-field have no relocation for an address and are rejected, where
+    // the relocation used to overrun the object.
     for (decl, what) in [
         ("int x = (int)(long)&g;", "an object of type `int`"),
         (
@@ -5523,8 +5522,7 @@ fn a_trailing_noreturn_specifier_is_recorded() {
 /// condition's dead branch neither falls through nor ends a loop: a call
 /// through a block-scope noreturn declaration, and a `for` whose only
 /// `break` sits in a constant-false branch reached by a `goto` from its
-/// third clause, do not warn, as gcc and clang do not. The warnings
-/// match clang's.
+/// third clause, do not warn. The warnings match clang's.
 #[test]
 fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
     let quiet = [
@@ -5565,7 +5563,7 @@ fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
 /// -Wreturn-type at -O0 and -O2: `x || 1`, `x | 1`, `!(x && 0)`,
 /// `(x & 0) == 0`, `!(x * 0)`, `x | ~0u`, `(x ^ x) == 0`, `x - x + 1` and
 /// `(x, 1)` are true whatever `x`; `x && 0` and `x * 0` false; `x || 0`,
-/// `x | 0` and `!x` undecided. The warnings match gcc's.
+/// `x | 0` and `!x` undecided.
 #[test]
 fn fall_off_end_folds_conditions_their_known_operands_decide() {
     let quiet = [
@@ -6207,7 +6205,7 @@ fn static_init_reads_only_a_const_object_in_bounds() {
 /// The value builtins take gcc's operands: their arity, the conversion of
 /// each operand to its parameter type, and integer constants for
 /// `__builtin_prefetch`'s access kind and locality, which outside their
-/// range warn as gcc does and are taken as 0.
+/// range warn and are taken as 0.
 #[test]
 fn value_builtins_check_their_operands() {
     let with_main = |body: &str| alloc::format!("{body}\nint main(void) {{ return 0; }}\n");
@@ -6264,21 +6262,21 @@ fn value_builtins_check_their_operands() {
             .contains("argument 3 of `__builtin_prefetch` is 4, not 0 to 3"),
         "{w:?}"
     );
-    // -Wint-conversion is an error by default, as in gcc 14.
+    // -Wint-conversion is an error by default.
     expect_compile_error(
         &with_main("long f(int *p) { return __builtin_expect(p, 0); }"),
         "pointer assigned to integer in argument 1 of `__builtin_expect`",
     );
-    // gcc takes any alignment value, constant or not.
+    // Any alignment value is taken, constant or not.
     assert!(
         warnings("void *f(int *p, int a) { return __builtin_assume_aligned(p, a); }").is_empty()
     );
 }
 
-/// A diagnostic about a `__builtin_` call names the spelling the call used,
-/// as gcc 16 and clang 22 do: a library builtin (`__builtin_strlen` binds
-/// `strlen`, whether a header declares it or not) and an intrinsic one, for
-/// the argument count and an argument's type.
+/// A diagnostic about a `__builtin_` call names the spelling the call used:
+/// a library builtin (`__builtin_strlen` binds `strlen`, whether a header
+/// declares it or not) and an intrinsic one, for the argument count and an
+/// argument's type.
 #[test]
 fn a_builtin_call_is_named_as_written() {
     use crate::{CompileOptions, Target};
@@ -6346,7 +6344,7 @@ fn a_builtin_call_is_named_as_written() {
     }
 }
 
-/// gcc's `-Wstrict-prototypes` under C99's rules: a function declarator
+/// `-Wstrict-prototypes` under C99's rules: a function declarator
 /// whose empty or identifier list declares no prototype (C99 6.7.5.3p14),
 /// in a declaration, a pointer, a typedef, a parameter, a member and a
 /// type name, but not in a cast's type name; a definition reports only
@@ -6382,11 +6380,11 @@ fn strict_prototypes_reports_where_gcc_does() {
     );
 }
 
-/// gcc's `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
+/// `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
 /// definition, neither `inline` nor `main`, with no earlier file-scope
 /// declaration having a prototype / at all. A block-scope declaration does
 /// not count. The lines are gcc 16.2.1's for the same units, and the
-/// declaration forms of the second unit each count, as in gcc.
+/// declaration forms of the second unit each count.
 #[test]
 fn missing_prototypes_and_declarations_report_where_gcc_does() {
     use crate::c5::diag::Code;
@@ -6445,7 +6443,7 @@ fn missing_prototypes_and_declarations_report_where_gcc_does() {
     );
 }
 
-/// gcc's `-Wcast-function-type` (in `-Wextra`): a cast between pointers to
+/// `-Wcast-function-type` (in `-Wextra`): a cast between pointers to
 /// functions whose returns or common leading parameters differ other than
 /// as pointers, as integers of one precision, or in qualifiers;
 /// `void (*)(void)`, a variadic tail and a list without a prototype match.
@@ -6523,7 +6521,7 @@ fn cast_function_type_reports_where_gcc_does() {
 /// GNU `designated_init` on a struct type: each initializer element with
 /// no designator for one of its members reports, braced or brace-elided,
 /// in a static, an automatic and a compound-literal initializer. The lines
-/// warned are gcc 16.2.1's for the same unit; gcc counts some elements on
+/// warned are gcc 16.2.1's for the same unit; it counts some elements on
 /// lines 16 and 17 differently but warns on the same lines.
 #[test]
 fn designated_init_reports_a_positional_member() {
@@ -6562,13 +6560,6 @@ fn designated_init_reports_a_positional_member() {
     );
 }
 
-/// gcc's `-Wimplicit-fallthrough=5`: a statement completing into the label
-/// after it, unless a `fallthrough` attribute statement ends it. The lines
-/// are gcc 16.2.1's for the same units: an endless loop does not complete,
-/// whatever `break` it holds, a `do` loop completes when its body does, a
-/// nested switch when it breaks or its last statement completes, and a
-/// label landing on `break`, `goto`, a bare `return` or the switch's end is
-/// passed over, as gcc's lowering gives them.
 /// `longjmp` does not return on any target, whether the header binds it to
 /// the C library or lowers it as an intrinsic (C99 7.13.2.1p4).
 #[test]
@@ -6595,6 +6586,13 @@ fn longjmp_ends_control_flow_on_every_target() {
     }
 }
 
+/// `-Wimplicit-fallthrough=5`: a statement completing into the label
+/// after it, unless a `fallthrough` attribute statement ends it. The lines
+/// are gcc 16.2.1's for the same units: an endless loop does not complete,
+/// whatever `break` it holds, a `do` loop completes when its body does, a
+/// nested switch when it breaks or its last statement completes, and a
+/// label landing on `break`, `goto`, a bare `return` or the switch's end is
+/// passed over.
 #[test]
 fn implicit_fallthrough_reports_where_gcc_does() {
     let units = [
@@ -6747,7 +6745,7 @@ fn implicit_fallthrough_reports_where_gcc_does() {
         // A nested switch completes only through a `break` control reaches
         // or a value no label matches: the unreachable `break` after an
         // `if` whose arms both return does not end it, and a switch with
-        // no `default` does (gcc 16.2.1 reports line 16 alone).
+        // no `default` does (line 16 alone reports).
         (
             "int g(int);\n\
                int f(int a, int b) {\n\
@@ -6777,7 +6775,7 @@ fn implicit_fallthrough_reports_where_gcc_does() {
             &[16],
         ),
         // What precedes a switch body's first label is never reached, so it
-        // falls into nothing; gcc reports none of these.
+        // falls into nothing; none of these reports.
         (
             "void g(void);\n\
                int a(int x) { switch (x) { int c; case 1: c = 2; return c; default: return 0; } }\n\
@@ -6787,7 +6785,7 @@ fn implicit_fallthrough_reports_where_gcc_does() {
             &[],
         ),
         // A `return` that leaves `cleanup` scopes runs their calls and
-        // leaves; gcc 16.2.1 reports none of these.
+        // leaves; none of these reports.
         (
             "void unlock(int *p);\n\
                int g(int);\n\
@@ -6915,7 +6913,7 @@ fn unselected_generic_associations_are_checked_not_evaluated() {
 /// A diagnostic in an initializer of static storage duration is reported
 /// once, though the initializer may be parsed twice (as an address
 /// constant first, then as arithmetic): the checkpoint the first parse is
-/// undone to also drops what it reported. gcc 16 reports each line once.
+/// undone to also drops what it reported.
 #[test]
 fn a_static_initializers_diagnostic_is_reported_once() {
     let src = "int *gp;\n\
@@ -6982,16 +6980,16 @@ fn vla_larger_than_reads_a_typedef_bound() {
     }
 }
 
-/// gcc's `-Wenum-conversion` (in `-Wextra`): an assignment, initializer,
+/// `-Wenum-conversion` (in `-Wextra`): an assignment, initializer,
 /// prototyped argument or return converting a value of one enumerated type
-/// to another, the type compared being gcc's original one: an enumeration
+/// to another, the type compared being the original one: an enumeration
 /// constant's enumeration (C99 6.7.2.2p3 types the constant `int`), a
 /// bit-field's declared type, two conditional arms' common enumeration.
 /// A bit-field narrower than its type has an integer type of its own as
 /// the target of a conversion or the value of a store, and an initializer
 /// of a type compatible with the object's, as the promoted `i ? a : a`
 /// is, initializes it as it is. The lines are gcc 16.2.1's for the same
-/// unit on x86-64 and AArch64 Linux; gcc reports 22 and 23 twice.
+/// unit on x86-64 and AArch64 Linux; it reports 22 and 23 twice.
 #[test]
 fn enum_conversion_reports_where_gcc_does() {
     use crate::c5::Target;
@@ -7274,9 +7272,9 @@ fn atomic_names_no_array_function_atomic_or_qualified_type() {
     assert!(compile(accepted).is_ok(), "{:?}", compile(accepted).err());
 }
 
-/// A weak name has external linkage, as gcc and clang require: a `static`
-/// function or object and a block-scope `static` are refused, while an
-/// `extern`, a plain and an `inline` declaration take the attribute.
+/// A weak name has external linkage: a `static` function or object and a
+/// block-scope `static` are refused, while an `extern`, a plain and an
+/// `inline` declaration take the attribute.
 #[test]
 fn a_weak_declaration_must_be_public() {
     let refused = [

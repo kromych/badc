@@ -636,8 +636,8 @@ impl Compiler {
     }
 
     /// Reduce the just-parsed va_* intrinsic operand to the address of
-    /// the `va_list` storage it names (the GCC builtins take the
-    /// `va_list` by reference). The record-form `va_list` (System V
+    /// the `va_list` storage it names (the builtins take the `va_list`
+    /// by reference). The record-form `va_list` (System V
     /// x86_64 / AAPCS64) reaches here already decayed to the record
     /// address; the cursor-form lvalue (a plain pointer object) drops
     /// its trailing load; anything else (an explicit `&ap`) already
@@ -1913,7 +1913,7 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Goto(label), pos)
     }
 
-    /// Push a `Stmt::GotoIndirect` (GCC `goto *expr;`).
+    /// Push a `Stmt::GotoIndirect` (`goto *expr;`).
     pub(super) fn ast_emit_goto_indirect(
         &mut self,
         target: super::super::ast::ExprId,
@@ -2011,10 +2011,10 @@ impl Compiler {
         id
     }
 
-    /// Consume `&& identifier` (GCC labels as values) and intern the
+    /// Consume `&& identifier` (GNU C labels as values) and intern the
     /// label. The current token must be `&&`. The label may be defined
     /// later in the function, so a forward reference is recorded for the
-    /// function-end check gcc and clang also apply.
+    /// function-end check.
     pub(super) fn parse_label_addr_operand(
         &mut self,
     ) -> Result<super::super::ast::LabelId, C5Error> {
@@ -2079,7 +2079,7 @@ impl Compiler {
         // operand type here (it retags after the emit, since the flavor
         // pick reads both operand types), so stamp the result type here
         // rather than leaving consumers to infer it from the operands.
-        // The GCC vector extension is the exception: a vector comparison
+        // The GNU C vector extension is the exception: a vector comparison
         // yields a vector, and its arm sets `self.ty` to it before this.
         let ty = if crate::c5::ir::is_comparison_op(op)
             && !super::types::is_vector_ty(&self.structs, self.ty)
@@ -2099,8 +2099,8 @@ impl Compiler {
     /// C99 6.5p8, 7.12.2: while `FP_CONTRACT` is on, a product that is an
     /// operand of an add or subtract `op` may be contracted with it; the
     /// pass does so where nothing else reads the product and it has the
-    /// add's precision. A GCC vector node keeps its nominal opcode, and
-    /// the lanes of a floating one contract as scalars do.
+    /// add's precision. A vector node keeps its nominal opcode, and the
+    /// lanes of a floating one contract as scalars do.
     fn mark_contractible(&mut self, op: super::super::ir::BinOp, operand: ExprId) {
         use super::super::ir::BinOp;
         use super::types::{is_floating_scalar, is_vector_ty, struct_id_of};

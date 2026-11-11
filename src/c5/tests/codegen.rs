@@ -97,8 +97,7 @@ fn an_unbound_static_slot_in_a_single_image_is_reported() {
 
 /// A weak reference no input defines is 0 in an ELF single-file image, as
 /// GNU ld resolves it, and an undefined reference in a Mach-O one, as ld64
-/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF,
-/// as gcc ignores it.
+/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF.
 #[test]
 fn a_weak_reference_no_input_defines_is_undefined_in_a_mach_o_image() {
     use crate::{Compiler, NativeOptions, Target};
@@ -671,8 +670,8 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
 /// link to move the whole section -- and with it the unit's pure
 /// `const` objects -- into the relro region, which is the placement
 /// this separation recovers. Without the flag the object keeps such
-/// storage in `.rodata`, as gcc does for a link that resolves the
-/// relocation statically.
+/// storage in `.rodata` for a link that resolves the relocation
+/// statically.
 #[test]
 fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
     use crate::c5::compiler::CompileOptions;
@@ -715,7 +714,7 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
             emit_native_with_options(&program, target, opts).expect("emit")
         };
 
-        // A link that resolves the relocation statically keeps gcc's
+        // A link that resolves the relocation statically keeps the default
         // assignment: both objects in `.rodata`, relocated through
         // `.rela.rodata`.
         let objs = super::linker::elf_data_objects(&object(false));
@@ -5148,9 +5147,9 @@ fn q_constraint_acquire_release_aarch64() {
 }
 
 /// The AArch64 `m` constraint: `%N` is the memory reference `[xN]` through
-/// the register holding the object's address, as GCC prints it, both in a
-/// plain template and in one the GNU-as directive pass substitutes. Each
-/// word is verified against `clang -target aarch64-linux-gnu`.
+/// the register holding the object's address, both in a plain template and
+/// in one the GNU-as directive pass substitutes. Each word is verified
+/// against `clang -target aarch64-linux-gnu`.
 #[test]
 fn m_constraint_substitutes_as_a_memory_reference_aarch64() {
     use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
@@ -6691,9 +6690,9 @@ fn elf64_shdr_addr_off(b: &[u8], want: &str) -> Option<(u64, u64)> {
     None
 }
 
-/// A foreign object's `.rodata.cst16`-style section (sh_addralign 16 --
-/// clang/gcc -O2 SSE constant pools) must keep its alignment through the
-/// family concatenation, the unit merge, and the final image placement:
+/// A foreign object's `.rodata.cst16`-style section (sh_addralign 16, an
+/// SSE constant pool) must keep its alignment through the family
+/// concatenation, the unit merge, and the final image placement:
 /// legacy-SSE aligned loads (`xorps`/`movaps`) fault on a misaligned
 /// operand. Link the foreign object after a badc unit and check the
 /// constant's final vaddr.
@@ -6767,9 +6766,8 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
 /// A constant controlling expression in a `?:` or `if` selects one
 /// arm at translation time (C99 6.5.15 / 6.8.4.1); the walker emits
 /// only that arm, so a dead arm's call -- and the undefined-symbol
-/// reference it would carry into the object -- never reaches the SSA.
-/// gcc performs this front-end fold even at -O0. A non-constant
-/// condition must still emit both arms.
+/// reference it would carry into the object -- never reaches the SSA,
+/// at -O0 too. A non-constant condition must still emit both arms.
 #[test]
 fn constant_condition_drops_dead_branch_call() {
     use crate::c5::ir::Inst;
@@ -7212,7 +7210,7 @@ fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
 /// slots and the units clobber each other. The unit's own thread-locals
 /// take the local-exec relocations against its TLS sections; an extern
 /// one, which a shared library may define, the initial-exec ones against
-/// its symbol, as gcc's code for an executable reads it.
+/// its symbol.
 #[test]
 fn relocatable_elf_reads_own_thread_locals_local_exec_and_others_initial_exec() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -7358,7 +7356,7 @@ fn thread_local_address_lowers_with_a_spilled_destination() {
 /// relocatable object under its own `STB_LOCAL` `STT_OBJECT` symbol,
 /// with the storage's section, offset and size. Without one, a tool
 /// attributing an address to a symbol names the nearest preceding
-/// global instead. Matches what gcc emits for the same unit.
+/// global instead.
 #[test]
 fn internal_linkage_data_objects_are_named_by_local_symbols() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -7440,7 +7438,7 @@ fn internal_linkage_data_objects_are_named_by_local_symbols() {
     }
 }
 
-/// gcc emits every undefined reference untyped -- an extern array, an
+/// Every undefined reference is untyped -- an extern array, an
 /// address-taken function and a plain call all reach `.symtab` as
 /// `STT_NOTYPE` `SHN_UNDEF`, only `extern _Thread_local` is typed
 /// (`STT_TLS`). A linker adopts a typed UNDEF onto an untyped
@@ -8354,12 +8352,12 @@ fn aggregate_parameter_classes_are_all_spliced() {
     }
 }
 
-/// AAPCS64 5.9.5 as gcc and clang apply it: a union holds as many
-/// homogeneous-aggregate elements as its largest member, a struct the sum
-/// of its members', an anonymous member counts as one member, 64- or
-/// 128-bit vectors of one width are one base type whatever their lanes,
-/// and padding, a bit-field of nonzero width, a vector of another width, a
-/// vector beside a scalar or a flexible or zero-length array makes none.
+/// AAPCS64 5.9.5: a union holds as many homogeneous-aggregate elements as
+/// its largest member, a struct the sum of its members', an anonymous
+/// member counts as one member, 64- or 128-bit vectors of one width are one
+/// base type whatever their lanes, and padding, a bit-field of nonzero
+/// width, a vector of another width, a vector beside a scalar or a flexible
+/// or zero-length array makes none.
 /// `take` reads the `double` after the aggregate from the first SIMD
 /// register past its elements, and `make` returns one per element.
 #[test]
@@ -10383,8 +10381,8 @@ fn library_builtins_need_no_auto_include_retry() {
     );
 }
 
-/// gcc and clang give each `__builtin_` library function its prototype with
-/// no declaration in scope. Where no header can be auto-included -- under
+/// Each `__builtin_` library function has its prototype with no
+/// declaration in scope. Where no header can be auto-included -- under
 /// `-nostdinc`, `-ffreestanding` and for preprocessed input -- the unit
 /// compiles with no note; the absolute values and the functions a header
 /// binds to an instruction leave no reference, and the rest call the
@@ -10541,9 +10539,9 @@ fn arm_neon_float_intrinsics_are_their_instructions() {
     }
 }
 
-/// C99 7.12.14's comparison builtins lower to the quiet compares, as gcc's
-/// and clang's do: `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64,
-/// never the signaling `comis*` or `fcmpe`, at -O0 and -O.
+/// C99 7.12.14's comparison builtins lower to the quiet compares:
+/// `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64, never the
+/// signaling `comis*` or `fcmpe`, at -O0 and -O.
 #[cfg(feature = "full")]
 #[test]
 fn c99_comparison_builtins_compare_quietly() {
@@ -10629,8 +10627,8 @@ fn absolute_value_builtins_fold_alongside_the_library_builtins() {
 }
 
 /// A driver `-include` file may hold a translation unit's body rather than
-/// declarations; the builtins are visible to it as to the main source, as
-/// gcc and clang make them visible before any input is read.
+/// declarations; the builtins are visible to it as to the main source,
+/// since they are visible before any input is read.
 #[test]
 #[cfg(feature = "full")]
 fn builtins_are_visible_to_a_forced_include_body() {
@@ -10884,8 +10882,7 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
     // `-fmin-function-alignment=N` starts every function at a multiple of
     // N and raises `.text`'s own alignment to match, so the placement
     // holds once the section is placed. The fill belongs to no function:
-    // each `st_size` stays the size the packed object gave it, as gcc's
-    // does.
+    // each `st_size` stays the size the packed object gave it.
     use crate::{
         CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
     };
@@ -11099,7 +11096,7 @@ fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
 fn a_freestanding_unit_takes_the_isdigit_builtin_it_probes() {
     // `__builtin_isdigit` stands in for `isdigit` when `__has_builtin`
     // reports it, in a unit with no library headers, so it folds from its
-    // operand as gcc folds it.
+    // operand.
     use crate::{CompileOptions, Compiler, Target};
     let src = "#if __has_builtin(__builtin_isdigit)\n\
                #define isdigit(c) __builtin_isdigit(c)\n\
@@ -11190,7 +11187,7 @@ fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
 #[test]
 #[cfg(feature = "full")]
 fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
-    // gcc keeps the `__builtin_` spelling callable in every mode: a
+    // The `__builtin_` spelling stays callable in every mode: a
     // transfer whose count is no small constant falls back to a call of
     // the library function, and the builtin supplies that binding
     // itself, so a freestanding unit compiles with the name left
@@ -11644,8 +11641,7 @@ fn indexes_by_address(text: &[u8], at: usize) -> bool {
 /// `-fno-pic`, the kernel code model) takes an absolute field, so the
 /// dispatch loads its entry through the table's address, `mov
 /// table(,%idx,8), %r10`: one `R_X86_64_32S` at that load's displacement
-/// against the table section's STT_SECTION symbol and no `lea`, as gcc
-/// relocates a `-fno-pic` switch table.
+/// against the table section's STT_SECTION symbol and no `lea`.
 #[test]
 fn static_link_switch_dispatch_indexes_the_table_by_its_address() {
     use crate::c5::object::elf_reloc_types::R_X86_64_32S;
@@ -11813,7 +11809,7 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
     // No named symbol covers the table: consumers that discover
     // compiler jump tables require the region symbol-free. The
     // section symbol and the `$d` mapping symbol are not names in
-    // that sense; gas emits the same `$d` over a gcc table.
+    // that sense; gas emits the same `$d` over a jump table.
     for s in 0..elf.sym_count() {
         assert!(
             elf.sym_shndx(s) != tbl || elf.sym_type(s) == 3 || elf.sym_name(s).starts_with('$'),
@@ -12993,10 +12989,10 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
 }
 
 /// A bit-field of a packed aggregate no 1-, 2-, 4-, 8- or 16-byte window fits
-/// is reached in power-of-two pieces inside the object, as gcc and clang
-/// split it: a read, a store and an update of a field spanning most of a 3-,
-/// 5-, 6- or 7-byte aggregate, or reaching the 9th or 17th byte from bit 1,
-/// load and store only the aggregate's bytes. The MS layout of the PE
+/// is reached in power-of-two pieces inside the object: a read, a store and
+/// an update of a field spanning most of a 3-, 5-, 6- or 7-byte aggregate,
+/// or reaching the 9th or 17th byte from bit 1, load and store only the
+/// aggregate's bytes. The MS layout of the PE
 /// targets gives each field a whole unit of its type, which its accesses
 /// stay inside as well.
 #[test]
@@ -13791,10 +13787,10 @@ fn duplicate_initializer_retires_the_overridden_relocation() {
     }
 }
 
-/// `always_inline` is a mandatory request: gcc and clang report an error
-/// when they cannot honor one rather than silently leaving the call out
-/// of line, so the inliner's size and frame budgets do not apply to it and
-/// a chain of such callees is admitted whatever the caller's frame costs.
+/// `always_inline` is a mandatory request: one that cannot be honored is
+/// an error rather than a call silently left out of line, so the inliner's
+/// size and frame budgets do not apply to it and a chain of such callees is
+/// admitted whatever the caller's frame costs.
 /// Every relocated callee slot must still address correctly.
 #[test]
 fn always_inline_is_admitted_regardless_of_caller_frame() {
@@ -14137,8 +14133,8 @@ fn an_unreachable_operand_seals_its_block_with_one_trap() {
 }
 
 /// The library `memcpy`, `memmove` and `memset` of a constant size lower as
-/// their builtins, at -O0 too, as gcc and clang lower them; under
-/// `-fno-builtin` they stay calls, and a variable size calls the library.
+/// their builtins, at -O0 too; under `-fno-builtin` they stay calls, and a
+/// variable size calls the library.
 #[test]
 fn library_memory_transfers_of_a_constant_size_expand_inline() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14193,7 +14189,7 @@ fn library_memory_transfers_of_a_constant_size_expand_inline() {
 /// `__builtin_constant_p` of a load through a parameter folds on const
 /// data. A check that holds drops its call. Type 3 keeps its fallback
 /// 0, and under `-fno-builtin` a call to `strlen` stays a call while
-/// `__builtin_strlen` still folds, as in gcc.
+/// `__builtin_strlen` still folds.
 #[test]
 fn fortified_inline_overflow_checks_fold() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14278,8 +14274,8 @@ fn fortified_inline_overflow_checks_fold() {
 }
 
 /// A fortified inline's `__builtin_object_size(p, 1)` of a parameter
-/// answers the subobject the caller's argument addresses, as gcc -O2
-/// resolves it after inlining: a member array, an element of it, a member
+/// answers the subobject the caller's argument addresses, resolved after
+/// inlining at -O2: a member array, an element of it, a member
 /// reached through a pointer or of a local, and through an inline that
 /// passes its own parameter on. Type 3 answers the same and type 0 the
 /// whole object. A check the bound fails keeps its call.
@@ -14402,8 +14398,7 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
 /// assertion on such a member is this shape -- a `u8` member, so the
 /// read back is an unsigned narrow one, and the guard's second half sits
 /// past a branch the first half decides. A member whose value is not a
-/// power of two keeps its call, and without `-O` both calls stay, as they
-/// do under gcc.
+/// power of two keeps its call, and without `-O` both calls stay.
 #[test]
 fn member_store_constant_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14471,8 +14466,7 @@ fn member_store_constant_guarded_assert_call_folds_away() {
 /// `always_inline` body that holds a call of its own returning a struct
 /// by value, and through a function-pointer parameter the splice turns
 /// into a direct call. A site whose marker
-/// is a runtime argument keeps its call, and without `-O` both stay,
-/// as they do under gcc.
+/// is a runtime argument keeps its call, and without `-O` both stay.
 #[test]
 fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14554,7 +14548,7 @@ fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
 /// `clamp` asserts on: a call fills `val` through its address, `val &= 7`
 /// bounds it, and the clamp compares it against an `unsigned` field.
 /// Without the mask the tag really is open and the call stays, and
-/// without `-O` both stay, as they do under gcc.
+/// without `-O` both stay.
 #[test]
 fn stored_bound_decides_a_clamp_signedness_assert() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14713,8 +14707,7 @@ fn x64_register_indirect_forms(text: &[u8]) -> usize {
 fn x64_function_return_thunk_replaces_every_ret() {
     // `-mfunction-return=thunk-extern`: each return becomes a `jmp rel32`
     // (0xE9) with a zero displacement and a PLT32 relocation naming the
-    // externally provided return thunk, addend -4 -- the form gcc emits
-    // for the same flag.
+    // externally provided return thunk, addend -4.
     let plain = emit_hardened(
         HARDENING_SRC,
         crate::Target::LinuxX64,
@@ -14795,7 +14788,7 @@ fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
     // symbol may be named): every indirect transfer embeds the
     // retpoline. The capture loop is `pause; lfence; jmp .-7` and the
     // slot overwrite follows; a call site hops over the body first so
-    // the continuation stays after the site (gcc's shape).
+    // the continuation stays after the site.
     const CAPTURE: &[u8] = &[0xF3, 0x90, 0x0F, 0xAE, 0xE8, 0xEB, 0xF9];
     const CALL_HEAD: &[u8] = &[0xEB, 0x11, 0xE8, 0x07, 0x00, 0x00, 0x00];
     const JMP_HEAD: &[u8] = &[0xE8, 0x07, 0x00, 0x00, 0x00, 0xF3, 0x90];
@@ -14832,11 +14825,11 @@ fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
 }
 
 /// A call to another unit's function whose result the caller returns
-/// unchanged is a sibling call, as gcc and clang emit at -O2: the epilogue
-/// runs and `jmp` (0xE9) reaches the callee by a PLT32 relocation. The
-/// declaration supplies the return contract a definition in the unit
-/// would. A declaration without a prototype or with a variadic one keeps
-/// the call, and `-fno-optimize-sibling-calls` keeps every call.
+/// unchanged is a sibling call at -O2: the epilogue runs and `jmp` (0xE9)
+/// reaches the callee by a PLT32 relocation. The declaration supplies the
+/// return contract a definition in the unit would. A declaration without
+/// a prototype or with a variadic one keeps the call, and
+/// `-fno-optimize-sibling-calls` keeps every call.
 #[test]
 fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14936,8 +14929,7 @@ fn x64_a_returned_call_of_the_same_narrow_type_is_a_sibling_call() {
 
 /// A function that calls a returns-twice function keeps its returned call:
 /// `longjmp` back to the `setjmp` resumes in this function's frame (C99
-/// 7.13.2.1), which a sibling call would have torn down. gcc and clang
-/// make no sibling call there either.
+/// 7.13.2.1), which a sibling call would have torn down.
 #[test]
 fn x64_a_function_calling_setjmp_makes_no_sibling_call() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14985,7 +14977,7 @@ fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
     // A call in tail position becomes a direct `jmp` to the callee: it is
     // neither a return nor an indirect branch. The callee's own epilogue
     // carries the return thunk, so converting this site would enter the
-    // thunk instead of the callee. gcc likewise leaves it a plain `jmp`.
+    // thunk instead of the callee.
     const SRC: &str = "static int leaf(int x) { return x + 1; }\n\
                        int tail(int x) { return leaf(x); }\n";
     let hardened = emit_hardened(
@@ -15009,9 +15001,9 @@ fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
 #[test]
 fn x64_harden_sls_traps_after_ret_and_indirect_jmp() {
     // `-mharden-sls=return` puts an int3 after each `ret`;
-    // `=indirect-jmp` after each indirect jump. gcc emits `C3 CC` and
-    // `FF E0 CC` for the two. A byte scan alone cannot tell an opcode
-    // from a displacement or SIB byte holding the same value, so each
+    // `=indirect-jmp` after each indirect jump: `C3 CC` and `FF E0 CC`
+    // for the two. A byte scan alone cannot tell an opcode from a
+    // displacement or SIB byte holding the same value, so each
     // case uses a fixture with exactly one guarded transfer and checks
     // the one-byte growth as well as the pattern.
     const ONE_RET: &str = "int f(int x) { return x + 1; }\n";
@@ -15067,8 +15059,8 @@ fn x64_harden_sls_traps_after_ret_and_indirect_jmp() {
 #[test]
 fn x64_return_thunk_suppresses_the_sls_return_trap() {
     // A thunked return leaves no `ret` for the trap to guard, and the
-    // branch into the thunk is not an indirect jump. gcc emits no int3
-    // there under `-mharden-sls=all -mfunction-return=thunk-extern`.
+    // branch into the thunk is not an indirect jump, so no int3 follows
+    // it under `-mharden-sls=all -mfunction-return=thunk-extern`.
     let obj = emit_hardened(
         "int f(int x) { return x + 1; }\n",
         crate::Target::LinuxX64,
@@ -15430,10 +15422,10 @@ fn a64_pac_ret_skips_a_naked_body() {
 fn a64_return_address_strips_the_authentication_code() {
     // `__builtin_return_address` reads a slot `paciasp` signed, so the
     // raw load returns a pointer matching no symbol range. `xpaclri`
-    // strips it. gcc and clang emit the hint whatever `-mbranch-protection`
-    // selects, since it is a NOP without FEAT_PAuth; match that, and check
-    // the staging register the hint form forces. A level above 0 reads
-    // the slot of the record the walk reached through the same strip.
+    // strips it. The hint is emitted whatever `-mbranch-protection`
+    // selects, since it is a NOP without FEAT_PAuth; check the staging
+    // register the hint form forces. A level above 0 reads the slot of the
+    // record the walk reached through the same strip.
     const XPACLRI: u32 = 0xD503_20FF;
     // `ldr x30, [<Xn>, #8]` -- the offset field scales by 8.
     const LDR_X30_SLOT: u32 = 0xF940_0000 | (1 << 10) | 30;
@@ -15513,8 +15505,7 @@ fn x64_inline_asm_ret_is_left_verbatim() {
     // The mitigations apply to compiler-generated transfers. A `ret`
     // written in inline asm is the author's instruction and stays a bare
     // `ret`, while the same function's epilogue still takes the thunk.
-    // gcc likewise rewrites neither the text nor the operands of an asm
-    // statement.
+    // Neither the text nor the operands of an asm statement are rewritten.
     const SRC: &str = "int f(int x) { __asm__ volatile(\"ret\"); return x + 1; }\n";
     let obj = emit_hardened(
         SRC,
@@ -16282,9 +16273,9 @@ fn stack_guard_forms_reach_the_object() {
     );
 }
 
-/// The kernel code model reads the default guard through `%gs`, as gcc
-/// and clang do: a unit that names no guard register reads its canary
-/// at `%gs:0x28`. A named segment is kept under either model.
+/// The kernel code model reads the default guard through `%gs`: a unit
+/// that names no guard register reads its canary at `%gs:0x28`. A named
+/// segment is kept under either model.
 #[test]
 #[cfg(feature = "full")]
 fn the_kernel_code_model_reads_the_default_guard_through_gs() {
@@ -16450,9 +16441,9 @@ fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
 /// the attribute away leaves the entry reading its system-table argument
 /// out of the wrong register.
 ///
-/// The attribute is x86-only, as in gcc: on the aarch64 targets and on
-/// Windows -- where it names the target's own convention -- it changes
-/// nothing, which the second half asserts.
+/// The attribute is x86-only: on the aarch64 targets and on Windows --
+/// where it names the target's own convention -- it changes nothing,
+/// which the second half asserts.
 #[test]
 fn ms_abi_selects_the_microsoft_x64_convention() {
     use crate::{
@@ -19189,8 +19180,8 @@ fn a64_code_describes(code: &[u8], w: u32) -> bool {
 /// image with a frame or a signed return address has its own `.xdata`
 /// record, one code per prolog instruction from the entry, or from the
 /// frame where the test of an early return precedes it. `bti c` takes `nop`
-/// and `paciasp` `pac_sign_lr`, as clang's `.seh_nop` and
-/// `.seh_pac_sign_lr`.
+/// and `paciasp` `pac_sign_lr`, as the `.seh_nop` and `.seh_pac_sign_lr`
+/// directives record them.
 #[cfg(feature = "full")]
 #[test]
 fn win_arm64_hardened_entries_take_their_own_unwind_records() {
@@ -19387,9 +19378,8 @@ fn a_callee_aligned_above_16_is_inlined() {
     }
 }
 
-/// A call to a `warning` function reports at the call, as gcc does, not at
-/// the function making it, and the diagnostic pragmas around the call
-/// govern the report.
+/// A call to a `warning` function reports at the call, not at the function
+/// making it, and the diagnostic pragmas around the call govern the report.
 #[test]
 fn an_attribute_warning_reports_at_the_call() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};

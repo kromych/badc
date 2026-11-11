@@ -187,8 +187,7 @@ impl Compiler {
                 continue;
             }
             // An empty struct-declaration (a stray `;`) declares no
-            // member. gcc and clang accept it in a member list as an
-            // extension, diagnosed only under `-pedantic`.
+            // member: an extension, as C99 6.7.2.1 has no such form.
             if self.lex.tk == ';' {
                 self.next()?;
                 continue;
@@ -241,10 +240,10 @@ impl Compiler {
 
     /// C23 6.2.7p1: two structure or union definitions are compatible when
     /// their members correspond one to one, in order, with the same names,
-    /// compatible types and bit-field widths. As in gcc, a member of an
-    /// untagged type each definition spells anew has two distinct types;
-    /// an anonymous member's members compare as members. The layouts,
-    /// which follow from that and from the attributes, must also agree.
+    /// compatible types and bit-field widths. A member of an untagged type
+    /// each definition spells anew has two distinct types; an anonymous
+    /// member's members compare as members. The layouts, which follow from
+    /// that and from the attributes, must also agree.
     fn aggregates_compatible(&self, a: usize, b: usize) -> bool {
         let (x, y) = (&self.structs[a], &self.structs[b]);
         let same_shape = x.name == y.name
@@ -367,10 +366,10 @@ impl Compiler {
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
             // `int x __attribute__((deprecated));`). Member-level
-            // `packed` clamps this field's alignment to 1 (GCC: it
-            // both removes the field's leading padding and keeps it
-            // from raising the aggregate's alignment), independent of
-            // a struct-level `packed`.
+            // `packed` clamps this field's alignment to 1 (it both
+            // removes the field's leading padding and keeps it from
+            // raising the aggregate's alignment), independent of a
+            // struct-level `packed`.
             self.skip_attribute_specifiers()?;
             let bit_width = if self.lex.tk == ':' {
                 // The 128-bit integer shares the aggregate machinery
@@ -415,8 +414,7 @@ impl Compiler {
             // type is parsed.
             let typedef_dim = self.pending.typedef_base_array_size;
             // A declarator-added dimension over an element whose
-            // typedef-carried alignment exceeds its size cannot tile
-            // (gcc rejects the same way).
+            // typedef-carried alignment exceeds its size cannot tile.
             self.check_array_elem_align(
                 field_array_size,
                 field_ty,
@@ -713,8 +711,8 @@ impl Compiler {
             layout.align = layout.align.max(required);
             if is_union {
                 // C99 6.7.2.1: a union bitfield takes the bytes its bits
-                // reach and aligns the union to its type (GCC), which pads
-                // it to the whole unit unless that alignment is lowered.
+                // reach and aligns the union to its type, which pads it to
+                // the whole unit unless that alignment is lowered.
                 field_offset = 0;
                 bit_offset = 0;
                 let unit_align = if attr_packed { 1 } else { type_align };
@@ -726,7 +724,7 @@ impl Compiler {
                     bit_unit = size;
                 }
             } else if attr_packed {
-                // GCC: the next bit, whatever units it straddles, and no
+                // The next bit, whatever units it straddles, and no
                 // alignment; the access window is fitted to the final size.
                 align_bit_cursor(layout, required);
                 field_offset = layout.bf_bit_cursor / 8;
@@ -759,14 +757,14 @@ impl Compiler {
             layout.bf_active = false;
 
             // `__attribute__((packed))` and `#pragma pack(N)` clamp different
-            // things, as they do under GCC and clang: the attribute drops a
-            // member's natural alignment to 1 and leaves an explicit
-            // `aligned(N)` on that member standing, while the pragma clamps
-            // the finished value, explicit request included.
+            // things: the attribute drops a member's natural alignment to 1
+            // and leaves an explicit `aligned(N)` on that member standing,
+            // while the pragma clamps the finished value, explicit request
+            // included.
             let pack = self.lex.current_pack();
             let elem_size = self.size_of_type(field_ty);
             // A complete but empty `struct {}` member contributes no
-            // storage (GCC), so the following member shares its
+            // storage (GNU C), so the following member shares its
             // offset -- which is what the `__DECLARE_FLEX_ARRAY`
             // idiom (`struct {} __empty; T arr[];`) relies on. Its
             // alignment still applies: an empty type carrying
@@ -790,13 +788,12 @@ impl Compiler {
             };
             // `aligned(N)` raises the field above its natural
             // alignment; `#pragma pack(N)` then lowers the result,
-            // explicit attribute included (GCC and clang both give
-            // alignment 1 for an `aligned(64)` member under
-            // `pack(1)`). A pack request above 16 packs nothing.
-            // A typedef's explicit type alignment replaces the
-            // field's natural alignment (it may lower it), except
-            // through a pointer declarator or under `packed`,
-            // which drops a type attribute to 1 (a member
+            // explicit attribute included (an `aligned(64)` member
+            // under `pack(1)` has alignment 1). A pack request above
+            // 16 packs nothing. A typedef's explicit type alignment
+            // replaces the field's natural alignment (it may lower
+            // it), except through a pointer declarator or under
+            // `packed`, which drops a type attribute to 1 (a member
             // `_Alignas` survives packing via `decl_align`).
             let typedef_align = type_align_override > 0 && !is_pointer_ty(field_ty);
             let natural_align = if attr_packed {
@@ -858,9 +855,9 @@ impl Compiler {
     /// in an outer scope is shadowed by the declaration here.
     ///
     /// From C23 a definition of a tag the scope already defined is taken
-    /// when the two are compatible (C23 6.7.2.3, as gcc 15 and clang 22
-    /// take it under `-std=c23` and not before): the body is read into an
-    /// entry no tag names, returned with the prior definition to compare.
+    /// when the two are compatible (C23 6.7.2.3, under `-std=c23` and not
+    /// before): the body is read into an entry no tag names, returned with
+    /// the prior definition to compare.
     fn register_aggregate_tag(
         &mut self,
         name: &str,
@@ -991,13 +988,13 @@ impl Compiler {
             incomplete_enum_tag = tag;
             enum_field_ty
         } else if self.is_lex_int128_spelling() {
-            // GCC `__int128` / `__uint128_t` field: a 16-byte type.
+            // GNU C `__int128` / `__uint128_t` field: a 16-byte type.
             // Needed for kernel-UAPI structs (`asm/sigcontext.h`).
             let tag = self.lex_int128_tag(mods.saw_unsigned);
             self.next()?;
             tag
         } else if self.is_lex_va_list_spelling() {
-            // GCC `__builtin_va_list` field: the target's `va_list`
+            // `__builtin_va_list` field: the target's `va_list`
             // representation.
             self.next()?;
             self.builtin_va_list_tag()
@@ -1119,8 +1116,8 @@ impl Compiler {
     /// An unnamed member (a struct / union type prefix with no declarator):
     /// its fields promote into the enclosing aggregate's namespace, rebased
     /// onto the member's offset, so `li.LowPart` names them. Untagged is
-    /// C11 6.7.2.1p13; tagged is the unnamed-field extension gcc spells
-    /// `-fms-extensions`, which requires a complete type.
+    /// C11 6.7.2.1p13; tagged is the `-fms-extensions` unnamed-field
+    /// extension, which requires a complete type.
     fn promote_unnamed_member(
         &mut self,
         struct_id: usize,
@@ -1265,10 +1262,10 @@ impl Compiler {
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
         // alignment. A struct with no named member -- empty, or holding
-        // only a zero-width bitfield -- has size 0: that is gcc's and
-        // clang's C empty-struct extension (C++ floors it at 1, C does
-        // not), and the `sizeof(struct { int:-!!(e); })` compile-time
-        // assertion idiom depends on the 0.
+        // only a zero-width bitfield -- has size 0: that is the GNU C
+        // empty-struct extension (C++ floors it at 1, C does not), and
+        // the `sizeof(struct { int:-!!(e); })` compile-time assertion
+        // idiom depends on the 0.
         let total = round_up(layout.offset, struct_align);
         self.structs[struct_id].size = total;
         self.structs[struct_id].align = struct_align;
@@ -1290,10 +1287,10 @@ impl Compiler {
         } else if let Some(pack) = self.lex.pragma_pack()
             && self.has_bitfield_members(struct_id)
         {
-            // GCC and clang place bit-fields contiguously, straddling
-            // storage units, whenever a pack pragma is in effect,
-            // whatever its value; the natural placement above is the
-            // one that bumps a field to the next unit of its type.
+            // Bit-fields are placed contiguously, straddling storage
+            // units, whenever a pack pragma is in effect, whatever its
+            // value; the natural placement above is the one that bumps a
+            // field to the next unit of its type.
             self.repack_struct(struct_id, Packing::Pragma(pack));
         }
     }
@@ -1328,8 +1325,8 @@ impl Compiler {
             self.mark_transparent_union(struct_id);
         }
         // MSVC gives a C aggregate with no storage size 4, or its
-        // alignment where an explicit one of at least 4 applies, as
-        // clang's `*-windows-msvc` layout does; the alignment stays.
+        // alignment where an explicit one of at least 4 applies; the
+        // alignment stays.
         let s = &mut self.structs[struct_id];
         if self.target.ms_layout() && s.is_complete && s.size == 0 {
             s.size = if s.explicit_align >= 4 { s.align } else { 4 };
@@ -1352,10 +1349,10 @@ impl Compiler {
     /// Honor or discard a `transparent_union` request on the aggregate.
     /// GCC honors the attribute only when the union's machine mode is the
     /// first member's, mirrored here as a non-floating, non-bitfield
-    /// first member whose storage covers every member; otherwise GCC
-    /// warns and ignores it. An incomplete union (a typedef alias of a
-    /// forward declaration) cannot be checked and takes the flag as
-    /// declared.
+    /// first member whose storage covers every member; otherwise the
+    /// attribute is ignored with a warning. An incomplete union (a typedef
+    /// alias of a forward declaration) cannot be checked and takes the
+    /// flag as declared.
     pub(super) fn mark_transparent_union(&mut self, struct_id: usize) {
         let def = &self.structs[struct_id];
         if def.is_union && !def.is_complete {
@@ -1387,7 +1384,7 @@ impl Compiler {
     /// when the attribute marker follows the body, after the fields were
     /// placed at their natural alignment. A union only loses its tail
     /// padding (members already sit at offset 0). Bitfields pack at the
-    /// bit level with no storage-unit padding (the GCC/clang packed
+    /// bit level with no storage-unit padding (the GNU C packed
     /// layout; C99 6.7.2.1p11 leaves the unit implementation-defined);
     /// a non-bitfield member starts at the next byte boundary.
     /// A member carrying an explicit `aligned(N)` keeps that boundary:
@@ -1517,7 +1514,7 @@ impl Compiler {
     /// fits inside the aggregate, or the bits of a 128-bit field starting
     /// past its first byte's bit 0 reach a 17th byte, the unit is the 3 to
     /// 17 bytes the field spans, which an access reaches in power-of-two
-    /// pieces, as gcc and clang split it.
+    /// pieces.
     fn fit_bitfield_windows(&mut self, struct_id: usize, refit_all: bool) {
         let size = self.structs[struct_id].size;
         for f in &mut self.structs[struct_id].fields {

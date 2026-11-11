@@ -1459,8 +1459,8 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // through `Alloca` / `AllocaSave` / `AllocaRestore` SSA values, not
     // a promotable slot. Address-free slots are therefore disjoint from
     // the dynamic region and promote safely (`candidate_slots` already
-    // excludes the reserved slot), matching gcc's const-propagation of
-    // such locals into an `"i"` asm operand.
+    // excludes the reserved slot), so such a local's constant reaches
+    // an `"i"` asm operand.
     let candidates = candidate_slots(func);
     if candidates.is_empty() {
         return Vec::new();

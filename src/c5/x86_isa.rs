@@ -1,7 +1,7 @@
-//! The x86 instruction-set extensions a unit targets, as gcc's `-m<ext>`,
+//! The x86 instruction-set extensions a unit targets, as the `-m<ext>`,
 //! `-mno-<ext>` and `-march=` options select them, and the macros they
 //! predefine. The set holds the extensions whose intrinsics badc's headers
-//! carry; gcc's implications between them and its CPU names were measured
+//! carry. The implications between them and the CPU names were measured
 //! against gcc 16, each CPU reduced to the extensions of this set.
 
 /// A set of x86 extensions beyond the x86-64 baseline (SSE2).
@@ -43,7 +43,7 @@ const AVX512VNNI: u64 = 1 << 31;
 
 /// An extension: its option name, its bit, its macro, the extensions
 /// enabling it enables, and those disabling it also disables beside its
-/// dependents (gcc's `-mno-sse4.2` drops POPCNT and CRC32).
+/// dependents (`-mno-sse4.2` drops POPCNT and CRC32).
 struct Ext {
     name: &'static str,
     bit: u64,
@@ -106,7 +106,7 @@ const V3: u64 = V2 | AVX | AVX2 | FMA | F16C | BMI | BMI2 | LZCNT | XSAVE;
 /// The AVX-512 part of x86-64-v4 within the set.
 const V4: u64 = AVX512F | AVX512BW | AVX512DQ | AVX512VL | AVX512CD;
 
-/// gcc's `-march=` names and their extensions within the set.
+/// The `-march=` names and their extensions within the set.
 #[rustfmt::skip]
 const CPUS: &[(&[&str], u64)] = &[
     (&["x86-64", "k8", "opteron", "athlon64", "athlon-fx"], 0),
@@ -160,7 +160,7 @@ const CPUS: &[(&[&str], u64)] = &[
         | CLFLUSHOPT | CLWB | PRFCHW),
 ];
 
-/// gcc's x86 extension names outside the set: `-mno-<name>` asks for
+/// The x86 extension names outside the set: `-mno-<name>` asks for
 /// nothing badc emits, `-m<name>` for intrinsics it lacks.
 const ABSENT: &[&str] = &[
     "sse4a",
@@ -225,7 +225,7 @@ const ABSENT: &[&str] = &[
 pub enum X86ExtOption {
     /// An extension of the set.
     Known,
-    /// A gcc extension badc has no intrinsics for.
+    /// A known extension badc has no intrinsics for.
     Absent,
     /// No x86 extension.
     Unknown,
@@ -287,7 +287,7 @@ impl X86Features {
         self.0 &= !(gone | also);
     }
 
-    /// `-march=<name>`'s extensions, or `None` for a name gcc lacks.
+    /// `-march=<name>`'s extensions, or `None` for an unknown name.
     pub fn for_cpu(name: &str) -> Option<Self> {
         CPUS.iter()
             .find(|(names, _)| names.contains(&name))
@@ -309,7 +309,7 @@ impl X86Features {
         f
     }
 
-    /// The feature macros gcc predefines for the set; AVX512VL's
+    /// The feature macros of the set; AVX512VL's
     /// `__EVEX256__` too.
     pub fn macros(self) -> impl Iterator<Item = &'static str> {
         let evex256 = (self.0 & AVX512VL != 0).then_some("__EVEX256__");
@@ -406,10 +406,10 @@ mod tests {
         assert!(macros(f).contains(&"__SSE4_1__"));
     }
 
-    /// gcc 16's AVX-512 model: AVX512F implies AVX2, the others AVX512F,
+    /// The AVX-512 model: AVX512F implies AVX2, the others AVX512F,
     /// AVX512VL adds `__EVEX256__`, and the alignment is 64.
     #[test]
-    fn avx512_extensions_imply_and_predefine_as_gccs() {
+    fn avx512_extensions_imply_and_predefine_their_macros() {
         let mut f = X86Features::NONE;
         f.enable("avx512vl");
         let m = macros(f);

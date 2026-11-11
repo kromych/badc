@@ -248,11 +248,10 @@ pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
     (ty & !(SEG_MASK | SEG_LVL_MASK)) | space | (level << SEG_LVL_SHIFT)
 }
 
-/// MSVC's `__ptr32`, as clang takes it for a windows-msvc triple: the third
-/// address space of the [`SEG_MASK`] field, recorded at the level of the
-/// type the 32-bit pointer points to. The value widens by sign extension
-/// (`__sptr`), so a 64-bit register holds it sign-extended, a load extends
-/// and a store truncates.
+/// MSVC's `__ptr32`: the third address space of the [`SEG_MASK`] field,
+/// recorded at the level of the type the 32-bit pointer points to. The
+/// value widens by sign extension (`__sptr`), so a 64-bit register holds it
+/// sign-extended, a load extends and a store truncates.
 pub(crate) const PTR32_SPACE: i64 = SEG_GS_BIT | SEG_FS_BIT;
 
 /// The levels [`apply_qual_bits`] records for a `__ptr32` beside a segment
@@ -281,7 +280,7 @@ pub(crate) fn ptr32_misplaced(ty: i64) -> Option<&'static str> {
 }
 
 /// High-bit flags marking a type tag qualified by an x86 named address
-/// space (GCC `__seg_gs` / `__seg_fs`). An access to an object so
+/// space (GNU C `__seg_gs` / `__seg_fs`). An access to an object so
 /// qualified rides a segment-override prefix (`%gs:` / `%fs:`).
 /// Orthogonal to the band scheme like [`UNSIGNED_BIT`] and stripped by
 /// [`strip_unsigned`]. x86-only; the two spellings never both appear on
@@ -339,8 +338,8 @@ pub(crate) fn non_atomic_ty(ty: i64) -> i64 {
     ty & !atomic_level_bit(ptr_depth_of(ty))
 }
 
-/// gcc's and clang's generic atomic functions: link name, declaring slot,
-/// prototype.
+/// The generic atomic library functions (the libatomic ABI): link name,
+/// declaring slot, prototype.
 pub(crate) const ATOMIC_LIBCALLS: &[(&str, &str, &str)] = &[
     (
         "__atomic_load",
@@ -627,8 +626,7 @@ pub(crate) fn pointer_conversion_key(ty: i64) -> i64 {
         | const_level_bit(depth - 1)
         | volatile_level_bit(depth - 1);
     let ty = ty & !(outer | VOLATILE_BIT | CONST_BIT);
-    // A 32-bit pointer converts to and from a 64-bit one (MSVC; clang for a
-    // windows-msvc triple).
+    // A 32-bit pointer converts to and from a 64-bit one (MSVC).
     if segment_of_object_ty(ty).is_some() || is_ptr32_ty(ty) {
         ty & !(SEG_MASK | SEG_LVL_MASK)
     } else {
@@ -1118,7 +1116,7 @@ pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
 
-/// True when `ty` names an aggregate *value* -- a struct, union, GCC
+/// True when `ty` names an aggregate *value* -- a struct, union, GNU C
 /// vector or 128-bit integer object -- rather than a pointer to one. The
 /// distinction decides whether a type is copied by extent or held in a
 /// register, so it gates aggregate assignment, argument passing, member
@@ -1143,7 +1141,7 @@ pub(crate) fn is_char_value_ty(ty: i64) -> bool {
 /// extent, an array of anything else counts as an array, and an aggregate
 /// contributes whatever its members do. A multidimensional array's element
 /// type is the inner array, not the character type, so it counts as an
-/// array only -- gcc classifies it the same way.
+/// array only.
 pub(crate) fn ssp_classify(
     structs: &[super::StructDef],
     ty: i64,
@@ -1224,7 +1222,7 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
-/// `true` when `ty` is a GCC vector type: an aggregate *value* (not a
+/// `true` when `ty` is a GNU C vector type: an aggregate *value* (not a
 /// pointer to one) whose synthesized `StructDef` carries `is_vector`.
 pub(crate) fn is_vector_ty(structs: &[super::StructDef], ty: i64) -> bool {
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
@@ -1310,8 +1308,8 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// hold every value of the original type because c5's int is 4
 /// bytes vs char's 1 / short's 2, so the result is always the
 /// signed `Ty::Int` -- the "convert to unsigned int" branch of the
-/// C99 rule never fires here. An enumerated type yields its integer
-/// type, at every rank as gcc and clang convert one.
+/// C99 rule never fires here. An enumerated type yields its compatible
+/// integer type (C99 6.7.2.2p4) at every rank.
 pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
     // `_Bool` (6.3.1.1) and the sub-int integer types all have a

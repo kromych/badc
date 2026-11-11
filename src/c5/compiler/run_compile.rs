@@ -474,10 +474,10 @@ impl Compiler {
 
     /// GNU `section`: a named section holds code, writable data or read-only
     /// data, by the first definition placed in it; a later definition of
-    /// another kind is "a section type conflict", as gcc reports it, so no
-    /// section of C definitions is both writable and executable. A `const`
-    /// object a relocation writes is read-only to gcc only without `-fPIC`,
-    /// which this unit does not know, so it conflicts with code alone.
+    /// another kind is a section type conflict, so no section of C
+    /// definitions is both writable and executable. A `const` object a
+    /// relocation writes is read-only only without `-fPIC`, which this unit
+    /// does not know, so it conflicts with code alone.
     fn reject_section_type_conflicts(&self) -> Result<(), C5Error> {
         const CODE: u8 = 0;
         const READ_ONLY: u8 = 1;
@@ -1066,7 +1066,7 @@ impl Compiler {
             self.parse_declarator_asm_label(id_idx)?;
             self.skip_attribute_specifiers()?;
         }
-        // A type attribute among them applies to the return type, as in gcc
+        // A type attribute among them applies to the return type
         // (`float *f(void) __attribute__((vector_size(16)))` returns a pointer
         // to a vector); the name's type was recorded before they were read.
         let declarator_ty = ty;
@@ -1174,11 +1174,11 @@ impl Compiler {
         }
         if was_sys {
             // A body for a name a bundled header binds to the C library:
-            // the program's function replaces the import for this unit, as
-            // under gcc / clang. The walker lowers every call by the
-            // symbol's class once the unit is parsed, so the calls before
-            // this definition reach it too. TODO: a definition in another
-            // unit still links against the import.
+            // the program's function replaces the import for this unit. The
+            // walker lowers every call by the symbol's class once the unit is
+            // parsed, so the calls before this definition reach it too.
+            // TODO: a definition in another unit still links against the
+            // import.
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
         let gnu89 = self.symbols[id_idx].is_gnu_inline
@@ -1211,7 +1211,7 @@ impl Compiler {
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         // C99 5.1.2.2.1: a hosted program's startup calls an external
-        // `main`. clang's `-Wmain` flags each `static` declaration of one.
+        // `main`. `-Wmain` flags each `static` declaration of one.
         if static_seen
             && !self.freestanding
             && self.symbols[id_idx].name == "main"
@@ -1916,7 +1916,7 @@ impl Compiler {
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
         self.open_cleanup_scope(false);
-        // GCC local labels declared by the body's top-level
+        // GNU C local labels declared by the body's top-level
         // block; see `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
         let mut at_block_start = true;
@@ -3375,8 +3375,8 @@ impl Compiler {
         None
     }
 
-    /// gcc's `-fvisibility=` for each external definition whose visibility no
-    /// attribute or pragma states; declarations keep default, as in gcc.
+    /// `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default.
     fn apply_default_visibility(&mut self) {
         use crate::c5::symbol::Linkage;
         let Some(vis) = self.default_visibility else {
@@ -3425,11 +3425,10 @@ impl Compiler {
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
     ///
-    /// With the Microsoft extensions neither model applies, as for MSVC and
-    /// clang's `*-windows-msvc` in C: an inline function of external
-    /// linkage, unless `gnu_inline`, is emitted by each unit that references
-    /// it as an `IMAGE_COMDAT_SELECT_ANY` definition, kept unreferenced only
-    /// when a declaration says `extern`.
+    /// With the Microsoft extensions neither model applies, as for MSVC in C:
+    /// an inline function of external linkage, unless `gnu_inline`, is
+    /// emitted by each unit that references it as an `IMAGE_COMDAT_SELECT_ANY`
+    /// definition, kept unreferenced only when a declaration says `extern`.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
@@ -3478,15 +3477,14 @@ impl Compiler {
     /// code. External-linkage functions cannot be flagged here --
     /// another TU may call them through the link-unit symbol
     /// table; the linker is responsible for the cross-TU
-    /// reachability check. Names starting with `_` are suppressed
-    /// (gcc / clang `-Wunused-function` convention). A `static` `main`
-    /// is no program entry, so it is reported like any other, as gcc
-    /// and clang report it.
+    /// reachability check. Names starting with `_` are suppressed. A
+    /// `static` `main` is no program entry, so it is reported like any
+    /// other.
     fn warn_unused_static_functions(&mut self) {
         use crate::c5::symbol::Linkage;
         // A `__attribute__((constructor))` / `((destructor))` function
         // has no in-source call site but runs at startup / exit, so it is
-        // not unused (matching gcc / clang, which never warn on it).
+        // not unused.
         let init_names: alloc::collections::BTreeSet<&str> =
             self.init_funcs.iter().map(|f| f.name.as_str()).collect();
         let mut unused: Vec<(u32, Site, String)> = Vec::new();
@@ -3495,8 +3493,8 @@ impl Compiler {
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
                 // An inline definition is internal but externally
-                // declared; another unit may still call the name. gcc
-                // reports no `inline` function, which headers define
+                // declared; another unit may still call the name. No
+                // `inline` function is reported: headers define them
                 // for their includers to call or not.
                 || sym.is_inline_definition
                 || sym.saw_plain_inline_decl
@@ -3535,8 +3533,8 @@ impl Compiler {
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) -> Result<(), C5Error> {
         if self.pending.attrs.weak {
             // A weak name is one the link may bind elsewhere, so it has
-            // external linkage, as gcc and clang require: not a function
-            // declared `static`, nor an object with internal linkage.
+            // external linkage: not a function declared `static`, nor an
+            // object with internal linkage.
             let s = &self.symbols[id_idx];
             let internal = match s.class == Token::Fun as i64 {
                 true => s.saw_static_decl,

@@ -867,7 +867,7 @@ impl SsaBuilder {
     }
 
     /// `Inst::BlockAddr` -- the code address of a basic block in
-    /// this function (GCC `&&label`). Records `block` as a computed-
+    /// this function (GNU C `&&label`). Records `block` as a computed-
     /// goto successor so the CFG treats every `goto *` as branching
     /// to it. Not CSE'd: distinct `&&label` sites must stay separate
     /// defs so the allocator keeps each live as needed.
@@ -879,7 +879,7 @@ impl SsaBuilder {
     }
 
     /// Bind a static-initializer data slot to `block`'s code address
-    /// (GCC `&&label` in a static initializer). The block joins the
+    /// (`&&label` in a static initializer). The block joins the
     /// computed-goto target set: its address escapes into memory, so
     /// every `goto *` may reach it and the block must stay live.
     pub(crate) fn label_data_block(&mut self, data_offset: u64, block: BlockId) {
@@ -892,7 +892,7 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::GotoIndirect`
-    /// (GCC `goto *expr`); `target` holds the destination code
+    /// (`goto *expr`); `target` holds the destination code
     /// address.
     pub(crate) fn goto_indirect(&mut self, target: ValueId) {
         self.close(Terminator::GotoIndirect { target }, target);
@@ -1953,7 +1953,7 @@ impl SsaBuilder {
         id
     }
 
-    /// `Inst::InlineAsm` -- GCC extended asm with operands. The block
+    /// `Inst::InlineAsm` -- GNU C extended asm with operands. The block
     /// carries the template and constraints; `args` is parallel to its
     /// operands (an output's destination address, an input's value).
     /// Conservative like a call: clear the CSE cache, since the asm may
@@ -1968,7 +1968,7 @@ impl SsaBuilder {
         self.push(Inst::InlineAsm { asm, args })
     }
 
-    /// GCC `asm goto`: push the `Inst::InlineAsm` as the block's last
+    /// `asm goto`: push the `Inst::InlineAsm` as the block's last
     /// instruction and close the block with `Terminator::AsmGoto`.
     /// `targets[0]` is the fall-through block; entries 1.. are the
     /// label targets in label-list order.

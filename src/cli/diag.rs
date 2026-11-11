@@ -12,7 +12,7 @@ pub(crate) fn eprint_diagnostic(msg: impl core::fmt::Display) {
 }
 
 /// Add ANSI color around the severity word (`warning:`, `error:`,
-/// `info:` / `note:`) inside a diagnostic line. Accepts either the gcc
+/// `info:` / `note:`) inside a diagnostic line. Accepts either the GNU
 /// shape `<file>:<line>: warning: <msg>` or any line whose severity
 /// word is followed by a colon and a space; the rest stays untouched.
 /// Falls through unchanged when stderr isn't a TTY so build logs stay
@@ -86,7 +86,7 @@ pub(crate) fn eprint_error(prefix: &str, e: &badc::C5Error) {
 
 /// Print a unit's diagnostics and report whether it may go on. A
 /// warning raised to an error does not unwind at its site: the unit
-/// parses whole and fails here, at the phase boundary, as gcc does.
+/// parses whole and fails here, at the phase boundary.
 pub(crate) fn report_unit_diagnostics(
     log: &mut TuLog,
     tty: bool,
@@ -100,7 +100,7 @@ pub(crate) fn report_unit_diagnostics(
 
 /// Print a phase's cataloged diagnostics and report whether the unit may
 /// go on: one at the error level fails it here, at the phase boundary, and
-/// one a warning raised says so, as gcc's `-Werror` note does.
+/// one a warning raised adds the `warnings treated as errors` note.
 pub(crate) fn report_diagnostics(
     log: &mut TuLog,
     tty: bool,

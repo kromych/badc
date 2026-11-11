@@ -103,9 +103,9 @@ pub(crate) fn foreign_object_reason(
 }
 
 /// A `-l` naming a part of the target's C library, whose functions the bundled
-/// headers route, as gcc and clang resolve it: glibc's libc, libm, libpthread,
-/// libdl, librt and libutil; libSystem's libc, libm, libpthread and libdl; on
-/// Windows libm and libpthread, which the on-demand sources stand for.
+/// headers route: glibc's libc, libm, libpthread, libdl, librt and libutil;
+/// libSystem's libc, libm, libpthread and libdl; on Windows libm and
+/// libpthread, which the on-demand sources stand for.
 fn c_library_part(name: &str, target: Target) -> bool {
     match target.binary_format() {
         badc::BinaryFormat::Elf => matches!(name, "c" | "m" | "pthread" | "dl" | "rt" | "util"),
@@ -531,7 +531,7 @@ impl Inputs {
                     prog_args_start = i;
                     break;
                 }
-                // gcc hands any other suffix to the linker, which reads its content.
+                // Any other suffix goes to the linker, which reads its content.
                 _ => linker_input_kind(a, cli.target).unwrap_or_else(|why| {
                     eprint_diagnostic(format!(
                         "badc: error: unrecognized input file extension: `{a}` \
@@ -655,7 +655,7 @@ impl Inputs {
         // undefined names are known. An ELF shared library leaves such a
         // name to the loader's global scope; a DLL's import names its DLL,
         // and ld64 reports a reference a dylib leaves unresolved, so a PE
-        // or Mach-O shared link takes the library as gcc's and clang's do.
+        // or Mach-O shared link takes the library.
         let hosted = match cli.mode {
             Mode::NativeExecutable => true,
             Mode::SharedLibrary => cli.target.binary_format() != badc::BinaryFormat::Elf,

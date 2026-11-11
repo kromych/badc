@@ -55,9 +55,9 @@ impl C5Error {
         Self::of(Diagnostic::new(code, Level::Error, None, text))
     }
 
-    /// A broken invariant of badc's own. The marker mirrors gcc's and
-    /// clang's, so the reader can tell the failure is badc's to fix and
-    /// worth filing. Anything reachable by valid input belongs to
+    /// A broken invariant of badc's own. The `internal compiler error`
+    /// marker tells the reader the failure is badc's to fix and worth
+    /// filing. Anything reachable by valid input belongs to
     /// [`Self::hard`] instead, so the marker stays a reliable signal.
     pub(crate) fn internal(text: impl AsRef<str>) -> Self {
         Self::hard(

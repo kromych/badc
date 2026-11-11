@@ -51,7 +51,7 @@ pub struct Diagnostic {
     pub loc: Option<Loc>,
     pub text: String,
     /// The text of the line `loc` points at, echoed beneath the
-    /// message the way gcc prints the offending line.
+    /// message.
     pub source_line: Option<String>,
     pub notes: Vec<(Option<Loc>, String)>,
     /// `source_line` is still to be read from the unit: an error is built

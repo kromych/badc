@@ -219,7 +219,7 @@ pub(super) struct IfExprParser<'a> {
     /// False while parsing a short-circuited (`&&`/`||`) or not-taken
     /// (`?:`) subexpression. C99 6.6p4 forbids division by zero in a
     /// constant expression, but an unevaluated operand must not trigger
-    /// the diagnostic (gcc/clang accept `1 ? 2 : 1/0`).
+    /// the diagnostic (`1 ? 2 : 1/0` is accepted).
     live: bool,
 }
 
@@ -728,9 +728,9 @@ impl<'a> IfExprParser<'a> {
     /// prefixed reading, which holds code points and keeps the last
     /// (6.4.4.4p11); an unprefixed constant packs execution bytes,
     /// first character most significant, the implementation-defined
-    /// value of 6.4.4.4p10 that gcc and clang also produce. Both
-    /// mirror the lexer, so a constant means the same inside a `#if`
-    /// and outside one, and evaluates in uintmax_t when its type is unsigned.
+    /// value of 6.4.4.4p10. Both mirror the lexer, so a constant means the
+    /// same inside a `#if` and outside one, and evaluates in uintmax_t when
+    /// its type is unsigned.
     fn parse_char_constant(&mut self, wide: Option<(usize, bool)>) -> Result<IfValue, C5Error> {
         let bytes = self.src.as_bytes();
         let mut packed: i64 = 0;
@@ -994,8 +994,8 @@ impl<'a> IfExprParser<'a> {
         };
         // 6.10.1p4: intmax_t is the signed widest type. A literal that
         // overflows it but fits u64 takes the unsigned interpretation,
-        // matching gcc/clang and keeping the unsigned bit-pattern probes
-        // (ULONG_MAX / UINT64_MAX) logical-shifting correctly.
+        // keeping the unsigned bit-pattern probes (ULONG_MAX / UINT64_MAX)
+        // logical-shifting correctly.
         let v = if digits.is_empty() {
             Ok((0i64, has_u))
         } else if let Ok(signed) = i64::from_str_radix(digits, raw_radix) {
@@ -1133,8 +1133,8 @@ impl<'a> IfExprParser<'a> {
             return Ok(IfValue::signed(i64::from(&*name == "true")));
         }
         // An identifier left after expansion -- undefined, or a macro
-        // whose unquoted body is no number -- is 0 (C99 6.10.1p4); gcc
-        // reports a function-like name with no arguments the same way.
+        // whose unquoted body is no number -- is 0 (C99 6.10.1p4); a
+        // function-like name with no arguments is reported the same way.
         if self.live {
             let text = format!("`{name}` is not defined, evaluates to 0");
             self.pp
@@ -1293,7 +1293,7 @@ fn resolve_has_operator(
 }
 
 /// `__has_attribute(NAME)` on `target`: `dllimport` / `dllexport` are known
-/// on the PE targets only, as under gcc.
+/// on the PE targets only.
 pub(super) fn has_attribute(name: &str, target: Target) -> bool {
     use crate::c5::attr::{Attr, gnu_attribute};
     match gnu_attribute(name) {

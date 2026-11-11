@@ -153,7 +153,7 @@ fn a_version_badc_does_not_emit_is_accepted_and_reported() {
         (&["-gdwarf-2"][..], 2),
         (&["-gdwarf-3"], 3),
         (&["-gdwarf-5"], 5),
-        // Leading zeros are digits, as they are to gcc.
+        // Leading zeros are digits.
         (&["-gdwarf-005"], 5),
         (&["-gdwarf-4", "-gdwarf-5"], 5),
     ] {

@@ -84,10 +84,10 @@ type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>, Vec<usize>);
 
 /// The integer type compatible with an enum whose values span
 /// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
-/// implementation; GCC picks `unsigned int` whenever no enumerator is
-/// negative (widening to the 64-bit type `wide` when a value exceeds it)
-/// and `int` otherwise, so an all-non-negative enum compares, divides,
-/// and converts as an unsigned type.
+/// implementation: `unsigned int` whenever no enumerator is negative
+/// (widening to the 64-bit type `wide` when a value exceeds it) and `int`
+/// otherwise, so an all-non-negative enum compares, divides, and converts
+/// as an unsigned type.
 fn enum_compatible_ty(min: i64, max: i64, wide: i64) -> i64 {
     if min < 0 {
         if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
@@ -159,8 +159,7 @@ impl Compiler {
             };
             let (min, max, captured, constants) = self.parse_enum_body(id)?;
             // An attribute after the closing brace binds to the enum type
-            // (`enum E { ... } __attribute__((packed))`), the position GCC
-            // and Clang accept most often.
+            // (`enum E { ... } __attribute__((packed))`).
             packed = self.skip_attribute_specifiers()? || packed;
             let underlying = self.enum_underlying_ty(min, max, packed)?;
             if !captured.is_empty() {
@@ -172,7 +171,7 @@ impl Compiler {
             }
             // Once the list ends, every constant of an enumeration with a
             // value outside `int` has the enumerated type (C23 6.7.2.2,
-            // gcc's `finish_enum` in every mode); the others are `int`.
+            // applied in every mode); the others are `int`.
             let ty = enum_ty(underlying, id);
             let wider_than_int = min < i32::MIN as i64 || max > i32::MAX as i64;
             for idx in constants {
@@ -216,7 +215,7 @@ impl Compiler {
         if !self.enum_placeholder_tags.contains(&tag) {
             self.enum_placeholder_tags.push(tag);
         }
-        // cl and clang-cl type such an enum `int` until its definition.
+        // cl types such an enum `int` until its definition.
         if self.is_ms_forward_enum(id) {
             return Ok((enum_ty(Ty::Int as i64, id), Some(tag)));
         }
@@ -234,8 +233,7 @@ impl Compiler {
                 enum_compatible_ty(min, max, self.enum_wide_ty())
             });
         };
-        // `mode(M)` fixes the enum's width outright; the enumerators must
-        // fit, as GCC requires.
+        // `mode(M)` fixes the enum's width outright; the enumerators must fit.
         let base = enum_compatible_ty(min, max, self.enum_wide_ty());
         let ty = self.apply_mode_to_type(base, m)?;
         let bits = self.size_of_type(ty) as u32 * 8;
@@ -255,9 +253,8 @@ impl Compiler {
 
     /// From C23 a definition of an enum its scope already defined is taken
     /// when it lists the same enumerators with the same values and chooses
-    /// the same type (C23 6.7.2.3, 6.2.7; gcc 15 and clang 22 under
-    /// `-std=c23`, not before); the enumerators keep their first
-    /// declaration. On entry `tk` is `{`.
+    /// the same type (C23 6.7.2.3, 6.2.7; under `-std=c23` only); the
+    /// enumerators keep their first declaration. On entry `tk` is `{`.
     fn redefine_enum(
         &mut self,
         id: usize,
@@ -377,7 +374,7 @@ impl Compiler {
     }
 
     /// The 64-bit type an enum widens to: `long` where it is 64 bits wide,
-    /// as gcc and clang choose, `long long` where `long` is 32.
+    /// `long long` where `long` is 32.
     fn enum_wide_ty(&self) -> i64 {
         if self.target.long_width_bytes() == 8 {
             Ty::Long as i64
@@ -386,8 +383,8 @@ impl Compiler {
         }
     }
 
-    /// The smallest integer type that represents `[min, max]`, matching
-    /// GCC's packed-enum rule: unsigned when all enumerators are
+    /// The smallest integer type that represents `[min, max]`, the GNU C
+    /// packed-enum rule: unsigned when all enumerators are
     /// non-negative (sized by `max`), signed otherwise (sized by range).
     fn packed_enum_underlying_ty(min: i64, max: i64, wide: i64) -> i64 {
         if min >= 0 {

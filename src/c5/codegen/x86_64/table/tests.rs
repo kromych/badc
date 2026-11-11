@@ -162,10 +162,10 @@ fn double_precision_and_ext_moves() {
 #[test]
 fn immediate_reduced_to_operation_width() {
     // An immediate wider than the operation is reduced to the operation
-    // width, as both reference assemblers do (GNU as warns "shortened to";
-    // clang is silent). Form selection still sees the value as written, so a
-    // short imm8 form is chosen only when the untruncated value fits it.
-    // Every expected encoding below was taken from the reference assemblers.
+    // width (GNU as warns "shortened to"). Form selection still sees the
+    // value as written, so a short imm8 form is chosen only when the
+    // untruncated value fits it. Every expected encoding below was taken
+    // from the reference assemblers, GNU as and clang.
     let imm = |v: i64| Opnd::Imm(v);
     // mov: no imm8 form, so the imm32/imm16/imm8 field truncates.
     assert_eq!(

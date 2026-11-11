@@ -645,10 +645,10 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
 /// Whether the register spelling of a 16-bit descriptor field selects the
 /// encoding. `Free`: `lldt` / `ltr` / `verr` / `verw` read `r/m16` and
 /// `lar` / `lsl` an `r32/m16` source, so the other operand picks the row and
-/// any general register at least 16 bits wide names the same field, which is
-/// what GNU as and clang both encode. `Sized`: `sldt` / `str` / `smsw` store
-/// into the operand, which has an `r/m16`, an `r32/m16` and an `r64/m16` row,
-/// and `lmsw` admits no wider spelling in either assembler.
+/// any general register at least 16 bits wide names the same field, as GNU as
+/// encodes it. `Sized`: `sldt` / `str` / `smsw` store into the operand, which
+/// has an `r/m16`, an `r32/m16` and an `r64/m16` row, and `lmsw` admits no
+/// wider spelling in GNU as.
 #[derive(Clone, Copy, PartialEq)]
 enum FieldRm {
     Free,
@@ -670,7 +670,7 @@ fn field_rm(mnem: Mnem) -> Option<FieldRm> {
 /// `lgdt` / `lidt` address a 16-bit limit followed by a base whose width is
 /// the operation size -- `m16&16`, `m16&32`, `m16&64` -- and the suffix names
 /// that base. The base is 64-bit in long mode, where the SDM gives no other
-/// row, and 16- or 32-bit outside it; GNU as and clang admit exactly that.
+/// row, and 16- or 32-bit outside it; GNU as admits exactly that.
 fn pseudo_descriptor_widths(mnem: Mnem, mode: Mode) -> Option<&'static [u8]> {
     matches!(mnem, Mnem::Sgdt | Mnem::Sidt | Mnem::Lgdt | Mnem::Lidt).then(|| {
         if mode == Mode::Bits64 {

@@ -3023,7 +3023,7 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
 
 /// Vector parameters and results travel in v registers (AAPCS64 6.4.2): a
 /// function taking and returning `uint32x4_t` is its instructions and
-/// `ret`, as with gcc 16 and clang, and a loop over parameters keeps them
+/// `ret`, as with gcc 16, and a loop over parameters keeps them
 /// in registers. Stored to the frame on entry and returned through it, the
 /// loop below took 49 instructions.
 #[test]
@@ -3055,7 +3055,7 @@ uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n)
 }
 
 /// GNU vector arithmetic on 16-byte vectors is one SIMD instruction per
-/// operator (`Inst::VecBinop`), as with gcc 16 and clang: `a * x + y` over
+/// operator (`Inst::VecBinop`), as with gcc 16: `a * x + y` over
 /// `float` lanes is `fmul`, `fadd` and `ret` on AArch64 and `mulps`,
 /// `addps` and `ret` on x86-64. Lowered per lane, it took 59 instructions.
 #[test]
@@ -3087,8 +3087,8 @@ v4h add4(v4h a, v4h b) { return a + b; }\n";
     m.expect(add4 == [0x0E61_8400, 0xD65F_03C0], || {
         format!("aarch64 add4: {add4:08x?}")
     });
-    // `_mm_add_pi16` in the low half of the xmm registers, as gcc 16 gives
-    // it: `paddw` and `ret`, from 22 instructions.
+    // `_mm_add_pi16` in the low half of the xmm registers: `paddw` and
+    // `ret`, from 22 instructions.
     let m64 = x64(
         "#include <mmintrin.h>\n\
 __m64 addw(__m64 a, __m64 b) { return _mm_add_pi16(a, b); }\n",
@@ -3399,7 +3399,7 @@ __m128i round4(__m128i a, __m128i b, __m128i c, __m128i d, int n) {\n\
 }
 
 /// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
-/// values in SIMD registers, as gcc 16 and clang do: each function is its
+/// values in SIMD registers, as gcc 16 does: each function is its
 /// instructions and `ret`, with no frame.
 #[test]
 fn eight_byte_simd_values_take_no_frame() {

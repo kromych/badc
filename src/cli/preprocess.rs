@@ -7,8 +7,7 @@ use super::deps::{DepKind, DepOptions, emit_deps};
 use super::diag::{TuLog, eprint_diagnostic, rendered, report_diagnostics};
 use super::inputs::{Inputs, StdinSource};
 
-/// `-M` / `-MM` preprocess only: emit the rule and produce no
-/// object, as gcc does.
+/// `-M` / `-MM` preprocess only: emit the rule and produce no object.
 pub(crate) fn dump_dependencies(
     cli: &Cli,
     inputs: &Inputs,
@@ -57,9 +56,8 @@ pub(crate) fn dump_dependencies(
             }
         }
         // An unresolved `#include` leaves the prerequisite list
-        // incomplete, so report it and write nothing, as gcc does. Any
-        // other error (`#error`) leaves the list whole: gcc and clang write
-        // it and fail.
+        // incomplete, so report it and write nothing. Any other error
+        // (`#error`) leaves the list whole: write it and fail.
         let unresolved = |r: &badc::IncludeRecord| r.status == badc::IncludeStatus::Missing;
         let missing = compiler.include_records().iter().any(unresolved);
         let res = match compiler.preprocess_error() {
@@ -96,16 +94,8 @@ pub(crate) fn dump_dependencies(
     }
 }
 
-/// `--dump-pp` / `-E` preprocesses each source and exits: no link,
-/// no codegen. `-o <path>` names the file the expansion goes to and
-/// `-o -` names stdout, as in gcc and clang; without `-o` it goes to
-/// stdout. A multi-source dump prefixes each unit with a
-/// `--- <label> ---` marker on stderr so the preprocessed bytes on
-/// stdout stay parseable, and takes no `-o`: one output stream
-/// cannot hold several expansions, which is why gcc and clang refuse
-/// the combination too.
-/// `text` without its GNU line markers (`# N "file" [flags]`), as gcc's
-/// `-E -P` prints it.
+/// `text` without its GNU line markers (`# N "file" [flags]`), as `-E -P`
+/// prints it.
 fn without_line_markers(text: &str) -> String {
     let is_marker = |line: &str| {
         let Some(rest) = line.strip_prefix("# ") else {
@@ -119,6 +109,12 @@ fn without_line_markers(text: &str) -> String {
         .collect()
 }
 
+/// `--dump-pp` / `-E` preprocesses each source and exits: no link,
+/// no codegen. `-o <path>` names the file the expansion goes to and
+/// `-o -` names stdout; without `-o` it goes to stdout. A multi-source
+/// dump prefixes each unit with a `--- <label> ---` marker on stderr so
+/// the preprocessed bytes on stdout stay parseable, and takes no `-o`:
+/// one output stream cannot hold several expansions.
 pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let sources = &inputs.sources;
     let multi_tu = sources.len() > 1;
@@ -131,9 +127,9 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         std::process::exit(1);
     }
     let pp_output = cli.output_path.as_deref().filter(|p| p.as_os_str() != "-");
-    // `-MD` / `-MMD` alongside `-E`: gcc preprocesses and writes the
-    // rule, naming the file from `-MF` / `-Wp,-M[M]D,<path>` / `-o` as
-    // it does for a compile.
+    // `-MD` / `-MMD` alongside `-E`: preprocess and write the rule,
+    // naming the file from `-MF` / `-Wp,-M[M]D,<path>` / `-o` as for a
+    // compile.
     let dump_deps = cli.deps.as_ref().filter(|d| d.kind == DepKind::WithOutput);
     let stderr_is_tty = std::io::stderr().is_terminal();
     let mut failed = false;
@@ -170,7 +166,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 // one at the error level fails the run once the text is out.
                 let mut log = TuLog::default();
                 failed |= report_diagnostics(&mut log, stderr_is_tty, &unit.diagnostics).is_err();
-                // gcc's `-H` trace, as a compile prints it.
+                // The `-H` trace, as a compile prints it.
                 if cli.front.show_includes {
                     let opened = unit.include_records.iter();
                     for r in opened.filter(|r| r.status != badc::IncludeStatus::Embedded) {

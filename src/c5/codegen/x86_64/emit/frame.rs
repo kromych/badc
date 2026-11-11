@@ -655,10 +655,11 @@ pub(super) struct BoundPlan {
 
 /// Bind each input to its value's register or a scratch it is loaded into,
 /// and each value output to its value's register or a scratch no other
-/// output holds, which a non-`&` output may share with an input (GCC's
-/// operand model). The scratch is [`BOUND_SCRATCH`] less the clobbers, the
-/// `fixed` registers, `live_gp` (the registers of values live across the
-/// statement) and, for an input, every operand's. `None` when it runs out.
+/// output holds, which a non-`&` output may share with an input (the GNU C
+/// extended asm operand model). The scratch is [`BOUND_SCRATCH`] less the
+/// clobbers, the `fixed` registers, `live_gp` (the registers of values live
+/// across the statement) and, for an input, every operand's. `None` when it
+/// runs out.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn plan_bound_operands(
     func: &FunctionSsa,

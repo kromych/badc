@@ -1,9 +1,8 @@
 //! The intrinsics lowered at the call site, whatever declares them: the MSVC
-//! ones on the PE targets, as MSVC and clang for a windows-msvc triple do,
-//! gcc's and clang's x86 system-instruction builtins on every x86-64
-//! target, and the ACLE's system and CRC32 intrinsics on every AArch64
-//! target. Each is a name's signature, which the parser converts to, and the
-//! operation it performs.
+//! ones on the PE targets, the `__builtin_ia32_*` x86 system-instruction
+//! builtins on every x86-64 target, and the ACLE's system and CRC32
+//! intrinsics on every AArch64 target. Each is a name's signature, which the
+//! parser converts to, and the operation it performs.
 
 use alloc::vec::Vec;
 
@@ -508,7 +507,7 @@ const ACLE_A64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__crc32cd", crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
 ];
 
-/// gcc's and clang's builtins of these names, with gcc's prototypes.
+/// The builtins of these names, with gcc's prototypes.
 #[rustfmt::skip]
 const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__builtin_ia32_sfence", Op::Insn("sfence"), None, &[]),

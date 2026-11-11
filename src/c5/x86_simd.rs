@@ -474,7 +474,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_punpckhdq128", "punpckhdq", Form::Vv, Ret::V4si, Sem::UnpackHi(4), 0),
     op("__builtin_ia32_punpckhqdq128", "punpckhqdq", Form::Vv, Ret::V2di, Sem::UnpackHi(8), 0),
     // SSE2 shifts. The `i` forms take a count in bits; the byte-granular
-    // pair counts bits too and the header divides by 8, as gcc's does.
+    // pair counts bits too and the header divides by 8.
     op("__builtin_ia32_psllwi128", "psllw", Form::Shift, Ret::V8hi, Sem::Shl(2), 4),
     op("__builtin_ia32_pslldi128", "pslld", Form::Shift, Ret::V4si, Sem::Shl(4), 4),
     op("__builtin_ia32_psllqi128", "psllq", Form::Shift, Ret::V2di, Sem::Shl(8), 4),
@@ -512,7 +512,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_phsubd128", "phsubd", Form::Vv, Ret::V4si, Sem::HSub(4, false), 0),
     op("__builtin_ia32_phsubsw128", "phsubsw", Form::Vv, Ret::V8hi, Sem::HSub(2, true), 0),
     op("__builtin_ia32_pmulhrsw128", "pmulhrsw", Form::Vv, Ret::V8hi, Sem::MulHrs, 0),
-    // PALIGNR's builtin counts bits, as gcc's does.
+    // PALIGNR's builtin counts bits.
     op("__builtin_ia32_palignr128", "palignr", Form::VvI, Ret::V2di, Sem::AlignR, 0),
     // SSE4.1, and SSE4.2's PCMPGTQ.
     op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
@@ -619,8 +619,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_rdseed16_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 2),
     op("__builtin_ia32_rdseed32_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 4),
     op("__builtin_ia32_rdseed64_step", "rdseed", Form::RdRand, Ret::Int, Sem::Rand, 8),
-    // The AVX2 forms over 32-byte vectors, as gcc names their builtins;
-    // the cross-lane permutations last.
+    // The AVX2 forms over 32-byte vectors, the cross-lane permutations last.
     op256("__builtin_ia32_pmullw256", "vpmullw", Form::Vv, Ret::V16hi, Sem::MulLo(2), 0),
     op256("__builtin_ia32_pmulld256", "vpmulld", Form::Vv, Ret::V8si, Sem::MulLo(4), 0),
     op256("__builtin_ia32_pmulhw256", "vpmulhw", Form::Vv, Ret::V16hi, Sem::MulHi(2, true), 0),
@@ -861,7 +860,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     SimdOp { name: "__builtin_ia32_storedqudi256_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 32 },
     SimdOp { name: "__builtin_ia32_loaddqudi128_mask", mnem: "vmovdqu64", form: Form::MaskLoad, ret: Ret::V2di, sem: Sem::Move, int_width: 8, bytes: 16 },
     SimdOp { name: "__builtin_ia32_storedqudi128_mask", mnem: "vmovdqu64", form: Form::MaskStore, ret: Ret::Void, sem: Sem::Move, int_width: 8, bytes: 16 },
-    // The MMX forms over 8-byte vectors, as gcc names their builtins.
+    // The MMX forms over 8-byte vectors.
     op64("__builtin_ia32_paddsb", "paddsb", Ret::V8qi, Sem::AddSat(1, true)),
     op64("__builtin_ia32_paddsw", "paddsw", Ret::V4hi, Sem::AddSat(2, true)),
     op64("__builtin_ia32_paddusb", "paddusb", Ret::V8qi, Sem::AddSat(1, false)),

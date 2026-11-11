@@ -56,7 +56,7 @@ impl<'a> Walker<'a> {
             return self.walk_atomic16(b, kind, args, order);
         }
         // The generic forms on any other size call the runtime's generic
-        // functions with the size, as gcc and clang do.
+        // functions with the size.
         if matches!(kind, AtomicKind::LoadInto | AtomicKind::StoreFrom)
             && !matches!(width, 1 | 2 | 4 | 8)
             && !self.target.is_windows()
@@ -200,7 +200,7 @@ impl<'a> Walker<'a> {
             | AtomicKind::AndFetch
             | AtomicKind::OrFetch
             | AtomicKind::XorFetch => {
-                // GCC `__sync_*_and_fetch`: the read-modify-write yields the
+                // `__sync_*_and_fetch`: the read-modify-write yields the
                 // prior value; recompute the post-operation value in plain
                 // IR so a value with side effects is evaluated once.
                 let value = self.walk_expr_rvalue(b, args[1])?;
@@ -218,7 +218,7 @@ impl<'a> Walker<'a> {
                 Ok(self.extend_atomic_result(b, new, elem_ty))
             }
             AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
-                // GCC `__sync_val/bool_compare_and_swap(p, old, new)`: the
+                // `__sync_val/bool_compare_and_swap(p, old, new)`: the
                 // prior `*p`, or whether it matched `old`.
                 let old_val = self.walk_expr_rvalue(b, args[1])?;
                 let old_val = self.atomic_bits_of(b, old_val, elem_ty);

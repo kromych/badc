@@ -1,5 +1,5 @@
-//! The library function a builtin calls, with the prototype gcc and clang
-//! give the builtin where no declaration is in scope.
+//! The library function a builtin calls, with the prototype the builtin
+//! takes where no declaration is in scope.
 
 use alloc::vec::Vec;
 
@@ -42,8 +42,8 @@ impl Compiler {
         Some(slot)
     }
 
-    /// Declare the generic `__atomic_*` functions of gcc's and clang's
-    /// runtime, through which an `_Atomic` object no instruction covers is
+    /// Declare the generic `__atomic_*` functions of the libatomic runtime,
+    /// through which an `_Atomic` object no instruction covers is
     /// accessed ([`super::types::AtomicAccess::Library`]), when the unit
     /// formed such a type. Each takes a slot no source name reaches; the
     /// walker finds it by [`ATOMIC_LIBCALLS`]' slot name.

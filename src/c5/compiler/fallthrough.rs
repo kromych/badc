@@ -98,8 +98,8 @@ impl Compiler {
         }
     }
 
-    /// gcc passes over a label whose statement leaves at once by `break`,
-    /// `goto` or a bare `return`, and an empty one ending the switch.
+    /// The warning passes over a label whose statement leaves at once by
+    /// `break`, `goto` or a bare `return`, and an empty one ending the switch.
     fn lands_on_exit(&self, site: StmtId, last: bool) -> bool {
         match self.ast.stmt(site) {
             Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
@@ -178,8 +178,9 @@ impl Compiler {
                     then_exit.max_leaving(else_exit)
                 }
             }
-            // gcc's lowering ends an endless loop in its back edge, whatever
-            // `break` it holds, and a `do` loop in its body's last statement.
+            // As the warning is defined, an endless loop ends in its back edge,
+            // whatever `break` it holds, and a `do` loop in its body's last
+            // statement.
             Stmt::While { cond, .. } => falls(!self.always_true(Some(*cond))),
             Stmt::For { cond, .. } => falls(!self.always_true(*cond)),
             Stmt::DoWhile { body, cond } => {

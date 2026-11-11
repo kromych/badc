@@ -195,7 +195,7 @@ fn fentry_area_x86_64_options() -> NativeOptions {
 
 #[test]
 fn x86_64_call_padding_form_matches_gcc() {
-    // gcc -O2 -fpatchable-function-entry=16,16 -pg -mfentry -mrecord-mcount
+    // -O2 -fpatchable-function-entry=16,16 -pg -mfentry -mrecord-mcount
     // -fmin-function-alignment=16: `one` at 0x10 behind 16 NOPs, 11 bytes
     // (`call __fentry__; mov $1, %eax; ret`), its record at `.text + 0`
     // and its `__mcount_loc` entry at the call; `four` keeps the area and
@@ -264,7 +264,7 @@ fn x86_64_call_padding_form_matches_gcc() {
 
 #[test]
 fn an_area_without_nops_ahead_of_the_symbol_starts_at_it() {
-    // gcc -fpatchable-function-entry=16: `one` at the area's first byte,
+    // -fpatchable-function-entry=16: `one` at the area's first byte,
     // 22 bytes (16 NOPs, `mov`, `ret`), recorded at `.text + 0`.
     let rel = compile(
         SRC,
@@ -289,7 +289,7 @@ fn an_area_without_nops_ahead_of_the_symbol_starts_at_it() {
 
 #[test]
 fn aarch64_call_ops_form_matches_gcc() {
-    // gcc -fpatchable-function-entry=4,2 -fmin-function-alignment=8: two
+    // -fpatchable-function-entry=4,2 -fmin-function-alignment=8: two
     // NOPs at an 8-byte aligned address (the literal slot), the symbol,
     // two more NOPs, then the body; `one` is 16 bytes. `five` (2,1) has
     // one NOP on each side.
@@ -371,7 +371,7 @@ fn aarch64_protected(patchable: PatchableEntry, bti: bool, pac_ret: bool) -> EtR
 
 #[test]
 fn aarch64_signing_follows_the_nops() {
-    // gcc -mbranch-protection=pac-ret -fpatchable-function-entry=4,2:
+    // -mbranch-protection=pac-ret -fpatchable-function-entry=4,2:
     // the two NOPs open the entry and `PACIASP` follows them. A patcher
     // that rewrites the first of the two to `MOV X9, X30` and the second
     // to a call requires a NOP at the symbol; a signature taken ahead of
@@ -404,7 +404,7 @@ fn aarch64_signing_follows_the_nops() {
 
 #[test]
 fn aarch64_a_signed_entry_with_a_nop_area_takes_its_own_landing_pad() {
-    // gcc -mbranch-protection=pac-ret+bti -fpatchable-function-entry=4,2:
+    // -mbranch-protection=pac-ret+bti -fpatchable-function-entry=4,2:
     // `BTI C`, the NOPs, then `PACIASP`. `PACIASP` stands in for the pad
     // only where it is the entry's first instruction; the NOP area moves
     // it, and a patcher that finds the site from the symbol tolerates
@@ -463,7 +463,7 @@ fn the_area_takes_the_function_alignment_on_both_targets() {
 
 #[test]
 fn mcount_form_calls_after_the_prologue() {
-    // gcc -pg -mno-fentry -mrecord-mcount: `one` is `push %rbp; mov
+    // -pg -mno-fentry -mrecord-mcount: `one` is `push %rbp; mov
     // %rsp, %rbp; call mcount; mov $1, %eax; pop %rbp; ret`, 16 bytes,
     // with the `__mcount_loc` entry at the call. The frame is forced on
     // a leaf: `mcount` reads the return address through rbp.
@@ -499,7 +499,7 @@ fn mcount_form_calls_after_the_prologue() {
 
 #[test]
 fn nop_mcount_puts_a_nop_of_the_calls_width_in_its_place() {
-    // gcc -pg -mfentry -mnop-mcount -mrecord-mcount: `nopl 0x0(%rax,%rax,1)`
+    // -pg -mfentry -mnop-mcount -mrecord-mcount: `nopl 0x0(%rax,%rax,1)`
     // at the entry, recorded, and no `__fentry__` reference.
     let rel = compile(
         SRC,
@@ -526,8 +526,8 @@ fn nop_mcount_puts_a_nop_of_the_calls_width_in_its_place() {
 
 #[test]
 fn the_landing_pad_leads_the_nops_and_the_call() {
-    // gcc -fcf-protection=branch -fpatchable-function-entry=3,1 -pg
-    // -mfentry: `endbr64` at the symbol, the two NOPs, then the call,
+    // -fcf-protection=branch -fpatchable-function-entry=3,1 -pg -mfentry:
+    // `endbr64` at the symbol, the two NOPs, then the call,
     // which is what `__mcount_loc` records.
     let rel = compile(
         SRC,

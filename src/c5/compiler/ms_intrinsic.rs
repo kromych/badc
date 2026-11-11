@@ -250,12 +250,12 @@ impl Compiler {
             && ms_intrinsic::lookup(name, self.target).is_some_and(|i| i.op == Op::Noop)
     }
 
-    /// `__va_start(&ap, ...)`, the `(` consumed, as clang lowers it: the first
-    /// argument converts to `va_list *` and the node is `__builtin_va_start`'s,
-    /// whose lowering reads the prototype; what follows, the last fixed
-    /// parameter (x64) or its address, size and alignment (arm64), is
-    /// unevaluated. The x64 form's parameter takes `va_start`'s `-Wvarargs`
-    /// checks; clang makes none on the arm64 form.
+    /// `__va_start(&ap, ...)`, the `(` consumed: the first argument converts
+    /// to `va_list *` and the node is `__builtin_va_start`'s, whose lowering
+    /// reads the prototype; what follows, the last fixed parameter (x64) or
+    /// its address, size and alignment (arm64), is unevaluated. The x64
+    /// form's parameter takes `va_start`'s `-Wvarargs` checks; the arm64
+    /// form takes none.
     fn parse_ms_va_start(&mut self, name: &str) -> Result<(), C5Error> {
         self.require_variadic_function()?;
         let list_ty = add_ptr_level(add_ptr_level(plain_char_ty(self.lex.char_signed)));
@@ -272,8 +272,8 @@ impl Compiler {
             self.check_va_start_operand(last, at);
         }
         // arm64's form, `__va_start(&ap, &v, _SLOTSIZEOF(v), __alignof(v), &v)`:
-        // the operands go unevaluated, and clang checks the named
-        // argument's address and its slot size as these do.
+        // the operands go unevaluated; the second must be the named
+        // argument's address and the third its slot size.
         if self.target.is_windows() && self.target.is_aarch64() {
             let wrong = match tys[..] {
                 [] | [_] => Some(alloc::string::String::from(

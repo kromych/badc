@@ -58,7 +58,7 @@ pub enum Class {
     /// invariant, or a failed link.
     Hard,
     /// Advisory. Prints `note:`; `-w` and `-Wno-<name>` turn it off, and
-    /// nothing raises it, `-Werror` included, as clang treats a remark.
+    /// nothing raises it, `-Werror` included.
     Note,
 }
 

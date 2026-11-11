@@ -85,8 +85,7 @@ impl Diagnostic {
             Class::Controllable => write!(out, " [-W{}]", self.code.name())?,
             Class::Hard | Class::Note => write!(out, " [{}]", self.code.name())?,
         }
-        // The echoed line follows the brackets, where gcc puts the
-        // source it points at.
+        // The echoed source line follows the brackets.
         if let Some(source) = &self.source_line {
             out.write_char('\n')?;
             out.write_str(source)?;

@@ -248,7 +248,7 @@ impl Compiler {
         self.next()?;
         // An alignment ahead of the keyword belongs to the declarators, not
         // to the aggregate, whose attributes follow the keyword or the body
-        // (GCC type attributes).
+        // (GNU C type attributes).
         let leading_align = core::mem::take(&mut self.pending.attrs.align);
         let leading_alignas = core::mem::take(&mut self.pending.attrs.alignas);
         // An attribute may sit between the keyword and the tag
@@ -438,7 +438,7 @@ impl Compiler {
     }
 
     /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
-    /// the GCC `__typeof__` extension). The result is the operand's
+    /// the GNU C `__typeof__` extension). The result is the operand's
     /// type. A type-name operand takes the type-name grammar (C99 6.7.6),
     /// its derivations included; an expression operand is parsed
     /// unevaluated and its type recovered, mirroring `sizeof`'s
@@ -747,7 +747,7 @@ impl Compiler {
     /// own identity: it stays the lookup key and the spelling every
     /// diagnostic uses. The label applies to the entity, so a later
     /// declaration -- including one that follows the definition -- renames
-    /// the symbol the whole unit emits, as gcc does.
+    /// the symbol the whole unit emits.
     pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let label = self.parse_asm_register_suffix()?;
         self.set_asm_label(id_idx, label)
@@ -853,8 +853,8 @@ impl Compiler {
     /// compile into direct register moves, the name holds no storage and
     /// emits no symbol. The declaration may repeat across the unit (headers
     /// re-include it) as long as the register matches. TODO: global
-    /// register variables on an allocatable register, which gcc takes out
-    /// of every function's allocation.
+    /// register variables on an allocatable register, which the GNU C
+    /// extension takes out of every function's allocation.
     pub(super) fn bind_file_scope_register(
         &mut self,
         id_idx: usize,
@@ -923,8 +923,8 @@ impl Compiler {
 
     /// Resolve a `register T name asm("reg")` register name against the
     /// compile target. The `%`-prefixed spelling is accepted, as is the
-    /// AArch64 `rN` spelling GCC accepts for `xN` (register-ABI operands
-    /// spell the binding `asm("r0")`). Every x86-64 GPR is bindable (the
+    /// AArch64 `rN` spelling of `xN` (register-ABI operands spell the
+    /// binding `asm("r0")`). Every x86-64 GPR is bindable (the
     /// asm emitter picks its staging scratch around bound operands); on
     /// aarch64 the encoders stage large immediates and veneers through
     /// x16 / x17 unconditionally and x18 is the platform register on the
@@ -933,9 +933,9 @@ impl Compiler {
     ///
     /// A file-scope binding holds its register for the whole unit, so it
     /// takes only a register no function allocates: the stack and frame
-    /// pointers, and x18 where the OS ABI reserves it. clang refuses every
-    /// other register with the message below; gcc takes the register out of
-    /// the unit's allocation, which badc does not do.
+    /// pointers, and x18 where the OS ABI reserves it. Every other register
+    /// is refused with the message below; gcc takes the register out of the
+    /// unit's allocation instead.
     pub(super) fn resolve_asm_register(
         &self,
         name: &str,
@@ -951,7 +951,7 @@ impl Compiler {
         );
         let resolved =
             if aarch64 {
-                // GCC accepts `rN` as an alias for `xN` on AArch64; normalize to
+                // `rN` is an alias for `xN` on AArch64; normalize to
                 // the `x` spelling so one path resolves both (`r29`->frame
                 // pointer, `r16`..`r18` reserved, like their `x` forms).
                 let mut norm = alloc::string::String::new();
@@ -1030,7 +1030,7 @@ impl Compiler {
         Ok(reg)
     }
 
-    /// `__auto_type` (GCC): the declared variable takes its
+    /// `__auto_type` (GNU C): the declared variable takes its
     /// initializer's type. The declaration must be a single plain
     /// identifier declarator with an initializer. The initializer is
     /// pre-scanned unevaluated to recover its type, the lexer rewinds
@@ -1120,8 +1120,7 @@ impl Compiler {
             // No prologue or epilogue: the body is the function's machine code.
             Attr::Naked => f.naked = true,
             Attr::Weak => f.weak = true,
-            // A weak reference on Darwin, as gcc and clang take it; gcc ignores
-            // it on an ELF target.
+            // A weak reference on Darwin; ignored on other object formats.
             Attr::WeakImport => {
                 f.weak |= self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
             }
@@ -1150,7 +1149,7 @@ impl Compiler {
         }
     }
 
-    /// Consume a run of declaration decorators -- GCC
+    /// Consume a run of declaration decorators -- GNU C
     /// `__attribute__ (( ... ))` / `__declspec ( ... )` / `_Alignas
     /// ( ... )` and C23 `[[ ... ]]` -- if any. Returns true when one
     /// names the `packed` attribute, which sets an aggregate's layout;
@@ -1312,7 +1311,7 @@ impl Compiler {
                             attrs.destructor |= seen.destructor;
                             init_priority = self.parse_init_priority(init_priority)?;
                         } else if is_vector_size && self.lex.tk == '(' {
-                            // GCC `vector_size(N)`: the declared type becomes a
+                            // `vector_size(N)`: the declared type becomes a
                             // vector N bytes wide. Captured here; the base-type
                             // parse rebuilds the element type into the vector.
                             self.next()?;
@@ -1325,7 +1324,7 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_mode && self.lex.tk == '(' {
-                            // GCC `mode(M)`: the declared type becomes the
+                            // `mode(M)`: the declared type becomes the
                             // integer or floating type of machine mode `M`.
                             self.next()?; // `(`
                             self.pending.attrs.mode = Some(self.parse_machine_mode()?);
@@ -1337,8 +1336,8 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_section && self.lex.tk == '(' {
-                            // GCC `section("name")`: place the declared
-                            // symbol's bytes in the named object section.
+                            // `section("name")`: place the declared symbol's
+                            // bytes in the named object section.
                             self.next()?; // `(`
                             let name = self.parse_attribute_string_operand("section")?;
                             self.pending.attrs.section = Some(name);
@@ -1352,7 +1351,7 @@ impl Compiler {
                         } else if let Some(error) = call_diagnostic
                             && self.lex.tk == '('
                         {
-                            // GCC `error("message")` / `warning("message")`.
+                            // `error("message")` / `warning("message")`.
                             self.next()?; // `(`
                             let what = if error { "error" } else { "warning" };
                             let message = self.parse_attribute_string_operand(what)?;
@@ -1365,7 +1364,7 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_patchable_entry && self.lex.tk == '(' {
-                            // GCC `patchable_function_entry(N[, M])`: this
+                            // `patchable_function_entry(N[, M])`: this
                             // function's NOP area, overriding the option's.
                             self.next()?; // `(`
                             let n = self.parse_constant_int()?;
@@ -1390,7 +1389,7 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_alias && self.lex.tk == '(' {
-                            // GCC `alias("target")`: the declared name is an
+                            // `alias("target")`: the declared name is an
                             // additional symbol for `target`, which must be
                             // defined in this unit.
                             self.next()?; // `(`
@@ -1404,7 +1403,7 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_visibility && self.lex.tk == '(' {
-                            // GCC `visibility("hidden"|"internal"|"protected"
+                            // `visibility("hidden"|"internal"|"protected"
                             // |"default")`, overriding an enclosing
                             // `#pragma GCC visibility` extent.
                             self.next()?; // `(`
@@ -1428,7 +1427,7 @@ impl Compiler {
                             }
                             self.next()?;
                         } else if is_cleanup && self.lex.tk == '(' {
-                            // GCC `cleanup(fn)`: name the function to call with
+                            // `cleanup(fn)`: name the function to call with
                             // the variable's address at scope exit. The operand
                             // is an identifier already in scope.
                             self.next()?; // `(`
@@ -1594,7 +1593,7 @@ impl Compiler {
         }
         // `ms_abi` / `sysv_abi` name the declared function's (or
         // function pointer's) calling convention. Both are inert off
-        // x86_64, matching gcc, which ignores them on other targets.
+        // x86_64.
         for (on, conv) in [
             (attrs.ms_abi, CallConv::Ms),
             (attrs.sysv_abi, CallConv::SysV),
@@ -1647,10 +1646,10 @@ impl Compiler {
     }
 
     /// Parse the operand of `__attribute__((mode(M)))` and return the
-    /// mode's `(byte width, is floating)`. The operand is an identifier;
-    /// GCC accepts the mode names with and without the `__M__` spelling.
-    /// An unrecognized name is an error, as in GCC -- a silently dropped
-    /// mode would change the layout of every aggregate holding the type.
+    /// mode's `(byte width, is floating)`. The operand is an identifier, the
+    /// mode name with or without the `__M__` spelling. An unrecognized name
+    /// is an error -- a silently dropped mode would change the layout of
+    /// every aggregate holding the type.
     fn parse_machine_mode(&mut self) -> Result<(u8, bool), C5Error> {
         if self.lex.tk != Token::Id {
             return Err(self.compile_err(
@@ -1795,8 +1794,7 @@ impl Compiler {
         Ok(ty)
     }
 
-    /// C: `__ptr32` follows the `*` of the pointer it narrows, as clang
-    /// requires for a windows-msvc triple.
+    /// C: `__ptr32` follows the `*` of the pointer it narrows.
     pub(super) fn check_ptr32_placement(&self, ty: i64) -> Result<(), C5Error> {
         match super::types::ptr32_misplaced(ty) {
             Some(text) => Err(self.compile_err(Code::INVALID_DECLARATION, text)),
@@ -1980,14 +1978,14 @@ impl Compiler {
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             self.parse_aggregate_base_type()?
         } else if self.is_lex_int128_spelling() {
-            // GCC `__int128` / `__int128_t` / `__uint128_t` (and, through the
+            // GNU C `__int128` / `__int128_t` / `__uint128_t` (and, through the
             // modifier soup, `unsigned __int128`): a 16-byte integer type,
             // modeled as a 16-byte aggregate for layout / sizeof / copy.
             let tag = self.lex_int128_tag(m.saw_unsigned);
             self.next()?;
             tag
         } else if self.is_lex_va_list_spelling() {
-            // GCC `__builtin_va_list`: the target's `va_list`
+            // GNU C `__builtin_va_list`: the target's `va_list`
             // representation, usable with no header.
             self.next()?;
             self.builtin_va_list_tag()
@@ -2031,7 +2029,7 @@ impl Compiler {
             }
         }
 
-        // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
+        // `__attribute__((vector_size(N)))` rebuilds the base type into a
         // vector of N bytes before qualifiers apply.
         bt = self.apply_pending_type_attributes(bt)?;
         // Written after the base type is complete, so a nested parse inside
@@ -2146,7 +2144,7 @@ impl Compiler {
     }
 
     /// C99 6.7.2p2: a declaration or type name without a type specifier
-    /// takes `int`, an error by default as in gcc 14, in gcc's words.
+    /// takes `int`, an error by default.
     pub(super) fn report_implicit_int(
         &mut self,
         what: ImplicitInt,

@@ -125,8 +125,8 @@ pub const BUILD_INFO: &str = VERSION_LINE;
 /// Compiler-identification marker carried by every emitted
 /// binary: appended to the code-section tail of final images so a
 /// `strings` scan reveals the producer, and stored as the
-/// `.comment` section of relocatable ELF objects, mirroring the
-/// version string gcc and clang place there.
+/// `.comment` section of relocatable ELF objects, where a producer
+/// records its version.
 ///
 /// The marker is the release version only, never the git commit /
 /// branch / remote -- so it is not [`VERSION_LINE`], which does

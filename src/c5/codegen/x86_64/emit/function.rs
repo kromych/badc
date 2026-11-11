@@ -2162,9 +2162,9 @@ fn emit_retpoline_capture(code: &mut Vec<u8>, target: Reg) {
 }
 
 /// Indirect call through `target`: a direct call to the register's thunk
-/// under `-mindirect-branch=thunk-extern`, the embedded retpoline (gcc's
-/// shape) under `thunk-inline`. A call has an architectural successor, so
-/// `-mharden-sls=` places no trap here.
+/// under `-mindirect-branch=thunk-extern`, the embedded retpoline under
+/// `thunk-inline`. A call has an architectural successor, so `-mharden-sls=`
+/// places no trap here.
 pub(super) fn emit_hardened_call_r(
     code: &mut Vec<u8>,
     target: Reg,

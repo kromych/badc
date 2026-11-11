@@ -1070,7 +1070,7 @@ fn run_func<H: Host>(
                 frame.block_idx = target as usize;
             }
             Terminator::GotoIndirect { target } => {
-                // GCC's labels as values: the operand must be the address
+                // GNU C labels as values: the operand must be the address
                 // of a label in this function; any other jump is undefined
                 // and stops the run.
                 let raw = frame.regs[target as usize];
@@ -1306,7 +1306,7 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::BlockAddr(b) => {
-            // Label address (GCC `&&label`): the code position at the
+            // Label address (GNU C `&&label`): the code position at the
             // start of the label's block, which GotoIndirect decodes.
             frame.regs[v as usize] = code_position(frame.func_idx, *b as usize, 0);
             return Ok(());
@@ -3391,7 +3391,7 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 /// * `VaCopy(&dst, &src)` -- `*dst = *src`.
 /// * AArch64 setjmp / longjmp intrinsics return "not implemented";
 ///   they only land in JIT / AOT output.
-/// Evaluate a GCC extended-asm statement (`Inst::InlineAsm`) in the
+/// Evaluate a GNU C extended-asm statement (`Inst::InlineAsm`) in the
 /// interpreter. The template is parsed into instructions and executed
 /// against a 16-entry model register file seeded from the operand
 /// values; the results are stored through the output addresses, a value
@@ -4706,8 +4706,8 @@ fn load_width(kind: LoadKind) -> usize {
 
 fn store_width(kind: StoreKind) -> usize {
     match kind {
-        // The x87 store writes 10 bytes and leaves the 6 padding
-        // bytes untouched, as gcc's FSTP does; binary128 writes 16.
+        // The x87 store (`fstp` m80) writes 10 bytes and leaves the 6
+        // padding bytes untouched; binary128 writes 16.
         StoreKind::F80 => 10,
         StoreKind::F128 | StoreKind::V128 => 16,
         StoreKind::V256 => 32,

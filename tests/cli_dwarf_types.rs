@@ -944,8 +944,8 @@ fn no_member_is_dropped_and_enums_survive() {
 }
 
 /// An untagged enum is described like a tagged one, less the name:
-/// DW_AT_name is optional on an enumeration type (DWARF 4 5.7), and
-/// gcc and clang leave it out. The relocatable object carries the DIE
+/// DW_AT_name is optional on an enumeration type (DWARF 4 5.7) and left
+/// out. The relocatable object carries the DIE
 /// on both Linux targets and the linked image keeps it.
 #[test]
 fn anonymous_enum_has_a_die_without_a_name() {
@@ -1277,7 +1277,7 @@ fn unprototyped_function_pointers_are_not_marked_prototyped() {
         assert_eq!(kinds, [DW_TAG_UNSPECIFIED_PARAMETERS], "{what}");
     }
     assert!(pointee(child("cb")).at(DW_AT_TYPE).is_none(), "void return");
-    // A `(void)` prototype has no children, as gcc and clang state it.
+    // A `(void)` prototype has no children.
     for d in [u.member(ops, "mv"), child("lv")] {
         assert_eq!(pointee(d).at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
         assert!(!pointee(d).has_children);
@@ -1709,8 +1709,8 @@ fn cast_only_type_declared_in_a_statement_expression_keeps_its_die() {
 /// A cast type-name inside an unevaluated operand and a compound
 /// literal of an otherwise-unused type both name their type, and so
 /// does a cast in a static initializer. `sizeof` / `_Alignof` of a
-/// type-name fold to a constant and leave no type behind -- gcc and
-/// clang emit no DIE for those, and neither does badc.
+/// type-name fold to a constant and leave no type behind: no DIE
+/// describes them.
 #[test]
 fn only_cast_type_names_reach_debug_info() {
     let u = compile_unit(

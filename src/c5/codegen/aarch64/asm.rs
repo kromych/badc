@@ -1,5 +1,5 @@
-//! GCC extended inline-asm (AArch64): ARM-syntax template parsing and operand
-//! assignment.
+//! GNU C extended inline asm (AArch64): ARM-syntax template parsing and
+//! operand assignment.
 //!
 //! [`parse_template`] turns a template into a sequence of [`AsmInsnA64`]s with
 //! symbolic operand references (`%N` / `%wN` / `%xN`), explicit registers
@@ -1730,7 +1730,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // Barriers: `dmb` / `dsb` take a domain option (default `sy`), `isb`
         // takes only `sy`, `clrex` a numeric imm. All are constant and encode
         // to their word here: `1101 0101 0000 0011 0011 CRm opc 11111` with
-        // opc 4 (dsb), 5 (dmb), 6 (isb), 2 (clrex). Byte-verified vs clang.
+        // opc 4 (dsb), 5 (dmb), 6 (isb), 2 (clrex).
         if matches!(mnem, "dmb" | "dsb" | "isb" | "clrex") {
             let toks = split_operands(rest);
             if toks.len() > 1 {

@@ -487,9 +487,9 @@ pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string:
 /// as statement separators, and never strip inside a string literal. They
 /// differ in the line-comment characters:
 ///
-/// * x86-64: `#` starts a comment anywhere in a line. GNU as rejects `//` as
-///   junk after an operand, so no valid template relies on it and treating it
-///   as a comment matches the clang integrated assembler.
+/// * x86-64: `#` and `//` start a comment anywhere in a line. GNU as rejects
+///   `//` as junk after an operand, so no valid template gives it another
+///   meaning.
 /// * aarch64: `//` starts a comment anywhere. `#` prefixes an immediate
 ///   (`mov x0, #1`) and starts a comment only as the first token of a
 ///   statement, which is where the `#`-prefixed line markers appear.

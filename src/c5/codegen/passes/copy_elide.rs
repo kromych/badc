@@ -25,22 +25,22 @@
 //! the temporary its `ret_slot_local` names -- the AArch64 x8 return, or
 //! the out-pointer the call passes first on System V and Win64 -- and
 //! `s = f(...)` copies that into `s`; pointing the call at `s` builds the
-//! result in place, as the return-slot rule of gcc and clang does. The
-//! callee then writes `s` while it runs, so it must have no way to reach
-//! `s`: no escaping use of `s`'s address may execute on a path to the
-//! call, the call's own operands included. A local whose address first
-//! escapes after the call qualifies; a destination reached through a
-//! pointer never does, since the callee may hold another pointer to it.
-//! The window rule applies from the call to the copy, and a function
-//! calling a returns-twice function keeps its copies: a `longjmp` out of
-//! the callee would leave `s` partly written, where the abstract machine
-//! left it unchanged (C99 7.13.2.1p3). A read of the temporary past the
-//! copy -- one of `s` an earlier pass forwarded -- reads `s` instead,
-//! which holds the same bytes there when nothing else writes `s` and no
-//! escape of `s` reaches the read. A call returning in registers stores
-//! the result's own bytes, so its copy may fill a leading member; an
-//! out-pointer call carries no result layout, so its copy must cover the
-//! temporary's whole cells, which a copy of a leading member cannot.
+//! result in place. The callee then writes `s` while it runs, so it must
+//! have no way to reach `s`: no escaping use of `s`'s address may execute
+//! on a path to the call, the call's own operands included. A local whose
+//! address first escapes after the call qualifies; a destination reached
+//! through a pointer never does, since the callee may hold another
+//! pointer to it. The window rule applies from the call to the copy, and
+//! a function calling a returns-twice function keeps its copies: a
+//! `longjmp` out of the callee would leave `s` partly written, where the
+//! abstract machine left it unchanged (C99 7.13.2.1p3). A read of the
+//! temporary past the copy -- one of `s` an earlier pass forwarded --
+//! reads `s` instead, which holds the same bytes there when nothing else
+//! writes `s` and no escape of `s` reaches the read. A call returning in
+//! registers stores the result's own bytes, so its copy may fill a
+//! leading member; an out-pointer call carries no result layout, so its
+//! copy must cover the temporary's whole cells, which a copy of a leading
+//! member cannot.
 
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};

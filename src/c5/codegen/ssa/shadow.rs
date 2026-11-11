@@ -599,7 +599,7 @@ pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
 }
 
 /// Function and data reachability of a unit (C99 6.2.2: an unreferenced internal
-/// definition is dropped, as by gcc -O); a pass adds each function's own edges.
+/// definition is dropped); a pass adds each function's own edges.
 pub(crate) struct ReachGraph<'p> {
     pub(crate) program: &'p Program,
     /// The object format whose spelling asm templates name symbols in.
@@ -649,7 +649,7 @@ impl<'p> ReachGraph<'p> {
                     graph.symbol_objects.push((i, s.owner_ent_pc));
                 }
             }
-            // A section attribute selects placement and keeps nothing (gcc).
+            // A section attribute selects placement and keeps nothing.
             if s.class == Token::Fun as i64 && (keeps || s.is_alias) {
                 graph.symbol_funcs.push(s.val as usize);
             }
@@ -773,8 +773,9 @@ impl<'p> ReachGraph<'p> {
         for r in &program.tls_code_relocs {
             work.push(Node::Func(r.target_ent_pc as usize));
         }
-        // A name in a file-scope `asm()` keeps nothing: the assembler resolves
-        // it, as for gcc, which parses no template; `used` keeps a definition.
+        // A name in a file-scope `asm()` keeps nothing: the template is not
+        // scanned for names and the assembler resolves them; `used` keeps a
+        // definition.
         if assume_data_live {
             work.extend((0..self.starts.len()).map(Node::Data));
         }

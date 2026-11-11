@@ -557,7 +557,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
     // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
     // A function type without a prototype omits DW_AT_prototyped and has
-    // one unspecified_parameters child, as gcc and clang emit it.
+    // one unspecified_parameters child.
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,
@@ -1567,8 +1567,8 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present, in
-    /// the order C99 6.7.3 gives them no significance and gcc emits them.
+    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present, in a
+    /// fixed order, as C99 6.7.3 gives the order no significance.
     fn qualify(&mut self, inner: Option<TypeId>, q: Quals) -> Option<TypeId> {
         let mut cur = inner;
         for (present, qual) in [

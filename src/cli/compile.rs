@@ -17,8 +17,8 @@ use super::options::SourceKind;
 /// stack stays at what the compile touches.
 pub(crate) const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// The `-D` list one translation unit preprocesses under. gcc predefines
-/// `__ASSEMBLER__` for a `.S`, and a header shared with assembly gates its
+/// The `-D` list one translation unit preprocesses under. A `.S` has
+/// `__ASSEMBLER__` predefined, and a header shared with assembly gates its
 /// C-only content on it. It goes ahead of the command-line list so
 /// `-U__ASSEMBLER__` and an explicit `-D__ASSEMBLER__=<v>` both still win.
 pub(crate) fn tu_defines(kind: SourceKind, defines: &[(String, String)]) -> Vec<(String, String)> {
@@ -255,8 +255,8 @@ pub(crate) fn tu_compile_options(
 
 /// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
 /// writing its dependency rule on the way. `.S` runs through the preprocessor
-/// first, as gcc's driver does, and the assembler follows its line markers
-/// back to the original lines; `.s` is taken verbatim.
+/// first, and the assembler follows its line markers back to the original
+/// lines; `.s` is taken verbatim.
 pub(crate) fn assemble_tu(
     src_path: &str,
     cfg: &CompileCfg,

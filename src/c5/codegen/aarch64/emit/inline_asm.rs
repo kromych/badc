@@ -603,8 +603,7 @@ impl AsmOperands<'_> {
         };
         Ok(match self.asm.operand_class(idx as usize) {
             // `%sN` selects the single view and `%dN` the double; a bare `%N`
-            // is `vN`, as gcc and clang print it, which an instruction takes
-            // only with an arrangement.
+            // is `vN`, which an instruction takes only with an arrangement.
             AsmConstraint::Fp => match is64 {
                 Some(is_d) => Opnd::VReg { num: r, is_d },
                 None => {
@@ -2211,7 +2210,7 @@ fn emit_goto_exits(
     Ok(())
 }
 
-/// Lower an `Inst::InlineAsm` (GCC extended asm): assign each register
+/// Lower an `Inst::InlineAsm` (GNU C extended asm): assign each register
 /// operand a register, save the registers the block overwrites, capture
 /// the operand values / addresses, load the inputs, encode the template
 /// through the table encoder, store the outputs back. x16 / x17 are the

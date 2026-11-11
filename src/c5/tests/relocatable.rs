@@ -33,7 +33,7 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
 #[test]
 fn a_relocated_thread_local_slot_holds_zero_like_a_data_slot() {
     // The addend is in the relocation for `.rela.tdata` as for `.rela.data`,
-    // and the slot either patches holds zero, as clang and gcc write it.
+    // and the slot either patches holds zero.
     let src = "int g[4]; _Thread_local int *x = &g[2]; int *y = &g[2];";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
@@ -332,7 +332,7 @@ fn an_internal_linkage_data_alias_names_its_target() {
         ("tbl_alias", "tbl", STB_LOCAL),
         ("glob_alias", "glob", STB_LOCAL),
         ("tbl_ext", "tbl", STB_GLOBAL),
-        // Declared `int`, the symbol still spans `glob`, as gcc sizes it.
+        // Declared `int`, the symbol still spans `glob`.
         ("glob_first", "glob", STB_GLOBAL),
     ] {
         let (al, tg) = (sym(alias), sym(target));
@@ -447,8 +447,8 @@ fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
 fn a_zero_length_object_ends_the_objects_of_its_own_section() {
     // A GNU zero-length array is an object of size zero. It sits in the
     // section its type and initializer give it, after the objects defined
-    // there before it, as gcc and clang place it -- not at the start of
-    // the next section's first object.
+    // there before it -- not at the start of the next section's first
+    // object.
     let src = "const long ro_a[2] = {1, 2};\n\
                const long ro_z[0] = {};\n\
                long rw_a[2] = {3, 4};\n\
@@ -542,10 +542,10 @@ fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
 fn a_pic_unit_names_its_interposable_definitions() {
     // System V gABI, symbol visibility: `-fPIC` code reaches the functions
     // and objects of default visibility it defines through their symbols,
-    // as clang -fPIC does, so the link decides whether another component
-    // preempts them -- a call by PLT relocation, an address and a read
-    // through the GOT, an initializer against the symbol. A `static` and a
-    // hidden definition stay direct.
+    // so the link decides whether another component preempts them -- a
+    // call by PLT relocation, an address and a read through the GOT, an
+    // initializer against the symbol. A `static` and a hidden definition
+    // stay direct.
     let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
                static int s(void) { return 3; }\n\
                __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
@@ -616,8 +616,8 @@ fn a_block_scope_extern_thread_local_is_referenced_as_one() {
 
 #[test]
 fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
-    // The call and the address-of reach one undefined symbol, as gcc and
-    // clang write it; the symbol table holds no second entry of the name.
+    // The call and the address-of reach one undefined symbol; the symbol
+    // table holds no second entry of the name.
     let src = "int f(void);\nint g(void) { return f ? f() : 7; }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let a = parse_et_rel(&compile_bytes(src, target), "f.o").expect("parse");
@@ -645,8 +645,7 @@ fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
 #[test]
 fn pragma_weak_binds_a_declared_reference_weak() {
     // `#pragma weak` binds a reference weak whether it stands before or
-    // after the declaration, a C-library function's included, as gcc and
-    // clang bind it.
+    // after the declaration, a C-library function's included.
     let src = "#pragma weak atoi\n#include <stdlib.h>\n\
                int f(void);\n#pragma weak f\nextern int o;\n#pragma weak o\n\
                long g(void) { return atoi(\"1\") + (f ? f() : 0) + (&o ? o : 0); }\n";
@@ -662,8 +661,8 @@ fn pragma_weak_binds_a_declared_reference_weak() {
 
 #[test]
 fn an_always_inline_call_is_inlined_without_optimization() {
-    // gcc and clang inline an `always_inline` function at -O0: no call to
-    // it and no body of it remain.
+    // An `always_inline` function inlines at -O0: no call to it and no
+    // body of it remain.
     let src = "static inline __attribute__((always_inline)) int h(int x) { return x + 1; }\n\
                int k(int x) { return h(x); }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -709,10 +708,10 @@ fn locals_kept_per_object() {
 
 #[test]
 fn unreferenced_section_static_drops_its_whole_cascade() {
-    // A section attribute selects placement, not retention (gcc parity),
-    // so an unreferenced section-attributed static drops and the sweep
-    // cascades: the static function only its initializer named goes with
-    // it, and with that function goes its reference to a symbol this unit
+    // A section attribute selects placement, not retention, so an
+    // unreferenced section-attributed static drops and the sweep cascades:
+    // the static function only its initializer named goes with it, and
+    // with that function goes its reference to a symbol this unit
     // never defines: a table entry declared with a section and without
     // `used`. `used`, an ordinary reference, and a name spelled in an asm
     // template each still pin their definition.
@@ -1537,10 +1536,9 @@ fn emit_relocs_survive_into_final_elf() {
 }
 
 /// Every relocatable ELF object carries the producer identification
-/// in `.comment`, shaped as gcc and clang shape theirs: one
-/// NUL-terminated line, SHF_MERGE | SHF_STRINGS with a byte entsize,
-/// so a linker folds the identical line from many badc objects into
-/// one copy in the linked image.
+/// in `.comment`: one NUL-terminated line, SHF_MERGE | SHF_STRINGS with
+/// a byte entsize, so a linker folds the identical line from many badc
+/// objects into one copy in the linked image.
 #[test]
 fn comment_section_is_a_mergeable_single_line_identification() {
     use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, read_struct};
@@ -2097,10 +2095,9 @@ fn compile_pie_optimized(src: &str, target: Target) -> EtRel {
 /// C99 6.7.3p5: a `const` pointer object with static storage duration
 /// holds its initializer's address for the whole execution, so at `-O`
 /// a load from it is the address constant itself and no pointer object,
-/// and no absolute relocation, reaches the object -- the form gcc's
-/// `-fpie` objects take, and the one a consumer that forbids absolute
-/// relocations outside the debug sections requires. An object whose
-/// address escapes stays, with its relocation.
+/// and no absolute relocation, reaches the object -- the form a
+/// consumer that forbids absolute relocations outside the debug sections
+/// requires. An object whose address escapes stays, with its relocation.
 #[test]
 fn const_pointer_objects_fold_to_their_address_in_a_pie_object() {
     use crate::c5::object::elf_reloc_types as rt;

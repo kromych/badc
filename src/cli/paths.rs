@@ -19,10 +19,9 @@ pub(crate) fn declared_home(flag: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// The directory `-print-file-name=include` names for the compiler's own
-/// headers: `lib/badc/include` under the prefix holding the executable, as
-/// gcc and clang keep theirs under their own. The `#include` search serves
-/// the headers from the binary wherever it names the directory, so nothing
-/// need be installed there.
+/// headers: `lib/badc/include` under the prefix holding the executable. The
+/// `#include` search serves the headers from the binary wherever it names
+/// the directory, so nothing need be installed there.
 pub(crate) fn compiler_include_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     #[cfg(unix)]
@@ -32,7 +31,7 @@ pub(crate) fn compiler_include_dir() -> Option<PathBuf> {
 }
 
 /// gcc's `-print-file-name=<name>`: the path badc has for `name`, else
-/// `name` itself, as gcc prints a name it does not find.
+/// `name` itself.
 pub(crate) fn print_file_name(name: &str) -> String {
     match compiler_include_dir() {
         Some(dir) if name == "include" => dir.to_string_lossy().into_owned(),

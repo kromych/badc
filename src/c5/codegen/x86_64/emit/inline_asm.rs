@@ -457,7 +457,7 @@ struct SectionOperandRefs<'a> {
     /// narrow field GNU as picks at the same point.
     fold: &'a dyn Fn(&str) -> Option<i64>,
     /// File-scope / `.S`-unit text is basic asm, where `%kN` is an opmask
-    /// register; an extended-asm statement's section text keeps GCC's
+    /// register; an extended-asm statement's section text keeps the
     /// `%k<N>` operand-modifier reading.
     file_scope: bool,
 }
@@ -1131,7 +1131,7 @@ impl SectionInsn<'_> {
     /// `%cN(%%rip)` / `%PN(%%rip)` (`riprel`) or a bare `%cN` / `%PN`
     /// reference: a constant becomes the displacement literal; a link-time
     /// address takes a RIP-relative relocation. A bare `%PN` naming a memory
-    /// operand is that memory reference, as gcc and clang print it.
+    /// operand is that memory reference.
     fn resolve_const_ref_mem(
         &self,
         idx: u8,
@@ -1351,8 +1351,8 @@ impl SectionInsn<'_> {
             body[field..field + width].fill(0);
             // A PC-relative field's addend is the symbol offset less the
             // field's own end skew and any bytes trailing it (the immediate of
-            // `testb $imm, sym(%rip)`), matching gcc. An absolute field is
-            // patched with the symbol value plus the offset directly.
+            // `testb $imm, sym(%rip)`). An absolute field is patched with the
+            // symbol value plus the offset directly.
             let trailing = body.len() - (field + width);
             let addend = if pcrel {
                 off - width as i64 - trailing as i64
@@ -2782,9 +2782,8 @@ impl AsmPass<'_> {
     /// `%P` / `%c` naming a link-time address (not a compile-time constant):
     /// the operand's captured value is the address. `lea` materializes it
     /// into the destination; `call` / `jmp` branch to the symbol directly,
-    /// as gcc prints the operand, through the fixup or relocation channel
-    /// a bare-symbol branch takes. `None` when the instruction carries no
-    /// such operand.
+    /// through the fixup or relocation channel a bare-symbol branch takes.
+    /// `None` when the instruction carries no such operand.
     fn emit_address_operand(
         &self,
         insn: &super::asm::AsmInsn,
@@ -3104,8 +3103,8 @@ impl AsmPass<'_> {
             // A bare `%cN` / `%PN` memory reference: a constant addresses
             // absolutely (the percpu form under a `%%gs:` / `%%fs:`
             // override), a link-time address RIP-relative, as for `%a`.
-            // TODO: gcc spells a `%c` symbol operand as an absolute
-            // reference, which a non-PIC code model needs.
+            // TODO: a `%c` symbol operand is an absolute reference, which a
+            // non-PIC code model needs.
             AsmOpnd::AbsMemRef { idx, symbolic } => {
                 self.resolve_const_ref_mem(idx, insn, false, symbolic, r)?
             }
@@ -3265,8 +3264,7 @@ impl AsmPass<'_> {
     /// `%cN` / `%PN` as a memory reference: a compile-time constant is the
     /// displacement literal (RIP-relative under `riprel`, absolute
     /// otherwise), a link-time address a RIP-relative relocation. A bare
-    /// `%PN` naming a memory operand is that memory reference, as gcc and
-    /// clang print it.
+    /// `%PN` naming a memory operand is that memory reference.
     fn resolve_const_ref_mem(
         &self,
         idx: u8,
@@ -3317,8 +3315,8 @@ impl AsmPass<'_> {
 
     /// A template operand: a memory-constraint operand is the register
     /// holding its address (a file-scope object addresses RIP-relative
-    /// instead, as gcc does), an `x` operand its xmm, any other its register
-    /// or its constant.
+    /// instead), an `x` operand its xmm, any other its register or its
+    /// constant.
     fn resolve_ref(
         &self,
         idx: u8,
@@ -3382,8 +3380,8 @@ impl AsmPass<'_> {
 
     /// An explicit `disp(%reg)` memory reference. A `%a` / `disp(%N)` whose
     /// `%N` is an `i`-class symbolic address resolves to no register and
-    /// lowers to a RIP-relative reference, as gcc does for `%a`; a scaled
-    /// index cannot ride that form. A constant base addresses absolutely.
+    /// lowers to a RIP-relative reference; a scaled index cannot ride that
+    /// form. A constant base addresses absolutely.
     fn resolve_mem(
         &self,
         base: super::asm::AsmMemBase,
@@ -3597,7 +3595,7 @@ impl AsmPass<'_> {
             });
         }
         // Both relocation channels place the reloc at `instr_offset + 3`, so
-        // the anchor is three bytes before the disp32 field. gcc's addend is
+        // the anchor is three bytes before the disp32 field. The addend is
         // the operand's constant offset less the field's 4-byte PC-relative
         // end skew and any immediate trailing the field.
         if let Some((sym, disp)) = resolved.riprel_reloc.take() {
@@ -4214,7 +4212,7 @@ fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, widt
     }
 }
 
-/// gcc and clang refuse `%c` on a memory operand; `%P` prints its reference.
+/// `%c` on a memory operand is refused; `%P` prints its reference.
 fn mem_const_modifier(idx: u8) -> alloc::string::String {
     alloc::format!("`%c{idx}` names a memory operand, which only `%P{idx}` or `%{idx}` prints")
 }

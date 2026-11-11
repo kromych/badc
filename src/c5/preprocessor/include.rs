@@ -84,7 +84,7 @@ impl SearchStep {
 /// that every spelling of one file is that file.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub(super) enum FileId {
-    /// A file on disk by device and inode, as gcc and clang identify it.
+    /// A file on disk by device and inode.
     #[cfg_attr(not(unix), allow(dead_code))]
     Inode(u64, u64),
     /// A file by its canonical path, where the platform reports no inode,
@@ -179,7 +179,7 @@ pub enum IncludeStatus {
     /// No search path or header set matched.
     Missing,
     /// A `#embed` resource: a `-M` prerequisite, absent from the `-H`
-    /// trace, as in gcc.
+    /// trace.
     Embedded,
 }
 
@@ -200,7 +200,7 @@ pub struct IncludeRecord {
 }
 
 impl IncludeRecord {
-    /// The gcc `-H` line for this record: leading dots mark nesting
+    /// The `-H` line for this record: leading dots mark nesting
     /// depth, `!` marks a miss. The name is the path the directive
     /// resolved to, so two search directories carrying the same
     /// relative name print apart; a miss or an in-binary header has
@@ -226,11 +226,10 @@ impl Preprocessor {
     /// `#include <name>` / `#include "name"`: splice the named header's
     /// processed contents into the output. The search runs the `-I`
     /// paths then [`crate::c5::headers::embedded_header`]; an unknown
-    /// name is an error, as in gcc and clang, since the directive
-    /// cannot perform the C99 6.10.2 replacement. A repeat include of a
-    /// `#pragma once` header contributes nothing. With
-    /// [`Self::set_track_includes`] on, each resolution is appended to
-    /// `include_records`.
+    /// name is an error, since the directive cannot perform the C99
+    /// 6.10.2 replacement. A repeat include of a `#pragma once` header
+    /// contributes nothing. With [`Self::set_track_includes`] on, each
+    /// resolution is appended to `include_records`.
     pub(super) fn process_include(
         &mut self,
         name: &str,
@@ -286,20 +285,20 @@ impl Preprocessor {
             }
             _ => SearchStart::Angle,
         };
-        // With the Microsoft extensions, which clang enables for a Windows
-        // target, a `\` in a header name separates directories as `/` does,
-        // on any host, as the target's file systems read it.
+        // With the Microsoft extensions, which a Windows target enables, a
+        // `\` in a header name separates directories as `/` does, on any
+        // host, as the target's file systems read it.
         if self.target.ms_extensions() && name.contains('\\') {
             return self.find_include(&name.replace('\\', "/"), start);
         }
         self.find_include(name, start)
     }
 
-    /// The bytes of the resource `#embed` names, searched as gcc and clang
-    /// search: an absolute name as written, the quoted form in the
-    /// including file's directory and then the `--embed-dir` directories,
-    /// the `<...>` form in those directories alone.
-    /// The path is the one read, for the `-M` prerequisites.
+    /// The bytes of the resource `#embed` names: an absolute name as
+    /// written, the quoted form searched in the including file's directory
+    /// and then the `--embed-dir` directories, the `<...>` form in those
+    /// directories alone. The path is the one read, for the `-M`
+    /// prerequisites.
     pub(super) fn find_embed(
         &self,
         name: &str,
@@ -349,9 +348,9 @@ impl Preprocessor {
         out: &mut String,
     ) -> Result<(), C5Error> {
         let Some(found) = resolved else {
-            // Missing header is a hard error, as in gcc/clang: the
-            // directive cannot perform the replacement C99 6.10.2
-            // requires, and continuing with an empty body miscompiles.
+            // Missing header is a hard error: the directive cannot perform
+            // the replacement C99 6.10.2 requires, and continuing with an
+            // empty body miscompiles.
             self.record_include(name, None, IncludeOrigin::User, IncludeStatus::Missing);
             return Err(C5Error::at(
                 Code::DIRECTIVE,
@@ -552,9 +551,9 @@ impl Preprocessor {
             // and its includes keep `-I`-shadows-bundled. Under `-nostdinc`
             // and `-nostdlibinc` the set is the compiler's own headers: a
             // library header one includes is searched for like any other, as
-            // gcc's and clang's `<mm_malloc.h>` searches for `<stdlib.h>`. It
-            // runs where the `-I` paths start, so a search resumed past the
-            // own set cannot return to it.
+            // `<mm_malloc.h>` searches for `<stdlib.h>`. It runs where the
+            // `-I` paths start, so a search resumed past the own set cannot
+            // return to it.
             let closed =
                 !(self.nostdinc || self.nostdlibinc) || crate::c5::headers::compiler_header(name);
             if runs(SearchStep::Path(0))

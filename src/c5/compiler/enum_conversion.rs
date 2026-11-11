@@ -65,7 +65,7 @@ impl Compiler {
         }
     }
 
-    /// gcc types a bit-field narrower than its declared type by its width.
+    /// A bit-field narrower than its declared type is typed by its width.
     fn full_width(&self, bits: u32, ty: i64) -> bool {
         bits as usize == self.size_of_type(ty) * 8
     }
@@ -75,7 +75,7 @@ impl Compiler {
             .then_some(desc.ty)
     }
 
-    /// gcc's type of the initializer value `e`.
+    /// The type of the initializer value `e`.
     pub(super) fn init_value_ty(&self, e: ExprId) -> Option<i64> {
         match self.bitfield_of(e) {
             Some(desc) => self.bitfield_ty(&desc),
@@ -83,8 +83,8 @@ impl Compiler {
         }
     }
 
-    /// gcc stores an initializer of a type compatible with the object's
-    /// with no conversion (c-typeck.cc `digest_init`).
+    /// An initializer of a type compatible with the object's is stored with
+    /// no conversion (c-typeck.cc `digest_init`).
     pub(super) fn initializes_as_is(&self, value_ty: i64, to: i64) -> bool {
         self.tags_compatible(unqualified_version_ty(value_ty), unqualified_version_ty(to))
     }

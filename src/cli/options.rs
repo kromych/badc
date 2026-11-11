@@ -83,10 +83,9 @@ impl Mode {
     }
 }
 
-/// The language a positional input's suffix selects, following gcc's
-/// suffix table. `.i` is C that needs no preprocessing; `.S` and `.sx`
-/// are assembler with the preprocessor run first; `.s` is assembler
-/// taken verbatim.
+/// The language a positional input's suffix selects. `.i` is C that
+/// needs no preprocessing; `.S` and `.sx` are assembler with the
+/// preprocessor run first; `.s` is assembler taken verbatim.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SourceKind {
     C { preprocessed: bool },

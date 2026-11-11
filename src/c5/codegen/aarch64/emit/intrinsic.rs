@@ -552,8 +552,7 @@ fn emit_frame_register(
 /// pac-ret the slot holds a signed pointer; `XPACLRI` strips x30 and no
 /// other register, so the value stages there (the epilogue reloads x30,
 /// since the intrinsic keeps the function off the full-leaf path). The
-/// hint is unconditional, as gcc and clang emit it: a NOP without
-/// FEAT_PAuth.
+/// hint is unconditional: a NOP without FEAT_PAuth.
 fn emit_return_address(
     code: &mut Vec<u8>,
     args: &[u32],

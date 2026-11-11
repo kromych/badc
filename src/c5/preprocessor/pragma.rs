@@ -18,7 +18,7 @@ impl Preprocessor {
     /// when badc has none for this target or `-fno-builtin` or
     /// `-fno-builtin-<name>` has made the library spelling opaque. A
     /// reserved name is the implementation's own, which the flags leave
-    /// bound as gcc leaves `__builtin_` names.
+    /// bound, like a `__builtin_` name.
     fn registered_intrinsic(&self, name: &str) -> Option<i64> {
         let opaque = self.no_builtin || self.no_builtin_names.contains(name);
         if opaque && !ident::is_reserved(name) {
@@ -293,10 +293,9 @@ impl Preprocessor {
         // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
         // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
         // / evaluation modes c5 does not act on, and `region` / `endregion`
-        // mark an editor's outline, which gcc and clang accept silently
-        // on every target. Accept them rather than warning on every
-        // occurrence; everything else falls through to the unknown-pragma
-        // warning.
+        // mark an editor's outline. Accept them on every target rather than
+        // warning on every occurrence; everything else falls through to the
+        // unknown-pragma warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
         let head = directive.split_whitespace().next().unwrap_or("");
         if matches!(head, "GCC" | "clang") && self.parse_pragma_diagnostic(args, site) {
@@ -883,9 +882,8 @@ impl Preprocessor {
 
     /// `#pragma push_macro("name")` saves the definition of `name`, or its
     /// absence, on a stack per name, and `#pragma pop_macro("name")`
-    /// reinstates the latest save, as gcc, clang and MSVC read the pair. A
-    /// pop with no save is reported, as clang and MSVC report it; gcc and
-    /// clang reject an operand other than one parenthesized string literal.
+    /// reinstates the latest save. A pop with no save is reported, and an
+    /// operand other than one parenthesized string literal is an error.
     pub(super) fn parse_pragma_macro_stack(
         &mut self,
         verb: &str,
@@ -942,7 +940,7 @@ impl Preprocessor {
         }
     }
 
-    /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
+    /// `#pragma weak name`, or `name = target` for a weak alias.
     fn parse_pragma_weak(&mut self, operand: &str, site: Site<'_>) {
         let (name, target) = match operand.split_once('=') {
             Some((n, t)) => (n.trim(), Some(t.trim())),
@@ -959,8 +957,9 @@ impl Preprocessor {
             .push((ident::key(name).into_owned(), target));
     }
 
-    /// `#pragma comment(lib, "name")`, MSVC's default library (clang's
-    /// `/DEFAULTLIB:` on COFF, `.deplibs` on ELF); adjacent literals concatenate.
+    /// `#pragma comment(lib, "name")`, MSVC's default library (`/DEFAULTLIB:`
+    /// on COFF, the LLVM `.deplibs` section on ELF); adjacent literals
+    /// concatenate.
     fn parse_pragma_comment_lib(&mut self, operand: &str, site: Site<'_>) {
         let Some(name) = self.pragma_comment_string(operand, "lib", "a library name", site) else {
             return;
@@ -971,8 +970,8 @@ impl Preprocessor {
     }
 
     /// `#pragma comment(linker, "options")`: link.exe options the object
-    /// carries, as cl writes them to `.drectve`. clang takes them on COFF
-    /// alone and ignores them elsewhere with a warning, as does this.
+    /// carries, as cl writes them to `.drectve`. They are taken on COFF
+    /// alone and ignored elsewhere with a warning.
     fn parse_pragma_comment_linker(&mut self, operand: &str, site: Site<'_>) {
         let Some(options) = self.pragma_comment_string(operand, "linker", "options", site) else {
             return;
@@ -1012,7 +1011,7 @@ impl Preprocessor {
     }
 
     /// The concatenated string literals of a `#pragma comment(kind, ...)`
-    /// operand after macro expansion, as cl and clang expand it; a warning
+    /// operand after macro expansion, as cl expands it; a warning
     /// and `None` when it is not one.
     fn pragma_comment_string(
         &mut self,
@@ -1282,8 +1281,8 @@ pub(super) fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(St
 /// Sub-classification of `#pragma` payloads. `dylib(...)` /
 /// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
 /// the dylib registry. `once` (it tags the *current* header) and
-/// `push_macro` / `pop_macro` act on the preprocessor's own state and,
-/// as with gcc and clang, leave nothing in `-E` output.
+/// `push_macro` / `pop_macro` act on the preprocessor's own state and
+/// leave nothing in `-E` output.
 pub(super) enum PragmaDirective<'a> {
     Once,
     /// The verb and its operand.
@@ -1350,7 +1349,7 @@ impl WarningAction {
 }
 
 /// The name a `push_macro` / `pop_macro` operand `("name")` spells: one
-/// string literal in parentheses, taken as written, as clang takes it.
+/// string literal in parentheses, taken as written.
 pub(super) fn macro_stack_name(operand: &str) -> Option<&str> {
     let literal = operand.strip_prefix('(')?.strip_suffix(')')?.trim();
     let body = literal.strip_prefix('"')?;

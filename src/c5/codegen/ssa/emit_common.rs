@@ -191,8 +191,7 @@ impl FrameStack {
 /// offset is emitted as a signed 32-bit displacement -- x86-64 `disp32`,
 /// the aarch64 frame-address sequence -- and the prologue's stack
 /// adjustment carries the same width, so a larger frame has no
-/// representation. gcc reports the equivalent target limit rather than
-/// emitting an unrepresentable frame.
+/// representation and is reported rather than emitted.
 pub(crate) const MAX_FRAME_BYTES: u32 = i32::MAX as u32;
 
 /// Byte size of the function's declared local slots, checked against
@@ -523,7 +522,7 @@ pub(crate) fn param_cell_written_first(
 /// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
 /// target's TLS access is one. The frame and register-file conditions a leaf
 /// also requires are target-specific and checked by the caller. An asm
-/// statement listing sp as clobbered needs the record, as gcc's leaf has one.
+/// statement listing sp as clobbered needs the record.
 pub(crate) fn body_keeps_frame_record(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
@@ -1639,7 +1638,7 @@ pub(crate) fn naked_refusal(
 }
 
 /// The prologue realigns sp (C11 6.7.5) and sp moves during the body: the
-/// realigned region needs a base register, as clang's base pointer.
+/// realigned region needs a base register.
 pub(crate) fn needs_region_base(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
@@ -2427,7 +2426,7 @@ pub(crate) trait LowerTarget {
     fn install(&mut self, build: &mut super::Build);
 }
 
-/// gcc's `error` and `warning` function attributes: each call `func` still
+/// The GNU C `error` and `warning` function attributes: each call `func` still
 /// makes to such a function, which the optimizer did not remove, is
 /// diagnosed with the attribute's message at the call.
 fn report_call_diagnostics(
@@ -2615,7 +2614,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // info so the emitted code is identical with and without -g. A probe
     // skips it: the stop discards the records it feeds the emitters, and
     // the retry runs it on the reported bodies.
-    // gcc and clang inline an `always_inline` function at every level; at -O0
+    // An `always_inline` function inlines at every optimization level; at -O0
     // the inliner takes those calls alone.
     if !native.optimize && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
         let code_syms = defined_fn_syms(program);

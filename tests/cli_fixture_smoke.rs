@@ -35,13 +35,12 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // x86-64 asm on both counts: aarch64 rejects `%c1(%%rip)`, and on
     // x86-64 the `i`-class operand fed through an always_inline helper
     // resolves only once the fold runs, so `-O0` reports it as not a
-    // constant or address (gcc parity). The -O run lives in
-    // native_elf_x64.
+    // constant or address. The -O run lives in native_elf_x64.
     "inline_asm_x64_riprel_param.c",
     // x86-64 asm: aarch64 rejects the `sym(,%reg,8)` operand. On
     // x86-64 the absolute `R_X86_64_32S` displacement has no link-time
-    // value in the position-independent image badc emits -- GNU ld and
-    // clang reject the same object with "relocation R_X86_64_32S ...
+    // value in the position-independent image badc emits -- GNU ld rejects
+    // the same object with "relocation R_X86_64_32S ...
     // can not be used when making a PIE object". The object-path
     // relocation shape is locked by a linker test.
     "file_scope_asm_sym_mem.c",
@@ -61,9 +60,8 @@ const COMPILE_SKIPLIST: &[&str] = &[
 
 /// Each calls a declared-but-undefined function from a statically dead
 /// branch, so the link succeeds only once the fold deletes the call --
-/// an -O capability. gcc likewise fails to link these at -O0 and links
-/// them at -O2. Excluded from the -O0 sweep below and built at -O by
-/// `dead_branch_calls_are_eliminated_under_optimize`, which is the
+/// an -O capability. Excluded from the -O0 sweep below and built at -O
+/// by `dead_branch_calls_are_eliminated_under_optimize`, which is the
 /// assertion; one list drives both so neither can drift.
 const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "dead_arm_short_circuit_undefined.c",
@@ -871,8 +869,7 @@ fn quoted_include_resolves_relative_to_including_file() {
 // The same build at `-O0` must fail to link. Each of these is an
 // optimization, not a front-end fold, and the two halves together say
 // so: without the `-O0` half a fixture whose call the front end starts
-// resolving would keep passing while asserting nothing. gcc likewise
-// links every one of these at `-O1` and above and fails to at `-O0`.
+// resolving would keep passing while asserting nothing.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn dead_branch_calls_are_eliminated_under_optimize() {
@@ -980,12 +977,11 @@ fn int128_atomics_hold_under_contention() {
     }
 }
 
-// `-E` output keeps the builtins as calls, as gcc's does, and the `.i`
-// unit takes them. `__builtin_nan` of an operand other than a literal
-// spelling a number calls `nan` (C99 7.12.11.2), which the bundled
-// <math.h> binds on every target; the payload is the library's, which
-// the Universal CRT ignores. The exit status has bit 0 for a wrong
-// runtime NaN and bit 1 for a wrong literal one.
+// `-E` output keeps the builtins as calls, and the `.i` unit takes them.
+// `__builtin_nan` of an operand other than a literal spelling a number calls
+// `nan` (C99 7.12.11.2), which the bundled <math.h> binds on every target;
+// the payload is the library's, which the Universal CRT ignores. The exit
+// status has bit 0 for a wrong runtime NaN and bit 1 for a wrong literal one.
 #[test]
 fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1183,11 +1179,11 @@ fn undeclared_library_calls_keep_the_header_types_on_windows() {
     }
 }
 
-// gcc and clang give each `__builtin_` library function its prototype with
-// no declaration in scope. Under `-nostdinc`, `-ffreestanding` and for a
-// preprocessed unit no header can be auto-included; the fixture still links
-// for linux-x64 and windows-x64 from every host, at -O0 and -O, and runs to
-// 0 for the host's own target.
+// Each `__builtin_` library function has its prototype with no declaration in
+// scope. Under `-nostdinc`, `-ffreestanding` and for a preprocessed unit no
+// header can be auto-included; the fixture still links for linux-x64 and
+// windows-x64 from every host, at -O0 and -O, and runs to 0 for the host's
+// own target.
 #[test]
 fn builtin_library_functions_link_without_a_declaration() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1242,13 +1238,13 @@ fn builtin_library_functions_link_without_a_declaration() {
     }
 }
 
-// C99 6.10.8p1: `__STDC_HOSTED__` is 1 for a hosted implementation and 0
-// for a freestanding one. As under gcc, `-ffreestanding` (`-fno-hosted`)
-// selects the latter for `-E`, `-dM -E` and a compiled unit, a later
-// `-fhosted` (`-fno-freestanding`) restores the former, and `-fbuiltin` /
-// `-fno-builtin` leave it alone. A freestanding unit gets no auto-included
-// header for an undeclared library call, and `<xmmintrin.h>` declares
-// `_mm_malloc` from `<mm_malloc.h>` only when hosted.
+// C99 6.10.8p1: `__STDC_HOSTED__` is 1 for a hosted implementation and 0 for
+// a freestanding one. `-ffreestanding` (`-fno-hosted`) selects the latter for
+// `-E`, `-dM -E` and a compiled unit, a later `-fhosted`
+// (`-fno-freestanding`) restores the former, and `-fbuiltin` / `-fno-builtin`
+// leave it alone. A freestanding unit gets no auto-included header for an
+// undeclared library call, and `<xmmintrin.h>` declares `_mm_malloc` from
+// `<mm_malloc.h>` only when hosted.
 #[test]
 fn ffreestanding_makes_stdc_hosted_zero() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1305,13 +1301,13 @@ fn ffreestanding_makes_stdc_hosted_zero() {
     }
 }
 
-// gcc and clang print the preprocessor's diagnostics under `-E` to stderr as
-// a compile does, under the same `-W` controls, `-Werror` and `-w`; stdout
-// carries the same text whatever they report, and an error among them, or an
-// `#error`, fails the run. `-dM -E`, `-M`, `-MM` and `-fsyntax-only` report
-// the same rows.
-/// The compiler's own headers are one set on the `#include` search, as
-/// gcc's and clang's: `-nostdinc` drops them with the C library's,
+// The preprocessor's diagnostics under `-E` print to stderr as a compile's
+// do, under the same `-W` controls, `-Werror` and `-w`; stdout carries the
+// same text whatever they report, and an error among them, or an `#error`,
+// fails the run. `-dM -E`, `-M`, `-MM` and `-fsyntax-only` report the same
+// rows.
+/// The compiler's own headers are one set on the `#include` search:
+/// `-nostdinc` drops them with the C library's,
 /// `-isystem $(badc -print-file-name=include)` restores them, and
 /// `-nostdlibinc` keeps them. Each outcome is clang 22's for the same unit
 /// and flags on Linux x86_64 and aarch64, and Apple clang 21's on macOS.
@@ -1430,14 +1426,13 @@ fn preprocessing_alone_reports_the_preprocessors_diagnostics() {
     assert!(!out.status.success() && stopped, "{err}");
 }
 
-/// `-E` past a preprocessor error, as gcc 16 does: an `#error` (each one
-/// reported, from a header too) or an unterminated `#if` fails the run
-/// after the whole unit is written; a missing include ends the unit there,
-/// as gcc's fatal error does, after the text before it. An `#error` in a
-/// skipped group is no error. The text is gcc 16's `-E -P` output with its
-/// blank lines dropped; clang 22 writes the same, except that it goes on
-/// past a missing include. `-dM -E` and `-M` go on past an `#error` too,
-/// and a compile reports every `#error`.
+/// `-E` past a preprocessor error: an `#error` (each one reported, from a
+/// header too) or an unterminated `#if` fails the run after the whole unit
+/// is written; a missing include ends the unit there, after the text
+/// before it. An `#error` in a skipped group is no error. The text is
+/// gcc 16's `-E -P` output with its blank lines dropped; clang 22 writes
+/// the same, except that it goes on past a missing include. `-dM -E` and
+/// `-M` go on past an `#error` too, and a compile reports every `#error`.
 #[test]
 fn preprocessing_goes_past_an_error_directive_and_still_fails() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1462,7 +1457,7 @@ fn preprocessing_goes_past_an_error_directive_and_still_fails() {
         let errors = stderr.matches("error:").count();
         (out.status.success(), lines, errors)
     };
-    // The unit, gcc's text, and the errors it reports.
+    // The unit, its expected text, and the errors it reports.
     type Case<'a> = (&'a str, &'a [&'a str], usize);
     #[rustfmt::skip]
     let cases: &[Case] = &[
@@ -1672,10 +1667,9 @@ fn opt_level_flags_map_to_the_single_level() {
     assert_eq!(os, o, "-Os should match -O");
 }
 
-// `-mcmodel=` values follow the target the way gcc's do: aarch64 has
-// tiny/small, x86-64 has small/kernel. `tiny` narrows the layout
-// contract the small form already satisfies, so it lowers as small and
-// the objects are identical.
+// `-mcmodel=` values follow the target: aarch64 has tiny/small, x86-64
+// has small/kernel. `tiny` narrows the layout contract the small form
+// already satisfies, so it lowers as small and the objects are identical.
 #[test]
 fn code_model_values_follow_the_target() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1725,9 +1719,9 @@ fn code_model_values_follow_the_target() {
     );
 }
 
-// `-O` predefines `__OPTIMIZE__=1` and not `NDEBUG`, as gcc and clang do,
-// so `assert` stays (C99 7.2p1). The predefine lands before the CLI `-D` /
-// `-U` lists, which override it.
+// `-O` predefines `__OPTIMIZE__=1` and not `NDEBUG`, so `assert` stays
+// (C99 7.2p1). The predefine lands before the CLI `-D` / `-U` lists, which
+// override it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn optimize_flag_predefines_optimize_and_keeps_asserts() {
@@ -4504,8 +4498,7 @@ fn a_diagnostic_pragma_governs_a_parser_diagnostic() {
 
 /// A pragma is a position in the translation unit, so one left set in a
 /// header applies to everything the include precedes; a header that
-/// wraps it in `push` / `pop` scopes it to itself. gcc and clang behave
-/// the same way.
+/// wraps it in `push` / `pop` scopes it to itself.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_header_scopes_its_diagnostic_pragma_with_push_and_pop() {
@@ -4626,8 +4619,8 @@ fn a_command_line_selector_governs_a_link_diagnostic() {
     );
 }
 
-/// A warning reported before a hard error is printed ahead of it, the
-/// way gcc prints every diagnostic of a failed unit.
+/// A warning reported before a hard error is printed ahead of it, as is
+/// every diagnostic of a failed unit.
 #[test]
 fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4704,10 +4697,9 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
 
 /// An integer and a pointer exchanged with no cast, in an argument, an
 /// assignment, an initializer and a return and in both directions, is an
-/// error by default, as gcc 14's and clang 15's `-Wint-conversion` is; a
-/// null pointer constant is none. `-Wno-error=int-conversion` and
-/// `-fpermissive` lower it to a warning the unit compiles under, and
-/// `-Wno-int-conversion` silences it.
+/// error by default; a null pointer constant is none.
+/// `-Wno-error=int-conversion` and `-fpermissive` lower it to a warning the
+/// unit compiles under, and `-Wno-int-conversion` silences it.
 #[test]
 fn int_conversion_is_an_error_the_user_can_lower() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -5392,8 +5384,7 @@ fn no_instruction_follows_a_trap_unreached() {
 }
 
 /// `-mno-sse` and `-mgeneral-regs-only` keep a unit off the SIMD register
-/// file, and the SSE feature macros go with it, as gcc and clang drop them;
-/// `__MMX__` stays.
+/// file, and the SSE feature macros go with it; `__MMX__` stays.
 #[test]
 fn no_sse_drops_the_sse_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -5422,7 +5413,7 @@ fn no_sse_drops_the_sse_feature_macros() {
 
 /// Under `-mno-sse` / `-mgeneral-regs-only` a `float` or `double` copied
 /// from memory to memory moves through a general register, and a value
-/// the function computes is refused, as gcc refuses it.
+/// the function computes is refused.
 #[test]
 fn general_regs_only_copies_floating_values_and_refuses_arithmetic() {
     let badc = env!("CARGO_BIN_EXE_badc");

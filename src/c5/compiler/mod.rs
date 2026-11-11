@@ -59,7 +59,7 @@ pub(crate) use type_layout::{
 pub(crate) mod types;
 
 /// Largest alignment (in bytes) honored on a static object via C11
-/// `_Alignas` / the GCC `aligned` attribute, whether the request comes
+/// `_Alignas` / the GNU C `aligned` attribute, whether the request comes
 /// from the declarator or the object's type. Static objects (file-scope,
 /// block-scope static, and initialized or zero-init alike) are placed at
 /// this alignment in `.data` / `.bss`; automatic objects stay capped at
@@ -160,7 +160,7 @@ pub struct StructDef {
     /// for this: a complete empty `struct {}` and a struct whose only
     /// member is a flexible array both have size 0.
     pub is_complete: bool,
-    /// `true` for the synthesized aggregate that models a GCC vector type
+    /// `true` for the synthesized aggregate that models a GNU C vector type
     /// (`__attribute__((vector_size(N)))`). It has one array field of the
     /// element type; the flag lets the cast and binary-operator paths treat it
     /// as a vector (reinterpret casts, element-wise operators) rather than a
@@ -261,7 +261,7 @@ pub struct AnonBitfield {
 }
 
 impl AnonBitfield {
-    /// The declared type's alignment in GCC's layout: a typedef's, or the size.
+    /// The declared type's alignment outside the MS layout: a typedef's, or the size.
     pub fn declared_align(&self) -> usize {
         if self.type_align > 0 {
             self.type_align as usize
@@ -296,8 +296,8 @@ pub struct Extent {
 }
 
 impl Extent {
-    /// Bytes from the offset to the end. An offset outside the object
-    /// leaves no room, as gcc reports for `&a[N]` and `a - 1`.
+    /// Bytes from the offset to the end. An offset outside the object,
+    /// as `&a[N]` and `a - 1` have, leaves no room.
     pub fn remaining(self) -> i64 {
         if self.offset < 0 {
             return 0;
@@ -491,9 +491,9 @@ pub struct StructField {
     /// Alignment requested for this field by an explicit
     /// `__attribute__((aligned(N)))` / `_Alignas(N)`, or 0 when the
     /// field sits at its type's natural alignment. `packed` drops a
-    /// field's natural alignment but not an explicit request (GCC and
-    /// clang both keep an `aligned(64)` member 64-aligned inside a
-    /// packed struct), so the re-lay path needs the request preserved.
+    /// field's natural alignment but not an explicit request (an
+    /// `aligned(64)` member stays 64-aligned inside a packed struct), so
+    /// the re-lay path needs the request preserved.
     /// The MS layout adds what the field's type requires.
     pub explicit_align: u32,
     /// For a bit-field, the alignment a typedef gives its type, 0 when
@@ -532,7 +532,7 @@ pub struct Preprocessed {
 /// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
 /// Which vector types of one size convert implicitly, as
-/// `-flax-vector-conversions` selects them: none (gcc's default), two
+/// `-flax-vector-conversions` selects them: none (the default), two
 /// integer vectors (clang's default), or any two (gcc's flag; MSVC, whose
 /// NEON vectors are all one `__n128`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -554,12 +554,12 @@ pub struct CompileOptions {
     pub include_paths: Vec<String>,
     /// `-iquote path` -- search paths for `#include "..."` only,
     /// probed after the including file's directory and before the
-    /// `-I` paths (gcc scope).
+    /// `-I` paths.
     pub quote_include_paths: Vec<String>,
     /// `--embed-dir path` -- the directories `#embed` searches.
     pub embed_paths: Vec<String>,
     /// `-isystem path` -- system header directories probed after the `-I`
-    /// paths and before the bundled headers (gcc scope).
+    /// paths and before the bundled headers.
     pub isystem_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
     /// (the driver fills them from the declared sysroot). A third-party
@@ -587,8 +587,7 @@ pub struct CompileOptions {
     /// `-fno-builtin`, which `-ffreestanding` implies -- a call spelled
     /// with a library function's own name is an ordinary call, not a
     /// builtin the compiler may fold. The `__builtin_` spellings keep
-    /// folding, as they do under gcc's flag, and the auto-include retry
-    /// declares no library name.
+    /// folding, and the auto-include retry declares no library name.
     pub no_builtin: bool,
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
@@ -648,7 +647,7 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
-    /// gcc's `-fvisibility=`: the visibility of a definition with external
+    /// `-fvisibility=`: the visibility of a definition with external
     /// linkage that no attribute or `#pragma GCC visibility` states.
     pub default_visibility: Option<crate::c5::program::SymVisibility>,
     /// `--gnu` -- when true the preprocessor defines the GCC identity
@@ -676,14 +675,13 @@ pub struct CompileOptions {
     pub gnu89_inline: bool,
     /// `-fstrict-flex-arrays=N` -- which trailing array members
     /// `__builtin_object_size` treats as unbounded through a pointer:
-    /// 0 (the default, as in gcc) every one, 1 those bounded `[]`,
+    /// 0 (the default) every one, 1 those bounded `[]`,
     /// `[0]` or `[1]`, 2 those bounded `[]` or `[0]`, 3 only `[]`.
     pub strict_flex_arrays: u8,
     /// `-std=gnu*` -- the GNU dialect, which suppresses the
-    /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs, as in gcc
-    /// and clang. Off by default: without `-std` badc reports strict
-    /// conformance so a header takes its standard-C path for the GNU
-    /// features badc lacks.
+    /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs. Off by
+    /// default: without `-std` badc reports strict conformance so a header
+    /// takes its standard-C path for the GNU features badc lacks.
     pub gnu_dialect: bool,
     /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
     /// passes a `#` line naming no directive through as text, as GNU
@@ -693,8 +691,8 @@ pub struct CompileOptions {
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
     /// `.code64` directive overrides it from that point on. The
-    /// preprocessor's data-model predefines follow it as well, as gcc's
-    /// do under `-m16` / `-m32`.
+    /// preprocessor's data-model predefines follow it as well (`-m16` /
+    /// `-m32`).
     pub elf_class: crate::c5::ElfClass,
     /// Mirror of [`crate::NativeOptions::code_model`] (`-mcmodel`).
     /// The preprocessor's `__code_model_*__` predefine follows it.
@@ -745,9 +743,9 @@ impl Default for CStd {
 }
 
 impl CStd {
-    /// The editions gcc's `-std=` names, the GNU dialect included, as
-    /// gcc 16 predefines `__STDC_VERSION__` for them; `None` for a name
-    /// gcc does not take.
+    /// The editions gcc 16's `-std=` names, the GNU dialect included,
+    /// with the `__STDC_VERSION__` it predefines for each; `None` for any
+    /// other name.
     pub fn from_dialect(name: &str) -> Option<Self> {
         let year = match name {
             "iso9899:1990" => "90",
@@ -790,7 +788,7 @@ impl CStd {
         self.0.is_none_or(|v| v < 199901)
     }
 
-    /// gcc's default inline model: GNU89's before C99, which introduced
+    /// The default inline model: GNU89's before C99, which introduced
     /// 6.7.4's, unless `-f[no-]gnu89-inline` says otherwise.
     pub fn gnu89_inline(self) -> bool {
         self.pre_c99()
@@ -804,7 +802,7 @@ pub enum FpContract {
     /// Nowhere.
     Off,
     /// Within one expression while `#pragma STDC FP_CONTRACT` is on (C99
-    /// 7.12.2), clang's default.
+    /// 7.12.2).
     #[default]
     On,
     /// Wherever the product has no other use, across statements and the
@@ -817,7 +815,7 @@ pub enum FpContract {
 /// -- scalars, aggregates, arrays and variable-length arrays alike. The
 /// store is emitted where the object's storage is established, so a
 /// declaration reached by a jump past it (C99 6.8.6.1 `goto`, 6.8.4.2
-/// `switch`) is not covered, as in gcc. An object carrying
+/// `switch`) is not covered. An object carrying
 /// `__attribute__((uninitialized))` or bound to a register by `asm` opts
 /// out. Diagnostics and the `-O` promotion of the object are unchanged:
 /// the supplied value is an ordinary initializer later stores overwrite.
@@ -834,9 +832,9 @@ pub enum AutoVarInit {
 }
 
 /// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
-/// stores `0xFE` for every type on both x86-64 and AArch64 (clang uses
-/// a per-type pattern instead); the value is unlikely to be a valid
-/// pointer or a small count and reads back as a negative integer.
+/// stores `0xFE` for every type on both x86-64 and AArch64; the value
+/// is unlikely to be a valid pointer or a small count and reads back as
+/// a negative integer.
 pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
 
 impl AutoVarInit {
@@ -852,7 +850,7 @@ impl AutoVarInit {
 }
 
 impl CompileOptions {
-    /// Enable the `--gnu` GCC identity predefines.
+    /// Enable the `--gnu` identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
         self
@@ -1188,7 +1186,7 @@ pub(in crate::c5::compiler) struct Pending {
     /// included a `const` qualifier. The declaration path reads it to mark
     /// a plain integer-scalar object `const`-qualified so a later constant
     /// expression can fold its value (C99 6.6 leaves this to the
-    /// implementation; GCC and common practice fold `const int N = ...`).
+    /// implementation; common practice folds `const int N = ...`).
     pub base_is_const: bool,
 
     /// Side channel from `parse_decl_base_type`: the base specifiers
@@ -1559,7 +1557,7 @@ pub(in crate::c5::compiler) struct Pending {
 
     /// The latest scalar assignment to a local, with the local and the
     /// `was_read` it marked: an assignment whose value is used reads its
-    /// left operand, as gcc's -Wunused-but-set-variable counts it, and a
+    /// left operand, as `-Wunused-but-set-variable` counts it, and a
     /// context discarding that value restores the flag.
     pub value_assignment: Option<(crate::c5::ast::ExprId, usize, bool)>,
 
@@ -1907,7 +1905,7 @@ struct LocalLabelBinding {
     depth: usize,
 }
 
-/// GCC `__label__` bindings for the blocks open in the current
+/// GNU C `__label__` bindings for the blocks open in the current
 /// function, keyed by the name's symbol-table index -- the lexer
 /// interns one entry per spelling, so a name is a `usize` here.
 /// Declaring, resolving and closing a block each cost one map probe
@@ -1952,7 +1950,7 @@ impl LocalLabelScopes {
 
     /// Bind the name at symbol index `idx` in the innermost open block
     /// and return its key. `None` when that block already declares the
-    /// name, which gcc rejects.
+    /// name, which is an error.
     fn declare(&mut self, idx: usize, name: &str) -> Option<String> {
         let depth = self.declared.len();
         if self.innermost(idx).is_some_and(|b| b.depth == depth) {
@@ -2140,7 +2138,7 @@ pub struct Compiler {
     /// `__builtin_constant_p`, `_Generic`'s controlling expression, the
     /// `?:` arm a constant condition skips and the `&&` / `||` operand a
     /// constant short-circuits, and a speculative parse. A diagnostic about
-    /// the value the operand would compute stays quiet there, as in gcc.
+    /// the value the operand would compute stays quiet there.
     unevaluated: u32,
     /// The integer literals that stand for a folded `__builtin_object_size`,
     /// which C does not count as integer constant expressions.
@@ -2158,7 +2156,7 @@ pub struct Compiler {
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
     /// arms). C99 6.6p4 forbids a zero divisor in a constant
     /// expression, but an unevaluated operand must not trigger the
-    /// diagnostic (`1 ? 2 : 1/0` is accepted by gcc / clang).
+    /// diagnostic (`1 ? 2 : 1/0` is accepted).
     const_unevaluated: u32,
 
     /// Nesting depth of constant-expression contexts where a reference
@@ -2286,7 +2284,7 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    /// GCC `__label__` bindings of the open blocks: an inner
+    /// The `__label__` bindings of the open blocks: an inner
     /// declaration shadows an outer one and two sibling blocks
     /// declaring the same name get distinct keys. Cleared at every
     /// function start.
@@ -2465,8 +2463,8 @@ pub struct Compiler {
     /// onto `Program::function_aliases`.
     function_aliases: Vec<crate::c5::program::FunctionAlias>,
     /// Aliases whose target was not yet defined when the declarator was
-    /// parsed. C99 leaves the ordering open and GCC accepts a target defined
-    /// later in the unit, so resolution is retried once the unit is complete.
+    /// parsed. The target may be defined later in the unit, so resolution
+    /// is retried once the unit is complete.
     /// Each entry is the alias symbol, its target name, and whether the
     /// declarator was an object rather than a function.
     pending_aliases: Vec<(usize, String, bool)>,
@@ -2579,7 +2577,7 @@ pub struct Compiler {
     /// target through every call site.
     target: Target,
     /// What a bare `__attribute__((aligned))` resolves to:
-    /// `__BIGGEST_ALIGNMENT__`, 32 under AVX as gcc has it.
+    /// `__BIGGEST_ALIGNMENT__`, 32 under AVX.
     biggest_align: i64,
 
     /// Side-channel state shared between parser layers -- the
@@ -2716,7 +2714,7 @@ pub struct Compiler {
     pending_block_locals: Vec<crate::c5::program::VariableInfo>,
     /// Stack of block scopes carrying `__attribute__((cleanup(fn)))`
     /// variables, innermost last, in declaration order. A block exit emits
-    /// `fn(&var)` in reverse order (C++-style, matching GCC) on every path
+    /// `fn(&var)` in reverse order (C++-style) on every path
     /// out: fall-through, `return`, `break`, `continue` and `goto`. Entries
     /// are snapshots of the declared binding: the symbol slot is rebound when
     /// an inner scope shadows the name, and an exit emitted inside such a
@@ -2811,7 +2809,7 @@ pub struct Compiler {
     /// function, so a second reference resolves to the same storage.
     func_name_objects: Vec<(String, String, i64)>,
     /// Per-TU counter for the `__func__.<n>` backing symbols, shared
-    /// across the three spellings as gcc's is.
+    /// across the three spellings.
     next_func_name_id: usize,
 
     /// Symbol indices of block-scope statics' emission records pushed
@@ -2855,7 +2853,7 @@ impl Compiler {
         Self::with_options(source, target, CompileOptions::default())
     }
 
-    /// The gcc `-H`-shape include trace. Empty when constructed
+    /// The `-H`-shape include trace. Empty when constructed
     /// without `CompileOptions::with_track_includes(true)`.
     pub fn include_trace(&self) -> Vec<String> {
         self.include_records
@@ -2931,7 +2929,7 @@ impl Compiler {
         Ok((text, pp.include_records))
     }
 
-    /// The `#define` lines of the macros `source` ends with (gcc's `-dM -E`).
+    /// The `#define` lines of the macros `source` ends with (`-dM -E`).
     pub fn preprocess_macros(
         source: String,
         target: Target,
@@ -2945,8 +2943,8 @@ impl Compiler {
     /// One unit through the preprocessor to its end, for `-E`: the text, the
     /// include records, the closing macro definitions when `macros` asks for
     /// them (`-dM`), and every diagnostic the pass reported. An error among
-    /// those fails the unit after its text is written, as under gcc and
-    /// clang; a hard error stops the pass and carries the ones before it.
+    /// those fails the unit after its text is written; a hard error stops
+    /// the pass and carries the ones before it.
     pub fn preprocess_unit(
         source: String,
         target: Target,
@@ -3013,8 +3011,8 @@ impl Compiler {
         // The `-W` family governs this pass's diagnostics too; the
         // pragmas it records then refine them per position.
         pp.sink.set_config(opts.diag_config());
-        // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
-        // gcc preprocesses those units with the i386 predefine set.
+        // `-m16` / `-m32` reach the front end as an ELFCLASS32 object, and
+        // those units take the i386 predefine set.
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
@@ -3083,8 +3081,8 @@ impl Compiler {
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
-        // `-O` predefines `__OPTIMIZE__`, as gcc and clang do, before the
-        // CLI lists so `-D` and `-U` override it. `NDEBUG` is the user's.
+        // `-O` predefines `__OPTIMIZE__` before the CLI lists so `-D` and
+        // `-U` override it. `NDEBUG` is the user's.
         if opts.optimize {
             pp.define("__OPTIMIZE__", "1");
         }

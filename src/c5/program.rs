@@ -90,8 +90,8 @@ pub enum SymVisibility {
 }
 
 impl SymVisibility {
-    /// GCC's `visibility` operand: `None` for an unknown one, `Some(None)`
-    /// for `default`.
+    /// The `visibility` attribute's operand: `None` for an unknown one,
+    /// `Some(None)` for `default`.
     pub fn from_gcc_name(name: &str) -> Option<Option<Self>> {
         Some(match name {
             "default" => None,

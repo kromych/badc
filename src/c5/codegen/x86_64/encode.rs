@@ -1600,7 +1600,7 @@ pub(crate) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
     emit_byte(code, modrm(0b11, 2, target.lo()));
 }
 
-/// `JMP r64` -- indirect branch through a register (GCC computed
+/// `JMP r64` -- indirect branch through a register (GNU C computed
 /// goto). Same `FF` opcode family as the indirect `CALL` above; only
 /// the ModR/M `/4` extension changes (4 = JMP, 2 = CALL).
 pub(crate) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
@@ -2498,8 +2498,8 @@ fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::Prologue
 }
 
 // ------------------------------------------------------------------
-// Encoder unit tests. Expected byte sequences cross-checked against
-// `clang -c` + `objdump -d` on x86_64.
+// Encoder unit tests. Expected byte sequences come from the cross-check
+// described at the encoders.
 // ------------------------------------------------------------------
 
 #[cfg(test)]
@@ -2540,8 +2540,7 @@ mod tests {
     /// The byte-wide base + index forms of the scale-1 indexed accesses:
     /// low registers, a source that needs REX to name its low byte
     /// (`sil`), the extended bank, and the bases that force a displacement
-    /// byte (`rbp` / `r13`) or take the SIB path (`rsp` / `r12`). Verified
-    /// against clang.
+    /// byte (`rbp` / `r13`) or take the SIB path (`rsp` / `r12`).
     #[test]
     fn byte_sib_forms() {
         assert_eq!(
@@ -2695,7 +2694,7 @@ mod tests {
         // The 132 / 213 / 231 rows of the 0F38 map, add / sub / nmadd
         // / nmsub each: vfmadd132sd xmm0, xmm1, xmm2 (xmm0 = xmm0*xmm2
         // + xmm1) -> C4 E2 F1 99 C2, and the other rows one opcode
-        // further per variant. Cross-checked against clang's assembler.
+        // further per variant.
         assert_eq!(
             assemble(|c| emit_vex_fma(c, 0x99, true, Reg(0), Reg(1), Reg(2))),
             vec![0xC4, 0xE2, 0xF1, 0x99, 0xC2]
@@ -2767,7 +2766,7 @@ mod tests {
 
     #[test]
     fn vex_fp_arith_scalar_encodings() {
-        // The VEX.NDS.LIG rows of the 0F map, as clang's assembler encodes them.
+        // The VEX.NDS.LIG rows of the 0F map.
         assert_eq!(
             assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(0), Reg(1), Reg(2))),
             vec![0xC5, 0xF3, 0x58, 0xC2]
@@ -2807,7 +2806,6 @@ mod tests {
     fn vex_shift_encodings() {
         // shlxq %rcx, %rsi, %rdi -> C4 E2 F1 F7 FE (count in vvvv, the
         // shifted value in r/m); the shrx / sarx rows change only pp.
-        // Cross-checked against clang's assembler.
         assert_eq!(
             assemble(|c| emit_vex_shift(c, 0b01, true, Reg(7), Reg(6), Reg(1))),
             vec![0xC4, 0xE2, 0xF1, 0xF7, 0xFE]
@@ -3251,9 +3249,6 @@ mod tests {
             }
         }
     }
-
-    // The atomic encodings below were cross-checked against
-    // `clang -target x86_64-linux-gnu` + `objdump -d`.
 
     #[test]
     fn lock_xadd_qword_rcx_rax() {

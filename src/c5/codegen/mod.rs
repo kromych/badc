@@ -249,7 +249,7 @@ impl WcharType {
     /// type is unsigned -- a 2-byte `wchar_t` promotes to `int` and its
     /// bounds are plain. The signed lower bound is spelled against
     /// `__WCHAR_MAX__` because `-2147483648` is not a constant of the
-    /// type; gcc spells both the same way.
+    /// type.
     pub fn bound_macros(self) -> (String, String) {
         let suffix = if self.max() > i32::MAX as i64 {
             "U"
@@ -346,14 +346,13 @@ impl Target {
     }
 
     /// Whether aggregates take the MS record layout, the PE targets' C ABI
-    /// (MSVC, and clang for a windows-msvc triple).
+    /// (MSVC).
     pub fn ms_layout(self) -> bool {
         self.is_windows()
     }
 
-    /// Whether the Microsoft C extensions apply, as clang enables them by
-    /// default for a windows-msvc triple (`-fms-extensions`), on the PE
-    /// targets.
+    /// Whether the Microsoft C extensions (`-fms-extensions`) apply: on the
+    /// PE targets.
     pub fn ms_extensions(self) -> bool {
         self.is_windows()
     }
@@ -381,10 +380,9 @@ impl Target {
     /// interoperate with the host toolchain and match the platform
     /// ABI, c5 follows the host C compiler: signed on x86_64 (all
     /// OSes), on Apple AArch64, and on Windows AArch64 (MSVC);
-    /// unsigned only on AArch64 ELF (the AAPCS64 default that the
-    /// Linux GCC/Clang toolchain keeps). The choice drives the
-    /// extension of an 8-bit `char` lvalue widened to a larger
-    /// integer.
+    /// unsigned only on AArch64 ELF (the AAPCS64 default). The choice
+    /// drives the extension of an 8-bit `char` lvalue widened to a
+    /// larger integer.
     pub fn plain_char_signed(self) -> bool {
         !matches!(self, Target::LinuxAarch64)
     }
@@ -3309,7 +3307,7 @@ pub(crate) struct RodataAbs64 {
 }
 
 /// A data-image slot holding the address of a labeled code location
-/// (GCC `&&label` in a static initializer), resolved once the owning
+/// (GNU C `&&label` in a static initializer), resolved once the owning
 /// function's block layout is final. The relocatable writers emit one
 /// `R_*_64` against the `.text` section symbol with `addend =
 /// text_offset`, the same shape a function-pointer initializer takes;
@@ -3667,13 +3665,13 @@ pub(crate) struct UserExternCallSite {
 /// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
 /// target is a named symbol defined in another TU rather than
 /// a local `.data` byte offset. The writer emits one undefined
-/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped, as
-/// gcc emits extern references) and one reloc per ref pointing
-/// at that symbol; the name also enters the unit's
-/// `NT_BADC_EXTERN_DATA` note, which carries what the symbol type
-/// no longer does. A cross-TU function pointer rides this channel
-/// too -- materializing an address is the same lowering -- so the
-/// note names functions as well as data.
+/// `STT_NOTYPE STB_GLOBAL` symbol per unique name (untyped) and
+/// one reloc per ref pointing at that symbol; the name also
+/// enters the unit's `NT_BADC_EXTERN_DATA` note, which carries
+/// what the symbol type no longer does. A cross-TU function
+/// pointer rides this channel too -- materializing an address is
+/// the same lowering -- so the note names functions as well as
+/// data.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternDataRef {
@@ -4088,9 +4086,8 @@ impl Hardening {
     };
 }
 
-/// `-mindirect-branch=` lowering of an indirect call or jump
-/// (gcc's option space; `thunk`, which generates a comdat thunk body,
-/// is not implemented).
+/// `-mindirect-branch=` lowering of an indirect call or jump (`thunk`,
+/// which generates a comdat thunk body, is not implemented).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IndirectBranch {
     /// `keep`: the plain `call *%reg` / `jmp *%reg` forms.
@@ -4157,8 +4154,7 @@ pub enum GuardSeg {
 
 impl GuardSeg {
     /// The segment a guard is read through when none is named: `%gs`
-    /// under the kernel code model, `%fs` otherwise, as gcc and clang
-    /// choose.
+    /// under the kernel code model, `%fs` otherwise.
     pub fn for_code_model(code_model: CodeModel) -> Self {
         match code_model {
             CodeModel::Kernel => GuardSeg::Gs,
@@ -4228,7 +4224,7 @@ pub struct StackProtect {
     pub mode: StackProtector,
     /// `--param ssp-buffer-size=`: least character-array size, in bytes,
     /// that makes a function eligible under [`StackProtector::Basic`].
-    /// gcc's default is 8.
+    /// The default is 8.
     pub buffer_size: u32,
     /// Where the canary value is read from.
     pub guard: StackGuard,
@@ -4497,8 +4493,7 @@ pub struct NativeOptions {
     /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
     /// + `.debug_str` + `.debug_frame`) into the output binary.
     ///
-    /// Off by default, matching gcc / clang, which emit no debug
-    /// info without `-g`. Enabling it via `-g` / `--debug` adds
+    /// Off by default. Enabling it via `-g` / `--debug` adds
     /// compile time (the type-catalog walk is non-trivial on big
     /// inputs) and artifact size (~10-30% on a large translation
     /// unit). The default keeps builds fast and binaries small;
@@ -4518,8 +4513,7 @@ pub struct NativeOptions {
     /// source marked `inline` is measured against a multiple of it, and
     /// a mandatory (`always_inline`) request against no bound. The
     /// `--inline-cap=N` CLI flag drives this; 0 leaves only the
-    /// mandatory requests. Default 64, matching gcc / clang `-O2`'s
-    /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
+    /// mandatory requests. Default 64.
     pub inline_cap: u32,
     /// `-Wframe-larger-than=<n>`: report a function whose stack frame --
     /// what its prologue reserves below the return address, saved
@@ -4539,9 +4533,8 @@ pub struct NativeOptions {
     /// `BADC_NO_BSS_SEGREGATE` forces it off.
     pub bss_segregate: bool,
     /// Whether an object whose initializer is all zeros takes zero-fill
-    /// storage as an uninitialized one does. gcc's
-    /// `-fno-zero-initialized-in-bss` clears it, which keeps such an
-    /// object in `.data`.
+    /// storage as an uninitialized one does. `-fno-zero-initialized-in-bss`
+    /// clears it, which keeps such an object in `.data`.
     pub zero_init_in_bss: bool,
     /// Keep compiler-generated code off the floating-point / SIMD
     /// register file (`-mno-sse` on x86_64, `-mgeneral-regs-only` on
@@ -4573,10 +4566,10 @@ pub struct NativeOptions {
     /// the option, in place of their defaults, 256 bytes and 1000%.
     pub conserve_stack: bool,
     /// Whether a call whose result the function returns unchanged may
-    /// become a jump after the epilogue (gcc and clang
-    /// `-foptimize-sibling-calls`; `-fno-optimize-sibling-calls` clears
-    /// it). Cleared, every call returns into the frame that made it, which
-    /// a frame-pointer unwinder walking the call chain relies on.
+    /// become a jump after the epilogue (`-foptimize-sibling-calls`;
+    /// `-fno-optimize-sibling-calls` clears it). Cleared, every call
+    /// returns into the frame that made it, which a frame-pointer unwinder
+    /// walking the call chain relies on.
     pub sibling_calls: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
@@ -5804,7 +5797,7 @@ impl Default for Abi {
 }
 
 /// Calling convention a function definition or a call site follows,
-/// when it is not the target's own. GCC spells the two x86_64
+/// when it is not the target's own. GNU C spells the two x86_64
 /// conventions `__attribute__((ms_abi))` and
 /// `__attribute__((sysv_abi))`; both are x86-only and inert on other
 /// architectures.

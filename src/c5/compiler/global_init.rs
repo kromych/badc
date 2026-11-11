@@ -328,7 +328,7 @@ impl Compiler {
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<(), C5Error> {
         // A block-scope `const` scalar object folds into a static
-        // object's initializer, as GCC accepts. No-op at file scope.
+        // object's initializer (6.6p10). No-op at file scope.
         self.const_object_fold += 1;
         let r = self.with_nesting("initializer", |c| {
             c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local, target_fn)
@@ -707,10 +707,10 @@ impl Compiler {
         }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
-        // pointer-typed slot would; gcc and clang accept it. Restricted
-        // to a bare designator, whose offset is the symbol's own address:
-        // a const-expr addend is not scaled by the pointee size here, so
-        // it stays rejected rather than stored at a wrong offset.
+        // pointer-typed slot would. Restricted to a bare designator, whose
+        // offset is the symbol's own address: a const-expr addend is not
+        // scaled by the pointee size here, so it stays rejected rather than
+        // stored at a wrong offset.
         if let ConstVal::Addr(a) = cv
             && let Some(sym_idx) = a.root.sym()
             && a.value == self.symbols[sym_idx].val

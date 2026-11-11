@@ -139,7 +139,7 @@ struct FnMacro {
     /// `true` for `#define foo(a, ...)` -- any extra arguments are
     /// joined with `, ` and substituted for `__VA_ARGS__` in the body.
     is_variadic: bool,
-    /// The variadic-tail name for the GCC named-rest form
+    /// The variadic-tail name for the GNU C named-rest form
     /// `#define foo(a, rest...)`: `Some("rest")`. The body reaches the
     /// trailing arguments through this name in addition to
     /// `__VA_ARGS__`. `None` for the standard `...` form.
@@ -204,8 +204,7 @@ pub(crate) struct Preprocessor {
     /// Controlling macro of each processed file whose whole content sits
     /// inside one `#ifndef X` / `#endif` pair. While `X` is defined such
     /// a file contributes nothing, so a repeat `#include` of that file is
-    /// dropped instead of being read and scanned again (C99 6.10.2; the
-    /// same optimization gcc and clang apply).
+    /// dropped instead of being read and scanned again (C99 6.10.2).
     include_guards: HashMap<include::FileId, String>,
     /// Headers being expanded, innermost last, each with the search step
     /// that supplied it. `find_include` reads the step for its closed-set
@@ -222,7 +221,7 @@ pub(crate) struct Preprocessor {
     /// On-disk copies of the compiler's own header set, probed by name
     /// ahead of the in-binary bodies. See `add_own_header_root`.
     own_header_roots: SearchPaths,
-    /// Directories probed for `#include "..."` only (the gcc `-iquote`
+    /// Directories probed for `#include "..."` only (the `-iquote`
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
     quote_search_paths: SearchPaths,
@@ -230,8 +229,7 @@ pub(crate) struct Preprocessor {
     /// `#embed "..."` after the including file's directory.
     embed_search_paths: SearchPaths,
     /// `-isystem` directories: probed after `search_paths` and before the
-    /// bundled headers, as gcc probes them ahead of its standard
-    /// directories, and their headers are system headers.
+    /// bundled headers, and their headers are system headers.
     isystem_paths: SearchPaths,
     /// System header directories, probed only after the bundled headers:
     /// a third-party header the embedded set lacks (`zlib.h`,
@@ -242,7 +240,7 @@ pub(crate) struct Preprocessor {
     system_fallback_paths: SearchPaths,
     /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
     /// the search, so a name no `-I` / `-iquote` path carries is an
-    /// error rather than badc's own libc, as in gcc and clang.
+    /// error rather than badc's own libc.
     nostdinc: bool,
     /// clang's `-nostdlibinc`: as `nostdinc`, but the compiler's own
     /// headers ([`crate::c5::headers::compiler_header`]) stay.
@@ -273,7 +271,7 @@ pub(crate) struct Preprocessor {
     /// every front-end diagnostic.
     pub sink: Sink,
     /// Include resolutions in directive order. Populated only when
-    /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
+    /// [`Self::set_track_includes`] is on. Renders the `-H` trace
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
     /// family's prerequisite list, so both read one list.
     pub include_records: Vec<IncludeRecord>,
@@ -569,8 +567,7 @@ impl Subsystem {
 /// headers test directly and `<float.h>` derives its own names from.
 /// `float` is IEEE binary32 and `double` binary64 everywhere; the
 /// `__LDBL_*` row follows the target ABI's `long double` (x87 80-bit
-/// on System V x86-64, binary128 on AAPCS64 ELF, binary64 elsewhere),
-/// matching gcc per target.
+/// on System V x86-64, binary128 on AAPCS64 ELF, binary64 elsewhere).
 fn install_float_characteristics(macros: &mut HashMap<String, String>, target: Target) {
     const COMMON: &[(&str, &str)] = &[
         ("__FLT_RADIX__", "2"),
@@ -714,8 +711,8 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
 /// model, replacing whatever a previous call left; sole owner of these
 /// names, so re-selecting leaves nothing from the other model behind.
 ///
-/// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
-/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit
+/// `Elf32` on an x86 target is `-m16` / `-m32`, preprocessed as i386:
+/// `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit
 /// pointer / `long` / `size_t` / `wchar_t`, no `__int128`, and
 /// `__code_model_32__`. `Elf32` never reaches an AArch64 target, which
 /// would mean AArch32; the driver refuses the flag there.
@@ -729,12 +726,12 @@ fn install_data_model(
     short_wchar: bool,
 ) {
     let ilp32 = class.is32() && target.is_x86_64();
-    // Both reserved spellings, as gcc has them; the unreserved `i386`
-    // stays out, as bare `linux` / `unix` do.
+    // Both reserved spellings; the unreserved `i386` stays out, as bare
+    // `linux` / `unix` do.
     const X86_64_NAMES: &[&str] = &["__x86_64__", "__x86_64", "__amd64__", "__amd64"];
     const I386_NAMES: &[&str] = &["__i386__", "__i386"];
-    // The x86-64 baseline ISA, as gcc and clang predefine it for every x86-64
-    // target; gcc's i686 default for `-m32` has none of it.
+    // The x86-64 baseline ISA, predefined for every x86-64 target; the i686
+    // baseline of `-m32` has none of it.
     const X86_64_ISA: &[&str] = &[
         "__MMX__",
         "__SSE__",
@@ -815,7 +812,7 @@ fn install_data_model(
         "__SIZEOF_LONG_DOUBLE__".to_string(),
         long_double.to_string(),
     );
-    // gcc leaves this undefined on i386, which has no `__int128`.
+    // Undefined on i386, which has no `__int128`.
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
     }
@@ -832,9 +829,9 @@ fn install_data_model(
     let (wchar_max, wchar_min) = wchar.bound_macros();
     macros.insert("__WCHAR_MAX__".to_string(), wchar_max);
     macros.insert("__WCHAR_MIN__".to_string(), wchar_min);
-    // gcc's x86 back end names the selected code model; the aarch64 one
-    // defines no such macro. An ELFCLASS32 object is the 32-bit model
-    // whatever `-mcmodel` says.
+    // An x86 unit names the selected code model; an aarch64 one defines
+    // no such macro. An ELFCLASS32 object is the 32-bit model whatever
+    // `-mcmodel` says.
     if target.is_x86_64() {
         let model = match (ilp32, code_model) {
             (true, _) => "__code_model_32__",
@@ -920,9 +917,8 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     let (max, umax) = limits(intptr);
     macros.insert("__PTRDIFF_MAX__".to_string(), max);
     macros.insert("__SIZE_MAX__".to_string(), umax);
-    // `wint_t`, as each platform's C library and gcc's predefines for it make
-    // it: glibc's `unsigned int`, Apple's `int`, the Windows C runtime's
-    // `unsigned short`.
+    // `wint_t`, as each platform's C library makes it: glibc's `unsigned
+    // int`, Apple's `int`, the Windows C runtime's `unsigned short`.
     let (wint, wint_size, wint_min, wint_max) = match target {
         Target::WindowsX64 | Target::WindowsAarch64 => ("unsigned short", "2", "0", "0xffff"),
         Target::LinuxX64 | Target::LinuxAarch64 => ("unsigned int", "4", "0U", "0xffffffffU"),
@@ -932,7 +928,7 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     macros.insert("__SIZEOF_WINT_T__".to_string(), wint_size.to_string());
     macros.insert("__WINT_MIN__".to_string(), wint_min.to_string());
     macros.insert("__WINT_MAX__".to_string(), wint_max.to_string());
-    // gcc's `__<T>_WIDTH__`, each the width of the type predefined for `T`.
+    // `__<T>_WIDTH__`, each the width of the type predefined for `T`.
     let bits = |ty: &str| match ty {
         "short" => 16,
         "int" => 32,
@@ -979,7 +975,7 @@ enum PredefOn {
     /// the Mach-O and PE ones.
     AlwaysPic,
     /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
-    /// choice to the implementation; gcc and clang report it here.
+    /// choice to the implementation; `__CHAR_UNSIGNED__` reports it.
     UnsignedChar,
 }
 
@@ -1003,9 +999,9 @@ impl PredefOn {
 }
 
 /// Object-like predefines with a fixed replacement list, grouped by the
-/// targets they cover. Naming follows the gcc / clang / msvc convention
-/// of double underscores around tool-supplied macros so they cannot
-/// collide with user identifiers. Predefines whose spelling or value
+/// targets they cover. The names begin with a double underscore, which
+/// C99 7.1.3 reserves to the implementation, so they cannot collide
+/// with user identifiers. Predefines whose spelling or value
 /// follows the unit's model are installed by
 /// [`install_float_characteristics`] and [`install_data_model`] instead,
 /// which own those names; the GCC identity set is opt-in through
@@ -1022,7 +1018,7 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__STDC_HOSTED__", "1"),
             ("__STDC_VERSION__", "201710L"),
             // C23 6.10.8.1: the `__has_embed` results, for `#embed`, which
-            // every edition takes, as in gcc and clang.
+            // every edition takes.
             ("__STDC_EMBED_NOT_FOUND__", "0"),
             ("__STDC_EMBED_FOUND__", "1"),
             ("__STDC_EMBED_EMPTY__", "2"),
@@ -1044,10 +1040,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__ATOMIC_RELEASE", "3"),
             ("__ATOMIC_ACQ_REL", "4"),
             ("__ATOMIC_SEQ_CST", "5"),
-            // Byte order (GCC/clang form); every supported target is
-            // little-endian. gcc and clang also define
-            // `__LITTLE_ENDIAN__` there, which byte-order-detecting code
-            // commonly gates on directly rather than comparing
+            // Byte order; every supported target is little-endian.
+            // `__LITTLE_ENDIAN__` is defined too: byte-order-detecting
+            // code commonly gates on it directly rather than comparing
             // `__BYTE_ORDER__`. `__BIG_ENDIAN__` stays undefined.
             ("__ORDER_LITTLE_ENDIAN__", "1234"),
             ("__ORDER_BIG_ENDIAN__", "4321"),
@@ -1076,7 +1071,7 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     ),
     (
         PredefOn::Aarch64,
-        // `__arm64__` is the Apple/clang spelling. `__AARCH64EL__`
+        // `__arm64__` is the Apple spelling. `__AARCH64EL__`
         // reports the little-endian variant, which arch-dispatch code
         // keys its aarch64 branch on.
         &[
@@ -1087,15 +1082,15 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     ),
     (
         PredefOn::X86_64,
-        // x86 named address spaces (`int __seg_gs *p`): gcc predefines
-        // these where the qualifiers are available, and an access through
-        // one rides a segment-override prefix.
+        // x86 named address spaces (`int __seg_gs *p`): defined where the
+        // qualifiers are available, and an access through one rides a
+        // segment-override prefix.
         &[("__SEG_FS", "1"), ("__SEG_GS", "1")],
     ),
     (PredefOn::UnsignedChar, &[("__CHAR_UNSIGNED__", "1")]),
-    // gcc and clang define it for the ELF object format, and sources key
-    // ELF-only directives and attributes on it (`.type`, `.size`,
-    // `.symver`, `.hidden`, `@progbits` section types, visibility).
+    // Defined for the ELF object format; sources key ELF-only directives
+    // and attributes on it (`.type`, `.size`, `.symver`, `.hidden`,
+    // `@progbits` section types, visibility).
     (PredefOn::Elf, &[("__ELF__", "1")]),
     // clang's values there, with or without `-fPIC`; on ELF the driver
     // derives them from the PIC flags.
@@ -1118,8 +1113,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__unix__", "1"),
             // badc links the GNU C library on Linux, so source gating a
             // glibc-only feature (pthread_getattr_np, __GLIBC_PREREQ)
-            // keys on these instead of a degraded fallback, as it would
-            // for a gcc/clang build here. A 2.17 baseline.
+            // keys on these instead of a degraded fallback. A 2.17
+            // baseline.
             ("__GLIBC__", "2"),
             ("__GLIBC_MINOR__", "17"),
             // The feature-test state glibc's <features.h> derives with
@@ -1163,9 +1158,8 @@ type DerivedPredef = (&'static str, fn(&PredefEnv<'_>) -> String);
 static DERIVED_PREDEFINES: &[DerivedPredef] = &[
     ("__BADC_VERSION__", |e| format!("\"{}\"", e.crate_version)),
     ("__BADC_TARGET__", |e| format!("\"{}\"", e.target_spec)),
-    // The prefix a C identifier takes as an assembler symbol, as gcc and
-    // clang define it: Mach-O's leading underscore, none on ELF and on the
-    // 64-bit PE targets.
+    // The prefix a C identifier takes as an assembler symbol: Mach-O's
+    // leading underscore, none on ELF and on the 64-bit PE targets.
     ("__USER_LABEL_PREFIX__", |e| {
         match e.target.binary_format() {
             crate::c5::codegen::BinaryFormat::MachO => String::from("_"),
@@ -1246,10 +1240,10 @@ fn default_translation_time() -> i64 {
     }
 }
 
-/// Function-like predefines. The `__counted_by` family is a GCC 15 /
-/// Clang bounds hint badc does not implement; empty is the fallback the
-/// kernel UAPI headers take when the compiler lacks it, and
-/// `__has_attribute(counted_by)` reports 0 to match.
+/// Function-like predefines. The `__counted_by` family spells the
+/// `counted_by` bounds attribute, which badc does not implement; empty is
+/// the fallback the kernel UAPI headers take when the compiler lacks it,
+/// and `__has_attribute(counted_by)` reports 0 to match.
 static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
     ("__counted_by", &["m"], ""),
     ("__counted_by_le", &["m"], ""),
@@ -1390,8 +1384,8 @@ impl Preprocessor {
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
     }
 
-    /// `-mno-sse` / `-mgeneral-regs-only`: the SSE feature macros go, as gcc
-    /// and clang drop them; `__MMX__` stays.
+    /// `-mno-sse` / `-mgeneral-regs-only`: the SSE feature macros go;
+    /// `__MMX__` stays.
     pub fn drop_simd_macros(&mut self) {
         for name in ["__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__"] {
             self.macros.remove(name);
@@ -1412,7 +1406,7 @@ impl Preprocessor {
     }
 
     /// The x86 extensions' feature macros, and `__BIGGEST_ALIGNMENT__`
-    /// 32 under AVX, as gcc predefines them for `-m<ext>` and `-march=`.
+    /// 32 under AVX, for `-m<ext>` and `-march=`.
     pub fn set_x86_features(&mut self, features: crate::c5::X86Features) {
         for name in features.macros() {
             self.macros.insert(name.into(), "1".into());
@@ -1436,13 +1430,6 @@ impl Preprocessor {
         }
     }
 
-    /// Define the GCC identity macros (`--gnu`), which badc claims only
-    /// on request: it implements most of the GNU C surface but not all
-    /// of it. Exactly one of `__GNUC_STDC_INLINE__` /
-    /// `__GNUC_GNU_INLINE__` reports the inline linkage model headers
-    /// key their inline declarations on. `__STRICT_ANSI__` accompanies
-    /// `__GNUC__` as under `gcc -std=c11`, so portable code takes the
-    /// standard path for the GNU-only features badc lacks.
     /// The identity cl 19.28 (the first with `/std:c17`) gives a C17 unit:
     /// `_MSC_VER` and its companions and the `_M_*` architecture macro, with
     /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`.
@@ -1472,6 +1459,13 @@ impl Preprocessor {
         }
     }
 
+    /// Define the GCC identity macros (`--gnu`), which badc claims only
+    /// on request: it implements most of the GNU C surface but not all
+    /// of it. Exactly one of `__GNUC_STDC_INLINE__` /
+    /// `__GNUC_GNU_INLINE__` reports the inline linkage model headers
+    /// key their inline declarations on. `__STRICT_ANSI__` accompanies
+    /// `__GNUC__` as under `-std=c11`, so portable code takes the
+    /// standard path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
         // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
         // which is backed. What 4.4 adds and real code selects on the
@@ -1493,10 +1487,8 @@ impl Preprocessor {
         };
         self.macros
             .insert(inline_model_macro.to_string(), "1".to_string());
-        // Dialect version first, then the real producer, as clang
-        // spells it ("4.2.1 Compatible Clang ..."), so a program that
-        // reports `__VERSION__` as its compiler names badc rather than
-        // claiming to be gcc.
+        // Dialect version first, then the real producer, so a program
+        // that reports `__VERSION__` as its compiler names badc.
         self.macros.insert(
             "__VERSION__".to_string(),
             alloc::format!(
@@ -1507,18 +1499,18 @@ impl Preprocessor {
         );
         // The `__sync_*` builtins lower for these widths, so the
         // capability macros a lock-free path tests are honest; 16 through
-        // the paired compare-exchange, as gcc and clang define it there.
+        // the paired compare-exchange.
         for w in [1u32, 2, 4, 8, 16] {
             self.macros.insert(
                 alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
                 "1".to_string(),
             );
         }
-        // C11 7.17.5 lock-free property, in the GCC spelling
-        // `<stdatomic.h>` and lock-free paths test. Every type named
-        // here is at most 8 bytes wide on every supported target and
-        // the `__atomic_*` builtins lower to a lock-free instruction at
-        // those widths, so all are 2 (always lock-free).
+        // C11 7.17.5 lock-free property, in the spelling `<stdatomic.h>`
+        // and lock-free paths test. Every type named here is at most 8
+        // bytes wide on every supported target and the `__atomic_*`
+        // builtins lower to a lock-free instruction at those widths, so
+        // all are 2 (always lock-free).
         for name in [
             "BOOL", "CHAR", "CHAR16_T", "CHAR32_T", "WCHAR_T", "SHORT", "INT", "LONG", "LLONG",
             "POINTER",
@@ -1533,21 +1525,21 @@ impl Preprocessor {
             "__GCC_ATOMIC_TEST_AND_SET_TRUEVAL".to_string(),
             "1".to_string(),
         );
-        // Report strict ISO conformance alongside `__GNUC__`, exactly as
-        // `gcc`/`clang -std=c11` does, so a header takes its standard-C
-        // path rather than a GNU-dialect path for any extension badc
-        // does not provide. Both the plain and `__`-prefixed spellings
+        // Report strict ISO conformance alongside `__GNUC__`, as
+        // `-std=c11` does, so a header takes its standard-C path rather
+        // than a GNU-dialect path for any extension badc does not
+        // provide. Both the plain and `__`-prefixed spellings
         // of the extensions badc does implement stay available.
         // `-std=gnu*` clears it: a header then reaches the GNU-dialect
-        // declarations the dialect promises, as under gcc and clang.
+        // declarations the dialect promises.
         if strict_ansi {
             self.macros
                 .insert("__STRICT_ANSI__".to_string(), "1".to_string());
         }
-        // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
-        // x86 only, so the macro follows the target rather than the
-        // dialect alone. gcc defines it under `-m32` too, so the test is
-        // the target and not the `__x86_64__` predefine.
+        // `=@cc<cond>` inline-asm flag outputs. Implemented for x86 only,
+        // so the macro follows the target rather than the dialect alone.
+        // `-m32` defines it too, so the test is the target and not the
+        // `__x86_64__` predefine.
         if self.target.is_x86_64() {
             self.macros
                 .insert("__GCC_ASM_FLAG_OUTPUTS__".to_string(), "1".to_string());
@@ -1568,12 +1560,12 @@ impl Preprocessor {
         self.keep_pragmas = on;
     }
 
-    /// Read the source as preprocessed already, as gcc reads a `.i`
-    /// unit: its text is not macro-expanded, nothing is included, the
+    /// Read the source as preprocessed already, as a `.i` unit is read:
+    /// its text is not macro-expanded, nothing is included, the
     /// `-include` list included, and of the directives only line
     /// markers, `#line` and `#pragma` act. `#define` / `#undef`, which
     /// gcc's `-dD` output carries, are accepted without effect; any other
-    /// directive is an error, as gcc's front end reports a stray `#`.
+    /// directive is an error.
     pub fn set_preprocessed(&mut self, on: bool) {
         self.preprocessed = on;
     }
@@ -1652,9 +1644,9 @@ impl Preprocessor {
         self.own_header_roots.add(path);
     }
 
-    /// Append a `#include "..."`-only search path (the gcc `-iquote`
-    /// scope). Probed after the including file's directory and before
-    /// the `-I` paths; angle includes never read it.
+    /// Append a `#include "..."`-only search path (the `-iquote` scope).
+    /// Probed after the including file's directory and before the `-I`
+    /// paths; angle includes never read it.
     pub fn add_quote_path(&mut self, path: &str) {
         self.quote_search_paths.add(path);
     }
@@ -1678,14 +1670,14 @@ impl Preprocessor {
         self.system_fallback_paths.add(path);
     }
 
-    /// gcc / clang `-nostdinc`: take the standard library headers off the
-    /// `#include` search. See [`Preprocessor::nostdinc`].
+    /// `-nostdinc`: take the standard library headers off the `#include`
+    /// search. See [`Preprocessor::nostdinc`].
     pub fn set_nostdinc(&mut self, on: bool) {
         self.nostdinc = on;
     }
 
-    /// clang's `-nostdlibinc`: the same, keeping the compiler's own
-    /// headers. See [`Preprocessor::nostdlibinc`].
+    /// `-nostdlibinc`: the same, keeping the compiler's own headers. See
+    /// [`Preprocessor::nostdlibinc`].
     pub fn set_nostdlibinc(&mut self, on: bool) {
         self.nostdlibinc = on;
     }
@@ -1696,14 +1688,14 @@ impl Preprocessor {
         self.compiler_include_dir = Some(dir.to_string());
     }
 
-    /// gcc / clang `-fno-builtin` / `-ffreestanding`, the preprocessor's
-    /// half. See [`Preprocessor::no_builtin`].
+    /// `-fno-builtin` / `-ffreestanding`, the preprocessor's half. See
+    /// [`Preprocessor::no_builtin`].
     pub fn set_no_builtin(&mut self, on: bool) {
         self.no_builtin = on;
     }
 
-    /// gcc / clang `-fno-builtin-<name>`, the preprocessor's half: `name`
-    /// alone is opaque, as `-fno-builtin` makes every library name.
+    /// `-fno-builtin-<name>`, the preprocessor's half: `name` alone is
+    /// opaque, as `-fno-builtin` makes every library name.
     pub fn set_no_builtin_name(&mut self, name: &str) {
         self.no_builtin_names.insert(name.to_string());
     }
@@ -1715,22 +1707,22 @@ impl Preprocessor {
     }
 
     /// Add a header to splice in front of the user's translation
-    /// unit, before any source line is preprocessed. Mirrors gcc /
-    /// clang's `-include FILE` flag. The name is resolved through
-    /// the same chain as a regular `#include "name"` -- filesystem
-    /// search paths first (so a checked-in copy of the header
-    /// wins), then the embedded registry. Order matters: multiple
-    /// `-include` flags expand top-to-bottom in the order given.
+    /// unit, before any source line is preprocessed: `-include FILE`.
+    /// The name is resolved through the same chain as a regular
+    /// `#include "name"` -- filesystem search paths first (so a
+    /// checked-in copy of the header wins), then the embedded
+    /// registry. Order matters: multiple `-include` flags expand
+    /// top-to-bottom in the order given.
     pub fn add_force_include(&mut self, name: &str) {
         self.force_includes.push(name.to_string());
     }
 
     /// Predefine a macro from the build driver -- the CLI's `-D NAME` /
     /// `-D NAME=VALUE` plumbs through here, `-D NAME` with body `"1"` and
-    /// `-D NAME=` with an empty one. As gcc and clang read the option, the
-    /// pair is the operand `NAME BODY` of a `#define`, so `-D 'F(x)=x+1'`
-    /// defines a function-like macro; an operand the directive rejects is
-    /// an error of the pass. Late definitions in source still win.
+    /// `-D NAME=` with an empty one. The pair is the operand `NAME BODY`
+    /// of a `#define`, so `-D 'F(x)=x+1'` defines a function-like macro;
+    /// an operand the directive rejects is an error of the pass. Late
+    /// definitions in source still win.
     pub fn define(&mut self, name: &str, body: &str) {
         let operand = format!("{name} {body}");
         let dollar = self.dollar();
@@ -1772,8 +1764,8 @@ impl Preprocessor {
         self.fn_macros.remove(&*name);
     }
 
-    /// A `#define` line per macro defined now, sorted, as gcc's `-dM` prints
-    /// them; like gcc's, without the names the expansion site supplies.
+    /// A `#define` line per macro defined now, sorted, as `-dM` prints
+    /// them, without the names the expansion site supplies.
     pub fn macro_definitions(&self) -> Vec<String> {
         const DYNAMIC: [&str; 8] = [
             "__FILE__",
@@ -1823,10 +1815,9 @@ impl Preprocessor {
     }
 
     /// [`Self::process`] leaving the diagnostics in the sink, an error
-    /// among them included: `-E` writes the whole text and then fails, as
-    /// gcc and clang do. An error the pass cannot go past ends it there,
-    /// as gcc's fatal errors do: the text before it is returned, and its
-    /// diagnostic joins the sink's.
+    /// among them included: `-E` writes the whole text and then fails.
+    /// An error the pass cannot go past ends it there: the text before
+    /// it is returned, and its diagnostic joins the sink's.
     pub fn process_to_end(&mut self, source: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
         let run = self.process_preamble(&mut out);
@@ -2107,7 +2098,7 @@ impl Preprocessor {
     /// unit in output order, so every pragma that can cover `site` is
     /// already recorded when this runs.
     pub(crate) fn warn(&mut self, code: Code, site: Site<'_>, text: String) {
-        // gcc's rule: a system header's warnings are suppressed, but `#warning`.
+        // A system header's warnings are suppressed, but `#warning`.
         if self.in_system_header()
             && code != WARNING_DIRECTIVE
             && code.default_level() == crate::c5::diag::Level::Warning
@@ -2128,7 +2119,7 @@ impl Preprocessor {
         out: &mut String,
     ) -> Result<(), C5Error> {
         // A UTF-8 byte-order mark opening the file is accepted and
-        // skipped, following gcc and clang.
+        // skipped.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
         let source = if self.trigraphs {
             replace_trigraphs(source)
@@ -2239,8 +2230,8 @@ impl Preprocessor {
             }
             Directive::Else => apply_else(cond_stack, filename, diag)?,
             Directive::Endif => apply_endif(cond_stack, filename, diag)?,
-            // The pass goes on to the end of the unit and then fails, as
-            // gcc's and clang's does, reporting every `#error` it reaches.
+            // The pass goes on to the end of the unit and then fails,
+            // reporting every `#error` it reaches.
             Directive::Error(message) => {
                 if active {
                     self.warn(
@@ -2251,7 +2242,7 @@ impl Preprocessor {
                 }
                 active
             }
-            // gcc/clang extension, standardized in C23: same shape as
+            // GNU C extension, standardized in C23: same shape as
             // `#error` but compilation continues.
             Directive::Warning(message) => {
                 if active {
@@ -2291,7 +2282,7 @@ impl Preprocessor {
     }
 
     /// Install a function-like macro definition. A trailing `...`
-    /// (C99 6.10.3) or the GCC named-rest form `name...` makes the
+    /// (C99 6.10.3) or the GNU C named-rest form `name...` makes the
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
@@ -2330,10 +2321,10 @@ impl Preprocessor {
 
     /// C99 6.10.3p2: a macro may be redefined only as the same kind with
     /// the same parameters and an identical replacement list, white-space
-    /// separation aside (6.10.3p1). gcc and clang warn on any other
-    /// redefinition outside a system header; the new definition wins. A
-    /// fallback of [`PREDEFINED_FN_MACROS`] is no macro of theirs, so a
-    /// definition replaces it silently.
+    /// separation aside (6.10.3p1). Any other redefinition outside a
+    /// system header warns; the new definition wins. A fallback of
+    /// [`PREDEFINED_FN_MACROS`] is a stand-in rather than a predefine, so
+    /// a definition replaces it silently.
     fn check_macro_redefinition(
         &mut self,
         name: &str,
@@ -2363,8 +2354,8 @@ impl Preprocessor {
         }
     }
 
-    /// Whether the line being read belongs to a system header, where gcc
-    /// and clang suppress their warnings.
+    /// Whether the line being read belongs to a system header, where
+    /// warnings are suppressed.
     pub(super) fn in_system_header(&self) -> bool {
         self.include_stack.last().is_some_and(|f| !f.user())
     }
@@ -2874,7 +2865,7 @@ impl<'p, 's> LinePass<'p, 's> {
     }
 
     /// A non-directive (C17 6.10p1) in a group that is not skipped is an
-    /// error, as in gcc and clang: dropping the line loses what it meant.
+    /// error: dropping the line loses what it meant.
     /// A bare `#` is the 6.10p9 null directive: consumed without effect.
     fn unknown(&mut self, spelling: &str, line_no: usize) {
         if !self.active || spelling.is_empty() {
@@ -2965,8 +2956,8 @@ impl<'p, 's> LinePass<'p, 's> {
     /// A directive inside the argument list works on the same
     /// conditional stack as a top-level one, so an `#if` opened there
     /// may close after the call's `)` and the reverse. C99 6.10.3p11
-    /// leaves the case undefined; gcc and clang process such directives
-    /// as if the invocation were not present. Directive lines never
+    /// leaves the case undefined; such directives are processed as if
+    /// the invocation were not present. Directive lines never
     /// become argument text; content lines join only while the current
     /// branch is active.
     fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
@@ -3022,11 +3013,10 @@ impl<'p, 's> LinePass<'p, 's> {
             let dline = self.presumed + *consumed - 1;
             if let Some(rest) = self.pp.directive_text(cont) {
                 let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
-                // `#embed` joins its byte list to the invocation, as gcc
-                // and clang do. TODO: `#include`, `#line` and `#pragma`
-                // inside an argument list are consumed without effect;
-                // their output would have to interleave with the joined
-                // expansion.
+                // `#embed` joins its byte list to the invocation. TODO:
+                // `#include`, `#line` and `#pragma` inside an argument
+                // list are consumed without effect; their output would
+                // have to interleave with the joined expansion.
                 if self.active {
                     match &parsed {
                         Directive::Embed(operand) => {

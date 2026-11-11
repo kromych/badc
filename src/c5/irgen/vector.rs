@@ -1,4 +1,4 @@
-//! GCC vector extension: element-wise operations and the x86 SIMD
+//! GNU C vector extension: element-wise operations and the x86 SIMD
 //! builtins.
 
 use super::access::{load_kind_for, store_kind_for};
@@ -7,13 +7,13 @@ use super::*;
 use crate::c5::ast::expr_ty;
 
 impl<'a> Walker<'a> {
-    /// Element type and lane count of the GCC vector type `ty`.
+    /// Element type and lane count of the vector type `ty`.
     fn vector_lanes(&self, ty: i64) -> (i64, i64) {
         let f = &self.structs[struct_id_of(ty)].fields[0];
         (f.ty, f.array_size.max(1))
     }
 
-    /// True when the node's own type is a GCC vector type; the broadcast
+    /// True when the node's own type is a vector type; the broadcast
     /// scalar of a mixed operand pair is the one for which this is false.
     fn expr_is_vector(&self, id: ExprId) -> bool {
         expr_ty(self.ast.expr(id)).is_some_and(|t| is_vector_ty(self.structs, t))
@@ -101,10 +101,9 @@ impl<'a> Walker<'a> {
             .then_some(lane)
     }
 
-    /// GCC vector extension: element-wise `op` over two vectors, or over a
-    /// vector and a scalar broadcast to every lane. The result is a fresh
-    /// synthetic aggregate whose address is returned, matching how a struct
-    /// rvalue is produced.
+    /// Element-wise `op` over two vectors, or over a vector and a scalar
+    /// broadcast to every lane. The result is a fresh synthetic aggregate
+    /// whose address is returned, matching how a struct rvalue is produced.
     ///
     /// One scalar operation per lane at the element width: the SSA value
     /// model has no vector class, so each lane emits the load / binop / store
@@ -214,8 +213,8 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// GCC vector extension: element-wise unary `-` / `~` over a vector,
-    /// lowered per lane like [`Self::walk_vector_binop`].
+    /// Element-wise unary `-` / `~` over a vector, lowered per lane like
+    /// [`Self::walk_vector_binop`].
     pub(super) fn walk_vector_unary(
         &mut self,
         b: &mut SsaBuilder,
@@ -303,7 +302,7 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Lower a bitwise operator (`^` / `&` / `|`) on two same-width GCC
+    /// Lower a bitwise operator (`^` / `&` / `|`) on two same-width
     /// vector values into a result temporary. Bitwise ops carry nothing
     /// between lanes, so the byte block combines in the widest chunks
     /// that fit whatever the element width. The result is a fresh
@@ -371,7 +370,7 @@ fn lane_addr(b: &mut SsaBuilder, base: ValueId, off: i64) -> ValueId {
     }
 }
 
-/// Concrete lane opcode for a GCC vector operator. The parser tags the node
+/// Concrete lane opcode for a vector operator. The parser tags the node
 /// with the nominal opcode; the element type picks the floating flavor and
 /// the signedness of divide / modulo / right shift.
 fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
@@ -402,7 +401,7 @@ fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
     }
 }
 
-/// The comparison opcodes the GCC vector extension lowers element-wise.
+/// The comparison opcodes the vector extension lowers element-wise.
 fn is_vector_compare_op(op: BinOp) -> bool {
     use BinOp as B;
     matches!(

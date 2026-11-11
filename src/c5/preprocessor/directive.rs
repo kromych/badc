@@ -258,8 +258,8 @@ pub(super) enum Directive<'a> {
     /// `#embed <resource> params` or `#embed "resource" params`, or the
     /// macro-replaced pp-token form (C23 6.10.4): the operand as written.
     Embed(&'a str),
-    /// `#ident "text"` / `#sccs "text"`, gcc's and clang's version-string
-    /// directives, accepted without effect.
+    /// `#ident "text"` / `#sccs "text"`, the version-string directives,
+    /// accepted without effect.
     Ident,
     /// `#include <pp-tokens>` -- C99 6.10.2p4, or the same form of
     /// `#include_next` (`next`). The operand isn't
@@ -279,8 +279,8 @@ pub(super) enum Directive<'a> {
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
-    /// `#warning <message>` -- gcc/clang extension, standardized in
-    /// C23. Emits a `warning:` diagnostic but, unlike `#error`,
+    /// `#warning <message>` -- an extension before C23, which
+    /// standardizes it. Emits a `warning:` diagnostic but, unlike `#error`,
     /// compilation continues. Matches the diagnostic format every
     /// other warning site uses, so downstream tooling can scrape it.
     Warning(&'a str),
@@ -288,20 +288,12 @@ pub(super) enum Directive<'a> {
     Other,
 }
 
-/// Format a GNU-style line marker (`# N "file"\n`) for the lexer.
-/// Filenames get the minimum C-string escape (`\\` and `\"` are
-/// escaped, everything else passes through). The lexer's
-/// `parse_line_marker` decodes the same shape: it sets
-/// `self.line = N - 1` and `self.file = file`, so the very next
-/// `\n` consumed by the outer loop bumps `self.line` to `N` --
-/// which means the next source line in the buffer is attributed
-/// to `(file, N)`.
 /// Append `s` as the body of a string literal, escaping `\` and `"`.
 /// Three positions need it: the `#` operator (C99 6.10.3.2), a line
 /// marker's filename, and `__FILE__` / `__BASE_FILE__`, whose expansion
-/// is itself a string literal. gcc and clang escape both characters in
-/// all three. A path is the case that reaches it in practice: an
-/// unescaped `\U` in a Windows path opens a universal character name.
+/// is itself a string literal. A path is the case that reaches it in
+/// practice: an unescaped `\U` in a Windows path opens a universal
+/// character name.
 pub(super) fn push_string_body(s: &str, out: &mut String) {
     for ch in s.chars() {
         match ch {
@@ -312,6 +304,14 @@ pub(super) fn push_string_body(s: &str, out: &mut String) {
     }
 }
 
+/// Format a GNU-style line marker (`# N "file"\n`) for the lexer.
+/// Filenames get the minimum C-string escape (`\\` and `\"` are
+/// escaped, everything else passes through). The lexer's
+/// `parse_line_marker` decodes the same shape: it sets
+/// `self.line = N - 1` and `self.file = file`, so the very next
+/// `\n` consumed by the outer loop bumps `self.line` to `N` --
+/// which means the next source line in the buffer is attributed
+/// to `(file, N)`.
 pub(super) fn format_line_marker(line: usize, file: &str) -> String {
     let mut escaped = String::with_capacity(file.len());
     push_string_body(file, &mut escaped);
@@ -346,7 +346,7 @@ pub(super) fn define_operand(after: &str, dollar: Dollar) -> Directive<'_> {
     }
 }
 
-/// The error for a parameter list the line ends inside, in gcc's terms.
+/// The error for a parameter list the line ends inside.
 pub(super) fn unclosed_params_error(params: &[&str], dollar: Dollar) -> String {
     let last = params.last().map_or("", |p| p.trim());
     if last.is_empty() {
@@ -488,8 +488,8 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
         return Directive::Shebang;
     }
     // GNU-style line marker: `# N "file" [flags]`. The C99 form is
-    // `#line N "file"` (above); the amalgamator and historic gcc
-    // preprocessors emit the keyword-less variant too. Trailing flag
+    // `#line N "file"` (above); the amalgamator and `gcc -E` emit the
+    // keyword-less variant too. Trailing flag
     // digits are GNU's enter / leave / system / extern markers, ignored
     // since c5 tracks only (file, line).
     //

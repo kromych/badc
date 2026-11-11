@@ -208,7 +208,7 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        // A vector-typed node is element-wise (GCC vector extension),
+        // A vector-typed node is element-wise (GNU C vector extension),
         // and a 128-bit operand makes the node 128-bit whatever type it
         // carries: a comparison's result is `int`, and the parser spells
         // the unary operators as a binop against a literal.

@@ -20,7 +20,7 @@ use super::types::{
 
 /// `tag` of a value leading to `f` at `depth`, each return type along the
 /// chain unqualified: a function returns the unqualified version of its
-/// declared type (C17 6.7.6.3p5), as gcc takes it in every mode.
+/// declared type (C17 6.7.6.3p5), in every language mode.
 fn unqualified_returns(tag: i64, f: &FnType, depth: i64) -> i64 {
     let mut level = ptr_depth_of(tag) - depth.max(1);
     let mut tag = unqualified_at_level(tag, level);
@@ -153,11 +153,11 @@ impl Compiler {
     /// function or a pointer to one, which the `i64` tags spell as the
     /// return type: two function types compare as such, and a pointer to
     /// a function and `void *` convert either way (C99 J.5.7) with no
-    /// qualifier check, as gcc and clang take them. A declared target that
-    /// leads to no function, `to_declared`, makes any other pointer to one
-    /// incompatible; an expression target or a value with none recorded (a
-    /// libc binding, a constant) is left to the tags. Returns whether the
-    /// case was decided here.
+    /// qualifier check. A declared target that leads to no function,
+    /// `to_declared`, makes any other pointer to one incompatible; an
+    /// expression target or a value with none recorded (a libc binding, a
+    /// constant) is left to the tags. Returns whether the case was decided
+    /// here.
     pub(super) fn check_function_conversion(
         &mut self,
         to: (i64, &Option<(FnType, i64)>),
@@ -409,9 +409,8 @@ impl Compiler {
 
     /// C99 6.7.5.3p15: two function types agree in their parameter
     /// information and in the function types their results point to, at
-    /// equal depths, and, as gcc and clang take them, in their calling
-    /// conventions. The return types themselves ride the tags the callers
-    /// compare.
+    /// equal depths, and in their calling conventions. The return types
+    /// themselves ride the tags the callers compare.
     pub(super) fn fn_types_compatible(&self, a: &FnType, b: &FnType) -> bool {
         a.conv == b.conv
             && self.fn_params_compatible(&a.params, &b.params)
@@ -479,7 +478,7 @@ impl Compiler {
                     && precision(a) == precision(b))
                 || self.tags_compatible(a, b)
         };
-        // gcc's TYPE_ARG_TYPES: a non-variadic prototype's list ends in `void`.
+        // As the warning defines it, a non-variadic prototype's list ends in `void`.
         let list = |p: &FnParams| -> alloc::vec::Vec<i64> {
             let end = (p.prototyped && !p.variadic).then_some(void);
             p.types
@@ -574,7 +573,7 @@ impl Compiler {
     }
 
     /// The convention a function type names once an attribute names `new`
-    /// where `prev` was named; gcc and clang reject a type naming two.
+    /// where `prev` was named; a type naming two is an error.
     pub(super) fn add_conv(
         &self,
         prev: Option<CallConv>,

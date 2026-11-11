@@ -286,10 +286,10 @@ fn a_headers_selectany_object_and_inline_function_link_once_per_program() {
     }
 }
 
-/// An inline function of external linkage on the Windows targets, as MSVC and
-/// clang's `*-windows-msvc` link one in C: each unit that references it emits
-/// a pick-any definition, one function program-wide; a unit that does not
-/// emits none, so what its body calls need not exist, even past a non-inline
+/// An inline function of external linkage on the Windows targets, as MSVC
+/// links one in C: each unit that references it emits a pick-any
+/// definition, one function program-wide; a unit that does not emits none,
+/// so what its body calls need not exist, even past a non-inline
 /// declaration; a declaration spelling `extern` keeps it for other units.
 #[test]
 fn msvc_inline_functions_link_once_and_drop_unreferenced() {
@@ -810,10 +810,10 @@ const RAW_ASM_NAMES: [(&str, &str); 2] = [
     ),
 ];
 
-// An asm label is the symbol as written, as clang spells it: Mach-O names a
-// C identifier with a leading underscore, so `other_name` and `raw_f` are
-// symbols without one. Linked from the sources and from their objects, the
-// image's symbol table spells each as written.
+// An asm label is the symbol as written: Mach-O names a C identifier with a
+// leading underscore, so `other_name` and `raw_f` are symbols without one.
+// Linked from the sources and from their objects, the image's symbol table
+// spells each as written.
 #[test]
 fn a_mach_o_asm_label_names_the_symbol_as_written() {
     let dir = tempdir("mach-o-asm-label");
@@ -1399,10 +1399,10 @@ fn a_link_replaces_a_running_executable() {
     assert_eq!(names, ["p", "p.c"]);
 }
 
-// Inputs enter the link in command-line order, as gcc hands them to the
-// linker: constructors of one priority run in that order, whether a unit
-// comes as a source or an object, and a `--whole-archive` member joins the
-// link unreferenced, at its archive's place.
+// Inputs enter the link in command-line order: constructors of one priority
+// run in that order, whether a unit comes as a source or an object, and a
+// `--whole-archive` member joins the link unreferenced, at its archive's
+// place.
 #[test]
 fn inputs_enter_the_link_in_command_line_order() {
     let dir = tempdir("link-order");
@@ -2003,10 +2003,9 @@ fn a_pe_programs_subsystem_follows_its_entry_function_unless_stated() {
 }
 
 /// A `-l` naming a part of the target's C library that no search path holds
-/// resolves through the C library badc describes, as gcc and clang find
-/// glibc's, libSystem's and on Windows libm and libpthread; a name the
-/// platform's toolchain does not resolve is still refused, and a library on
-/// `-L` still wins.
+/// resolves through the C library badc describes -- glibc's, libSystem's
+/// and on Windows libm and libpthread; a name the platform's toolchain does
+/// not resolve is still refused, and a library on `-L` still wins.
 #[test]
 fn a_c_library_part_named_by_l_links_without_a_sysroot() {
     let dir = tempdir("c-library-parts");
@@ -2099,7 +2098,7 @@ fn a_c_library_part_named_by_l_links_without_a_sysroot() {
     }
 }
 
-/// A unit with each way C and gcc state a definition's visibility.
+/// A unit with each way C and GNU C state a definition's visibility.
 const VISIBILITY_UNIT: &str = "int counter = 5;\n\
     static int local(void) { return 1; }\n\
     __attribute__((visibility(\"hidden\"))) int hidden_fn(void) { return 2; }\n\
@@ -2114,9 +2113,9 @@ const VISIBILITY_UNIT: &str = "int counter = 5;\n\
     int plain(void) { return 6; }\n";
 
 /// An ELF or Mach-O shared library exports each external definition of
-/// default visibility, functions and data, as gcc and clang build one;
-/// a hidden attribute or extent and `-fvisibility=hidden` keep a name out,
-/// a default one keeps it in. A PE DLL exports its `dllexport` names alone.
+/// default visibility, functions and data; a hidden attribute or extent and
+/// `-fvisibility=hidden` keep a name out, a default one keeps it in. A PE
+/// DLL exports its `dllexport` names alone.
 #[test]
 fn a_shared_library_exports_its_default_visibility_definitions() {
     let dir = tempdir("shared-exports");
@@ -2588,8 +2587,8 @@ fn a_weak_import_from_a_dylib_reads_zero_when_the_dylib_lacks_it() {
 }
 
 /// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
-/// versioned `libx.so.1`, is read by content, as gcc hands it to the linker;
-/// a text file or a missing one is still refused by name.
+/// versioned `libx.so.1`, is read by content; a text file or a missing one
+/// is still refused by name.
 #[test]
 fn a_link_input_of_an_unlisted_suffix_is_read_by_content() {
     let dir = tempdir("unlisted-suffix");
@@ -3036,7 +3035,7 @@ fn a_definition_takes_precedence_over_a_data_binding_of_its_name() {
 }
 
 /// The address of an object a DLL exports is the object's, read from the
-/// import address table, as MSVC and clang give it for
+/// import address table, the PE import convention for
 /// `__declspec(dllimport)` data. The arm64 msvcrt exports no `_environ`,
 /// which the headers reach there through an accessor function.
 #[cfg(all(windows, target_arch = "x86_64"))]
@@ -3637,8 +3636,7 @@ fn array_to_pointer_decay_in_global_initializer() {
 // linkage, so `&f` denotes one function program-wide even though
 // 6.7.4p6 lets the unit implement its own calls from the local body.
 // The unit holding the inline definition and the unit holding the
-// external definition must agree on the pointer, as they do under gcc
-// and clang.
+// external definition must agree on the pointer.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn inline_definition_address_is_the_same_across_tus() {
@@ -3691,14 +3689,13 @@ fn inline_definition_address_is_the_same_across_tus() {
 }
 
 // The address escaping as an external reference means a program that
-// never defines the function fails to link, which is what gcc and clang
-// report for the same source.
+// never defines the function fails to link.
 #[test]
 fn a_static_function_no_body_defines_is_an_undefined_reference() {
     // C99 6.9p3: a used function with internal linkage needs a definition
     // in the unit. Each use of one with none is an undefined reference at
-    // the link, as gcc and clang report it, never another function's
-    // address; a use only a dropped object holds links.
+    // the link, never another function's address; a use only a dropped
+    // object holds links.
     let dir = tempdir("static-undefined");
     for (name, body) in [
         (
@@ -5284,11 +5281,11 @@ fn compile_only_writes_relocatable_elf() {
     assert_eq!(bytes[5], 1, "expected ELFDATA2LSB");
 }
 
-/// DWARF is off by default and opt-in via `-g` / `--debug`, matching
-/// gcc / clang. A default build links a DWARF-free executable -- the
-/// shipped binary stays small -- while `-g` carries the `.debug_*`
-/// sections through. The `debug_abbrev` substring matches both the
-/// ELF `.debug_abbrev` and the Mach-O `__debug_abbrev` section names.
+/// DWARF is off by default and opt-in via `-g` / `--debug`. A default build
+/// links a DWARF-free executable -- the shipped binary stays small -- while
+/// `-g` carries the `.debug_*` sections through. The `debug_abbrev`
+/// substring matches both the ELF `.debug_abbrev` and the Mach-O
+/// `__debug_abbrev` section names.
 #[test]
 fn debug_info_is_off_by_default_and_enabled_by_g() {
     let dir = tempdir("dwarf-default-off");
@@ -7953,7 +7950,7 @@ fn a_module_definition_file_gives_the_dll_its_exports() {
 
 /// `#pragma detect_mismatch` gives the object cl's `/FAILIFMISMATCH` pair:
 /// two units disagreeing on a key fail the PE link, agreeing ones link. Its
-/// operands are macro-expanded, as cl and clang expand them.
+/// operands are macro-expanded, as cl expands them.
 #[test]
 fn detect_mismatch_fails_a_link_whose_units_disagree() {
     let dir = tempdir("pe-detect-mismatch");
@@ -8270,7 +8267,7 @@ fn pragma_comment_linker_forwards_aliases_and_alternates() {
 }
 
 /// Outside a PE link `#pragma comment(linker, ...)` has no effect, which
-/// the compile reports, as clang does on ELF and Mach-O.
+/// the compile reports.
 #[test]
 fn pragma_comment_linker_is_ignored_outside_pe() {
     let dir = tempdir("pragma-comment-linker-elf");
@@ -11446,7 +11443,7 @@ fn elf_symbol_table(bytes: &[u8], sh_type: u32) -> (Vec<SymtabRow>, u32) {
 
 /// `<time.h>`'s data bindings import `tzname`, `timezone` and `daylight`
 /// only into an image that names them, which reads the C library's own
-/// objects as gcc's image does.
+/// objects.
 #[test]
 fn tzset_outputs_are_imported_only_where_named() {
     let dir = tempdir("tzset-outputs");
@@ -11775,7 +11772,7 @@ fn compile_only_object_keeps_the_read_only_prefix_when_linked() {
             "{target}: relocation-free const demoted into PT_GNU_RELRO"
         );
 
-        // `-fno-pic` keeps gcc's static-link assignment: both objects
+        // `-fno-pic` keeps the static-link assignment: both objects
         // in `.rodata`, so the link has the whole section to demote.
         let nobj = dir.join(format!("ro-nopic-{target}.o"));
         run(
@@ -11821,9 +11818,8 @@ const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 
 /// A named section carries `SHF_WRITE` only when its members are
-/// writable: an all-`const` section is read-only, matching gcc and
-/// clang. A `const` and a writable member in one section are a section
-/// type conflict, as gcc reports it.
+/// writable: an all-`const` section is read-only. A `const` and a
+/// writable member in one section are a section type conflict.
 #[test]
 fn named_section_flags_follow_member_constness() {
     let dir = tempdir("named-section-const");
@@ -12108,14 +12104,13 @@ fn an_unbound_dylib_declaration_records_no_needed_entry() {
 
 /// A name spelled inside a file-scope `asm()` is not a use that keeps a
 /// definition alive. The text reaches the object as written and the
-/// assembler and linker resolve the names in it, as they do for gcc,
-/// which parses no template; `used` is what asks for a definition to be
-/// emitted unreferenced. Rooting on the spelling turned an included
-/// header's `static inline` into an out-of-line definition of the unit,
-/// so a reference the program meant for another unit's definition bound
-/// to it instead -- the Linux export table, generated as one `asm()`
-/// per exported name, then carried a local copy of every inline whose
-/// name it spells.
+/// assembler and linker resolve the names in it; `used` is what asks for a
+/// definition to be emitted unreferenced. Rooting on the spelling turned an
+/// included header's `static inline` into an out-of-line definition of the
+/// unit, so a reference the program meant for another unit's definition
+/// bound to it instead -- an export table generated as one `asm()` per
+/// exported name then carried a local copy of every inline whose name it
+/// spells.
 #[test]
 fn a_name_in_file_scope_asm_does_not_keep_a_static_definition() {
     let dir = tempdir("asm-name-root");
@@ -12249,7 +12244,7 @@ fn a_section_type_changed_across_asm_statements_is_diagnosed() {
 /// position-independent image cannot promise. The `-c` object carries
 /// the relocation (its shape is locked in the linker tests); linking it
 /// into an executable names the constraint rather than reporting a
-/// missing patcher. GNU ld and clang reject the same object with
+/// missing patcher. GNU ld rejects the same object with
 /// "relocation R_X86_64_32S ... can not be used when making a PIE
 /// object".
 #[test]
@@ -12999,7 +12994,7 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
 // slot, a `_Thread_local` slot and code when the system linker links the
 // object, as a fixed and as a position-independent executable. A weak
 // declaration of a function a header declares is a weak reference, null
-// where no library linked defines it, as in gcc's objects.
+// where no library linked defines it.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_library_function_address_is_one_pointer_under_the_system_linker() {
@@ -13842,7 +13837,7 @@ fn packed_spanning_bitfields_cross_the_system_compiler_boundary() {
 #[cfg(windows)]
 #[test]
 fn packed_spanning_bitfields_cross_the_windows_compiler_boundary() {
-    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    // MSVC has no GNU attributes.
     let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
         eprintln!(
             "skipping packed_spanning_bitfields_cross_the_windows_compiler_boundary: no clang"
@@ -13860,7 +13855,7 @@ fn packed_spanning_bitfields_cross_the_windows_compiler_boundary() {
 #[cfg(windows)]
 #[test]
 fn bitfield_attributes_cross_the_windows_compiler_boundary() {
-    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    // MSVC has no GNU attributes.
     let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
         eprintln!("skipping bitfield_attributes_cross_the_windows_compiler_boundary: no clang");
         return;
@@ -14874,7 +14869,7 @@ fn an_import_slot_of_a_bound_name_does_not_load_the_runtime_sources() {
 
 // A dllimport function's address is the one its DLL exports and a dllimport
 // object is the DLL's own, both read from the import-address slot, while a
-// static initializer takes the image's thunk (MSVC, mingw-w64 gcc, clang). A
+// static initializer takes the image's thunk (the PE import convention). A
 // slot whose name the image itself defines resolves to the definition, with
 // the warning lld gives (LNK4217).
 #[cfg(windows)]
@@ -18492,7 +18487,7 @@ fn a_linked_image_lists_every_definition_in_its_symbol_table() {
 /// A thread-local whose image is all zeros takes the `.tbss` zero fill
 /// wherever it is declared: zero-initialized, ahead of an initialized one in
 /// its unit, or beside another unit's initialized one, linked from sources
-/// and from objects, as gcc places it. Only the initialized `one` reaches
+/// and from objects. Only the initialized `one` reaches
 /// `.tdata`, the file leaves the megabyte out, and every access, a
 /// cross-unit one included, finds its object. Both Linux targets link on
 /// every host; the image runs on a matching one.
@@ -20778,9 +20773,9 @@ fn run_with_stdin(cmd: &mut Command, src: &str, what: &str) -> std::process::Out
 }
 
 /// `-` names stdin for the object and archive modes as it does for the
-/// link, so a generator's output can be piped straight into a build. gcc
-/// and clang name the object after the input, giving `-.o`; `--ar` takes
-/// the same name for the member.
+/// link, so a generator's output can be piped straight into a build. The
+/// object is named after the input, `-.o`; `--ar` takes the same name for
+/// the member.
 #[test]
 fn stdin_source_compiles_to_an_object_and_into_an_archive() {
     let dir = tempdir("stdin-object");
@@ -20848,7 +20843,7 @@ fn stdin_source_compiles_to_an_object_and_into_an_archive() {
     );
 }
 
-/// The gcc / clang link-time-table idiom: several units place data
+/// The link-time-table idiom: several units place data
 /// under one C-identifier section name and walk it between
 /// `__start_<name>` and `__stop_<name>`. Every unit's contribution has
 /// to be contiguous and the bounds have to enclose exactly it.

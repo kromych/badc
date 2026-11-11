@@ -8,8 +8,8 @@ use super::diag::eprint_diagnostic;
 const CODESIGN: &str = "/usr/bin/codesign";
 
 /// Write to standard output for [`out!`] / [`outln!`]. A closed pipe ends
-/// the run with a failure status and no message, as gcc's driver reports a
-/// compiler a closed pipe stopped; any other write error is reported.
+/// the run with a failure status and no message; any other write error is
+/// reported.
 pub(crate) fn write_stdout(args: core::fmt::Arguments) {
     use std::io::Write;
     if let Err(e) = std::io::stdout().lock().write_fmt(args) {

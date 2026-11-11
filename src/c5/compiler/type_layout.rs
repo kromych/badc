@@ -58,7 +58,7 @@ impl Compiler {
     /// True if pointer arithmetic on `ptr_ty` scales the offset by
     /// the pointee's byte size: any size but one, zero included -- an
     /// element of a zero-length array or an empty structure occupies no
-    /// bytes, so the pointer does not move, as in gcc and clang.
+    /// bytes, so the pointer does not move.
     pub(super) fn is_ptr_scaling_nontrivial(&self, ptr_ty: i64) -> bool {
         is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) != 1
     }
@@ -161,8 +161,7 @@ impl Compiler {
 
     /// Rewrite `ty` into the type named by a `__attribute__((mode(M)))`
     /// spec of `(bytes, is_float)`, keeping the operand's signedness.
-    /// Only scalar operands have a machine mode; anything else is the
-    /// error GCC reports as "applied to inappropriate type".
+    /// Only scalar operands have a machine mode; anything else is an error.
     pub(super) fn apply_mode_to_type(&mut self, ty: i64, m: (u8, bool)) -> Result<i64, C5Error> {
         let (bytes, is_float) = m;
         let floating = is_floating_scalar(ty);
@@ -189,7 +188,7 @@ impl Compiler {
         })
     }
 
-    /// True when the current identifier is a spelling of the GCC 128-bit
+    /// True when the current identifier is a spelling of the GNU C 128-bit
     /// integer type: `__int128`, `__int128_t`, or `__uint128_t`.
     pub(super) fn is_lex_int128_spelling(&self) -> bool {
         self.lex.tk == Token::Id
@@ -199,7 +198,7 @@ impl Compiler {
             )
     }
 
-    /// Type tag for the GCC 128-bit integer (`__int128` / `__uint128_t`).
+    /// Type tag for the 128-bit integer (`__int128` / `__uint128_t`).
     /// badc models it as a 16-byte aggregate `{ long long; long long; }`:
     /// declarations, struct / array layout, `sizeof`, and by-value copies
     /// go through the struct machinery. The operators are expanded by the
@@ -236,10 +235,10 @@ impl Compiler {
         self.structs.push(StructDef {
             name: "__int128".to_string(),
             size: 16,
-            // GCC / clang give `__int128` 16-byte alignment on every
-            // target that provides it, which the member offsets of a
-            // containing struct and the x86-64 / AArch64 argument
-            // classification both depend on.
+            // `__int128` takes 16-byte alignment on every target that
+            // provides it, which the member offsets of a containing struct
+            // and the x86-64 / AArch64 argument classification both
+            // depend on.
             align: 16,
             explicit_align: 0,
             natural_align: 16,
@@ -262,7 +261,7 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
-    /// True when the current identifier spells the GCC builtin type name
+    /// True when the current identifier spells the builtin type name
     /// `__builtin_va_list`.
     pub(super) fn is_lex_va_list_spelling(&self) -> bool {
         self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
@@ -372,7 +371,7 @@ impl Compiler {
         if unsigned { tag | UNSIGNED_BIT } else { tag }
     }
 
-    /// True when `t` is the GCC 128-bit `__int128` as a value (not a
+    /// True when `t` is the 128-bit `__int128` as a value (not a
     /// pointer to one). Mirrors the walker's `is_int128_value_ty`; used to
     /// widen a scalar assigned to an `__int128` lvalue.
     pub(super) fn is_int128_ty(&self, t: i64) -> bool {
@@ -391,7 +390,7 @@ impl Compiler {
         is_struct_value_ty(t) && !self.is_int128_ty(t)
     }
 
-    /// C99 6.3.1.8 usual arithmetic conversions, with the GCC 128-bit
+    /// C99 6.3.1.8 usual arithmetic conversions, with the 128-bit
     /// integer ranked above every standard integer type. Two 128-bit
     /// operands take the unsigned flavor when either is unsigned; a
     /// 128-bit operand against a narrower type keeps its own
@@ -467,7 +466,7 @@ impl Compiler {
     }
 
     /// The return type `ret` of a function declarator under the type
-    /// attributes its trailing list carries, as gcc applies them:
+    /// attributes its trailing list carries:
     /// `vector_size` reaches the innermost element of the return type, and
     /// `mode` finds no type it can apply to in a function type.
     pub(super) fn apply_function_declarator_attributes(
@@ -483,12 +482,12 @@ impl Compiler {
         self.apply_pending_vector_size(ret)
     }
 
-    /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
+    /// Synthesize the aggregate that models a GNU C `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
     /// struct machinery; the cast and binary-operator paths read the flag.
     /// The object is the width rounded up to a power of two and aligned to
-    /// that width up to the target's ceiling, as gcc and clang lay it out.
+    /// that width up to the target's ceiling.
     pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let lanes = (n_bytes / elem_size).max(1);
@@ -556,7 +555,7 @@ impl Compiler {
     /// `make_vector_type`. The entry's size is the row byte count, so
     /// `pointee_size` scales `p[i]` / `p + 1` by the whole row.
     pub(super) fn array_agg_type(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
-        // A zero dimension (`T (*p)[0]`, GCC zero-length array) makes a
+        // A zero dimension (`T (*p)[0]`, GNU C zero-length array) makes a
         // complete zero-size pointee. A negative dimension is the
         // unspecified-bound sentinel (`T (*)[]`, C99 6.7.5.2p4 incomplete
         // array): the size is unknown (recorded 0) and the sentinel is
@@ -816,8 +815,8 @@ impl Compiler {
     }
 
     /// Whether the tag entry `id` is an enum named before its definition
-    /// on a target taking the Microsoft extensions, where MSVC and clang
-    /// type it `int` until the definition.
+    /// on a target taking the Microsoft extensions, where MSVC types it
+    /// `int` until the definition.
     pub(super) fn is_ms_forward_enum(&self, id: usize) -> bool {
         let s = &self.structs[id];
         self.target.ms_extensions() && s.is_enum && s.enum_underlying.is_none()
@@ -1038,8 +1037,8 @@ impl Compiler {
 
     /// C99 6.2.5p20 lays array elements contiguously, so an element type
     /// whose requested alignment exceeds its size cannot tile an array;
-    /// a declarator-added dimension over such an element is rejected, as
-    /// gcc does. The alignment an array typedef itself carries
+    /// a declarator-added dimension over such an element is rejected. The
+    /// alignment an array typedef itself carries
     /// (`typedef char A[4] aligned(16)`) binds to the array object, not
     /// its elements, so only a new dimension (`declared_array_size`, from
     /// the declarator) triggers the check; `typedef_dim` scales the
@@ -1126,9 +1125,9 @@ pub(crate) fn flatten_struct_fields(
 
 /// [`flatten_struct_fields`] for aggregate `struct_id` at `base_off`, where
 /// `checked` says whether the leaves' alignment binds: past an array's
-/// first element it does not, as gcc classifies the first alone. An
-/// anonymous member is an aggregate field of its own, as gcc classifies it,
-/// so its union rules hold.
+/// first element it does not, as the classification takes the first alone.
+/// An anonymous member is an aggregate field of its own, so its union rules
+/// hold.
 fn flatten_leaves(
     structs: &[StructDef],
     target: Target,
@@ -1142,7 +1141,7 @@ fn flatten_leaves(
     let single_fp_vector = sd.is_vector
         && matches!(sd.fields.as_slice(),
             [f] if f.array_size == 1 && scalar_kind(f.ty, target).is_fp_scalar());
-    // A GCC vector at a width the calling conventions name is one ABI
+    // A GNU C vector at a width the calling conventions name is one ABI
     // object, not its lanes: both classify it by its whole width (System
     // V AMD64 psABI 3.2.3, AAPCS64 6.4.2 Stage C.1), so the traversal
     // stops here. At any other width neither has a vector rule and the
@@ -1244,7 +1243,7 @@ fn push_unnamed_bit_fields(
 }
 
 /// The bytes of the narrowest integer mode holding `width` bits, the type
-/// gcc gives a union's bit-field: one for a zero width.
+/// a union's bit-field takes in the classification: one for a zero width.
 fn int_mode_bytes(width: u32) -> u32 {
     width.max(1).div_ceil(8).next_power_of_two()
 }
@@ -1270,11 +1269,11 @@ fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
 }
 
 /// The AAPCS64 homogeneous aggregate (5.9.5) the struct type `ty` forms on
-/// `target`, decided from the members as gcc and clang do: a struct has
-/// the sum of its members' elements, a union the most any member has, an
-/// array its element's times its length, and no padding. On macOS an
-/// `_Atomic` aggregate or member is none, as clang classifies it; gcc
-/// takes `_Atomic` as a qualifier.
+/// `target`, decided from the members: a struct has the sum of its
+/// members' elements, a union the most any member has, an array its
+/// element's times its length, and no padding. On macOS an `_Atomic`
+/// aggregate or member is none, as clang classifies it; elsewhere
+/// `_Atomic` is a qualifier the classification looks through.
 pub(crate) fn homogeneous_aggregate(
     structs: &[StructDef],
     target: Target,
@@ -1288,8 +1287,8 @@ pub(crate) fn homogeneous_aggregate(
     HomogeneousAggregate::new(kind, width, count)
 }
 
-/// Whether `ty` is an `_Atomic` type clang's AArch64 classification takes
-/// as no homogeneous base, on the target whose system compiler it is.
+/// Whether `ty` is an `_Atomic` type the macOS AArch64 classification takes
+/// as no homogeneous base.
 fn atomic_opaque(target: Target, ty: i64) -> bool {
     target == Target::MacOSAarch64 && super::types::is_atomic_object_ty(ty)
 }
@@ -1310,8 +1309,7 @@ fn homogeneous_elements(
     if sd.anon_bitfields.iter().any(|b| b.width > 0) {
         return None;
     }
-    // An empty record adds no element whatever size it has (MSVC's is 4),
-    // as clang skips one.
+    // An empty record adds no element whatever size it has (MSVC's is 4).
     if sd.fields.is_empty() && sd.anon_members.is_empty() {
         return Some((None, 0));
     }
@@ -1416,9 +1414,8 @@ fn is_empty_record(structs: &[StructDef], id: usize) -> bool {
 
 /// The bytes a call moves for aggregate `id`: its size, except that on
 /// Apple and Windows AArch64 an empty record crosses in nothing whatever
-/// size its layout gives it (4 under MSVC's), as clang lowers C there.
-/// GNU/Linux follows gcc, which moves the size -- 0 for an empty record
-/// unless an unnamed bit-field gives it bytes.
+/// size its layout gives it (4 under MSVC's). GNU/Linux moves the size --
+/// 0 for an empty record unless an unnamed bit-field gives it bytes.
 fn abi_size(structs: &[StructDef], target: Target, id: usize) -> u32 {
     if matches!(target, Target::MacOSAarch64 | Target::WindowsAarch64)
         && is_empty_record(structs, id)

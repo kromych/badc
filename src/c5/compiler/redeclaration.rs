@@ -172,7 +172,7 @@ fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
 impl Compiler {
     /// The convention a declaration of function `idx` naming `named` gives
     /// it, and whether one of its declarations named it: the first's, in any
-    /// scope, as in gcc and clang; a later one naming another is an error.
+    /// scope; a later one naming another is an error.
     pub(super) fn declared_conv(
         &self,
         idx: usize,
@@ -426,10 +426,9 @@ impl Compiler {
                 ),
             );
         }
-        // C99 6.2.2p7: one identifier with both linkages is undefined, which
-        // gcc and clang reject, after a type conflict as gcc orders them. MSVC
-        // and clang for a windows-msvc triple let a `static` declaration make
-        // an external one internal.
+        // C99 6.2.2p7: one identifier with both linkages is undefined; it is
+        // rejected, a type conflict above being reported first. Under MS
+        // extensions a `static` declaration makes an external one internal.
         let conflict = match claim {
             LinkClaim::Internal if !prior.internal && !self.target.ms_extensions() => {
                 Some(("static", "non-static"))
@@ -463,7 +462,7 @@ impl Compiler {
         (rb, pb): (Spelled, &Params),
     ) -> Verdict {
         // C17 6.7.6.3p5: a function returns the unqualified version of its
-        // declared type, which gcc applies in every mode.
+        // declared type, applied in every language mode.
         let ret = |s: Spelled| unqualified_version_ty(self.spelled_ty(s));
         if !self.tags_agree(ret(ra), ret(rb), false) {
             return Verdict::Conflict;

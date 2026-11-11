@@ -11,7 +11,7 @@ fn process(source: &str) -> String {
     pp.process(source).expect("preprocessor failed")
 }
 
-/// The gcc `-H` trace for what `pp` recorded.
+/// The `-H` trace for what `pp` recorded.
 fn trace_lines(pp: &Preprocessor) -> Vec<String> {
     pp.include_records
         .iter()
@@ -51,7 +51,7 @@ fn if_char_literal_takes_a_universal_character_name() {
     // C11 6.4.3: a universal character name in a `#if` character
     // constant means what it means outside one -- the UTF-8 bytes of its
     // code point, packed per C99 6.4.4.4p10 and read at the constant's
-    // `int` type, so four of them give a negative value. Matches GCC.
+    // `int` type, so four of them give a negative value.
     for e in [
         r"'\u0024' == 0x24",
         r"'\u00E9' == 0xC3A9",
@@ -88,7 +88,7 @@ fn if_division_by_zero_is_error() {
         );
     }
     // A short-circuited or not-taken zero divisor is unevaluated and
-    // must not be diagnosed (gcc/clang accept these).
+    // must not be diagnosed.
     for src in [
         "#if 1 ? 2 : 1/0\nX\n#endif\n",
         "#if 1 || 1/0\nX\n#endif\n",
@@ -266,10 +266,9 @@ fn gnu_identity_macros_are_opt_in() {
     );
 
     // `-std=gnu*` keeps `__GNUC__` and drops `__STRICT_ANSI__`, the
-    // combination gcc and clang produce for a GNU dialect. A header that
-    // gates a GNU declaration on the pair -- an anonymous union naming
-    // both `rip` and `eip` -- then reaches the same declarations it gives
-    // gcc.
+    // combination a GNU dialect predefines. A header that gates a GNU
+    // declaration on the pair -- an anonymous union naming both `rip` and
+    // `eip` -- then reaches that declaration.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.enable_gnu(false, false);
     let out = pp.process(probe).expect("preprocessor failed");
@@ -416,8 +415,8 @@ fn segment_and_utf_capability_macros_track_the_feature() {
 fn gnu_identity_version_derives_from_the_shared_claim() {
     // The `__GNUC__` triple and `__VERSION__` must state
     // `GNU_COMPAT_VERSION` -- the same claim `--version` prints --
-    // and `__VERSION__` must name badc as the producer, as clang
-    // names itself in its "<dialect> Compatible <producer>" form.
+    // and `__VERSION__` must name badc as the producer, in the
+    // "<dialect> Compatible <producer>" form.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.enable_gnu(false, true);
     let out = pp
@@ -476,8 +475,8 @@ fn vendor_and_stdc_pragmas_are_silent() {
 
 #[test]
 fn builtins_reach_the_parser_unexpanded() {
-    // gcc and clang keep a builtin's call in their preprocessed output, so
-    // the parser takes it from `-E` text as from a source file.
+    // A builtin's call stays in the preprocessed output, so the parser
+    // takes it from `-E` text as from a source file.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let src = "int f(int v) { return __builtin_expect(v > 1, 1) + __builtin_isdigit(v); }\n";
     let out = pp.process(src).expect("preprocessor failed");
@@ -786,7 +785,7 @@ fn short_wchar_moves_the_wchar_predefines() {
             );
         }
     }
-    // The i386 spelling is gcc's `long int` at the default width; the
+    // The i386 spelling is `long int` at the default width; the
     // narrowed one wins over it, as the width does.
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
     pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, true);
@@ -798,8 +797,8 @@ fn short_wchar_moves_the_wchar_predefines() {
 /// `__LDBL_*` spellings third-party headers test directly. `float` is
 /// binary32 and `double` binary64 everywhere; the LDBL row describes
 /// the storage format badc gives the type per target: x87 80-bit on
-/// linux-x64 and IEEE binary128 on linux-aarch64, matching gcc on
-/// both, and binary64 on the targets whose ABI defines it that way.
+/// linux-x64 and IEEE binary128 on linux-aarch64, as their psABIs
+/// define it, and binary64 on the targets whose ABI defines it that way.
 /// `__DECIMAL_DIG__` follows the widest format (5.2.4.2.2p11).
 #[test]
 fn float_characteristic_predefines_describe_the_target_formats() {
@@ -974,7 +973,7 @@ fn a_macro_redefined_differently_is_reported() {
 /// The empty `__counted_by` family is badc's fallback for an attribute it
 /// does not implement, which neither gcc nor clang predefines, so a
 /// definition replaces it with no diagnostic; a definition replacing that
-/// one, or a predefine gcc and clang also make, is reported as theirs is.
+/// one, or a predefine they also make, is reported.
 #[test]
 fn a_definition_replaces_a_fallback_predefine_silently() {
     let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
@@ -996,10 +995,10 @@ fn a_definition_replaces_a_fallback_predefine_silently() {
     assert_eq!(lines, [4, 5]);
 }
 
-/// gcc and clang read `-D NAME[=BODY]` as `#define NAME BODY` (`1` without
-/// `=`), so a name with a parameter list defines a function-like macro and
-/// an operand the directive rejects is an error. The expansions are gcc
-/// 16's and clang 22's for the same options.
+/// `-D NAME[=BODY]` reads as `#define NAME BODY` (`1` without `=`, as POSIX
+/// `c99` specifies), so a name with a parameter list defines a function-like
+/// macro and an operand the directive rejects is an error. The expansions
+/// are gcc 16's and clang 22's for the same options.
 #[test]
 fn cli_define_takes_the_define_directives_operand() {
     let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
@@ -1038,8 +1037,8 @@ fn cli_define_takes_the_define_directives_operand() {
 }
 
 /// C99 6.10.3p10 closes a function-like macro's identifier list with `)`;
-/// a line ending inside it is an error that defines nothing, as gcc 16
-/// and clang 22 report it, and none in a skipped group.
+/// a line ending inside it is an error that defines nothing, and none in a
+/// skipped group.
 #[test]
 fn an_unclosed_macro_parameter_list_is_an_error() {
     for (src, text) in [
@@ -1152,7 +1151,7 @@ fn preprocessed_output_keeps_the_pragmas_the_pass_consumes() {
 
 #[test]
 fn preprocessed_input_is_not_preprocessed_again() {
-    // A `.i` unit, as gcc reads one: no text is expanded, `#define`
+    // A `.i` unit: no text is expanded, `#define`
     // has no effect, line markers and pragmas act, and nothing is
     // force-included.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -1238,8 +1237,8 @@ fn msvc_pragma_operator_ignored_inside_string_literal() {
 
 #[test]
 fn push_macro_saves_a_definition_and_pop_macro_reinstates_it() {
-    // gcc, clang and MSVC keep a stack per name of what `push_macro` saw:
-    // an object-like or function-like definition, or none.
+    // A stack per name keeps what `push_macro` saw: an object-like or
+    // function-like definition, or none.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let out = pp
         .process(
@@ -1356,8 +1355,7 @@ fn a_push_macro_operand_other_than_one_string_literal_is_an_error() {
 
 #[test]
 fn push_macro_and_pop_macro_leave_nothing_in_preprocessed_output() {
-    // gcc -E and clang -E consume the pair: the expansion already
-    // reflects it.
+    // `-E` consumes the pair: the expansion already reflects it.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.set_keep_pragmas(true);
     let out = pp
@@ -1436,7 +1434,7 @@ fn a_macro_stack_operator_applies_where_the_rescan_meets_it() {
 
 #[test]
 fn preprocessed_output_writes_an_expanded_pragma_operator_where_it_stands() {
-    // gcc -E writes each operator of an expansion as a `#pragma` line at
+    // `-E` writes each operator of an expansion as a `#pragma` line at
     // its position among the tokens around it.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.set_keep_pragmas(true);
@@ -1485,7 +1483,7 @@ fn named_rest_variadic_macro_paste_elides_comma() {
     assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
 }
 
-// GNU `, ## __VA_ARGS__` keeps the comma before a written, empty argument (gcc, clang).
+// GNU `, ## __VA_ARGS__` keeps the comma before a written, empty argument.
 #[test]
 fn comma_paste_keeps_the_comma_before_an_empty_written_tail() {
     let out = process(
@@ -1613,8 +1611,8 @@ fn stringify_escapes_quote_and_backslash() {
 fn a_file_name_is_escaped_wherever_it_becomes_a_string_literal() {
     // A Windows path is what reaches this: `\U` opens a universal
     // character name, so `__FILE__` naming `...\UefiApp\...` failed to
-    // lex once the lexer diagnosed an incomplete one. gcc and clang
-    // escape `\` and `"` in both positions.
+    // lex once the lexer diagnosed an incomplete one. `\` and `"` are
+    // escaped in both positions.
     let name = "R:\\src\\UefiApp\\a\"b.c";
     let want = "\"R:\\\\src\\\\UefiApp\\\\a\\\"b.c\"";
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -1911,7 +1909,7 @@ fn strip_c_comments_bounds_literals_at_the_line() {
 
 /// An unterminated quote runs to end of line and its text passes
 /// through verbatim: comments are not opened and macro names are not
-/// expanded behind it. Matches `gcc -E -x assembler-with-cpp`.
+/// expanded behind it.
 #[test]
 fn unterminated_quote_shields_the_rest_of_its_line() {
     let out = process("#define ONE (1<<0)\n\t.byte 'a /* c */ ONE\n\t.byte ONE\n");
@@ -1982,10 +1980,10 @@ fn the_edition_sets_stdc_version_and_the_c23_if_keywords() {
     assert!(!c23.contains("macro") && !run(edition("c17")).contains("c23 ="));
 }
 
-/// `$` is an identifier character in C and not in assembler-with-cpp, as
-/// gcc 16 and clang 22 take it (`-fdollars-in-identifiers` is on for C):
-/// `$FOO` is one name in C, while assembly expands the `FOO` of `$FOO`.
-/// The expansions are theirs for the same lines.
+/// `$` is an identifier character in C and not in assembler-with-cpp
+/// (`-fdollars-in-identifiers` is on for C): `$FOO` is one name in C,
+/// while assembly expands the `FOO` of `$FOO`. The expansions are gcc 16's
+/// and clang 22's for the same lines.
 #[test]
 fn dollar_forms_identifiers_in_c_and_not_in_assembly() {
     let lines = "#define FOO 5\n#define CAT(a, b) a##b\n\
@@ -2056,9 +2054,9 @@ fn asm_hash_line_tail_is_macro_expanded() {
 }
 
 /// A keyword-less line marker is text in assembler input and a directive
-/// in C. `#` opens a comment for several assemblers, so GNU cpp and clang
-/// pass every `# <n> ...` line through unchanged there -- flag digits and
-/// the file-less form included -- and honor only `#line`; consuming one
+/// in C. `#` opens a comment for several assemblers, so GNU cpp passes
+/// every `# <n> ...` line through unchanged there -- flag digits and the
+/// file-less form included -- and honors only `#line`; consuming one
 /// re-homes the unit's diagnostics onto a file it never read and drops the
 /// line's own text.
 #[test]
@@ -2323,8 +2321,8 @@ fn defined_form_works_in_if() {
 
 #[test]
 fn a_defined_a_replacement_produces_takes_its_operand_as_written() {
-    // C99 6.10.1p4 leaves it undefined; gcc and clang test the operand
-    // as the rescan meets it, pasted or not, from the replacement or from
+    // C99 6.10.1p4 leaves it undefined; the operand is tested as the
+    // rescan meets it, pasted or not, from the replacement or from
     // the source after it. A parameter's argument is expanded before it
     // is substituted (6.10.3.1), so its operand is the expansion.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -2373,8 +2371,8 @@ fn a_defined_a_replacement_produces_takes_its_operand_as_written() {
 #[test]
 fn a_defined_inside_a_macro_argument_takes_the_expanded_operand() {
     // The argument is expanded before substitution as any other, so a
-    // `defined` there meets the operand's expansion, as gcc and clang
-    // have it: an alias of an undefined name tests false, a name defined
+    // `defined` there meets the operand's expansion: an alias of an
+    // undefined name tests false, a name defined
     // as a number leaves no identifier.
     let src = "#define F(x) x\n\
                #define ALIAS NOT_DEFINED\n\
@@ -2425,8 +2423,8 @@ fn wide_char_constant_in_if() {
 
 /// C99 6.10.1p4 evaluates `#if` in `intmax_t`, but a character constant
 /// enters that evaluation at the type 6.4.4.4p10 gives it -- `int` -- so
-/// bytes that fill the width read as a negative value. gcc-16 agrees on
-/// every row.
+/// bytes that fill the width read as a negative value. The expected values
+/// are gcc 16's.
 #[test]
 fn if_character_constant_narrows_to_int() {
     for (e, want) in [
@@ -2471,7 +2469,7 @@ fn if_prefixed_character_constant_holds_a_code_point() {
     }
 }
 
-/// C99 6.10.1p4: a character constant evaluates at its type's signedness, as gcc 16.2.1 does.
+/// C99 6.10.1p4: a character constant evaluates at its type's signedness.
 #[test]
 fn if_character_constant_takes_the_signedness_of_its_type() {
     let take = |t: Target, char_signed: Option<bool>, e: &str| {
@@ -2619,8 +2617,8 @@ fn a_withheld_bundled_name_is_reached_only_from_the_bundled_headers() {
 
 #[test]
 fn unknown_include_is_a_hard_error() {
-    // A header that resolves nowhere aborts the compile, as in
-    // gcc/clang; continuing with an empty body would miscompile.
+    // A header that resolves nowhere aborts the compile; continuing with
+    // an empty body would miscompile.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let err = pp
         .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
@@ -2996,7 +2994,7 @@ fn quoted_include_form_is_recognized() {
 
 #[test]
 fn iquote_paths_apply_to_quoted_includes_only() {
-    // gcc `-iquote` scope: probed for `#include "..."` (after the
+    // `-iquote` scope: probed for `#include "..."` (after the
     // including file's directory, before `-I`), never for `<...>`.
     let base = std::env::temp_dir().join(format!("badc-iquote-{}", std::process::id()));
     let qdir = base.join("q");
@@ -3022,7 +3020,7 @@ fn iquote_paths_apply_to_quoted_includes_only() {
 
 #[test]
 fn isystem_paths_follow_the_i_paths_and_precede_the_bundled_headers() {
-    // gcc `-isystem` scope: probed after `-I` for both include forms and
+    // `-isystem` scope: probed after `-I` for both include forms and
     // ahead of the standard headers, which an `#include_next` there
     // reaches; the headers found there are system headers.
     let base = std::env::temp_dir().join(format!("badc-isystem-{}", std::process::id()));
@@ -3107,8 +3105,8 @@ fn include_parent_dir_resolves_bare_filename_to_cwd() {
         include_parent_dir("/abs/dir/src.c"),
         Some("/abs/dir".to_string())
     );
-    // The stdin label behaves like a bare filename: gcc resolves a
-    // quoted include in piped source against the working directory.
+    // The stdin label behaves like a bare filename: a quoted include in
+    // piped source resolves against the working directory.
     assert_eq!(include_parent_dir("-"), Some(String::new()));
 }
 
@@ -3176,8 +3174,8 @@ fn macro_args_split_across_an_enclosing_conditional() {
 #[test]
 fn conditional_inside_macro_argument_list() {
     // C99 6.10.3p11 leaves directives inside an argument list
-    // undefined; gcc and clang evaluate them and keep the surviving
-    // tokens as argument text. Output checked against gcc -E.
+    // undefined; they are evaluated and the surviving tokens kept as
+    // argument text. Output checked against gcc -E.
     let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 1\n2\n#else\n3\n#endif\n); }\n";
     let out = process(src);
     assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
@@ -3188,8 +3186,8 @@ fn conditional_inside_macro_argument_list() {
 
 #[test]
 fn define_inside_macro_argument_list() {
-    // gcc processes a `#define` between macro arguments; the new name
-    // expands in the argument text. Output checked against gcc -E.
+    // A `#define` between macro arguments is processed; the new name
+    // expands in the argument text.
     let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\n";
     let out = process(src);
     assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
@@ -3201,7 +3199,6 @@ fn define_inside_macro_argument_list() {
 
 #[test]
 fn nested_conditionals_inside_macro_argument_list() {
-    // Output checked against gcc -E.
     let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(CALL(1,\n#if 1\n9\n#endif\n),\n#if 1\n#if 0\n5\n#else\n2\n#endif\n#else\n3\n#endif\n); }\n";
     let out = process(src);
     assert!(
@@ -3215,9 +3212,8 @@ fn macro_argument_list_closed_inside_conditional_arm() {
     // The call's `)` sits inside a conditional arm, so argument
     // collection ends while the `#if` is still open and the `#endif`
     // arrives after the invocation. The conditional stack is shared
-    // with the top level, matching gcc; a private per-invocation
-    // stack loses the open frame and misreports the trailing
-    // `#endif` as unmatched. Output checked against gcc -E.
+    // with the top level; a private per-invocation stack loses the
+    // open frame and misreports the trailing `#endif` as unmatched.
     for (cond, picked) in [("#ifdef ZZZ", "3"), ("#ifndef ZZZ", "2")] {
         let src = format!(
             "#define M(a) f(a)\nint g(int c) {{ return M(c ? 1 :\n{cond}\n2);\n#else\n3);\n#endif\n}}\n"
@@ -3341,9 +3337,9 @@ fn bundled_header_resolves_bundled_includes_over_search_paths() {
 fn nostdinc_withdraws_the_bundled_headers_compilers_included() {
     // `-nostdinc` takes the bundled headers off the search, so a name only
     // the bundled set carries stops resolving; a `-I` directory that
-    // carries it still does. The compiler's own headers go too, as gcc's
-    // and clang's do; the directory `-print-file-name=include` names brings
-    // them back, and `-nostdlibinc` keeps them.
+    // carries it still does. The compiler's own headers go too; the
+    // directory `-print-file-name=include` names brings them back, and
+    // `-nostdlibinc` keeps them.
     let base = std::env::temp_dir().join(format!("badc-nostdinc-{}", std::process::id()));
     let sys = base.join("sys");
     std::fs::create_dir_all(&sys).unwrap();
@@ -3404,7 +3400,7 @@ fn not_found(err: &impl core::fmt::Debug, name: &str) -> bool {
 
 #[test]
 fn a_compiler_header_under_nostdinc_searches_for_the_library_header_it_includes() {
-    // gcc's and clang's hosted `<xmmintrin.h>` includes `<mm_malloc.h>`,
+    // The hosted `<xmmintrin.h>` includes `<mm_malloc.h>`,
     // which includes `<stdlib.h>`; under `-nostdinc` with the compiler's
     // directory restored, or `-nostdlibinc`, that is not found unless a
     // search path carries it. Freestanding, `<mm_malloc.h>` is not included.
@@ -3505,7 +3501,7 @@ fn computed_include_combines_pp_number_spelling() {
     // C99 6.10.2p4: the expanded operand is reparsed as a header
     // name built from the token spellings, a space only where the
     // source had white space. `1x` followed by `.h` must reassemble
-    // as `ev/1x.h` (gcc parity); a re-lex separator would misname
+    // as `ev/1x.h`; a re-lex separator would misname
     // the file.
     let base = computed_include_dir("cinc");
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -3535,7 +3531,7 @@ fn computed_has_include_combines_pp_number_spelling() {
 
 #[test]
 fn stringize_and_expansion_spacing_around_pp_numbers() {
-    // gcc -E parity. `1x.h` is one pp-number (C99 6.4.8), so `#`
+    // `1x.h` is one pp-number (C99 6.4.8), so `#`
     // spells it whole; the substitution-created `1x` `.` `h`
     // adjacency stringizes with no space (C99 6.10.3.2 inserts one
     // only where the argument had white space). Plain expanded text
@@ -3856,7 +3852,7 @@ fn include_next_takes_a_macro_operand() {
 fn expansion_result_meets_source_parens() {
     // C99 6.10.3.4: the replacement joins the rest of the source, so
     // a trailing function-like name in a multi-token result takes the
-    // following source `(...)` as its arguments (gcc/clang parity).
+    // following source `(...)` as its arguments.
     let out = process("#define f(a) a*g\n#define g(a) f(a)\nint x = f(2)(9);\n");
     assert!(out.contains("2*9*g"), "{out}");
 }
@@ -4270,9 +4266,9 @@ fn directive_keyword_requires_a_word_boundary() {
 /// intrinsic("__builtin_bswap64")` rejected a name badc lowers, and
 /// `__has_builtin(__builtin_trap)` reported 1 for a name that was
 /// unusable without <assert.h>. C23 6.10.1 makes `__has_builtin` 1 when
-/// the builtin is supported, so the no-header groups below report 1 --
-/// as gcc-16 and clang do for the same names -- and the library group,
-/// which badc supplies only through its header, reports 0.
+/// the builtin is supported, so the no-header groups below report 1 and
+/// the library group, which badc supplies only through its header,
+/// reports 0.
 #[test]
 fn builtin_table_answers_all_three_roles() {
     use super::builtins;
@@ -4326,7 +4322,7 @@ fn builtin_table_answers_all_three_roles() {
         );
     }
     // Builtins equivalent to a library function: no registry id, and
-    // `__has_builtin` reports 1 as it does in gcc and clang. The
+    // `__has_builtin` reports 1. The
     // library name they bind to is derived from the builtin spelling.
     for (name, fn_name) in [
         ("__builtin_strlen", "strlen"),
@@ -4373,7 +4369,7 @@ fn builtin_table_answers_all_three_roles() {
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
     }
-    // The classifications gcc folds from the operand and the absolute
+    // The classifications that fold from the operand and the absolute
     // values are no calls, so a freestanding unit can take them.
     for name in [
         "__builtin_isdigit",
@@ -4574,7 +4570,7 @@ fn has_builtin_reports_every_accepted_builtin() {
     }
 }
 
-/// Every GCC atomic builtin the table reports is one the parser lowers.
+/// Every GNU C atomic builtin the table reports is one the parser lowers.
 #[test]
 fn every_gcc_atomic_builtin_in_the_table_compiles() {
     use super::builtins;
@@ -4741,9 +4737,8 @@ fn if_rejects_non_integer_pp_numbers() {
             "unexpected diagnostic for {src:?}: {err}"
         );
     }
-    // `0x1e+5` is one pp-number, not `0x1e` `+` `5`; gcc-16 and clang
-    // both reject it ("invalid suffix `+5` on integer constant") rather
-    // than folding it to 35.
+    // `0x1e+5` is one pp-number, not `0x1e` `+` `5`, so it is rejected
+    // rather than folded to 35.
     let err = process_err("#if 0x1e+5 == 35\nyes\n#endif\n");
     assert!(err.contains("0x1e+5"), "unexpected diagnostic: {err}");
     // Through a macro the operand is already three tokens, so the sum
@@ -4782,7 +4777,7 @@ fn merge_test_covers_every_punctuator_pair() {
 
 /// A pp-number must not absorb what follows it across an expansion seam:
 /// `0x10` then `...` re-lexes as one pp-number (C99 6.4.8) unless the
-/// serializer separates them. gcc-16 and clang both emit the space.
+/// serializer separates them.
 /// An identifier ending in the same bytes needs no separation.
 #[test]
 fn serializer_separates_only_real_pastes() {
@@ -4805,7 +4800,7 @@ fn serializer_separates_only_real_pastes() {
 /// joins them (C99 6.10.3.2, 6.10.3.3), so the serializer separates them
 /// however the adjacency arises: a literal prefix written before `#param`
 /// in the replacement list, or a parameter substituting to the prefix
-/// before a literal. gcc-16 emits the same separators.
+/// before a literal.
 #[test]
 fn serializer_separates_an_encoding_prefix_from_a_literal() {
     for (prefix, sep) in [("L", " "), ("u", " "), ("U", " "), ("u8", " ")] {
@@ -4902,8 +4897,7 @@ fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
     // An intrinsic header (arm_neon.h) resolves to the embedded copy where a
     // `-I` directory holds a same-named file (a foreign toolchain's private
     // include directory folded onto the search path), with or without
-    // `-nostdinc`. Any other name (stdarg.h) keeps `-I`-shadows-embedded,
-    // as gcc and clang do.
+    // `-nostdinc`. Any other name (stdarg.h) keeps `-I`-shadows-embedded.
     use std::io::Write;
     let dir = std::env::temp_dir().join(format!("badc-owned-hdr-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -4971,8 +4965,8 @@ fn a_projects_intrin_h_in_a_user_directory_is_used() {
 #[test]
 fn msvc_intrin_h_on_a_system_path_binds_the_embedded_copy() {
     // MSVC's include directory carries an `<intrin.h>` written against cl's
-    // builtins; on a Windows target the name binds badc's, as clang's
-    // shadows MSVC's. Off Windows, where badc serves none, the file stands.
+    // builtins; on a Windows target the name binds badc's. Off Windows,
+    // where badc serves none, the file stands.
     use std::io::Write;
     let dir = std::env::temp_dir().join(format!("badc-msvc-intrin-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -5016,7 +5010,7 @@ fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::pat
     (pp, base)
 }
 
-/// With the Microsoft extensions, as clang has them for a Windows target,
+/// With the Microsoft extensions of a Windows target,
 /// a `\` in a header name separates directories, in the quoted and the
 /// angled form and in a nested include, and the names the files go by in
 /// line markers and `__FILE__` use `/`. Another target keeps `\` as an
@@ -5069,7 +5063,7 @@ fn a_backslash_in_a_header_name_separates_directories_for_a_windows_target() {
 }
 
 /// `_Pragma("once")` from an expansion, with a declaration after it on its
-/// line, marks the header as the directive does (gcc 16, clang).
+/// line, marks the header as the directive does.
 #[test]
 fn a_pragma_once_operator_from_an_expansion_marks_its_header() {
     let (mut pp, base) = pp_with_headers(
@@ -5085,8 +5079,8 @@ fn a_pragma_once_operator_from_an_expansion_marks_its_header() {
     assert_eq!(out.matches("int once_by_macro;").count(), 1, "{out}");
 }
 
-/// `#pragma once` and the include-guard drop identify a file as gcc and
-/// clang do, by device and inode, so another spelling of the same file
+/// `#pragma once` and the include-guard drop identify a file by device
+/// and inode, so another spelling of the same file
 /// (`./`, `//`, an absolute path, a symbolic link, another case where the
 /// file system folds it) is the same file, and a file of the same name
 /// in another directory is another.
@@ -5580,8 +5574,8 @@ fn retry_reuse_declines_when_the_extension_pushes_a_name_the_source_pops() {
 
 /// C99 6.10 makes the directive name one preprocessing token: a longer
 /// identifier names no directive, and a punctuator ends the name the way
-/// white space does. gcc and clang reject `#elseelse`, read `#else(x)`
-/// as `#else`, and report `#error(x)` as the diagnostic `(x)`.
+/// white space does: `#elseelse` is rejected, `#else(x)` reads as
+/// `#else`, and `#error(x)` reports the diagnostic `(x)`.
 #[test]
 fn a_directive_name_is_one_preprocessing_token() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
@@ -5928,7 +5922,7 @@ fn preprocessor_codes_are_live_catalog_rows() {
     }
 }
 
-/// A system header's warnings are suppressed, as gcc suppresses them, all
+/// A system header's warnings are suppressed, all
 /// but `#warning`; `#error` stays an error. The same lines in a user header
 /// warn.
 #[test]
@@ -6609,7 +6603,7 @@ fn line_in_an_invocation_spanning_lines_is_its_own_tokens_line() {
     );
 }
 
-/// gcc's `-Wdate-time`: each expansion of `__DATE__` or `__TIME__`,
+/// `-Wdate-time`: each expansion of `__DATE__` or `__TIME__`,
 /// through another macro too, at the line of the name expanded; a test of
 /// whether one is defined expands nothing. Off unless asked for.
 #[test]
@@ -6635,7 +6629,7 @@ fn date_time_reports_each_expansion() {
     assert_eq!(lines(&asked), vec![(2, DATE_TIME), (8, DATE_TIME)]);
 }
 
-/// gcc's `-Wundef`: an identifier left in an evaluated `#if` / `#elif`
+/// `-Wundef`: an identifier left in an evaluated `#if` / `#elif`
 /// operand after expansion, which is 0. A short-circuited or not-taken
 /// operand, a `defined` operand, a skipped group and an `#elif` after a
 /// taken group evaluate nothing. Off unless asked for.
@@ -6670,7 +6664,7 @@ fn undef_reports_each_evaluated_identifier() {
     assert_eq!(lines(&asked), vec![2, 12, 12, 15, 17, 27, 30]);
 }
 
-/// gcc's `__<T>_WIDTH__` predefines, each the width of the target's type
+/// The `__<T>_WIDTH__` predefines, each the width of the target's type
 /// for `T`: gcc 16 on linux-x64 (also -m32) and linux-aarch64, Apple clang
 /// 21's on macos-aarch64 (which omits the SCHAR and LONG_LONG rows), and on
 /// Windows the widths of badc's own LLP64 types.
@@ -6708,8 +6702,8 @@ fn width_predefines_follow_the_targets_types() {
     assert!(out.contains(ilp32), "ILP32: {out}");
 }
 
-/// The i386 SysV ABI keeps the x87 `long double` in 12 bytes, as gcc -m32
-/// and clang for i386-linux-gnu predefine it; x86-64 keeps 16.
+/// The i386 SysV ABI keeps the x87 `long double` in 12 bytes; x86-64 keeps
+/// 16.
 #[test]
 fn i386_long_double_takes_twelve_bytes() {
     use crate::c5::{CodeModel, ElfClass};
@@ -6753,7 +6747,7 @@ fn embed_pp() -> Preprocessor {
 /// C23 6.10.4: the directive becomes the resource's bytes as integer
 /// literals; `limit` and gnu's / clang's `offset` select them, `prefix` and
 /// `suffix` frame a non-empty list, `if_empty` replaces an empty one, and
-/// the clauses and a pp-token operand are macro-replaced, as gcc does.
+/// the clauses and a pp-token operand are macro-replaced.
 #[test]
 fn embed_lists_the_selected_bytes_with_their_clauses() {
     let dir = EmbedDir::new(
@@ -6796,7 +6790,7 @@ fn embed_lists_the_selected_bytes_with_their_clauses() {
 }
 
 /// The directive line keeps one output line, and inside a macro's
-/// argument list the bytes join the invocation, as in gcc and clang.
+/// argument list the bytes join the invocation.
 #[test]
 fn embed_keeps_the_line_count_and_joins_an_argument_list() {
     let dir = EmbedDir::new("lines", &[("d.bin", b"AB")]);
@@ -6863,7 +6857,7 @@ fn has_embed_answers_found_empty_and_not_found() {
 }
 
 /// A repeated parameter, one badc does not implement, and a missing
-/// resource are errors, as gcc reports them.
+/// resource are errors.
 #[test]
 fn embed_rejects_what_it_cannot_honor() {
     let dir = EmbedDir::new("errors", &[("d.bin", b"A")]);
@@ -6888,8 +6882,8 @@ fn embed_rejects_what_it_cannot_honor() {
     assert!(err.to_string().contains("not found"), "{err}");
 }
 
-/// A non-directive in a group that is not skipped is an error, as in gcc
-/// and clang; a skipped one, `#ident` / `#sccs`, the null directive and an
+/// A non-directive in a group that is not skipped is an error; a skipped
+/// one, `#ident` / `#sccs`, the null directive and an
 /// assembler-with-cpp `#` comment are not.
 #[test]
 fn unknown_directive_is_an_error_where_it_is_not_skipped() {
@@ -6930,7 +6924,7 @@ fn include_operand_expanding_to_no_header_name_is_an_error() {
 }
 
 /// `__has_attribute` reports the GNU attributes the parser applies, from
-/// the parser's own table, as clang does: `dllimport` on the Windows targets
+/// the parser's own table: `dllimport` on the Windows targets
 /// only, and neither the C23 `maybe_unused` nor the `__declspec`-only
 /// `thread` and `align`.
 #[test]
@@ -6983,7 +6977,7 @@ fn has_attribute_reports_what_the_parser_applies() {
 
 /// A `<...>` header name is one token: its `//` and `/*` are characters of
 /// the name in `#include`, `#include_next`, `#embed` and the `__has_include`
-/// / `__has_embed` operands, as gcc and clang lex it. Elsewhere `<` stays an
+/// / `__has_embed` operands. Elsewhere `<` stays an
 /// operator, and every scanner agrees with the reference composition.
 #[test]
 fn a_header_name_keeps_its_comment_delimiters() {

@@ -125,9 +125,9 @@ fn utf8_at(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
 }
 
 /// Whether `$` is an identifier character. C99 6.4.2.1p1 lets an
-/// identifier hold implementation-defined characters; gcc and clang take
-/// `$` in C (`-fdollars-in-identifiers`) and not in assembler-with-cpp,
-/// where it marks an immediate operand.
+/// identifier hold implementation-defined characters; `$` is one in C
+/// (`-fdollars-in-identifiers`) and not in assembler-with-cpp, where it
+/// marks an immediate operand.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Dollar {
     Ident,

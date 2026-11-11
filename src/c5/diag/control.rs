@@ -88,8 +88,7 @@ impl Config {
     }
 
     /// The edition is one before C99, where an implicit `int` is valid
-    /// (C90 6.5.2): as in gcc, only `-Wall` or the row's own selector
-    /// reports it.
+    /// (C90 6.5.2): only `-Wall` or the row's own selector reports it.
     pub fn pre_c99(&mut self, on: bool) {
         self.pre_c99 = on;
     }

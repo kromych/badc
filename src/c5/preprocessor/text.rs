@@ -51,8 +51,8 @@ pub(super) fn strip_c_comments(source: &str) -> String {
             commented = true;
             out.push_str(&source[copied..i]);
             i += 2;
-            // An unterminated comment runs to end of file, as in
-            // gcc / clang; the diagnostic is the lexer's.
+            // An unterminated comment runs to end of file; the diagnostic
+            // is the lexer's.
             while i < bytes.len() {
                 if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
                     i += 2;
@@ -110,8 +110,8 @@ enum ScanMode {
 /// before it, opens a header name: the operand of `#include`,
 /// `#include_next`, `#import` or `#embed`, or of `__has_include`,
 /// `__has_include_next` or `__has_embed`. The name runs to `>` and its
-/// `//` and `/*` are characters of it, as gcc and clang lex it (C17 6.4.7p3
-/// leaves them undefined there).
+/// `//` and `/*` are characters of it (C17 6.4.7p3 leaves them undefined
+/// there).
 fn opens_header_name(prefix: &[u8]) -> bool {
     let word = |s: &[u8]| {
         s.iter()

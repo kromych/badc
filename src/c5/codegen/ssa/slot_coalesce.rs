@@ -38,9 +38,9 @@
 //! (`FunctionSsa::array_slots`, an array or an aggregate with an array
 //! member at any depth) is placed above all other storage, the canary
 //! being above that again. A linear overflow of any array then reaches the
-//! canary before it reaches another object, which is the protection gcc's
-//! frame sorting gives. An address-taken scalar is ordinary storage here:
-//! what the order guards it against is the overflow, not the address.
+//! canary before it reaches another object. An address-taken scalar is
+//! ordinary storage here: what the order guards it against is the overflow,
+//! not the address.
 //!
 //! The pass always coalesces the whole movable frame (declared locals
 //! included) so the emitted machine code is independent of whether debug

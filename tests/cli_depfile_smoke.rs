@@ -95,9 +95,9 @@ fn read(dir: &Path, name: &str) -> String {
 }
 
 /// The prerequisites of a one-rule dependency file, unwrapping the
-/// ` \`-continued lines. Order is not asserted: gcc emits them in
-/// include order and so does badc, but a set comparison is what makes
-/// the file equivalent for make's purposes.
+/// ` \`-continued lines. Order is not asserted: they are emitted in
+/// include order, but a set comparison is what makes the file
+/// equivalent for make's purposes.
 fn prereqs(text: &str) -> Vec<String> {
     let rule = text
         .split('\n')
@@ -127,9 +127,9 @@ fn dash_m_writes_the_rule_to_stdout_and_compiles_nothing() {
 
 /// The unused-binding warnings take the split `-MM` does: a header the
 /// unit's directory or `-I` supplied is the project's and its bindings are
-/// reported at their own file, as gcc and clang report them; the bundled
-/// headers and an `-isystem` directory's are system headers and are not.
-/// An unused `inline` function is reported nowhere, as under gcc.
+/// reported at their own file; the bundled headers and an `-isystem`
+/// directory's are system headers and are not. An unused `inline` function
+/// is reported nowhere.
 #[test]
 fn unused_binding_warnings_cover_the_projects_headers_only() {
     let dir = TempDir::new("badc-dep-test-unused");
@@ -181,9 +181,9 @@ fn unused_binding_warnings_cover_the_projects_headers_only() {
     );
 }
 
-/// A system header's warnings are suppressed, as gcc and clang suppress
-/// them, the preprocessor's and the compiler's alike, but `#warning`; the
-/// same lines in a project header warn.
+/// A system header's warnings are suppressed, the preprocessor's and the
+/// compiler's alike, but `#warning`; the same lines in a project header
+/// warn.
 #[test]
 fn a_system_headers_warnings_are_suppressed_but_warning_directives() {
     let dir = TempDir::new("badc-dep-test-system-warnings");
@@ -319,11 +319,11 @@ fn dash_mmd_compiles_and_names_the_file_and_rule_after_the_object() {
 }
 
 /// `-E` produces a translation unit's expansion, which is enough for
-/// `-MD` / `-MMD` to describe: gcc and clang preprocess and write the rule.
+/// `-MD` / `-MMD` to describe: the run preprocesses and writes the rule.
 /// The dependency file is named as it is for a compile -- `-MF` and the
 /// `-Wp,` payload first, else `-o` with a `.d` suffix, else the source base
 /// name -- but `-o` names the preprocessed text here, not an object, so the
-/// rule keeps gcc's default target rather than naming it.
+/// rule keeps the default target rather than naming it.
 #[test]
 fn dash_e_writes_the_rule_and_preprocesses() {
     let dir = fixture("dumppp");
@@ -344,9 +344,8 @@ fn dash_e_writes_the_rule_and_preprocesses() {
 }
 
 /// Under `-E`, `-o` names the file the expansion is written to and `-o -`
-/// names stdout, as in gcc 16.1.1 and clang; without `-o` it goes to
-/// stdout. One output stream holds one expansion, so `-o` with several
-/// sources is refused, which is what both of them do.
+/// names stdout; without `-o` it goes to stdout. One output stream holds
+/// one expansion, so `-o` with several sources is refused.
 #[test]
 fn dash_e_writes_the_expansion_to_the_o_operand() {
     let dir = fixture("dumppp-o");
@@ -370,8 +369,8 @@ fn dash_e_writes_the_expansion_to_the_o_operand() {
 #[test]
 fn wp_spellings_carry_the_path_and_keep_the_default_rule_name() {
     let dir = fixture("wp");
-    // `-Wp,-MMD,file`: as in gcc the payload reaches the preprocessor
-    // directly, so `-o` does not name the rule.
+    // `-Wp,-MMD,file`: the payload reaches the preprocessor directly, so
+    // `-o` does not name the rule.
     run(
         &dir,
         &["-q", "-c", "-Wp,-MMD,dep3.d", "-o", "obj/main.o", "main.c"],
@@ -565,7 +564,7 @@ fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
 }
 
 /// `-H` prints the include trace under `-E` too, on stderr, whether the
-/// preprocessed text goes to stdout or to `-o`, as gcc and clang do.
+/// preprocessed text goes to stdout or to `-o`.
 #[test]
 fn show_includes_prints_the_trace_under_dash_e() {
     let dir = fixture("h-dash-e");
@@ -594,7 +593,7 @@ fn show_includes_prints_the_trace_under_dash_e() {
 
 #[test]
 fn show_includes_names_the_resolved_path() {
-    // gcc's `-H` names the path each include opened: two spellings of
+    // `-H` names the path each include opened: two spellings of
     // one file print the same line, and the `-I` directory that served
     // a header is visible in it.
     let dir = fixture("h-path");
@@ -616,7 +615,7 @@ fn show_includes_names_the_resolved_path() {
 }
 
 /// A reader that closes the pipe early ends the run as it ends a C
-/// program and gcc: by `SIGPIPE`, or, where the failed write returns
+/// program: by `SIGPIPE`, or, where the failed write returns
 /// before the signal is taken (macOS, other hosts), with a failure status
 /// and no message; never with a panic report.
 #[test]

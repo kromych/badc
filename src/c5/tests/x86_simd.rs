@@ -619,11 +619,10 @@ fn m64_forms_of_sse_sse2_and_ssse3_follow_the_sdm() {
     );
 }
 
-/// gcc's and clang's x86 system-instruction builtins, with gcc's prototypes,
-/// emit their instruction on both x86-64 targets, `__builtin_ia32_xgetbv`
-/// with its operand in ecx; on the AArch64 targets `__has_builtin` reports
-/// none of them and a call is to an unknown function, as gcc and clang have
-/// them.
+/// The x86 system-instruction builtins, with gcc's prototypes, emit their
+/// instruction on both x86-64 targets, `__builtin_ia32_xgetbv` with its
+/// operand in ecx; on the AArch64 targets `__has_builtin` reports none of
+/// them and a call is to an unknown function.
 #[cfg(feature = "full")]
 #[test]
 fn the_x86_system_builtins_emit_their_instruction() {
@@ -692,11 +691,11 @@ fn the_x86_system_builtins_emit_their_instruction() {
     }
 }
 
-/// gcc's and clang's wrappers over the system builtins emit their
-/// instruction on both x86-64 targets: the `_mm_` fences, `_xgetbv`,
-/// `__rdtscp` and the RFLAGS pair, with the builtins `rdtscp` and
-/// `writeeflags_u64`. `_xgetbv` is gcc's `long long` on Linux and MSVC's
-/// `unsigned __int64` intrinsic on Windows, where every name here is one.
+/// The header wrappers over the system builtins emit their instruction on
+/// both x86-64 targets: the `_mm_` fences, `_xgetbv`, `__rdtscp` and the
+/// RFLAGS pair, with the builtins `rdtscp` and `writeeflags_u64`. `_xgetbv`
+/// is gcc's `long long` on Linux and MSVC's `unsigned __int64` intrinsic on
+/// Windows, where every name here is one.
 #[cfg(feature = "full")]
 #[test]
 fn the_x86_system_wrappers_emit_their_instruction() {
@@ -1044,11 +1043,11 @@ fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
     assert!(err.to_string().contains("__stosb"), "{err}");
 }
 
-/// `<cpuid.h>` executes CPUID, as gcc's does: `__get_cpuid_max` emits the
-/// instruction on both x86-64 targets with the range's first leaf in eax,
-/// rather than folding to a constant. The interpreter runs CPUID as zero in
-/// every register, so there the maximum is 0 and `__get_cpuid` rejects the
-/// leaf, leaving its outputs as they were.
+/// `<cpuid.h>` executes CPUID: `__get_cpuid_max` emits the instruction on
+/// both x86-64 targets with the range's first leaf in eax, rather than
+/// folding to a constant. The interpreter runs CPUID as zero in every
+/// register, so there the maximum is 0 and `__get_cpuid` rejects the leaf,
+/// leaving its outputs as they were.
 #[cfg(feature = "full")]
 #[test]
 fn cpuid_h_executes_the_instruction() {

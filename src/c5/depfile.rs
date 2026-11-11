@@ -6,9 +6,8 @@
 //! optionally followed by a phony target per prerequisite (`-MP`).
 //!
 //! It follows gcc's writer: the same files, in the same order, with the
-//! same escaping and the same wrap points. It is not byte-for-byte
-//! identical, and deliberately so -- gcc repeats a prerequisite reached
-//! twice, and this emits each once. The rules are equivalent to `make`,
+//! same escaping and the same wrap points, except that a prerequisite
+//! reached twice is emitted once. The rules are equivalent to `make`,
 //! which stats each prerequisite either way.
 
 use alloc::string::{String, ToString};
@@ -16,21 +15,19 @@ use alloc::vec::Vec;
 
 use super::preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus};
 
-/// Column past which a further name starts a continuation line. gcc's
-/// dependency writer uses the same bound, so the wrap points agree.
+/// Column past which a further name starts a continuation line.
 const MAX_OUTPUT_WIDTH: usize = 72;
 
 /// Escape one name for a make target or prerequisite position.
 ///
 /// `make` splits rules on unescaped whitespace, starts a comment at an
-/// unescaped `#`, and expands `$`. gcc's dependency writer escapes
-/// exactly those: a space or tab takes a leading backslash, `#` takes a
-/// leading backslash, and `$` doubles. A backslash run is doubled only
-/// when it immediately precedes whitespace, which is where `make`
-/// applies its own backslash counting; elsewhere it stands (a Windows
-/// path separator must not be mangled). `:` is left alone, matching gcc
-/// -- escaping it would break drive letters, and `make` accepts the
-/// bare form in a prerequisite list.
+/// unescaped `#`, and expands `$`. Exactly those are escaped: a space or
+/// tab takes a leading backslash, `#` takes a leading backslash, and `$`
+/// doubles. A backslash run is doubled only when it immediately precedes
+/// whitespace, which is where `make` applies its own backslash counting;
+/// elsewhere it stands (a Windows path separator must not be mangled).
+/// `:` is left alone -- escaping it would break drive letters, and `make`
+/// accepts the bare form in a prerequisite list.
 pub fn escape(name: &str) -> String {
     let bytes = name.as_bytes();
     let mut out = String::with_capacity(name.len());
@@ -66,11 +63,10 @@ pub fn escape(name: &str) -> String {
     out
 }
 
-/// Accumulates names onto wrapped lines the way gcc's writer does: a
-/// name that would carry the line past `MAX_OUTPUT_WIDTH` starts a
-/// continuation, except when the line holds nothing but the one-space
-/// indent, so a name longer than the bound sits alone rather than being
-/// split.
+/// Accumulates names onto wrapped lines: a name that would carry the line
+/// past `MAX_OUTPUT_WIDTH` starts a continuation, except when the line
+/// holds nothing but the one-space indent, so a name longer than the bound
+/// sits alone rather than being split.
 struct Wrapper {
     out: String,
     column: usize,
@@ -136,7 +132,7 @@ pub fn render(targets: &[String], prereqs: &[String], phony: bool) -> String {
 ///
 /// `system` selects `-M` over `-MM`: with it clear, headers from the
 /// compiler's own set and from the host system directories are dropped,
-/// which is the distinction gcc draws between a user header and a
+/// which is the distinction `-MM` draws between a user header and a
 /// system one.
 ///
 /// A header served from the in-binary set has no filesystem path and is
@@ -146,9 +142,9 @@ pub fn render(targets: &[String], prereqs: &[String], phony: bool) -> String {
 /// real files. Under `-nostdinc` every header comes from a `-I`
 /// directory and none of this applies.
 ///
-/// Names repeat in the include stream and are emitted once. gcc repeats
-/// them; make stats each prerequisite either way, so the shorter list
-/// describes the same build.
+/// Names repeat in the include stream and are emitted once; make stats
+/// each prerequisite either way, so the shorter list describes the same
+/// build.
 pub fn prerequisites(source: &str, records: &[IncludeRecord], system: bool) -> Vec<String> {
     let mut out = Vec::with_capacity(records.len() + 1);
     out.push(simplify(source).to_string());
@@ -170,13 +166,13 @@ pub fn prerequisites(source: &str, records: &[IncludeRecord], system: bool) -> V
     out
 }
 
-/// Drop the leading `./` a search-path spelling contributes, as gcc's
-/// path simplification does: `-I./include` would otherwise name every
-/// header it serves `./include/...`. make matches a prerequisite
-/// against target names textually, so a generated header reached that
-/// way would not match the rule that builds it. Only the leading `./`
-/// goes -- gcc keeps `..` components, and collapsing one would name a
-/// different file across a symlinked directory.
+/// Drop the leading `./` a search-path spelling contributes:
+/// `-I./include` would otherwise name every header it serves
+/// `./include/...`. make matches a prerequisite against target names
+/// textually, so a generated header reached that way would not match the
+/// rule that builds it. Only the leading `./` goes -- `..` components
+/// stay, as collapsing one would name a different file across a
+/// symlinked directory.
 fn simplify(path: &str) -> &str {
     let mut p = path;
     while let Some(rest) = p.strip_prefix("./") {
@@ -212,7 +208,7 @@ mod tests {
         assert_eq!(escape("ha#sh.h"), "ha\\#sh.h");
         assert_eq!(escape("dol$lar.h"), "dol$$lar.h");
         assert_eq!(escape("tab\there.h"), "tab\\\there.h");
-        // A colon stays bare, as in gcc.
+        // A colon stays bare.
         assert_eq!(escape("c:/x.h"), "c:/x.h");
         // A backslash run is doubled only where it meets whitespace.
         assert_eq!(escape("bs\\sl.h"), "bs\\sl.h");
@@ -226,7 +222,7 @@ mod tests {
     #[test]
     fn wraps_past_column_72_with_gcc_continuation() {
         // Column before the last name is 7 + len(first header) = 17;
-        // gcc breaks when that plus the name exceeds 72.
+        // the line breaks when that plus the name exceeds 72.
         let h1 = "haaaaaaa.h"; // 10
         let fits = "b".repeat(53) + ".h"; // 55 -> 17 + 55 == 72
         let wraps = "b".repeat(54) + ".h"; // 56 -> 17 + 56 == 73
@@ -333,9 +329,9 @@ mod tests {
 
     #[test]
     fn a_leading_dot_slash_from_the_search_path_spelling_is_dropped() {
-        // `-I./include` resolves headers to `./include/...`; gcc names
-        // them without the prefix and so must badc, or a generated
-        // header would not match the rule that builds it.
+        // `-I./include` resolves headers to `./include/...`; they are
+        // named without the prefix, or a generated header would not match
+        // the rule that builds it.
         let records = vec![
             rec(
                 "linux/a.h",
@@ -346,7 +342,7 @@ mod tests {
             // prerequisite.
             rec("linux/a.h", Some("include/linux/a.h"), IncludeOrigin::User),
             // `..` stays: collapsing it names a different file across a
-            // symlinked directory, and gcc keeps it too.
+            // symlinked directory.
             rec("b.h", Some("src/../lib/b.h"), IncludeOrigin::User),
         ];
         assert_eq!(

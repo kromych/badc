@@ -1,4 +1,4 @@
-//! GCC extended inline-asm (x86_64): template parsing and instruction
+//! GNU C extended inline asm (x86_64): template parsing and instruction
 //! encoding.
 //!
 //! [`parse_template`] turns an AT&T template into a sequence of
@@ -982,7 +982,7 @@ const DR_BASE: u8 = 40;
 const SEG_BASE: u8 = 48;
 
 /// The number of an opmask register `kN`. Opmasks are deliberately absent from
-/// [`reg_by_name`]: under a single `%` their spelling collides with GCC's
+/// [`reg_by_name`]: under a single `%` their spelling collides with the
 /// `%k<N>` operand modifier, which selects the 32-bit form of operand N and is
 /// what the spelling means in extended asm. There they reach the encoder
 /// as `%%kN` operands and through the `{%kN}` write-mask decorator; only the
@@ -1695,10 +1695,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
 }
 
 /// The vector lengths each VEX form has a member at. The scalar ops are
-/// VEX.LIG, and GNU as and clang accept only their xmm spelling; the
-/// lane-crossing permutes, the 128-bit lane broadcasts and the 128-bit lane
-/// inserts and extracts are defined at 256 bits only. Every other form has
-/// both members.
+/// VEX.LIG and take only their xmm spelling; the lane-crossing permutes,
+/// the 128-bit lane broadcasts and the 128-bit lane inserts and extracts are
+/// defined at 256 bits only. Every other form has both members.
 fn vex_len(name: &str) -> VexLen {
     #[rustfmt::skip]
     const ONE_LENGTH: &[(&str, u16)] = &[
@@ -2474,7 +2473,7 @@ fn parse_label_ref(tok: &str, labels: &[&str]) -> Option<(u32, bool)> {
 /// named-label intern table (from the definition pre-scan); a bare token
 /// matching an entry is a local-label reference, not a symbol. `file_scope`
 /// selects the basic-asm reading of a single `%`, where `%kN` is an opmask
-/// register rather than GCC's operand modifier.
+/// register rather than the operand modifier.
 fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd, String> {
     // A leading `*` is AT&T's indirect-branch marker (`jmp *%rax`,
     // `call *8(%rbx)`); the operand kind alone selects the encoding.
@@ -2517,8 +2516,8 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
     }
     if bytes.first() == Some(&b'%') {
         let body = &tok[1..];
-        // A single `%` before a register name is an explicit register. GCC
-        // uses this in *basic* asm (no operand list); extended asm spells it
+        // A single `%` before a register name is an explicit register, the
+        // *basic* asm (no operand list) spelling; extended asm spells it
         // `%%reg`. Operand references (`%0`, `%w1`) are never register names,
         // so trying the register table first is unambiguous -- except for
         // `%k0`..`%k7`, which extended asm reads as the operand modifier and
@@ -2555,9 +2554,9 @@ fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd
         }
         // `%aN`: operand N rendered as an address reference. The operand holds
         // an address in a general register, so this is the base-only memory
-        // form `(%reg)`. GCC may instead fold a constant displacement or a
-        // symbol into the addressing expression (`64(%rdi)`, `sym(%rip)`);
-        // the register form names the same address.
+        // form `(%reg)`. The address may also print with a constant
+        // displacement or a symbol folded into the addressing expression
+        // (`64(%rdi)`, `sym(%rip)`); the register form names the same address.
         if let Some(digits) = body.strip_prefix('a')
             && !digits.is_empty()
             && digits.bytes().all(|c| c.is_ascii_digit())
@@ -6385,7 +6384,7 @@ mod tests {
 
     #[test]
     fn explicit_memory_operands() {
-        // Every addressing shape vs clang: disp0 / disp8 / disp32, negative
+        // Every addressing shape: disp0 / disp8 / disp32, negative
         // displacements, and the rbp/r13 (no mod=00 form) and rsp/r12 (SIB)
         // corners. Expected bytes from `clang --target=x86_64-unknown-linux-gnu`.
         #[rustfmt::skip]
@@ -6943,7 +6942,7 @@ mod tests {
         }
         // Packed-single float ops: unpck/sqrt (no prefix) and the int<->float
         // convert trio (cvtdq2ps none, cvtps2dq 0x66, cvttps2dq 0xF3). Prefix 0
-        // emits no leading byte. Byte-exact vs clang.
+        // emits no leading byte.
         for (name, prefix, op) in [
             ("unpcklps", 0u8, 0x14u8),
             ("unpckhps", 0, 0x15),
@@ -7728,7 +7727,7 @@ mod tests {
         );
         assert_eq!(vex_op("not_a_vex"), None);
         // 2-operand VEX moves (VEX.vvvv = 1111): reg-reg uses load_op, a store
-        // to memory uses store_op. Byte-exact vs clang.
+        // to memory uses store_op.
         let mem = |base: u8| Concrete::Mem {
             base,
             index: None,

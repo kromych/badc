@@ -1,7 +1,7 @@
 //! Diagnostic helpers (warnings, errors, type-mismatch checks).
 //!
-//! Centralizes the gcc / clang-shape `<file>:<line>: <kind>: <msg>`
-//! formatting plus the lax type-compatibility predicate that
+//! Centralizes the `<file>:<line>: <kind>: <msg>` formatting plus the
+//! lax type-compatibility predicate that
 //! [`Compiler::type_warning`] uses to decide whether a mixed
 //! pointer / integer / struct assignment is worth surfacing.
 //!
@@ -189,10 +189,9 @@ impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
     /// indeterminate -- undefined behavior if the caller uses it, but
-    /// not a constraint violation. gcc and clang diagnose it with a
-    /// warning, not an error, and the codegen synthesizes a `return 0`
-    /// for the fall-through, so this is a warning too. `main` is exempt
-    /// (5.1.2.2.3 supplies a default 0).
+    /// not a constraint violation, and the codegen synthesizes a
+    /// `return 0` for the fall-through, so this is a warning, not an
+    /// error. `main` is exempt (5.1.2.2.3 supplies a default 0).
     ///
     /// The analysis reports a fall-through only when control certainly
     /// reaches the end, and only with the noreturn information available
@@ -319,7 +318,7 @@ impl Compiler {
     }
 
     /// The truth value of the controlling expression `e` when its known
-    /// operands decide it, as gcc and clang fold it for -Wreturn-type
+    /// operands decide it, as the -Wreturn-type flow analysis folds it
     /// ([`Fold::Flow`]).
     fn expr_truth(&self, e: ExprId) -> Option<bool> {
         if let Some(v) = self.const_int(e, Fold::Flow) {
@@ -585,7 +584,7 @@ impl Compiler {
         }
     }
 
-    /// A warning at a system header's line, which gcc and clang suppress.
+    /// A warning at a system header's line, which is suppressed.
     fn suppressed_in(&self, code: Code, file: &str) -> bool {
         code.default_level() == crate::c5::diag::Level::Warning
             && self.system_headers.contains(file)
@@ -640,8 +639,7 @@ impl Compiler {
     /// Whether the lexer's current file is the unit's own: the primary
     /// source or a header its directory, `-iquote` or `-I` supplied. Sets
     /// `Binding::decl_in_user_source`, so the unused-binding diagnostics
-    /// report declarations there and skip the bundled and system headers,
-    /// as gcc and clang skip system headers.
+    /// report declarations there and skip the bundled and system headers.
     pub(super) fn in_user_source(&self) -> bool {
         !self.system_headers.contains(&self.lex.file)
     }
@@ -1047,7 +1045,7 @@ impl Compiler {
             return None;
         }
 
-        // The GCC 128-bit integer against an integer or pointer is a
+        // The 128-bit integer against an integer or pointer is a
         // value conversion (C99 6.3.1.3), not a struct mismatch.
         let is_int128 = |ty: i64| {
             is_struct_value_ty(ty)
@@ -1162,7 +1160,7 @@ impl Compiler {
     /// compatible, or one side points to `void`. Pointers to integer types
     /// that differ only in signedness convert with a `pointer-sign`
     /// warning; any other pair is an incompatible conversion, an error by
-    /// default as in gcc 14. The pointed-to types' own qualifiers are
+    /// default. The pointed-to types' own qualifiers are
     /// [`Self::discarded_qualifiers`]' to check.
     fn pointer_mismatch(
         structs: &[super::StructDef],
@@ -1182,7 +1180,7 @@ impl Compiler {
         }
         // The key drops the qualifiers of the pointer and of what it points
         // to; ones further down are part of the pointed-to type's identity
-        // (C99 6.7.3p9), and a difference there alone warns, as in clang.
+        // (C99 6.7.3p9), and a difference there alone warns.
         let nested = super::types::CONST_LVL_MASK | super::types::VOL_LVL_MASK;
         if pointees_compatible(structs, d & !nested, a & !nested) {
             return TypeMismatch::warn(
@@ -1218,8 +1216,7 @@ impl Compiler {
 
     /// Where the conversion of the value just parsed reports when its
     /// target is at `at`: the value's own position when it begins on that
-    /// line, so a `_Pragma` around it in a macro argument governs the
-    /// report, as clang resolves an argument's and a return value's.
+    /// line, so a `_Pragma` around it in a macro argument governs the report.
     pub(super) fn value_site(&self, at: Site) -> Site {
         match self.value_start.line == at.line {
             true => self.value_start,
@@ -1377,7 +1374,7 @@ impl Compiler {
     }
 
     /// A reference to `idx` that no evaluation follows (C99 6.5.3.4p2, 6.6p3):
-    /// used and read, as gcc counts a reference it parses without evaluating.
+    /// used and read.
     pub(super) fn mark_unevaluated_use(&mut self, idx: usize) {
         let binding = &mut self.symbols[idx].binding;
         binding.was_referenced = true;
@@ -1429,8 +1426,8 @@ impl Compiler {
 
     /// Warns when the integer constant `value` of type `from` changes value
     /// in its implicit conversion to the integer type `to`, a bit-field of
-    /// `bits` bits when that is not zero. As in gcc, a value that fits the
-    /// width at the other signedness keeps its bits and is no change
+    /// `bits` bits when that is not zero. A value that fits the width at
+    /// the other signedness keeps its bits and is no change
     /// (`unsigned u = -1;`, `char c = 255;`); `_Bool` takes any value.
     pub(super) fn check_constant_conversion(
         &mut self,

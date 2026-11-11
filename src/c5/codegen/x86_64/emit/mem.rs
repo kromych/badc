@@ -70,9 +70,9 @@ pub(super) fn emit_tls_addr(
             code.extend_from_slice(&0u32.to_le_bytes());
             // A cross-unit `extern _Thread_local` (`extern_tls_names`) may live
             // in a shared library, whose block the loader places, so its offset
-            // comes from the GOT (initial-exec, as gcc's code for an executable
-            // reads it): add rd, qword ptr [rip + disp32], REX.W=1, REX.R =
-            // (rd >= 8), opcode 03, ModR/M mod=00 reg=rd.lo rm=101.
+            // comes from the GOT (the initial-exec TLS model): add rd, qword
+            // ptr [rip + disp32], REX.W=1, REX.R = (rd >= 8), opcode 03,
+            // ModR/M mod=00 reg=rd.lo rm=101.
             let by_name = extern_tls_names.get(&v);
             if let Some(r) = by_name.filter(|r| !r.defined_here) {
                 code.push(rex);
@@ -428,8 +428,8 @@ fn emit_store_fp_mem(
             return fail(alloc::format!("{site}: binary128 store on x86-64"));
         }
         // `fld m64` widens the f64 exactly; `fstp m80` writes the 10
-        // significant bytes and leaves the object's padding untouched,
-        // as gcc's stores do. The round trip rides the red zone.
+        // significant bytes and leaves the object's padding untouched.
+        // The round trip rides the red zone.
         emit_movsd_mem_xmm(code, Reg::RSP, -8, dn);
         super::encode::emit_fld_m64(code, Reg::RSP, -8);
         if let Some(p) = seg {

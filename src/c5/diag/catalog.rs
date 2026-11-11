@@ -7,9 +7,8 @@
 //! compilers' identifiers as selectors: gcc and clang names where they
 //! differ, and MSVC numbers spelled with their letter prefix (`C4101`,
 //! `D9002`), which `#pragma warning(...)` spells bare. A spelling several
-//! rows carry selects all of them, as a clang diagnostic group spans
-//! several diagnostics. Only the canonical name and the `B` code are ever
-//! printed.
+//! rows carry selects all of them, as a diagnostic group does. Only the
+//! canonical name and the `B` code are ever printed.
 
 use alloc::format;
 
@@ -483,7 +482,7 @@ impl Code {
 
     /// The row a leveled gcc option implements, named by the option's own
     /// name `base` or any of its levels `base=N`, for a row spelled
-    /// `base=M`. gcc's levels are one option, so ignoring any of them
+    /// `base=M`. The levels are one option, so ignoring any of them
     /// ignores the row.
     pub fn leveled_row(name: &str) -> Option<Code> {
         let base = name.split_once('=').map_or(name, |(b, _)| b);

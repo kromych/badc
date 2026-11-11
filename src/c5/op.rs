@@ -183,16 +183,15 @@ pub enum Intrinsic {
     AArch64DsbIsh = 54,
     AArch64Isb = 55,
     /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
-    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
+    /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GNU C
     /// builtin). The result is `int`. Lowered in the walker as
     /// `(ctz(x) + 1) & ((ctz(x) >> log2(w)) - 1)`: ctz is the bit width `w`
     /// only for 0, and the mask clears that case.
     Ffs = 56,
     Ffsll = 57,
     /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
-    /// exclusive-pair retry loop (the shape GCC/clang inline asm emits for
-    /// `Int128` atomics, since aarch64 has no native 128-bit CAS through
-    /// gcc 10). Each takes a pointer to the 128-bit object, the addresses
+    /// exclusive-pair retry loop (ARMv8.0 has no 128-bit compare-and-swap).
+    /// Each takes a pointer to the 128-bit object, the addresses
     /// of the two 64-bit halves of the prior value (written back), and the
     /// operand halves as inputs: `CmpXchg` compares against `cmp{l,h}` and
     /// stores `new{l,h}` on a match; `Xchg` stores unconditionally;

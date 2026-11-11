@@ -1538,7 +1538,7 @@ fn merge_string_addend_anchors_to_symbol_entry() {
             "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } }",
         )
         .expect("parses");
-    // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
+    // A .rodata.str1.8 section: 8-aligned strings, NUL padding.
     let a = TestObj::new()
         .sec(
             ".text",
@@ -3039,8 +3039,7 @@ fn a_shared_objects_direct_reference_to_imported_data_is_refused() {
     );
 }
 
-/// A `zR` CIE, the shape gcc emits for a unit needing no
-/// personality routine.
+/// A `zR` CIE for a unit needing no personality routine.
 fn eh_cie_zr() -> Vec<u8> {
     alloc::vec![
         0x14, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'R', 0, 1, 0x78, 0x10, 1, 0x1b, 0x0c, 0x07, 0x08,
@@ -3309,9 +3308,8 @@ fn eh_frame_gc_drops_a_collected_fde_and_its_last_cie() {
     assert_eq!(image_section(&plain.image, ".eh_frame").1.len(), 4 * 24);
 }
 
-/// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND, and gcc
-/// and clang emit it that way; pruning and dedup treat it exactly
-/// as a SHT_PROGBITS input.
+/// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND; pruning and
+/// dedup treat it exactly as a SHT_PROGBITS input.
 #[test]
 fn eh_frame_gc_prunes_unwind_typed_inputs() {
     let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");

@@ -2866,7 +2866,7 @@ impl<'a> ElfImageWriter<'a> {
             tail.rela_data_off = post_dwarf_off;
             post_dwarf_off
         };
-        // The producer fingerprint in gcc's ident form, past the loaded
+        // The producer fingerprint in the `.ident` form, past the loaded
         // image so `.text` stays instruction-pure.
         tail.comment = super::provenance_comment();
         tail.comment_off = post_rela_off;

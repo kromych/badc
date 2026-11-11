@@ -14,7 +14,7 @@ use crate::c5::op::Intrinsic;
 #[derive(Clone, Copy)]
 pub(super) enum Supply {
     /// Intrinsic-registry entry seeded at construction, so the name is
-    /// usable with no header (gcc/clang do the same).
+    /// usable with no header.
     Registry(Intrinsic),
     /// Registry entry whose discriminant follows the target's `long`
     /// width: the `l`-suffixed bit builtins operate on `unsigned long`.
@@ -62,7 +62,7 @@ const fn library(name: &'static str, kind: Intrinsic) -> Builtin {
 
 /// Every builtin badc provides, with its supply route.
 pub(super) const BUILTINS: &[Builtin] = &[
-    // Bit-count, byte-swap and control-flow builtins, as in gcc/clang.
+    // Bit-count, byte-swap and control-flow builtins.
     // `__builtin_unreachable` lowers to the trap intrinsic, so a reached
     // unreachable aborts rather than continuing.
     registry("__builtin_clz", Intrinsic::Clz),
@@ -197,7 +197,7 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__atomic_signal_fence"),
     direct("__atomic_is_lock_free"),
     direct("__atomic_always_lock_free"),
-    // clang's C11 forms `<stdatomic.h>` uses where they differ from GCC's.
+    // clang's C11 forms `<stdatomic.h>` uses where they differ from `__atomic`.
     direct("__c11_atomic_init"),
     direct("__c11_atomic_fetch_add"),
     direct("__c11_atomic_fetch_sub"),
@@ -240,20 +240,20 @@ pub(super) const BUILTINS: &[Builtin] = &[
     library("__c5_establisher_frame", Intrinsic::EstablisherFrame),
 ];
 
-/// Library functions whose `__builtin_` spelling gcc or clang provide as the
-/// function itself, among those the bundled headers declare or define. The
-/// parser binds such a call to the function through the symbol table, so a
-/// translation unit that defines a macro of the library name does not
-/// capture the builtin spelling -- the guarantee gcc and clang give, and the
-/// reason a fortified header can call the builtin to reach the unfortified
-/// function. The string comparisons fold with constant arguments.
+/// Library functions whose `__builtin_` spelling names the function itself,
+/// among those the bundled headers declare or define. The parser binds such
+/// a call to the function through the symbol table, so a translation unit
+/// that defines a macro of the library name does not capture the builtin
+/// spelling, which lets a fortified header call the builtin to reach the
+/// unfortified function. The string comparisons fold with constant
+/// arguments.
 /// Excluded: `setjmp` / `longjmp`, whose builtins take gcc's five-word
 /// buffer, the classification macros of <math.h>, and the builtins formed
 /// at the call site, which the table supplies.
 ///
 /// Each carries the prototype gcc gives the builtin, which declares the
 /// function where the unit does not. `FILE *` and `const struct tm *` are
-/// `void *` and `const void *` until a header declares the type, as in gcc.
+/// `void *` and `const void *` until a header declares the type.
 /// Sorted for the binary search.
 #[rustfmt::skip]
 pub(super) const LIBRARY_BUILTINS: &[(&str, &str)] = &[
@@ -406,7 +406,7 @@ pub(super) const LIBRARY_BUILTINS: &[(&str, &str)] = &[
 ];
 
 /// The library functions builtins formed at the call site call where they
-/// decline to expand, with gcc's prototypes.
+/// decline to expand, with their prototypes.
 pub(super) const FALLBACK_FUNCTIONS: &[(&str, &str)] = &[
     ("memcpy", "void *(void *, const void *, size_t)"),
     ("memmove", "void *(void *, const void *, size_t)"),
@@ -459,8 +459,8 @@ pub(crate) fn library_alias(name: &str) -> Option<&'static str> {
     Some(LIBRARY_BUILTINS[at].0)
 }
 
-/// The prototype gcc gives the builtin calling library function
-/// `fn_name`, in the tables' C spelling.
+/// The prototype of the builtin calling library function `fn_name`, in
+/// the tables' C spelling.
 pub(crate) fn library_prototype(fn_name: &str) -> Option<&'static str> {
     LIBRARY_BUILTINS
         .iter()
@@ -492,7 +492,7 @@ pub(super) fn is_builtin(name: &str) -> bool {
     lookup(name).is_some() || library_alias(name).is_some()
 }
 
-/// `__has_builtin(name)` (C23 6.10.1, clang/gcc practice): 1 when a
+/// `__has_builtin(name)` (C23 6.10.1 form, a clang extension): 1 when a
 /// translation unit for `target` can use `name` with no `#include`. The
 /// x86 vector builtins are the x86 targets' only.
 pub(super) fn has_builtin(name: &str, target: Target) -> bool {

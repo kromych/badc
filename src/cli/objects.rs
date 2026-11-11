@@ -97,8 +97,8 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 }
 
 /// `-fsyntax-only`: each source through the preprocessor and the front end,
-/// or through the assembler, as gcc runs it, with their diagnostics; no
-/// output is written and the status is the units'.
+/// or through the assembler, with their diagnostics; no output is written
+/// and the status is the units'.
 pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let sources = &inputs.sources;
     if sources.is_empty() {
@@ -289,8 +289,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.
     cfg.export_all = false;
-    // `--ar` bundles objects; gcc has no dependency-output analogue for
-    // archive assembly.
+    // `--ar` bundles objects; archive assembly has no dependency output.
     cfg.deps = None;
     cfg.dep_output = None;
     let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
@@ -366,8 +365,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 /// The default is that it is: this toolchain's own linker is the usual
 /// consumer and its default executable is `ET_DYN`, so a `const` object
 /// carrying a relocation cannot ride the read-only prefix and would
-/// otherwise cost its whole `.rodata` that placement. gcc reaches the
-/// same layout wherever it is configured default-PIE.
+/// otherwise cost its whole `.rodata` that placement.
 ///
 /// Two inputs state the opposite -- a link that resolves the relocation
 /// statically -- and keep such storage in `.rodata`: an explicit

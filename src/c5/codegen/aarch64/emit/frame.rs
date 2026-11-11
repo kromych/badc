@@ -685,8 +685,8 @@ pub(super) fn asm_operand_regs(
 /// registers it writes -- the clobber list (minus x16 / x17 and bit 31)
 /// plus every operand register -- that `preserve` names as holding
 /// something across the block. A `w` operand is a scalar of 1 to 8 bytes
-/// or a 16-byte vector. A `-ffixed-` register holds nothing of the compiler's and is
-/// never saved, as under gcc.
+/// or a 16-byte vector. A `-ffixed-` register holds nothing of the
+/// compiler's and is never saved.
 pub(super) fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],

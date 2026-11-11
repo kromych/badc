@@ -1775,9 +1775,9 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     );
 }
 
-/// `always_inline` is a mandatory request -- gcc and clang report a
-/// diagnostic when they cannot honor one rather than declining -- so the
-/// inliner's size and frame budgets do not apply to it, and the splice
+/// `always_inline` is a mandatory request -- one that cannot be honored is
+/// diagnosed rather than declined -- so the inliner's size and frame
+/// budgets do not apply to it, and the splice
 /// relocates the callee's own slots into the caller's frame. Every
 /// relocated slot must still address correctly past the single-instruction
 /// and scaled-immediate reaches. The index comes from the parameter so the
@@ -2739,13 +2739,12 @@ fn struct_array_member_compound_literal_elements() {
     assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
 }
 
-/// GCC evaluates a non-constant `__builtin_constant_p` operand late
-/// under `-O`: after inlining and constant propagation a parameter fed
-/// a literal answers 1, while a runtime value still answers 0. Without
-/// `-O` the early conservative 0 stands (gcc -O0 parity). Locks the
-/// deferred `Intrinsic::ConstantP` resolution through the whole
-/// pipeline: walker -> inliner substitution -> constant fold -> the
-/// branch-fold fixed point's resolve-to-0.
+/// Under `-O` a non-constant `__builtin_constant_p` operand is evaluated
+/// late: after inlining and constant propagation a parameter fed a literal
+/// answers 1, while a runtime value still answers 0. Without `-O` the
+/// early conservative 0 stands. Locks the deferred `Intrinsic::ConstantP`
+/// resolution through the whole pipeline: walker -> inliner substitution
+/// -> constant fold -> the branch-fold fixed point's resolve-to-0.
 #[test]
 fn constant_p_defers_to_post_inline_fold() {
     let src = "static inline int is_const(int x) { return __builtin_constant_p(x); }\n\

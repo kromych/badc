@@ -692,14 +692,13 @@ impl<'a> Walker<'a> {
     ///
     /// C99 leaves an out-of-range truncated value undefined --
     /// infinities, NaNs and any negative operand converted to the
-    /// unsigned type included -- and gcc and clang differ there from
-    /// each other and between targets. This lowering saturates: a
-    /// negative operand converted to the unsigned type yields 0, and
-    /// anything else out of range yields the target type's minimum or
-    /// maximum by the operand's sign. That is total, deterministic and
-    /// identical on every backend, and matches the runtime routines
-    /// both compilers call when they do not expand the conversion
-    /// inline.
+    /// unsigned type included. This lowering is total and identical on
+    /// every backend: a negative operand converted to the unsigned type
+    /// yields 0, and a magnitude of 2^128 or more, an infinity, or a NaN
+    /// yields the target type's minimum or maximum by the operand's sign.
+    /// A signed conversion of a magnitude in [2^127, 2^128) wraps. Both
+    /// follow the libgcc and compiler-rt routines, so a value converts the
+    /// same in a unit badc compiles and in one that calls them.
     pub(super) fn fp_to_int128(&mut self, b: &mut SsaBuilder, v: ValueId, signed: bool) -> Halves {
         // A `float` operand widens to double exactly, so one dissection
         // serves both source types.
@@ -748,9 +747,8 @@ impl<'a> Walker<'a> {
         // Out of range once the magnitude reaches 2^128, where an
         // infinity and a NaN also land, their exponent being the
         // maximum. The signed conversion uses the same limit, so a
-        // magnitude in [2^127, 2^128) wraps negative rather than
-        // saturating: that keeps -2^127 exact and matches gcc and
-        // clang, which agree here across targets.
+        // magnitude in [2^127, 2^128) wraps rather than saturating,
+        // which keeps -2^127 exact.
         let over = {
             let o = b.binop_imm(BinOp::Ge, exp, 128);
             let z = b.imm(0);

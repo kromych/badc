@@ -141,7 +141,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
-    // gcc's order: the startup runtime where crt1.o stands, then the inputs.
+    // Link order: the startup runtime where crt1.o stands, then the inputs.
     let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
     // Compiled resource files, which link.exe takes for the image's `.rsrc`.
@@ -878,10 +878,10 @@ fn program_entry(slots: &mut [Slot], target: badc::Target) -> Option<&'static st
 }
 
 /// A definition anywhere in the link satisfies a call to a library
-/// function, as under gcc and clang. A unit whose auto-included header
-/// binds such a function to its library is compiled again with that
-/// binding dropped and the same headers included, so the call keeps the
-/// header's declaration and resolves to the link's definition.
+/// function. A unit whose auto-included header binds such a function to
+/// its library is compiled again with that binding dropped and the same
+/// headers included, so the call keeps the header's declaration and
+/// resolves to the link's definition.
 fn rebind_auto_includes(
     cfg: &CompileCfg,
     embedded: &mut EmbeddedSources,

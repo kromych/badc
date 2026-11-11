@@ -924,7 +924,7 @@ impl Compiler {
                                 format!("array dimension must be positive (got {m})"),
                             ));
                         }
-                        // `T (*p)[0]` -- a GCC zero-length array pointee:
+                        // `T (*p)[0]` -- a GNU C zero-length array pointee:
                         // a complete type of zero size. The 0 dimension
                         // rides into the aggregate tag so `sizeof(*p)`
                         // folds to 0.
@@ -1174,7 +1174,7 @@ impl Compiler {
                         .compile_err(Code::SYNTAX, "close bracket expected in array declarator"));
                 }
                 self.next()?;
-                // `T x[0]` -- a GCC zero-length array. As a struct or union
+                // `T x[0]` -- a GNU C zero-length array. As a struct or union
                 // member it behaves like a C99 6.7.2.1 flexible array member
                 // (`T x[]`), so it rides the same `array_size = -1` sentinel.
                 // As a declared object the two differ -- `[0]` is a complete

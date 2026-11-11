@@ -1013,13 +1013,13 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // C99 6.5.2.5 pointer field = array-of-struct compound literal in a
     // static initializer (a real-world descriptor-table shape).
     ("compound_literal_pointer_field.c", 0),
-    // GCC zero-length array `T x[0]` as a local (compile-time-assert idiom).
+    // GNU C zero-length array `T x[0]` as a local (compile-time-assert idiom).
     ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
-    // GCC 128-bit integer as a 16-byte type: sizeof, struct/array layout
+    // GNU C 128-bit integer as a 16-byte type: sizeof, struct/array layout
     // (asm/sigcontext.h shape), by-value copy.
     ("int128_type_layout.c", 0),
-    // GCC 128-bit integer arithmetic, expanded over the two 64-bit
+    // 128-bit integer arithmetic, expanded over the two 64-bit
     // halves: add / sub / neg / bitwise / increment with carry and
     // borrow, shifts across the halfway point, the widening 64x64
     // product, signed and unsigned comparison edges, and division /
@@ -1297,7 +1297,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // `~(unsigned long)` stays unsigned so a following `>>` is logical.
     ("complement_preserves_type.c", 0),
     // A decimal constant past the widest signed type takes the
-    // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
+    // unsigned type at that rank, the existing practice where C99
+    // 6.4.4.1p5 lists no type.
     ("decimal_literal_over_signed_max.c", 0),
     // Block-scope function declaration resolves to the file-scope
     // definition (C99 6.7p1 / 6.2.2p5).
@@ -6721,7 +6722,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // `~(unsigned long)` stays unsigned so a following `>>` is logical.
     ("complement_preserves_type.c", 0),
     // A decimal constant past the widest signed type takes the
-    // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
+    // unsigned type at that rank, the existing practice where C99
+    // 6.4.4.1p5 lists no type.
     ("decimal_literal_over_signed_max.c", 0),
     // Block-scope function declaration resolves to the file-scope
     // definition (C99 6.7p1 / 6.2.2p5).

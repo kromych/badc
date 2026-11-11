@@ -71,10 +71,10 @@ const MAX_MULTI_BLOCK_SPLICE_STEPS: usize = 64;
 /// raises the bound rather than removing it: an unbounded marked body is
 /// re-expanded at every site across the candidacy fixpoint, and a caller
 /// absorbing a chain of them reaches several times the size gcc emits
-/// from the same source. gcc bounds the two populations the same way,
-/// with a single-function limit for a marked body and a lower automatic
-/// one for a size-driven candidate. A mandatory (`always_inline`)
-/// request carries no size bound.
+/// from the same source. The two populations take separate bounds: a
+/// single-function limit for a marked body and a lower automatic one for
+/// a size-driven candidate. A mandatory (`always_inline`) request carries
+/// no size bound.
 const MARKED_CAP_FACTOR: usize = 2;
 
 /// Body-size bound for `func`: `cap` for a size-driven candidate,
@@ -96,16 +96,14 @@ fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
 /// otherwise compound into a function that is large in both code and
 /// stack frame. Once a caller has grown by this much only callees the
 /// source explicitly marked `inline` are still inlined into it; a caller
-/// that is large on its own still absorbs small helpers up to it. Mirrors
-/// gcc's large-function-growth limit.
+/// that is large on its own still absorbs small helpers up to it.
 const CALLER_INST_BUDGET: usize = 2048;
 
 /// Body-size bound for a function only one call site reaches. Its
 /// out-of-line copy is dead once that site is spliced, so the unit shrinks
-/// by it, as with gcc's `-finline-functions-called-once`; gcc bounds the
-/// caller's growth (`large-function-growth`), and this bound keeps the
-/// kernel's count of functions over 4 KiB at gcc's for the same
-/// configuration (`demos/linux/verify.py`'s TEXT_BUDGETS).
+/// by it. The bound keeps the kernel's count of functions over 4 KiB at
+/// gcc's for the same configuration (`demos/linux/verify.py`'s
+/// TEXT_BUDGETS).
 const CALLED_ONCE_CAP: u32 = 512;
 
 /// Local-slot count past which a *self-recursive* caller stops absorbing
@@ -115,8 +113,8 @@ const CALLED_ONCE_CAP: u32 = 512;
 /// well above the frame a leaf helper contributes -- a recursion that
 /// only inlines a swap / partition-sized body stays small and is
 /// unaffected -- but far below the runaway growth an inline fixpoint can
-/// otherwise reach. Mirrors gcc's large-stack-frame limit. Each slot is
-/// 8 bytes, so this caps the inlined-frame growth at 256 bytes.
+/// otherwise reach. Each slot is 8 bytes, so this caps the inlined-frame
+/// growth at 256 bytes.
 const RECURSIVE_FRAME_SLOTS: i64 = 32;
 
 /// Local-slot count (2 KiB) a caller's frame must exceed -- together with
@@ -149,8 +147,8 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 const CALLER_FRAME_ABS_SLOTS: i64 = 512;
 
 /// gcc's `large-stack-frame` and `large-stack-frame-growth`: an optional
-/// splice that takes the caller's frame past both is refused, as gcc
-/// refuses it to a plain `inline` hint.
+/// splice, a plain `inline` hint included, that takes the caller's frame
+/// past both is refused.
 #[derive(Clone, Copy)]
 pub(crate) struct StackGrowth {
     /// Bytes.
@@ -862,9 +860,9 @@ fn is_inline_candidate(
         }
     };
 
-    // gcc's documented way to keep a body out of line, and the escape hatch
-    // its `__builtin_return_address` wording names. Checked before every
-    // other gate so the request holds whatever the body's shape.
+    // `noinline` keeps a body out of line, which the GNU C documentation of
+    // `__builtin_return_address` relies on. Checked before every other gate
+    // so the request holds whatever the body's shape.
     if func.is_noinline {
         say(format_args!("noinline"));
         return false;
@@ -893,8 +891,7 @@ fn is_inline_candidate(
     // A weak definition is replaceable: the linker binds every reference to
     // a strong definition of the same name when one exists in another
     // object, so the body visible here need not be the one that runs.
-    // Splicing it in would commit the caller to this unit's copy. gcc and
-    // clang keep the out-of-line call for the same reason.
+    // Splicing it in would commit the caller to this unit's copy.
     if func.is_weak {
         say(format_args!("weak definition"));
         return false;
@@ -902,8 +899,7 @@ fn is_inline_candidate(
     // A self-recursive callee stays out of line: splicing it does not
     // remove the recursion -- the recursive calls come along -- so
     // inlining only unrolls the call tree one level per candidacy-fixpoint
-    // round, unbounded code growth for no call elimination. Matches gcc's
-    // -O2 default of not inlining recursive functions.
+    // round, unbounded code growth for no call elimination.
     if func
         .insts
         .iter()
@@ -1032,13 +1028,12 @@ fn is_inline_candidate(
         }
     }
     // A call to a function that never returns ends the path it is on.
-    // gcc (PRED_NORETURN) and clang (the unreachable heuristic) predict
-    // that path cold and keep the call: the body would grow the caller
-    // for nothing on the paths that return, and the annotations that
-    // describe it name the out-of-line function. Held out of line for a
-    // callee declared `_Noreturn` (C11 6.7.4) and for one no path
-    // returns from -- every exit traps or calls a `_Noreturn` function --
-    // unless the request is mandatory.
+    // That path is predicted cold and the call is kept: the body would
+    // grow the caller for nothing on the paths that return, and the
+    // annotations that describe it name the out-of-line function. Held out
+    // of line for a callee declared `_Noreturn` (C11 6.7.4) and for one no
+    // path returns from -- every exit traps or calls a `_Noreturn`
+    // function -- unless the request is mandatory.
     if (func.is_noreturn || return_blocks == 0) && !func.is_always_inline {
         say(format_args!("never returns"));
         return false;
@@ -1765,9 +1760,8 @@ impl<'a> CandidatePool<'a> {
 /// callers placed in the same section: its placement is a contract (a
 /// linker script places by it, a reference check keys on it) that the
 /// splice moves the body out of. A mandatory (`always_inline`) request
-/// overrides it, as gcc and clang do -- both splice such a body into a
-/// caller in any section and emit no out-of-line copy at all -- so a
-/// call from `.text` never targets a helper in a section the image
+/// overrides it -- such a body is spliced into a caller in any section --
+/// so a call from `.text` never targets a helper in a section the image
 /// discards after startup.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
@@ -4256,8 +4250,7 @@ fn inline_caller(
     // `JumpTable` (switch) or `AsmGoto` terminator on the way out. So any
     // caller shape is spliceable.
     // Optional splices count toward the per-step cap; a mandatory
-    // (`always_inline`) request is spliced past it, as gcc honors one at
-    // any caller size.
+    // (`always_inline`) request is spliced past it at any caller size.
     let mut steps = 0usize;
     let mut spliced = false;
     // Callees this caller can no longer afford: every splice through this
@@ -5364,7 +5357,7 @@ mod tests {
         );
     }
 
-    /// gcc's large-stack-frame pair: an optional splice whose growth
+    /// The `StackGrowth` bounds: an optional splice whose growth
     /// carries the caller's frame past 256 bytes and past 11 times the
     /// caller's own frame stays a call; a mandatory one is spliced, and so
     /// is one that stays under either bound.

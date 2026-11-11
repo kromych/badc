@@ -554,8 +554,7 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
 /// the referent must be defined in this unit and not weak. An undefined
 /// symbol may bind to address zero (a weak reference by ELF rule, any
 /// extern under a model that places objects at absolute addresses), and
-/// a weak definition is preemptible, so both stay out -- the behavior
-/// GCC keeps under `-fno-delete-null-pointer-checks`.
+/// a weak definition is preemptible, so both stay out.
 pub(crate) struct AddrFacts {
     /// Parser-symbol indices with a non-weak definition in this unit.
     nonnull_syms: BTreeSet<u32>,

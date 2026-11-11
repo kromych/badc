@@ -2244,12 +2244,11 @@ mod code_mode_tests {
     }
 
     /// Undefined-opcode and descriptor-table forms. A 64-bit `lsl` / `lar`
-    /// destination takes the SDM's
-    /// `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r` row, as clang emits; GNU as
-    /// encodes it as the 32-bit form instead (`0f 03 c0`, `45 0f 03 ec`,
-    /// `0f 03 03`, `0f 02 c0` for the four below), which zero-extends to the
-    /// same value. `ud2a` / `ud2b` are its spellings of `ud2` / `ud1`, and
-    /// both `ud0` and `ud1` have an operandless form.
+    /// destination takes the SDM's `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r`
+    /// row; GNU as encodes it as the 32-bit form instead (`0f 03 c0`,
+    /// `45 0f 03 ec`, `0f 03 03`, `0f 02 c0` for the four below), which
+    /// zero-extends to the same value. `ud2a` / `ud2b` are its spellings of
+    /// `ud2` / `ud1`, and both `ud0` and `ud1` have an operandless form.
     #[test]
     fn undefined_opcode_and_descriptor_forms() {
         for (src, want) in [
@@ -3146,8 +3145,8 @@ mod code_mode_tests {
     /// one, `0F 22` / `0F 23` write one, over a single register row per mode
     /// -- `r64` in 64-bit mode, `r32` in the other two -- and no memory row.
     /// The width is the row's rather than the mode's, so `.code16` takes no
-    /// `66`. Bytes measured with GNU as 2.46.1 and clang 22, which agree here
-    /// in all three modes.
+    /// `66`. Bytes measured with GNU as 2.46.1 and clang 22 in all three
+    /// modes.
     #[test]
     fn control_debug_register_move_operand_widths() {
         #[rustfmt::skip]

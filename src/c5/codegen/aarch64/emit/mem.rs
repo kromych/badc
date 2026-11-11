@@ -339,8 +339,8 @@ pub(super) fn emit_tls_addr(
             let target = match tls_sym {
                 // A cross-unit `extern _Thread_local` may live in a shared
                 // library, whose block the loader places, so its offset comes
-                // from the GOT (initial-exec, as gcc's code for an executable
-                // reads it); x17 holds the slot's address, then its value.
+                // from the GOT (initial-exec); x17 holds the slot's address,
+                // then its value.
                 Some(r) if !r.defined_here => {
                     emit(code, enc_adrp(Reg(17), 0));
                     emit(code, enc_ldr_imm(Reg(17), Reg(17), 0));

@@ -1,4 +1,4 @@
-//! The GCC builtins whose value the call forms from its operands, with
+//! The builtins whose value the call forms from its operands, with
 //! gcc's signatures. A call lowers to the conversions and operators
 //! computing the value, and folds in a constant expression.
 
@@ -43,7 +43,7 @@ pub(super) enum ValueBuiltin {
     /// quiet (`ucomis*`, `fcmp`): a quiet NaN raises no invalid exception.
     Compare(BinOp),
     /// `T (T)` over `int`, `long`, `long long` and, for `None`, `intmax_t`:
-    /// the magnitude, the most negative value wrapping as gcc's does.
+    /// the magnitude, the most negative value wrapping.
     Abs(Option<Ty>),
     /// `T (T)` over a real floating type: the operand with its sign clear.
     FAbs(i64),
@@ -99,7 +99,7 @@ enum Arg {
     Constant,
 }
 
-/// The binary64 pattern of the quiet NaN of `ty` with the payload gcc reads
+/// The binary64 pattern of the quiet NaN of `ty` with the payload read
 /// from `spelling`: past white space and a sign, a decimal, octal or hex
 /// number in the significand's low bits. `None` for a spelling gcc leaves
 /// to the library. A `float` payload sits where binary32 narrowing keeps it.
@@ -206,7 +206,7 @@ impl Compiler {
         Ok(args)
     }
 
-    /// An integer constant operand; outside `0..=max` it warns and is 0, as in gcc.
+    /// An integer constant operand; outside `0..=max` it warns and is 0.
     fn builtin_constant(&mut self, name: &str, pos: usize, max: i64) -> Result<i64, C5Error> {
         let at = self.site();
         let Ok(v) = self.parse_constant_int() else {
@@ -594,7 +594,7 @@ impl Compiler {
 
     /// The common real floating type of a comparison builtin's operands,
     /// after the usual arithmetic conversions (C99 6.3.1.8). Both must be
-    /// arithmetic and one floating, as gcc and clang require.
+    /// arithmetic and one floating.
     fn relation_common_ty(&self, name: &str, a: i64, b: i64) -> Result<i64, C5Error> {
         use super::types::{is_floating_scalar, is_integer_scalar_ty};
         let arithmetic = |t: i64| is_floating_scalar(t) || is_integer_scalar_ty(t);

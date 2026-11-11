@@ -104,9 +104,8 @@ pub(crate) enum UnOp {
     Renormalize { nsw: bool },
 }
 
-/// Memory transfer the compiler expands inline, from a GCC
-/// `__builtin_mem*` call whose byte count is an integer constant
-/// expression.
+/// Memory transfer the compiler expands inline, from a `__builtin_mem*`
+/// call whose byte count is an integer constant expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MemTransferOp {
     /// C99 7.21.2.1 `memcpy` -- the objects may not overlap.
@@ -202,17 +201,17 @@ pub(crate) enum AtomicKind {
     AndFetch,
     OrFetch,
     XorFetch,
-    /// GCC `__sync_val_compare_and_swap(p, old, new)` -- if `*p == old`
+    /// `__sync_val_compare_and_swap(p, old, new)` -- if `*p == old`
     /// store `new`; yield the prior `*p` in either case. `args` are
     /// `[p, old, new]` (`old`/`new` are by value, not pointers).
     SyncCasVal,
-    /// GCC `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
+    /// `__sync_bool_compare_and_swap(p, old, new)` -- as `SyncCasVal`
     /// but yield 1 on a swap, 0 otherwise.
     SyncCasBool,
     /// GCC generic `__atomic_load(p, ret, memorder)` -- atomically load
     /// `*p` and write it through `ret`. `args` are `[p, ret]`; no value.
     LoadInto,
-    /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
+    /// Generic `__atomic_store(p, val, memorder)` -- atomically store
     /// `*val` into `*p`. `args` are `[p, val]`; no value.
     StoreFrom,
     /// `atomic_init(p, v)` (C17 7.17.2.2), clang's `__c11_atomic_init`: the
@@ -326,7 +325,7 @@ pub(crate) enum Expr {
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
     /// instead.
     Unary { op: UnOp, child: ExprId, ty: i64 },
-    /// `&&label` -- GCC labels-as-values. The address of a local
+    /// `&&label` -- GNU C labels-as-values. The address of a local
     /// label as a `void *`, consumed by `Stmt::GotoIndirect`.
     LabelAddr(LabelId),
     /// `lhs op rhs`. C99 6.5 operator-by-operator semantics; `op`
@@ -460,7 +459,7 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
-    /// GCC extended inline asm with operands. The payload is an index
+    /// GNU C extended inline asm with operands. The payload is an index
     /// into [`Ast::asm_blocks`]; the descriptor there holds the
     /// template, per-operand constraints, clobbers, and the operand
     /// expressions. As a statement it yields no value (`void`); the
@@ -513,7 +512,7 @@ pub(crate) enum Expr {
     /// `Decl::Vla` stored into `size_slot` (C99 6.5.3.4p2: for a VLA
     /// the operand is evaluated and the result is a runtime value).
     VlaSizeof { size_slot: i64 },
-    /// GCC statement expression `({ ... })` (Annex J.5 common
+    /// GNU C statement expression `({ ... })` (Annex J.5 common
     /// extension). `block` is the enclosed compound statement (or,
     /// for a single-item block, the bare statement `ast_wrap_block_items`
     /// yields). `value_item` indexes the block item the value and type
@@ -553,7 +552,7 @@ pub(crate) enum Expr {
         imm: Option<u8>,
         ty: i64,
     },
-    /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
+    /// `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
     /// with an integer-constant-expression byte count. `src` is the
     /// source address for the copies and the fill byte for the set.
     /// `align` is the alignment both endpoints satisfy by virtue of
@@ -633,7 +632,7 @@ pub(crate) enum Stmt {
     Return(Option<ExprId>),
     /// `goto label;` (C99 6.8.6.1).
     Goto(LabelId),
-    /// `goto *expr;` -- GCC computed goto. `target` evaluates to a
+    /// `goto *expr;` -- GNU C computed goto. `target` evaluates to a
     /// label address produced by `Expr::LabelAddr`.
     GotoIndirect(ExprId),
     /// `label: body` (C99 6.8.1) -- the goto target.
@@ -644,7 +643,7 @@ pub(crate) enum Stmt {
         text: alloc::string::String,
         clobbers: alloc::string::String,
     },
-    /// GCC `asm goto`: extended asm whose template may branch to the
+    /// GNU C `asm goto`: extended asm whose template may branch to the
     /// C labels listed in `asm_blocks[idx].labels`. A statement (not
     /// an expression) because it ends the current basic block;
     /// control either falls through or jumps to a listed label.
@@ -956,7 +955,7 @@ pub(crate) struct FinishedFunction {
 
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
-/// A GCC extended-asm statement as parsed, before the walker evaluates
+/// An extended-asm statement as parsed, before the walker evaluates
 /// its operands. `block` carries the template, constraints, and
 /// clobbers; `operand_exprs` is parallel to `block.operands` and holds
 /// each operand's parenthesised expression (an lvalue for an output, an

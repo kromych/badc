@@ -434,7 +434,6 @@ pub(crate) fn emit_add_sp_imm_scratch(code: &mut Vec<u8>, bytes: u32, scratch: R
 
 // ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
-// Verified against `clang -c -arch arm64` on Apple Silicon.
 
 /// 3-register data-processing word: `base | Rm<<16 | Rn<<5 | Rd`. Any baked
 /// field (e.g. MUL's `Ra = XZR`) is part of `base`.
@@ -2887,7 +2886,6 @@ mod tests {
 
     #[test]
     fn bit_count_forms() {
-        // The words `clang --target=aarch64-linux-gnu` assembles.
         assert_eq!(enc_clz32(Reg(1), Reg(2)), 0x5AC0_1041);
         assert_eq!(enc_clz(Reg(1), Reg(2)), 0xDAC0_1041);
         assert_eq!(enc_rbit32(Reg(1), Reg(2)), 0x5AC0_0041);
@@ -2988,8 +2986,7 @@ mod tests {
         assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
     }
 
-    /// The pair forms at both widths and the post-indexed narrow loads,
-    /// against clang's encodings.
+    /// The pair forms at both widths and the post-indexed narrow loads.
     #[test]
     fn pair_and_post_indexed_unit_forms() {
         let (x1, x2, x3) = (Reg(1), Reg(2), Reg(3));
@@ -3049,7 +3046,7 @@ mod tests {
     }
 
     /// `LDR Xt, [Xn, Xm, LSL #3]` -- Win64 TLS lookup uses this to
-    /// fetch `tls_array[_tls_index]`. Verified against clang.
+    /// fetch `tls_array[_tls_index]`.
     #[test]
     fn ldr_x16_x16_x17_lsl3() {
         // ldr x16, [x16, x17, lsl #3]  ->  0xF8717A10
@@ -3060,7 +3057,7 @@ mod tests {
     }
 
     /// The unscaled register-offset byte forms (`S = 0`) of the scale-1
-    /// indexed accesses. Verified against clang.
+    /// indexed accesses.
     #[test]
     fn byte_register_offset_forms() {
         let lsl = IndexExt::None;
@@ -3074,7 +3071,7 @@ mod tests {
 
     /// The register-offset forms over a word index, every access size with
     /// and without the scaling shift, and the extended-register add of the
-    /// spilled-operand store. Verified against clang.
+    /// spilled-operand store.
     #[test]
     fn word_index_forms() {
         use IndexExt::{Sxtw, Uxtw};
@@ -3103,7 +3100,7 @@ mod tests {
     }
 
     /// The shifted-register forms of the six base words, each shift kind,
-    /// and the widest amount. Verified against clang.
+    /// and the widest amount.
     #[test]
     fn shifted_register_forms() {
         use RegShift::{Asr, Lsl, Lsr};
@@ -3120,7 +3117,7 @@ mod tests {
 
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The
     /// Win64 TLS lookup uses this to read the 4-byte `_tls_index`
-    /// slot. Verified against clang.
+    /// slot.
     #[test]
     fn ldr_w17_x17_4() {
         // ldr w17, [x17, #4]  ->  0xB9400631
@@ -3129,8 +3126,7 @@ mod tests {
 
     /// `LDR Xt, [X18, #0x58]` -- the Win64 TLS lookup pulls
     /// `TEB->ThreadLocalStoragePointer` out of `[x18 + 0x58]`,
-    /// and the encoder needs to handle x18 as a base. Verified
-    /// against clang.
+    /// and the encoder needs to handle x18 as a base.
     #[test]
     fn ldr_x16_x18_0x58() {
         // ldr x16, [x18, #0x58]  ->  0xF9402E50
@@ -3138,17 +3134,14 @@ mod tests {
     }
 
     /// `MRS Xt, TPIDR_EL0` -- Linux/aarch64 TLS lookup reads the
-    /// per-thread pointer system register here. Verified against
-    /// clang.
+    /// per-thread pointer system register here.
     #[test]
     fn mrs_x19_tpidr_el0() {
         // mrs x19, tpidr_el0  ->  0xD53BD053
         assert_eq!(enc_mrs_tpidr_el0(Reg::X19), 0xD53B_D053);
     }
 
-    // Encoder spot checks. Each expected byte string was pasted from
-    // `otool -t -X` on `clang -c -arch arm64` output; if you change
-    // an encoder, run the same trip and update.
+    // Encoder spot checks.
 
     fn r(n: u8) -> Reg {
         Reg(n)
@@ -3586,9 +3579,9 @@ mod tests {
         assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
     }
 
-    // Cross-checked against `clang -c` + `otool -t` (aarch64). The plain
-    // LDP / STP forms are the same fixed encodings [`enc_ldp_off`] /
-    // [`enc_stp_off`] produce at a zero offset:
+    // Cross-checked the same way. The plain LDP / STP forms are the same
+    // fixed encodings [`enc_ldp_off`] / [`enc_stp_off`] produce at a zero
+    // offset:
     //   ldxp x1,x2,[x3]=c87f0861  stxp w0,x1,x2,[x3]=c8200861
     //   ldp x1,x2,[x3]=a9400861   stp x1,x2,[x3]=a9000861
     #[test]

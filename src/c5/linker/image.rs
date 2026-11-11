@@ -97,9 +97,9 @@ const ELF64_DYN_SIZE: u64 = 16;
 const ELF_HEADER_SIZE: u16 = 64;
 const PROGRAM_HEADER_SIZE: u16 = 56;
 
-/// Standard Linux executable load base. `ld -no-pie` plants
+/// Standard Linux executable load base. `ld -no-pie` places
 /// the program here by default; matching it keeps `objdump -d`
-/// addresses recognizable next to a `gcc -static` reference.
+/// addresses comparable with a statically linked reference.
 const BASE_ADDR: u64 = 0x400000;
 const PAGE_SIZE: u64 = 0x1000;
 

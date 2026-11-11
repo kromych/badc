@@ -81,8 +81,8 @@ fn signed_arithmetic_renormalization_is_marked_unless_wrapping() {
     }
 }
 
-/// A conversion is implementation-defined (C99 6.3.1.3p3) and gcc defines a
-/// signed `<<` to wrap, so neither renormalization is marked.
+/// A conversion is implementation-defined (C99 6.3.1.3p3) and a signed `<<`
+/// wraps, as GNU C defines it, so neither renormalization is marked.
 #[test]
 fn conversion_and_shift_renormalize_unmarked() {
     for (name, src) in [

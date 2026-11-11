@@ -93,7 +93,7 @@ const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 //   PROLOGUE_END        (u64 entry, u64 post-prologue) `.text` offsets.
 //   EXTERN_DATA         NUL-separated names this unit takes the address of
 //                       through an undefined symbol; every undefined
-//                       reference is typed STT_NOTYPE, as gcc types its own.
+//                       reference is typed STT_NOTYPE.
 const NT_BADC_DYLIBS: u32 = 1;
 const NT_BADC_BINDING_MAP: u32 = 2;
 const NT_BADC_EXPORTS: u32 = 3;
@@ -411,8 +411,7 @@ fn text_slot_rela(
 /// `__patchable_function_entries` section of its own, `SHF_LINK_ORDER` on
 /// the text section holding the function and relocated to the NOP area's
 /// first byte, so a linker dropping the function drops the record with it.
-/// gcc emits the same shape: writable, allocated, 8-aligned, one section
-/// per function.
+/// The section is writable, allocated, and 8-aligned.
 fn build_patchable_entry_sections(
     build: &Build,
     carve: &CarvePlan,
@@ -1628,8 +1627,8 @@ impl<'a> RelocWriter<'a> {
     fn place_writer_payloads(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         // The system linkers read a missing `.note.GNU-stack` as a request
-        // for an executable stack. Compiled C needs none, as gcc's objects
-        // state; an assembler unit carries only the note its source names.
+        // for an executable stack. Compiled C needs none; an assembler unit
+        // carries only the note its source names.
         if !self.program.asm_unit {
             self.layout
                 .carve
@@ -1658,7 +1657,7 @@ impl<'a> RelocWriter<'a> {
             let base = self.place_in_entry(e, gnu_property_align, body.len() as u64);
             self.layout.writer_bodies.push((e, base, body));
         }
-        // `#pragma comment(lib, ...)`'s names, NUL-terminated, as clang writes them.
+        // `#pragma comment(lib, ...)`'s names, NUL-terminated, in the LLVM `.deplibs` section.
         if !self.program.default_libs.is_empty() {
             let body: Vec<u8> = (self.program.default_libs.iter())
                 .flat_map(|n| n.bytes().chain([0]))
@@ -3003,8 +3002,8 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// Import symbols: undefined and untyped, as gcc and clang write a
-    /// reference; global unless the declaration is weak.
+    /// Import symbols: undefined and untyped; global unless the declaration
+    /// is weak.
     fn emit_import_symbols(&mut self) {
         let build = self.build;
         for i in 0..build.imports.imports.len() {
@@ -4917,9 +4916,9 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// `.comment`: non-alloc, `SHF_MERGE | SHF_STRINGS` with a byte entsize
-    /// as gcc and clang flag theirs, so a linker merging many badc objects
-    /// folds identical lines into one copy.
+    /// `.comment`: non-alloc, `SHF_MERGE | SHF_STRINGS` with a byte entsize,
+    /// so a linker merging many badc objects folds identical lines into one
+    /// copy.
     fn emit_comment_section(&mut self) {
         let out = &mut self.out;
         if let Some(body) = out.comment.take() {

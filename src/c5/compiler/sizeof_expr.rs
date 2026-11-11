@@ -1,5 +1,5 @@
 //! `sizeof` and `_Alignof` operands (C99 6.5.3.4), shared by the
-//! runtime and constant-expression parsers, and the GCC builtins that
+//! runtime and constant-expression parsers, and the GNU C builtins that
 //! read an operand unevaluated: `__builtin_object_size`,
 //! `__builtin_choose_expr`, `__builtin_has_attribute`,
 //! `__builtin_constant_p`.
@@ -202,7 +202,7 @@ impl Compiler {
         Ok(total)
     }
 
-    /// GCC `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
+    /// `__builtin_object_size(ptr, type)`, `type` in 0..=3: a
     /// `size_t` constant, the pointer operand unevaluated like a
     /// `sizeof` operand. Bit 0 of `type` selects the closest
     /// surrounding subobject over the whole enclosing object, bit 1 the
@@ -284,7 +284,7 @@ impl Compiler {
             .and_then(|r| if kind & 1 == 1 { r.sub } else { r.whole });
         self.ty = self.size_t_ty();
         // A pointer value designating no object here may reach one once
-        // inlining substitutes the caller's argument, as gcc answers it.
+        // inlining substitutes the caller's argument.
         if extent.is_none()
             && let Some(id) = operand.filter(|&id| self.constant_p_operand_defers(id))
         {
@@ -323,7 +323,7 @@ impl Compiler {
     }
 
     /// The object member `idx` of aggregate `sid` designates, reached
-    /// from `base`. gcc's closest surrounding subobject is the member
+    /// from `base`. The closest surrounding subobject is the member
     /// itself, except where it has no bound the object can be held to:
     /// a member with no declared bound (C99 6.7.2.1p16) has no extent
     /// of its own and answers the object holding it, and a trailing
@@ -410,7 +410,7 @@ impl Compiler {
         self.type_ends_in_flex_array(f.ty)
     }
 
-    /// One subscript of a tracked object. gcc's closest surrounding
+    /// One subscript of a tracked object. The closest surrounding
     /// subobject of an array element is the array indexed, so the
     /// subobject narrows to it and both offsets move by the index; a
     /// row keeps its stride for the next subscript. A member with no
@@ -541,7 +541,7 @@ impl Compiler {
         admitted && records <= 1 && at_end
     }
 
-    /// GCC `__builtin_choose_expr(const, e1, e2)`: the chosen operand
+    /// `__builtin_choose_expr(const, e1, e2)`: the chosen operand
     /// IS the expression -- its exact type carries through (no `?:`
     /// arithmetic conversions) and the other operand is parsed but not
     /// evaluated. The condition must fold to an integer constant.
@@ -602,7 +602,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
+    /// `__builtin_has_attribute(operand, attribute)`: an `int`
     /// constant. badc does not model the queried attributes on objects or
     /// types, so under its own semantics no operand carries one -- the
     /// answer is 0. Both operands are consumed unevaluated.
@@ -620,7 +620,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
+    /// `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
     /// operand folds to a constant value. A parse-time constant answers
     /// 1, which no later phase revises. A non-constant operand can still
     /// become one after inlining and constant propagation, so where
@@ -661,8 +661,7 @@ impl Compiler {
             }
             _ => {
                 // The parsed operand is dropped unreferenced: its side
-                // effects are never walked, matching GCC's unevaluated
-                // operand.
+                // effects are never walked.
                 self.emit_imm(0);
                 self.ast_emit_int_lit(0, self.ty);
             }
@@ -744,7 +743,7 @@ impl Compiler {
         }
     }
 
-    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GCC's `__alignof__` on an
+    /// C11 6.5.3.4 `_Alignof ( type-name )`, and GNU C `__alignof__` on an
     /// expression (both spellings share the token). An array's alignment
     /// is its element's (C11 6.2.8); a pointer's is the pointer's.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {

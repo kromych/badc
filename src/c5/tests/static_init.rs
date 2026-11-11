@@ -469,8 +469,7 @@ const PACKED_AND_BITS: &[Case] = &[
     case!("bits_from_float", "struct B { int a : 5; _Bool b : 1; } x = {3.75, 0.5};", "23000000"),
 ];
 
-/// Initializers that are not constant, each with its diagnostic; clang
-/// rejects each of them too.
+/// Initializers that are not constant, each with its diagnostic.
 #[rustfmt::skip]
 const REJECTED: &[Reject] = &[
     reject!("writable_element", "static int a[] = {1, 2}; int x = a[1];", "constant integer expected (got identifier `a`)"),
@@ -480,7 +479,7 @@ const REJECTED: &[Reject] = &[
     reject!("function_call", "int f(void); int x = f();", "constant integer expected (got identifier `f`)"),
     reject!("address_in_int", "int g; int x = (int)(long)&g;", "an address constant does not fit an object of type `int`"),
     reject!("address_in_int_member", "int g; struct { int a, b, c; } x = {1, (int)(long)&g, 3};", "an address constant does not fit an object of type `int`"),
-    // -Wint-conversion, an error by default as in gcc 14 and clang.
+    // -Wint-conversion, an error by default.
     reject!("pointer_to_integer_without_cast", "int g; long x = &g;", "pointer assigned to integer in initializer"),
     reject!("address_in_short_element", "int g; short x[2] = {1, (short)(long)&g};", "an address constant does not fit an object of type `short`"),
     reject!("address_in_char", "char x = (char)(long)\"abc\";", "an address constant does not fit an object of type"),

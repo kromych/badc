@@ -355,7 +355,7 @@ fn sys_op_dc_ic_tlbi() {
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8700)]), 0xD508_871F); // tlbi vmalle1
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8720), x(3)]), 0xD508_8723); // tlbi vae1, x3
     assert_eq!(enc("ic", &[Opnd::SysOp(0xD508_7100)]), 0xD508_711F); // ic ialluis
-    // `at`/`sys` share the same path; base words verified against clang.
+    // `at`/`sys` share the same path.
     assert_eq!(enc("at", &[Opnd::SysOp(0xD508_7800), x(0)]), 0xD508_7800); // at s1e1r, x0
     assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7A20), x(0)]), 0xD50B_7A20); // sys #3,c7,c10,#1,x0
     assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7E20)]), 0xD50B_7E3F); // sys #3,c7,c14,#1 (xzr)

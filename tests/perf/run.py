@@ -155,18 +155,28 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
 # skipped rather than counted as a build failure. The vendored tcc does not
 # implement the AArch64 `yield` instruction quickjs uses in a spin loop;
 # quickjs includes <sys/time.h> and <unistd.h>, which MSVC does not ship.
-# tcc and ccc ship no <immintrin.h> for the x86 vector kernels.
 FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"tcc", "cl"},
-    "blake2b.c": {"tcc", "ccc"},
-    "adler32.c": {"tcc", "ccc"},
-    "crc32.c": {"tcc", "ccc"},
+}
+
+# The same, on one host architecture only. tcc and ccc ship no
+# <immintrin.h> for the x86-64 vector kernels; elsewhere those fixtures
+# take their portable loops.
+ARCH_FIXTURE_SKIP_COMPILERS: dict[str, dict[str, set[str]]] = {
+    "x86_64": {
+        "blake2b.c": {"tcc", "ccc"},
+        "adler32.c": {"tcc", "ccc"},
+        "crc32.c": {"tcc", "ccc"},
+    },
 }
 
 
-def skips(fixture: str, leg: str) -> bool:
-    """Whether the leg named `leg` sits out `fixture`."""
-    return leg.split()[0] in FIXTURE_SKIP_COMPILERS.get(fixture, set())
+def skips(fixture: str, leg: str, arch: str = "") -> bool:
+    """Whether the leg named `leg` sits out `fixture` on the architecture
+    `arch`, the host's when empty."""
+    on_arch = ARCH_FIXTURE_SKIP_COMPILERS.get(host_arch(arch), {})
+    skipped = FIXTURE_SKIP_COMPILERS.get(fixture, set()) | on_arch.get(fixture, set())
+    return leg.split()[0] in skipped
 
 
 @dataclass
@@ -197,11 +207,17 @@ class Result:
     compile_ms: float
 
 
+def host_arch(arch: str = "") -> str:
+    """`arch`, or the host's architecture when empty, in the spelling
+    BASELINE_LEVEL and ARCH_FIXTURE_SKIP_COMPILERS key on."""
+    arch = arch or platform.machine()
+    return ARCH_ALIAS.get(arch, arch)
+
+
 def host_level(arch: str = "") -> str:
     """The instruction-set level badc assumes on this machine, or empty
     where it assumes none."""
-    arch = arch or platform.machine()
-    return BASELINE_LEVEL.get(ARCH_ALIAS.get(arch, arch), "")
+    return BASELINE_LEVEL.get(host_arch(arch), "")
 
 
 def accepts_flag(argv: list[str], flag: str) -> bool:
@@ -752,10 +768,17 @@ def self_test() -> int:
         # quickjs sits out every cl and tcc leg; nothing else does.
         assert skips("quickjs_bench.c", "cl /O2 /arch:AVX2")
         assert skips("quickjs_bench.c", "tcc")
-        assert skips("blake2b.c", "ccc -O2") and not skips("blake2b.c", "badc -O")
         assert not skips("quickjs_bench.c", "clang -O2")
         assert not skips("quickjs_bench.c", "badc -O")
         assert not skips("fib.c", "cl /O2")
+        # The x86-64 vector kernels sit out tcc and ccc on x86-64 hosts
+        # only; elsewhere they are portable C.
+        assert skips("blake2b.c", "ccc -O2", "x86_64")
+        assert skips("adler32.c", "tcc", "AMD64")
+        assert not skips("blake2b.c", "badc -O", "x86_64")
+        assert not skips("crc32.c", "ccc -O2", "aarch64")
+        assert not skips("adler32.c", "tcc", "arm64")
+        assert skips("quickjs_bench.c", "tcc", "aarch64")
         # A failure reports what the compiler said on either stream.
         said = failure_text(subprocess.CompletedProcess(
             ["cl"], 2, stdout="bad.c\nbad.c(1): error C2065: 'x': undeclared\n",
@@ -868,6 +891,19 @@ def main() -> int:
         # Digit loop over a counted range: division and modulo by a
         # constant, a table load, and an early-exit compare.
         "munchausen.c",
+        # Floating point: register-held doubles with square roots and
+        # divisions, a small helper to inline, an early-exit loop, and a
+        # serial multiply-add chain beside its tree-shaped split.
+        "nbody.c",
+        "spectral_norm.c",
+        "mandelbrot.c",
+        "horner.c",
+        # Integer search: permutation flips, bitmask backtracking, a
+        # constraint solver over small arrays; allocation-bound tree walks.
+        "fannkuch.c",
+        "nqueens.c",
+        "sudoku.c",
+        "binary_trees.c",
         "crypto.c",
         # Vector kernels: AVX2 and PCLMULQDQ intrinsics on x86-64, the
         # portable loops elsewhere.

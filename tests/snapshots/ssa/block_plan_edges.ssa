@@ -1007,8 +1007,8 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v999 BinopI { op=and, lhs=v998, rhs_imm=1 }           -> x6
     v1000 BinopI { op=eq, lhs=v999, rhs_imm=0 }            -> x7
     v1001 BinopI { op=add, lhs=v989, rhs_imm=1 }           -> x7
-    v1002 BinopI { op=eq, lhs=v999, rhs_imm=0 }            -> x6
-    v1003 Select { cond=v1002, a=v989, b=v1001, kind=I64 } -> x1
+    v1002 BinopI { op=eq, lhs=v999, rhs_imm=0 }            -> x8
+    v1003 Select { cond=v999, a=v1001, b=v989, kind=I64 }  -> x1
     terminator Jmp(b80)
   block 80  start_pc=0
     v992 Copy { value=v1003, fp=false }                   -> x6

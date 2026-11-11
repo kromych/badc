@@ -60,7 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	mov	x1, #0x0                // =0
                	cmp	w2, #0x0
-               	csel	x0, x0, x1, eq
+               	csel	x0, x1, x0, ne
                	ret
 
 <main>:

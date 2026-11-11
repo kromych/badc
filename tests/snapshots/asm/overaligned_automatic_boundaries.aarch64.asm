@@ -26,11 +26,10 @@ Disassembly of section .text:
                	str	w1, [sp]
                	mov	x1, #0xa                // =10
                	str	w1, [sp, #0x4]
-               	and	x1, x0, #0x1f
+               	tst	x0, #0x1f
                	mov	x0, #0x0                // =0
                	mov	x2, #0x1                // =1
-               	cmp	w1, #0x0
-               	csel	x1, x2, x0, eq
+               	csel	x1, x0, x2, ne
                	cbz	x1, <addr>
                	ldrsw	x0, [sp, #0x4]
                	cmp	w0, #0xa
@@ -62,7 +61,7 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	cset	x1, eq
                	cmp	w3, #0x0
-               	csel	x1, x1, x0, eq
+               	csel	x1, x0, x1, ne
                	and	x2, x2, #0x3f
                	cmp	w2, #0x0
                	cset	x2, eq
@@ -177,11 +176,10 @@ Disassembly of section .text:
                	str	x0, [x1, #0x30]
                	mov	x1, #0x4                // =4
                	strh	w1, [sp]
-               	and	x0, x0, #0x1f
+               	tst	x0, #0x1f
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1                // =1
-               	cmp	w0, #0x0
-               	csel	x0, x2, x1, eq
+               	csel	x0, x1, x2, ne
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

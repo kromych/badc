@@ -61,7 +61,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v62  Extend { value=v53, kind=I32 }                   -> x7
     v63  BinopI { op=eq, lhs=v53, rhs_imm=0 }             -> x7
     v64  BinopI { op=eq, lhs=v53, rhs_imm=0 }             -> x7
-    v65  Select { cond=v64, a=v5, b=v55, kind=I64 }       -> x1
+    v65  Select { cond=v53, a=v55, b=v5, kind=I64 }       -> x1
     terminator Jmp(b3)
   block 3  start_pc=0
     v72  Copy { value=v65, fp=false }                     -> x7

@@ -142,8 +142,7 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %r8
                	movq	(%rdi,%rax,8), %rax
                	leaq	-0x8(%rsi), %r9
-               	movq	(%r9), %r9
-               	testq	%r9, %r9
+               	cmpq	$0x0, (%r9)
                	cmovneq	%rax, %r8
                	leaq	0x1(%r8), %rax
                	movq	(%rdi,%r8,8), %r8
@@ -294,8 +293,7 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rdx
                	movq	(%rdi,%rax,8), %rax
                	leaq	-0x8(%rsi), %r9
-               	movq	(%r9), %r9
-               	testq	%r9, %r9
+               	cmpq	$0x0, (%r9)
                	cmovneq	%rax, %rdx
                	jmp	<addr>
                	leaq	-0x8(%rsi), %rdx

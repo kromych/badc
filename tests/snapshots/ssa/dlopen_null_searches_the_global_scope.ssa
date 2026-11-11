@@ -79,8 +79,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v51  BinopI { op=eq, lhs=v50, rhs_imm=0 }             -> x1
     v52  Imm(0)                                           -> x1
     v53  Imm(5)                                           -> x2
-    v54  BinopI { op=eq, lhs=v50, rhs_imm=0 }             -> x0
-    v55  Select { cond=v54, a=v52, b=v53, kind=I64 }      -> x0
+    v54  BinopI { op=eq, lhs=v50, rhs_imm=0 }             -> x6
+    v55  Select { cond=v50, a=v53, b=v52, kind=I64 }      -> x0
     terminator Jmp(b12)
   block 12  start_pc=0
     v60  Copy { value=v55, fp=false }                     -> x1

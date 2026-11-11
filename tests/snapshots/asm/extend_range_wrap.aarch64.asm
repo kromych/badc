@@ -140,7 +140,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	mov	x2, #0x9                // =9
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, eq
+               	csel	x0, x2, x1, ne
                	ret
 
 <main>:

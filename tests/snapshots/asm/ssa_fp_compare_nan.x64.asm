@@ -68,8 +68,8 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	orq	$0x20, %rdx
                	testq	%rax, %rax
-               	movq	%rcx, %rax
-               	cmoveq	%rdx, %rax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	movq	%rax, %rcx
                	orq	$0x40, %rcx
                	comisd	%xmm0, %xmm0

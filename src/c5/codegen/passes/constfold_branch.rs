@@ -371,29 +371,53 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
             func.low_word_tests[bidx] = true;
         }
     }
-    // A select tests its condition's low word the same way: a 32-bit
-    // parameter, or the operand of a 32-bit extension it alone reads.
+    // A select tests its condition as a branch does: through a zero test
+    // or a 32-bit extension it alone reads, at the last link's width, and
+    // a 32-bit parameter in its low word.
     for v in 0..func.insts.len() {
-        let Inst::Select { cond, .. } = func.insts[v] else {
+        let Inst::Select { cond: first, .. } = func.insts[v] else {
             continue;
         };
-        let low = match func.insts[cond as usize] {
-            Inst::Extend {
-                value,
-                kind: LoadKind::I32 | LoadKind::U32,
-                ..
-            } if uses[cond as usize] == 1 => Some(value),
-            _ if narrow_param(func, cond) => Some(cond),
-            _ => None,
-        };
-        let Some(low) = low else { continue };
-        if let Inst::Select { cond, .. } = &mut func.insts[v] {
-            *cond = low;
+        let (mut cond, mut swap, mut low) = (first, false, false);
+        for _ in 0..func.insts.len() {
+            let link = if uses[cond as usize] == 1 {
+                zero_test(func, cond).or_else(|| low_word_of(func, &uses, cond))
+            } else {
+                None
+            };
+            let Some((lhs, negate, low_word)) = link else {
+                break;
+            };
+            // The zero test of an exclusive-or compares its operands.
+            if matches!(
+                func.insts[lhs as usize],
+                Inst::Binop { op: BinOp::Xor, .. } | Inst::BinopI { op: BinOp::Xor, .. }
+            ) {
+                break;
+            }
+            uses[lhs as usize] += 1;
+            uses[cond as usize] -= 1;
+            if func.insts[cond as usize].is_pure() {
+                for_each_operand(&func.insts[cond as usize], |op| {
+                    uses[op as usize] = uses[op as usize].saturating_sub(1);
+                });
+            }
+            (cond, swap, low) = (lhs, swap != negate, low_word);
+        }
+        low |= narrow_param(func, cond);
+        if cond == first && !low {
+            continue;
+        }
+        if let Inst::Select { cond: c, a, b, .. } = &mut func.insts[v] {
+            *c = cond;
+            if swap {
+                core::mem::swap(a, b);
+            }
         }
         if func.cmp32.len() < func.insts.len() {
             func.cmp32.resize(func.insts.len(), false);
         }
-        func.cmp32[v] = true;
+        func.cmp32[v] = low;
         changed = true;
     }
     changed

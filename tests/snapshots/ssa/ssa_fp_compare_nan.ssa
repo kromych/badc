@@ -58,8 +58,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v62  Binop { op=fne, lhs=v2, rhs=v1 }                 -> x0
     v63  BinopI { op=eq, lhs=v62, rhs_imm=0 }             -> x2
     v64  BinopI { op=or, lhs=v54, rhs_imm=32 }            -> x2
-    v65  BinopI { op=eq, lhs=v62, rhs_imm=0 }             -> x0
-    v66  Select { cond=v65, a=v64, b=v54, kind=I64 }      -> x0
+    v65  BinopI { op=eq, lhs=v62, rhs_imm=0 }             -> x6
+    v66  Select { cond=v62, a=v54, b=v64, kind=I64 }      -> x0
     terminator Jmp(b6)
   block 6  start_pc=0
     v71  Copy { value=v66, fp=false }                     -> x1

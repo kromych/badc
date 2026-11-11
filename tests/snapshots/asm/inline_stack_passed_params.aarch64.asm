@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	add	x2, x0, #0x14
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, eq
+               	csel	x0, x2, x1, ne
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>

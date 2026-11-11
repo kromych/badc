@@ -37,7 +37,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, x0
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, eq
+               	csel	x0, x1, x2, ne
                	ret
 
 <at_rev>:

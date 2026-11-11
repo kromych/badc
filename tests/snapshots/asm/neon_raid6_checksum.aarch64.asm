@@ -429,7 +429,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	mov	x1, #0x0                // =0
                	cmp	x20, #0x0
-               	csel	x0, x0, x1, eq
+               	csel	x0, x1, x0, ne
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xa0

@@ -60,11 +60,10 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	bl	<addr>
                	mov	x0, sp
-               	and	x0, x0, #0x3f
+               	tst	x0, #0x3f
                	mov	x1, #0x3                // =3
                	mov	x2, #0x64               // =100
-               	cmp	w0, #0x0
-               	csel	x0, x1, x2, eq
+               	csel	x0, x2, x1, ne
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -132,11 +131,10 @@ Disassembly of section .text:
                	mov	x1, sp
                	ldrb	w2, [sp]
                	add	x0, x0, x2
-               	and	x1, x1, #0x3f
+               	tst	x1, #0x3f
                	mov	x2, #0x0                // =0
                	mov	x3, #0x3e8              // =1000
-               	cmp	w1, #0x0
-               	csel	x1, x2, x3, eq
+               	csel	x1, x3, x2, ne
                	add	x0, x0, x1
                	sub	sp, x29, #0x10
                	ldp	x20, x21, [sp]

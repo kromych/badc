@@ -92,8 +92,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x5, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq

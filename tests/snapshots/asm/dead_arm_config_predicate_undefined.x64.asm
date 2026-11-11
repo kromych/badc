@@ -48,8 +48,7 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movq	%rcx, -0x8(%rbp)
                	movq	-0x8(%rbp), %rdx
-               	andq	$0x8, %rdx
-               	testl	%edx, %edx
+               	testb	$0x8, %dl
                	cmovneq	%rcx, %rax
                	addq	$0xb, %rax
                	addq	$0xa, %rax

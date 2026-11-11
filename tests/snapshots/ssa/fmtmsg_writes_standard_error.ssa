@@ -104,8 +104,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=35
     v84  BinopI { op=ne, lhs=v83, rhs_imm=0 }             -> x1
     v85  Imm(4)                                           -> x1
     v86  Imm(0)                                           -> x2
-    v87  BinopI { op=ne, lhs=v83, rhs_imm=0 }             -> x0
-    v88  Select { cond=v87, a=v85, b=v86, kind=I64 }      -> x0
+    v87  BinopI { op=ne, lhs=v83, rhs_imm=0 }             -> x6
+    v88  Select { cond=v83, a=v85, b=v86, kind=I64 }      -> x0
     terminator Jmp(b8)
   block 8  start_pc=0
     v93  Copy { value=v88, fp=false }                     -> x1

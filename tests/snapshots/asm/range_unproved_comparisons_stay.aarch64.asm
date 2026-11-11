@@ -30,7 +30,7 @@ Disassembly of section .text:
                	cbnz	w5, <addr>
                	mov	x5, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x1, x5, x0, eq
+               	csel	x1, x0, x5, ne
                	cbz	x1, <addr>
                	mov	x0, x1
                	add	sp, sp, #0x10

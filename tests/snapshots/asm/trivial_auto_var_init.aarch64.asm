@@ -258,7 +258,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	cmp	w1, #0x0
-               	csel	x0, x0, x0, eq
+               	csel	x0, x0, x0, ne
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>

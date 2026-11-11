@@ -254,7 +254,7 @@ Disassembly of section .text:
                	mov	x7, #0xf                // =15
                	sub	x7, x7, x0
                	cmp	w5, #0x0
-               	csel	x5, x6, x7, eq
+               	csel	x5, x7, x6, ne
                	strb	w5, [x4, x0]
                	sub	x4, x29, #0x40
                	add	x5, x0, #0xa0

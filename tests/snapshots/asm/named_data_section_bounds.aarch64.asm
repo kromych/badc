@@ -28,7 +28,7 @@ Disassembly of section .text:
                	ldrb	w6, [x6, #0x1]
                	mov	x7, #0x3e8              // =1000
                	cmp	w6, #0x0
-               	csel	x6, x1, x7, eq
+               	csel	x6, x7, x1, ne
                	add	x5, x5, x6
                	add	x3, x3, x5
                	add	x0, x0, #0x10

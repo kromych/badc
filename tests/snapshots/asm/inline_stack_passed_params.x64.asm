@@ -48,8 +48,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	0x14(%rax), %rdx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

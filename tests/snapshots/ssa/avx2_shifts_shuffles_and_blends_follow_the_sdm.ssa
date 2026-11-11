@@ -4563,9 +4563,9 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v360 CallExt { binding_idx=78, args=[v357, v358, v359], fp_arg_mask=0x0 } -> x0
     v361 BinopI { op=ne, lhs=v360, rhs_imm=0 }            -> x1
     v362 Imm(4)                                           -> x1
-    v363 Imm(0)                                           -> x2
-    v364 BinopI { op=ne, lhs=v360, rhs_imm=0 }            -> x0
-    v365 Select { cond=v364, a=v362, b=v363, kind=I64 }   -> x13
+    v363 BinopI { op=ne, lhs=v360, rhs_imm=0 }            -> x2
+    v364 Imm(0)                                           -> x2
+    v365 Select { cond=v360, a=v362, b=v364, kind=I64 }   -> x13
     terminator Jmp(b147)
   block 147  start_pc=0
     v368 Copy { value=v365, fp=false }                    -> x0
@@ -4994,8 +4994,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v2660 CallExt { binding_idx=78, args=[v2657, v2658, v2659], fp_arg_mask=0x0 } -> x0
     v2661 BinopI { op=ne, lhs=v2660, rhs_imm=0 }           -> x1
     v2662 Imm(4)                                           -> x1
-    v2663 BinopI { op=ne, lhs=v2660, rhs_imm=0 }           -> x0
-    v2664 Select { cond=v2663, a=v2662, b=v365, kind=I64 } -> x13
+    v2663 BinopI { op=ne, lhs=v2660, rhs_imm=0 }           -> x2
+    v2664 Select { cond=v2660, a=v2662, b=v365, kind=I64 } -> x13
     terminator Jmp(b167)
   block 167  start_pc=0
     v405 Copy { value=v2664, fp=false }                   -> x0
@@ -5298,8 +5298,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v2301 CallExt { binding_idx=78, args=[v2298, v2299, v2300], fp_arg_mask=0x0 } -> x0
     v2302 BinopI { op=ne, lhs=v2301, rhs_imm=0 }           -> x1
     v2303 Imm(4)                                           -> x1
-    v2304 BinopI { op=ne, lhs=v2301, rhs_imm=0 }           -> x0
-    v2305 Select { cond=v2304, a=v2303, b=v2664, kind=I64 } -> x12
+    v2304 BinopI { op=ne, lhs=v2301, rhs_imm=0 }           -> x2
+    v2305 Select { cond=v2301, a=v2303, b=v2664, kind=I64 } -> x12
     terminator Jmp(b174)
   block 174  start_pc=0
     v423 Copy { value=v2305, fp=false }                   -> x0
@@ -5489,8 +5489,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v2804 CallExt { binding_idx=78, args=[v2801, v2802, v2803], fp_arg_mask=0x0 } -> x0
     v2805 BinopI { op=ne, lhs=v2804, rhs_imm=0 }           -> x1
     v2806 Imm(4)                                           -> x1
-    v2807 BinopI { op=ne, lhs=v2804, rhs_imm=0 }           -> x0
-    v2808 Select { cond=v2807, a=v2806, b=v2305, kind=I64 } -> x12
+    v2807 BinopI { op=ne, lhs=v2804, rhs_imm=0 }           -> x2
+    v2808 Select { cond=v2804, a=v2806, b=v2305, kind=I64 } -> x12
     terminator Jmp(b181)
   block 181  start_pc=0
     v441 Copy { value=v2808, fp=false }                   -> x0
@@ -5684,8 +5684,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v2969 CallExt { binding_idx=78, args=[v2966, v2967, v2968], fp_arg_mask=0x0 } -> x0
     v2970 BinopI { op=ne, lhs=v2969, rhs_imm=0 }           -> x1
     v2971 Imm(4)                                           -> x1
-    v2972 BinopI { op=ne, lhs=v2969, rhs_imm=0 }           -> x0
-    v2973 Select { cond=v2972, a=v2971, b=v2808, kind=I64 } -> x12
+    v2972 BinopI { op=ne, lhs=v2969, rhs_imm=0 }           -> x2
+    v2973 Select { cond=v2969, a=v2971, b=v2808, kind=I64 } -> x12
     terminator Jmp(b188)
   block 188  start_pc=0
     v459 Copy { value=v2973, fp=false }                   -> x0
@@ -5875,8 +5875,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v3126 CallExt { binding_idx=78, args=[v3123, v3124, v3125], fp_arg_mask=0x0 } -> x0
     v3127 BinopI { op=ne, lhs=v3126, rhs_imm=0 }           -> x1
     v3128 Imm(4)                                           -> x1
-    v3129 BinopI { op=ne, lhs=v3126, rhs_imm=0 }           -> x0
-    v3130 Select { cond=v3129, a=v3128, b=v2973, kind=I64 } -> x12
+    v3129 BinopI { op=ne, lhs=v3126, rhs_imm=0 }           -> x2
+    v3130 Select { cond=v3126, a=v3128, b=v2973, kind=I64 } -> x12
     terminator Jmp(b195)
   block 195  start_pc=0
     v477 Copy { value=v3130, fp=false }                   -> x0
@@ -6069,8 +6069,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v3291 CallExt { binding_idx=78, args=[v3288, v3289, v3290], fp_arg_mask=0x0 } -> x0
     v3292 BinopI { op=ne, lhs=v3291, rhs_imm=0 }           -> x1
     v3293 Imm(4)                                           -> x1
-    v3294 BinopI { op=ne, lhs=v3291, rhs_imm=0 }           -> x0
-    v3295 Select { cond=v3294, a=v3293, b=v3130, kind=I64 } -> x12
+    v3294 BinopI { op=ne, lhs=v3291, rhs_imm=0 }           -> x2
+    v3295 Select { cond=v3291, a=v3293, b=v3130, kind=I64 } -> x12
     terminator Jmp(b202)
   block 202  start_pc=0
     v495 Copy { value=v3295, fp=false }                   -> x0
@@ -6261,8 +6261,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v3460 CallExt { binding_idx=78, args=[v3457, v3458, v3459], fp_arg_mask=0x0 } -> x0
     v3461 BinopI { op=ne, lhs=v3460, rhs_imm=0 }           -> x1
     v3462 Imm(4)                                           -> x1
-    v3463 BinopI { op=ne, lhs=v3460, rhs_imm=0 }           -> x0
-    v3464 Select { cond=v3463, a=v3462, b=v3295, kind=I64 } -> x12
+    v3463 BinopI { op=ne, lhs=v3460, rhs_imm=0 }           -> x2
+    v3464 Select { cond=v3460, a=v3462, b=v3295, kind=I64 } -> x12
     terminator Jmp(b209)
   block 209  start_pc=0
     v513 Copy { value=v3464, fp=false }                   -> x0
@@ -6400,8 +6400,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v3565 CallExt { binding_idx=78, args=[v3562, v3563, v3564], fp_arg_mask=0x0 } -> x0
     v3566 BinopI { op=ne, lhs=v3565, rhs_imm=0 }           -> x1
     v3567 Imm(4)                                           -> x1
-    v3568 BinopI { op=ne, lhs=v3565, rhs_imm=0 }           -> x0
-    v3569 Select { cond=v3568, a=v3567, b=v3464, kind=I64 } -> x12
+    v3568 BinopI { op=ne, lhs=v3565, rhs_imm=0 }           -> x2
+    v3569 Select { cond=v3565, a=v3567, b=v3464, kind=I64 } -> x12
     terminator Jmp(b216)
   block 216  start_pc=0
     v531 Copy { value=v3569, fp=false }                   -> x0
@@ -6541,8 +6541,8 @@ fn ent_pc=1369 n_params=1 variadic=false locals=12
     v3676 CallExt { binding_idx=78, args=[v3673, v3674, v3675], fp_arg_mask=0x0 } -> x0
     v3677 BinopI { op=ne, lhs=v3676, rhs_imm=0 }           -> x1
     v3678 Imm(4)                                           -> x1
-    v3679 BinopI { op=ne, lhs=v3676, rhs_imm=0 }           -> x0
-    v3680 Select { cond=v3679, a=v3678, b=v3569, kind=I64 } -> x0
+    v3679 BinopI { op=ne, lhs=v3676, rhs_imm=0 }           -> x2
+    v3680 Select { cond=v3676, a=v3678, b=v3569, kind=I64 } -> x0
     terminator Jmp(b223)
   block 223  start_pc=0
     v549 Copy { value=v3680, fp=false }                   -> x1

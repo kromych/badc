@@ -39,7 +39,7 @@ Disassembly of section .text:
                	ldursw	x4, [x29, #-0x8]
                	add	x2, x2, x4
                	cmp	w0, #0x0
-               	csel	x1, x3, x1, eq
+               	csel	x1, x1, x3, ne
                	ldrsw	x4, [x1]
                	add	x4, x4, #0x1
                	str	w4, [x1]

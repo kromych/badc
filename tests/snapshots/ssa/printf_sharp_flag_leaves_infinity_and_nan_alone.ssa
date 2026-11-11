@@ -44,8 +44,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=48
     v34  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x1
     v35  Imm(2)                                           -> x1
     v36  Imm(0)                                           -> x2
-    v37  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x0
-    v38  Select { cond=v37, a=v35, b=v36, kind=I64 }      -> x0
+    v37  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x6
+    v38  Select { cond=v33, a=v35, b=v36, kind=I64 }      -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
     v43  Copy { value=v38, fp=false }                     -> x1

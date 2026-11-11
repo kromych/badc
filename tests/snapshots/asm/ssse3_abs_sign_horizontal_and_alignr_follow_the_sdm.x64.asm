@@ -888,8 +888,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x10, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	leave
                	retq
 
@@ -919,14 +919,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
                	xorl	%edx, %edx
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	movq	%rdx, %r13
-               	cmoveq	%rcx, %r13
+               	cmovneq	%rcx, %r13
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rsi
                	leaq	0x1(%rax), %rcx
@@ -949,12 +946,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rdx
                	leaq	0x5(%rax), %rcx
@@ -978,12 +972,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rdx
                	leaq	0x8(%rax), %rcx
@@ -1007,12 +998,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rdx
                	leaq	0xf(%rax), %rcx
@@ -1036,12 +1024,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rcx
                	leaq	0x10(%rax), %rdx
@@ -1061,12 +1046,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	leaq	-0x20(%rbp), %rsi
@@ -1091,12 +1073,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	leaq	-0x20(%rbp), %rsi
@@ -1121,12 +1100,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	leaq	-0x20(%rbp), %rsi
@@ -1150,12 +1126,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	leaq	-0x20(%rbp), %rdx
@@ -1173,12 +1146,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
-               	cmoveq	%rcx, %r13
+               	testq	%rax, %rax
+               	cmovneq	%rcx, %r13
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
                	leaq	-0x20(%rbp), %rdx
@@ -1196,13 +1166,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
                	movl	$0x20, %ecx
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	movq	%r13, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

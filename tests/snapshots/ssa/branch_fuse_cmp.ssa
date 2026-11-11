@@ -128,8 +128,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v24  Load { addr=v16, disp=0, kind=I64, volatile pc_rel } -> x1
     v25  BinopI { op=eq, lhs=v24, rhs_imm=0 }             -> x2
     v26  BinopI { op=add, lhs=v19, rhs_imm=1 }            -> x2
-    v27  BinopI { op=eq, lhs=v24, rhs_imm=0 }             -> x1
-    v28  Select { cond=v27, a=v26, b=v19, kind=I64 }      -> x0
+    v27  BinopI { op=eq, lhs=v24, rhs_imm=0 }             -> x6
+    v28  Select { cond=v24, a=v19, b=v26, kind=I64 }      -> x0
     terminator Jmp(b14)
   block 14  start_pc=0
     v33  Copy { value=v28, fp=false }                     -> x1
@@ -144,8 +144,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v44  Load { addr=v34, disp=0, kind=I64, volatile pc_rel } -> x1
     v45  BinopI { op=eq, lhs=v44, rhs_imm=0 }             -> x2
     v46  BinopI { op=add, lhs=v37, rhs_imm=100 }          -> x2
-    v47  BinopI { op=eq, lhs=v44, rhs_imm=0 }             -> x1
-    v48  Select { cond=v47, a=v46, b=v37, kind=I64 }      -> x0
+    v47  BinopI { op=eq, lhs=v44, rhs_imm=0 }             -> x6
+    v48  Select { cond=v44, a=v37, b=v46, kind=I64 }      -> x0
     terminator Jmp(b16)
   block 16  start_pc=0
     v53  Copy { value=v48, fp=false }                     -> x1
@@ -153,8 +153,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v55  Load { addr=v34, disp=0, kind=I64, volatile pc_rel } -> x1
     v56  BinopI { op=ne, lhs=v55, rhs_imm=0 }             -> x2
     v57  BinopI { op=add, lhs=v48, rhs_imm=1 }            -> x2
-    v58  BinopI { op=ne, lhs=v55, rhs_imm=0 }             -> x1
-    v59  Select { cond=v58, a=v57, b=v48, kind=I64 }      -> x0
+    v58  BinopI { op=ne, lhs=v55, rhs_imm=0 }             -> x6
+    v59  Select { cond=v55, a=v57, b=v48, kind=I64 }      -> x0
     terminator Jmp(b17)
   block 17  start_pc=0
     v64  Copy { value=v59, fp=false }                     -> x1
@@ -162,8 +162,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v66  Load { addr=v16, disp=0, kind=I64, volatile pc_rel } -> x1
     v67  BinopI { op=eq, lhs=v66, rhs_imm=0 }             -> x2
     v68  BinopI { op=add, lhs=v59, rhs_imm=1 }            -> x2
-    v69  BinopI { op=eq, lhs=v66, rhs_imm=0 }             -> x1
-    v70  Select { cond=v69, a=v68, b=v59, kind=I64 }      -> x0
+    v69  BinopI { op=eq, lhs=v66, rhs_imm=0 }             -> x6
+    v70  Select { cond=v66, a=v59, b=v68, kind=I64 }      -> x0
     terminator Jmp(b18)
   block 18  start_pc=0
     v75  Copy { value=v70, fp=false }                     -> x1

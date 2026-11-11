@@ -3115,7 +3115,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]
                	cmp	w20, #0x0
-               	fcsel	d3, d0, d1, eq
+               	fcsel	d3, d1, d0, ne
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]

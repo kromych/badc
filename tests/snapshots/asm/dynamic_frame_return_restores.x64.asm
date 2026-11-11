@@ -70,12 +70,11 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	callq	<addr>
                	leaq	(%rsp), %rax
-               	andq	$0x3f, %rax
+               	testb	$0x3f, %al
                	movl	$0x3, %ecx
                	movl	$0x64, %edx
-               	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	leave
                	retq
 
@@ -151,8 +150,8 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	testl	%ecx, %ecx
-               	movq	%rsi, %rcx
-               	cmoveq	%rdx, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rsi, %rcx
                	addq	%rcx, %rax
                	leaq	-0x10(%rbp), %rsp
                	popq	%rbx

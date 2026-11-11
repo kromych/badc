@@ -4384,6 +4384,26 @@ long both(long x, int c) { long y = c ? x : 5; return y + c; }\n";
     m.finish();
 }
 
+/// A select on a loaded value's zero test reads it from memory in the
+/// compare on x86-64, at the load's width, as a branch does: no register
+/// load and `test`.
+#[test]
+fn x64_select_on_a_loaded_zero_test_compares_memory() {
+    const SRC: &str = "long nz(const int *p, long a, long b) { return *p ? a : b; }\n\
+long z(const long *p, long a, long b) { return *p == 0 ? a : b; }\n\
+long zb(const signed char *p, long a, long b) { return !*p ? a : b; }\n";
+    let cmp_mem = |i: &X64Insn| matches!(i.op, 0x80 | 0x83) && !i.reg_form();
+    let test = |i: &X64Insn| i.op == 0x85;
+    let mut m = Misses::default();
+    for name in ["nz", "z", "zb"] {
+        let insns = x64(SRC, name);
+        m.expect(insns.iter().any(cmp_mem) && !insns.iter().any(test), || {
+            format!("{name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

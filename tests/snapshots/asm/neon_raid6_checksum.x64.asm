@@ -144,8 +144,8 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	xorl	%edx, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq

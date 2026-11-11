@@ -634,8 +634,8 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -704,8 +704,8 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -2339,8 +2339,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -2656,8 +2656,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -2973,8 +2973,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -3290,8 +3290,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -3607,8 +3607,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -3924,8 +3924,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -4241,8 +4241,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -4558,8 +4558,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -4875,8 +4875,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testl	%r15d, %r15d
-               	movq	%rcx, %r15
-               	cmoveq	%rax, %r15
+               	movq	%rax, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -5201,8 +5201,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -5541,8 +5541,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -5881,8 +5881,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -6221,8 +6221,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -6561,8 +6561,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -6901,8 +6901,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -7241,8 +7241,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -7581,8 +7581,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -7921,8 +7921,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -8255,8 +8255,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -8589,8 +8589,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -8923,8 +8923,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -9257,8 +9257,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -9591,8 +9591,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -9925,8 +9925,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -10259,8 +10259,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -10593,8 +10593,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -10927,8 +10927,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -11261,8 +11261,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -11595,8 +11595,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -11929,8 +11929,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -12263,8 +12263,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -12597,8 +12597,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -12931,8 +12931,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -13265,8 +13265,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -13599,8 +13599,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -13933,8 +13933,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -14267,8 +14267,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -14601,8 +14601,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -14935,8 +14935,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -15269,8 +15269,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -15603,8 +15603,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -15937,8 +15937,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -16271,8 +16271,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -16605,8 +16605,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -16939,8 +16939,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -17273,8 +17273,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -17607,8 +17607,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -17941,8 +17941,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -18275,8 +18275,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -18609,8 +18609,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -18943,8 +18943,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -19277,8 +19277,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -19611,8 +19611,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -19945,8 +19945,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -20279,8 +20279,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -20613,8 +20613,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -20947,8 +20947,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -21281,8 +21281,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -21615,8 +21615,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -21949,8 +21949,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -22283,8 +22283,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -22617,8 +22617,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -22951,8 +22951,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -23285,8 +23285,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -23619,8 +23619,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -23953,8 +23953,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -24287,8 +24287,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -24621,8 +24621,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -24955,8 +24955,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -25289,8 +25289,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -25623,8 +25623,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -25957,8 +25957,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -26291,8 +26291,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -26625,8 +26625,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -26959,8 +26959,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -27293,8 +27293,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -27627,8 +27627,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -27961,8 +27961,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -28295,8 +28295,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -28629,8 +28629,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -28963,8 +28963,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -29297,8 +29297,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -29631,8 +29631,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -29965,8 +29965,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -30299,8 +30299,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -30633,8 +30633,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -30967,8 +30967,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -31301,8 +31301,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -31635,8 +31635,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -31969,8 +31969,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -32303,8 +32303,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -32637,8 +32637,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -32971,8 +32971,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -33305,8 +33305,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx
@@ -33639,8 +33639,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rcx, %r15
-               	cmoveq	%rdx, %r15
+               	movq	%rdx, %r15
+               	cmovneq	%rcx, %r15
                	leaq	-0x3cf0(%rbp), %rax
                	leaq	-0x3ce0(%rbp), %rcx
                	leaq	-0x3c80(%rbp), %rdx

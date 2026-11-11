@@ -33,8 +33,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v31  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x6
     v32  Imm(0)                                           -> x6
     v33  Imm(1)                                           -> x6
-    v34  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x2
-    v35  Select { cond=v34, a=v33, b=v4, kind=I64 }       -> x2
+    v34  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x7
+    v35  Select { cond=v30, a=v4, b=v33, kind=I64 }       -> x2
     terminator Jmp(b3)
   block 3  start_pc=0
     v39  Copy { value=v35, fp=false }                     -> x6
@@ -52,8 +52,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v51  BinopI { op=and, lhs=v46, rhs_imm=63 }           -> x2
     v52  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x6
     v53  Imm(1)                                           -> x6
-    v54  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x2
-    v55  Select { cond=v54, a=v53, b=v4, kind=I64 }       -> x2
+    v54  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x7
+    v55  Select { cond=v51, a=v4, b=v53, kind=I64 }       -> x2
     terminator Jmp(b4)
   block 4  start_pc=0
     v60  Copy { value=v55, fp=false }                     -> x6

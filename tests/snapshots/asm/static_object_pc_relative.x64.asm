@@ -88,9 +88,8 @@ Disassembly of section .text:
 
 <zero_tests>:
                	xorl	%eax, %eax
-               	movsbq	<rip>, %rcx # <addr>
+               	cmpb	$0x0, <rip> # <addr>
                	movl	$0x1, %edx
-               	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
                	movswq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx

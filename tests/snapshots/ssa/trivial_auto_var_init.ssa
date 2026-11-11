@@ -69,8 +69,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v20  Imm(0)                                           -> x8
     v21  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x8
     v22  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x8
-    v23  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x2
-    v24  Select { cond=v23, a=v22, b=v11, kind=I64 }      -> x0
+    v23  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x9
+    v24  Select { cond=v19, a=v22, b=v11, kind=I64 }      -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
     v30  Copy { value=v24, fp=false }                     -> x2
@@ -518,7 +518,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=0
     v11  Extend { value=v6, kind=I32 }                    -> x2
     v12  BinopI { op=eq, lhs=v6, rhs_imm=0 }              -> x2
     v13  BinopI { op=eq, lhs=v6, rhs_imm=0 }              -> x2
-    v14  Select { cond=v13, a=v5, b=v5, kind=I64 }        -> x0
+    v14  Select { cond=v6, a=v5, b=v5, kind=I64 }         -> x0
     terminator Jmp(b2)
   block 2  start_pc=0
     v19  Copy { value=v14, fp=false }                     -> x2

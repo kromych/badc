@@ -383,7 +383,7 @@ Disassembly of section .text:
                	mov	x1, #0x1f               // =31
                	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x4, x2, x1, eq
+               	csel	x4, x1, x2, ne
                	b	<addr>
                	mov	x0, #0x4925             // =18725
                	movk	x0, #0x2492, lsl #16

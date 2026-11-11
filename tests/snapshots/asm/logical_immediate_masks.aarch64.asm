@@ -187,10 +187,9 @@ Disassembly of section .text:
                	orr	x3, x1, #0x2
                	cmp	w2, #0x30
                	csel	x1, x3, x1, eq
-               	and	x2, x0, #0x8000000000000000
+               	tst	x0, #0x8000000000000000
                	orr	x3, x1, #0x4
-               	cmp	x2, #0x0
-               	csel	x1, x3, x1, eq
+               	csel	x1, x1, x3, ne
                	orr	x2, x1, #0x8
                	and	w0, w0, #0xf0f0f0f
                	cmp	x0, #0x0
@@ -410,7 +409,7 @@ Disassembly of section .text:
                	and	x2, x20, x2
                	orr	x3, x1, #0x4
                	cmp	x2, #0x0
-               	csel	x1, x3, x1, eq
+               	csel	x1, x1, x3, ne
                	mov	w2, w20
                	ldur	w3, [x29, #-0x8]
                	and	x2, x2, x3

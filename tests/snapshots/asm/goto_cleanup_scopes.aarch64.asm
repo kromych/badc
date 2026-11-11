@@ -416,7 +416,7 @@ Disassembly of section .text:
                	cmp	w3, #0x1
                	cset	x3, eq
                	cmp	w5, #0x0
-               	csel	x5, x3, x2, eq
+               	csel	x5, x2, x3, ne
                	adrp	x3, <page>
                	ldrsw	x6, [x3, #0x88]
                	add	x6, x6, #0x1

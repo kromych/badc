@@ -370,8 +370,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=31
     v279 BinopI { op=ne, lhs=v278, rhs_imm=0 }            -> x1
     v280 Imm(23)                                          -> x1
     v281 Imm(0)                                           -> x2
-    v282 BinopI { op=ne, lhs=v278, rhs_imm=0 }            -> x0
-    v283 Select { cond=v282, a=v280, b=v281, kind=I64 }   -> x0
+    v282 BinopI { op=ne, lhs=v278, rhs_imm=0 }            -> x6
+    v283 Select { cond=v278, a=v280, b=v281, kind=I64 }   -> x0
     terminator Jmp(b43)
   block 43  start_pc=0
     v286 Copy { value=v283, fp=false }                    -> x1

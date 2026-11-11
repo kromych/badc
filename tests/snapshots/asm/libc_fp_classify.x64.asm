@@ -153,8 +153,8 @@ Disassembly of section .text:
                	movl	$0x2, %edx
                	movl	$0x3, %esi
                	testl	%ecx, %ecx
-               	movq	%rsi, %rcx
-               	cmoveq	%rdx, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rsi, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x9, %eax
@@ -191,8 +191,8 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	movl	$0x3, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xb, %eax
@@ -206,8 +206,8 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	xorl	%edx, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
                	jmp	<addr>
                	cmpl	$0xff, %edx
                	jne	<addr>
@@ -219,6 +219,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %edx
                	testl	%ecx, %ecx
-               	movq	%rax, %rcx
-               	cmoveq	%rdx, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rax, %rcx
                	jmp	<addr>

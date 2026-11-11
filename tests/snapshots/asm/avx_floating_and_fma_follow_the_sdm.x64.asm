@@ -348,8 +348,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%ecx, %ecx
-               	movq	%rsi, %rcx
-               	cmoveq	%rdx, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rsi, %rcx
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

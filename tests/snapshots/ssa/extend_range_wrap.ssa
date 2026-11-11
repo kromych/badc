@@ -347,7 +347,7 @@ fn ent_pc=16 n_params=2 variadic=false locals=0
     v10  Imm(7)                                           -> x0
     v11  Imm(9)                                           -> x1
     v12  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x2
-    v13  Select { cond=v12, a=v10, b=v11, kind=I64 }      -> x0
+    v13  Select { cond=v7, a=v11, b=v10, kind=I64 }       -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
     v18  Copy { value=v13, fp=false }                     -> x1

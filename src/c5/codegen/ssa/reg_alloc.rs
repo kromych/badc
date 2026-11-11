@@ -2097,8 +2097,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         branch_fused[cond as usize] = true;
     }
-    // Likewise a comparison or a mask only later selects in its block
-    // read, the mask one `test` / `bt` or aarch64 `tst` holds.
+    // Likewise a comparison, a mask one `test` / `bt` or aarch64 `tst`
+    // holds, or an x86-64 load compared with zero in memory, that only later
+    // selects in its block read.
     let mut mask_tests: Vec<bool> = vec![false; func.insts.len()];
     for block in &func.blocks {
         for c in block.inst_range.clone() {
@@ -2124,9 +2125,32 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                         && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(op)),
                     false,
                 ),
+                ref load if is_x86 && zero_testable_load(load) => (true, false),
                 _ => (false, false),
             };
             if !fuses || branch_fused[c as usize] {
+                continue;
+            }
+            // `cmp $0, mem` tests a load at its width, not a quadword's low
+            // word a select tests.
+            let quad = matches!(
+                func.insts[c as usize],
+                Inst::Load {
+                    kind: LoadKind::I64,
+                    ..
+                } | Inst::LoadLocal {
+                    kind: LoadKind::I64,
+                    ..
+                } | Inst::LoadIndexed {
+                    kind: LoadKind::I64,
+                    ..
+                }
+            );
+            let low_word_reader = (c..block.inst_range.end).any(|p| {
+                matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c)
+                    && super::super::passes::narrow::is_cmp32(&func.cmp32, p)
+            });
+            if quad && low_word_reader {
                 continue;
             }
             let reads = |p: ValueId| matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c);

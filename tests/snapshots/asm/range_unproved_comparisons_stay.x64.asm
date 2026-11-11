@@ -40,8 +40,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	movq	%rax, %rcx
-               	cmoveq	%rdx, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rcx, %rax

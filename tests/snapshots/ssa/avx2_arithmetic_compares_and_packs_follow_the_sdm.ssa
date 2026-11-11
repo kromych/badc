@@ -1987,7 +1987,7 @@ fn ent_pc=1366 n_params=2 variadic=false locals=12
     v175 BinopI { op=eq, lhs=v297, rhs_imm=0 }            -> x0
     v176 Imm(0)                                           -> x0
     v177 BinopI { op=eq, lhs=v297, rhs_imm=0 }            -> x7
-    v178 Select { cond=v177, a=v176, b=v255, kind=I64 }   -> x2
+    v178 Select { cond=v297, a=v255, b=v176, kind=I64 }   -> x2
     terminator Jmp(b24)
   block 24  start_pc=0
     v188 Copy { value=v178, fp=false }                    -> x0

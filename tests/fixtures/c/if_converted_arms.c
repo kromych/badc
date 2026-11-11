@@ -3,8 +3,9 @@
  * reading values the branch's block defines after the condition sees
  * them, two values chosen by one comparison, both arms of a diamond, a
  * conditional increment in a loop and out of one, floating constants
- * chosen by a comparison, and integers chosen by floating comparisons, a
- * NaN operand among them. Every check is against values computed here;
+ * chosen by a comparison, integers chosen by floating comparisons, a NaN
+ * operand among them, and by the zero test of a loaded value or a
+ * parameter, either way round. Every check is against values computed here;
  * each failure returns a distinct code. */
 
 #define NOINLINE __attribute__((noinline))
@@ -84,6 +85,11 @@ NOINLINE long pick_eq(double x, double y, long a, long b) {
 
 NOINLINE long pick_lt(double x, double y, long a, long b) { return x < y ? a : b; }
 
+NOINLINE long on_byte(const signed char *p, long a, long b) { return *p ? a : b; }
+NOINLINE long on_int_zero(const int *p, long a, long b) { return *p == 0 ? a : b; }
+NOINLINE long on_long(const long long *p, long a, long b) { return !*p ? a : b; }
+NOINLINE long on_param(int c, long a, long b) { return c == 0 ? a : b; }
+
 int main(void) {
     if (!narrow_compare_in_arm(18)) return 1;
     if (narrow_compare_in_arm(17)) return 2;
@@ -108,5 +114,14 @@ int main(void) {
     if (pick_lt(1, 2, 5, 7) != 5 || pick_lt(2, 1, 5, 7) != 7 || pick_lt(nan, 1, 5, 7) != 7 ||
         pick_lt(1, nan, 5, 7) != 7)
         return 14;
+    signed char bytes[2] = {0, -128};
+    int ints[2] = {0, 1 << 31};
+    long long longs[2] = {0, 1LL << 40};
+    for (int i = 0; i < 2; i++) {
+        if (on_byte(&bytes[i], 5, 7) != (i ? 5 : 7)) return 16;
+        if (on_int_zero(&ints[i], 5, 7) != (i ? 7 : 5)) return 17;
+        if (on_long(&longs[i], 5, 7) != (i ? 7 : 5)) return 18;
+        if (on_param(i, 5, 7) != (i ? 7 : 5)) return 19;
+    }
     return 0;
 }

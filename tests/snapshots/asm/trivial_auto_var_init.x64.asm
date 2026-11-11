@@ -269,7 +269,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	testl	%ecx, %ecx
-               	cmovneq	%rax, %rax
+               	cmoveq	%rax, %rax
                	incq	%rcx
                	cmpl	$0x2, %ecx
                	jl	<addr>

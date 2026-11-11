@@ -42,10 +42,8 @@ Disassembly of section .text:
                	csel	x1, x2, x1, eq
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
                	orr	x2, x1, #0x20
-               	cmp	x0, #0x0
-               	csel	x0, x2, x1, eq
+               	csel	x0, x1, x2, ne
                	orr	x1, x0, #0x40
                	fcmpe	d0, d0
                	csel	x0, x1, x0, mi

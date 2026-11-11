@@ -45,8 +45,8 @@ fn ent_pc=2 n_params=11 variadic=false locals=0
     v91  BinopI { op=eq, lhs=v87, rhs_imm=0 }             -> x1
     v92  Imm(0)                                           -> x1
     v93  BinopI { op=add, lhs=v87, rhs_imm=20 }           -> x2
-    v94  BinopI { op=eq, lhs=v87, rhs_imm=0 }             -> x0
-    v95  Select { cond=v94, a=v92, b=v93, kind=I64 }      -> x0
+    v94  BinopI { op=eq, lhs=v87, rhs_imm=0 }             -> x6
+    v95  Select { cond=v87, a=v93, b=v92, kind=I64 }      -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
     v36  Copy { value=v95, fp=false }                     -> x1

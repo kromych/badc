@@ -250,8 +250,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v16  BinopI { op=eq, lhs=v82, rhs_imm=0 }             -> x1
     v17  Imm(7)                                           -> x1
     v18  Imm(0)                                           -> x2
-    v19  BinopI { op=eq, lhs=v82, rhs_imm=0 }             -> x0
-    v20  Select { cond=v19, a=v17, b=v18, kind=I64 }      -> x0
+    v19  BinopI { op=eq, lhs=v82, rhs_imm=0 }             -> x6
+    v20  Select { cond=v82, a=v18, b=v17, kind=I64 }      -> x0
     terminator Jmp(b20)
   block 20  start_pc=0
     v63  Copy { value=v20, fp=false }                     -> x1

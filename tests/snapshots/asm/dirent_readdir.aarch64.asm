@@ -39,7 +39,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x1, #0x1                // =1
                	cmp	x0, #0x0
-               	csel	x20, x1, x20, eq
+               	csel	x20, x20, x1, ne
                	mov	x0, x22
                	bl	<addr>
                	cbnz	x0, <addr>

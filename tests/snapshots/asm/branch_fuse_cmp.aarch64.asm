@@ -81,7 +81,7 @@ Disassembly of section .text:
                	ldr	x3, [x1, #0x38]
                	add	x4, x2, #0x64
                	cmp	x3, #0x0
-               	csel	x2, x4, x2, eq
+               	csel	x2, x2, x4, ne
                	ldr	x1, [x1, #0x38]
                	cmp	x1, #0x0
                	cinc	x1, x2, ne

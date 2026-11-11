@@ -223,3 +223,48 @@ fn the_interpreter_runs_the_widening_intrinsics() {
         "a failing element type sets its bit in the exit code"
     );
 }
+
+/// The shifts by a register count give each lane the result the
+/// instructions give, checked against the hardware and the reference
+/// compiler: counts at and past the lane width either way, the low byte's
+/// sign, rounding at the boundary, saturation, and the scalar 64-bit forms.
+#[test]
+fn the_interpreter_runs_the_register_shifts() {
+    let src = "#include <arm_neon.h>\n\
+        #include <string.h>\n\
+        int main(void) {\n\
+            static const signed char A[16] = {-128, 127, -1, 1, 0x40, -0x41, 3, -3, 100, -100, 7, 0, 0x55, -0x56, 1, -1};\n\
+            static const signed char S[16] = {1, 1, 7, 8, -1, -7, -8, -9, 127, -128, 3, 5, 2, -2, 64, -64};\n\
+            int8x16_t a, s; memcpy(&a, A, 16); memcpy(&s, S, 16);\n\
+            int16x8_t h = {-32768, 32767, -1, 300, 5, -5, 0x4000, 2}, hs = {1, -1, 15, 16, -16, -17, 1, 14};\n\
+            int64x2_t d = {(long long)0x8000000000000000ull, 0x7fffffffffffffffll}, ds = {-1, 1};\n\
+            uint8x16_t r[11];\n\
+            r[0] = (uint8x16_t)vshlq_s8(a, s); r[1] = (uint8x16_t)vrshlq_s8(a, s);\n\
+            r[2] = (uint8x16_t)vqshlq_s8(a, s); r[3] = vshlq_u8((uint8x16_t)a, s);\n\
+            r[4] = vrshlq_u8((uint8x16_t)a, s); r[5] = vqshlq_u8((uint8x16_t)a, s);\n\
+            r[6] = (uint8x16_t)vqshlq_s16(h, hs); r[7] = (uint8x16_t)vrshlq_s16(h, hs);\n\
+            r[8] = (uint8x16_t)vqshlq_s64(d, ds); r[9] = (uint8x16_t)vrshlq_s64(d, ds);\n\
+            r[10] = (uint8x16_t)vshlq_s64(d, (int64x2_t){-64, 63});\n\
+            if (memcmp(&r[0], (const unsigned char[16]){0x00, 0xfe, 0x80, 0x00, 0x20, 0xff, 0x00, 0xff, 0x00, 0xff, 0x38, 0x00, 0x54, 0xea, 0x00, 0xff}, 16)) return 1;\n\
+            if (memcmp(&r[1], (const unsigned char[16]){0x00, 0xfe, 0x80, 0x00, 0x20, 0xff, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x54, 0xeb, 0x00, 0x00}, 16)) return 2;\n\
+            if (memcmp(&r[2], (const unsigned char[16]){0x80, 0x7f, 0x80, 0x7f, 0x20, 0xff, 0x00, 0xff, 0x7f, 0xff, 0x38, 0x00, 0x7f, 0xea, 0x7f, 0xff}, 16)) return 3;\n\
+            if (memcmp(&r[3], (const unsigned char[16]){0x00, 0xfe, 0x80, 0x00, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x54, 0x2a, 0x00, 0x00}, 16)) return 4;\n\
+            if (memcmp(&r[4], (const unsigned char[16]){0x00, 0xfe, 0x80, 0x00, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x54, 0x2b, 0x00, 0x00}, 16)) return 5;\n\
+            if (memcmp(&r[5], (const unsigned char[16]){0xff, 0xfe, 0xff, 0xff, 0x20, 0x01, 0x00, 0x00, 0xff, 0x00, 0x38, 0x00, 0xff, 0x2a, 0xff, 0x00}, 16)) return 6;\n\
+            if (memcmp(&r[6], (const unsigned char[16]){0x00, 0x80, 0xff, 0x3f, 0x00, 0x80, 0xff, 0x7f, 0x00, 0x00, 0xff, 0xff, 0xff, 0x7f, 0xff, 0x7f}, 16)) return 7;\n\
+            if (memcmp(&r[7], (const unsigned char[16]){0x00, 0x00, 0x00, 0x40, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x80}, 16)) return 8;\n\
+            if (memcmp(&r[8], (const unsigned char[16]){0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f}, 16)) return 9;\n\
+            if (memcmp(&r[9], (const unsigned char[16]){0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, 16)) return 10;\n\
+            if (memcmp(&r[10], (const unsigned char[16]){0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, 16)) return 11;\n\
+            int64x1_t f1 = vqshl_s64((int64x1_t){3}, (int64x1_t){62});\n\
+            uint64x1_t f2 = vrshl_u64((uint64x1_t){0xffffffffffffffffull}, (int64x1_t){-1});\n\
+            if ((unsigned long long)f1[0] != 0x7fffffffffffffffull || f2[0] != 0x8000000000000000ull) return 20;\n\
+            return 0;\n\
+        }";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the failing check's number"
+    );
+}

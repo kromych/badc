@@ -404,6 +404,12 @@ pub(crate) enum Sem {
     /// Each lane of the source width into a lane half as wide, in the low 8
     /// bytes of the result (`xtn`, `sqxtn`, `uqxtn`, `sqxtun`).
     Narrow(u8, NarrowKind),
+    /// Each lane, signed when the first flag is set, shifted by the signed
+    /// low byte of the second operand's lane: left when positive, right
+    /// when negative, rounding a right shift when the second flag is set
+    /// and saturating a left one when the third is (`sshl`, `urshl`,
+    /// `sqshl`).
+    ShlReg(u8, bool, bool, bool),
 }
 
 /// The operation of a widening form: on the narrow lanes, its result as
@@ -1265,6 +1271,40 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     LongOp::AbsDiff => (x - y).abs(),
                 };
                 set_lane(&mut o, 2 * w, i, r as u64 & mask(2 * w));
+            }
+        }
+        Sem::ShlReg(w, signed, round, sat) => {
+            let bits = 8 * i32::from(w);
+            let (lo, hi) = match signed {
+                true => (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1),
+                false => (0, (1i128 << bits) - 1),
+            };
+            for i in 0..16 / w as usize {
+                let x = match signed {
+                    true => i128::from(slane(a, w, i)),
+                    false => i128::from(lane(a, w, i)),
+                };
+                let s = i32::from(lane(b, w, i) as u8 as i8);
+                // A left shift at or past the width keeps no bit of `x`, and
+                // the saturating form saturates a nonzero one.
+                let r = match s {
+                    0.. if s >= bits && sat && x != 0 => {
+                        if x < 0 {
+                            lo - 1
+                        } else {
+                            hi + 1
+                        }
+                    }
+                    0.. if s >= bits => 0,
+                    0.. => x << s,
+                    _ => {
+                        let n = (-s).min(127);
+                        let bias = if round { 1i128 << (n - 1) } else { 0 };
+                        (x + bias) >> n
+                    }
+                };
+                let r = if sat { r.clamp(lo, hi) } else { r };
+                set_lane(&mut o, w, i, r as u64 & mask(w));
             }
         }
         Sem::Narrow(w, kind) => {

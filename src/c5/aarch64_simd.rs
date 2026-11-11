@@ -267,6 +267,12 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "uaba" Vvv AbsDiffAcc (false): b8 b16 h4 h8 s2 s4;
     "bsl" Vvv BitSelect -: b8 b16;
     "shl" Shift Shl (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sshl" Vv ShlReg (true, false, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "ushl" Vv ShlReg (false, false, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "srshl" Vv ShlReg (true, true, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "urshl" Vv ShlReg (false, true, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sqshl" Vv ShlReg (true, false, true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "uqshl" Vv ShlReg (false, false, true): b8 b16 h4 h8 s2 s4 d1 d2;
     "sshr" Shift Sar (): b8 b16 h4 h8 s2 s4 d1 d2;
     "ushr" Shift Shr (): b8 b16 h4 h8 s2 s4 d1 d2;
     "fadd" Vv Float [Add]: f2s f4s fd f2d;

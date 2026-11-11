@@ -441,8 +441,8 @@ __BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, __builtin_neon_cnt)
     __BADC_NEON_B2R(op##_##sfx, UD, D, D, k, si, ui, AD)                  \
     __BADC_NEON_B2R(op##q_##sfx, UQ, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_SHL(op, si, ui, sfx, k, E, D, Q, AD, AQ, UD, UQ, SD, SQ) \
-    __BADC_NEON_FN2(op##_##sfx, D, D, SD, __BADC_NEON_K3(k, si, ui, AD))  \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, SQ, __BADC_NEON_K3(k, si, ui, AQ))
+    __BADC_NEON_B2(op##_##sfx, D, D, SD, k, si, ui, AD)                   \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, SQ, k, si, ui, AQ)
 __BADC_NEON_INT(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
 __BADC_NEON_R_p8(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
 __BADC_NEON_R_p64(__BADC_NEON_F_CMP, vceq, __builtin_neon_cmeq, __builtin_neon_cmeq)
@@ -452,9 +452,9 @@ __BADC_NEON_INT(__BADC_NEON_F_CMPR, vcle, __builtin_neon_cmge, __builtin_neon_cm
 __BADC_NEON_INT(__BADC_NEON_F_CMPR, vclt, __builtin_neon_cmgt, __builtin_neon_cmhi)
 __BADC_NEON_INT(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
 __BADC_NEON_R_p8(__BADC_NEON_F_CMP, vtst, __builtin_neon_cmtst, __builtin_neon_cmtst)
-__BADC_NEON_INT(__BADC_NEON_F_SHL, vshl, "sshl", "ushl")
-__BADC_NEON_INT(__BADC_NEON_F_SHL, vrshl, "srshl", "urshl")
-__BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, "sqshl", "uqshl")
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vshl, __builtin_neon_sshl, __builtin_neon_ushl)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vrshl, __builtin_neon_srshl, __builtin_neon_urshl)
+__BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, __builtin_neon_sqshl, __builtin_neon_uqshl)
 
 /* Rows of a narrow type and its double: suffixes, kind, narrow and wide
  * vectors, their arrangements, and the unsigned narrow vectors. */

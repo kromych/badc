@@ -154,3 +154,58 @@ fn the_vector_operators_take_the_rows() {
         );
     }
 }
+
+/// The floating rows give the bits the instructions give, checked against
+/// the hardware and the reference compiler on AArch64: a NaN operand
+/// propagated and a signaling one quieted, `fmax` and `fmin` ordering -0
+/// below +0, the quiet `fcmeq` and the ordered compares, `fabs` and `fneg`
+/// on a NaN's sign, and `fmla` and `fmls` rounded once.
+#[test]
+fn the_interpreter_runs_the_floating_rows() {
+    let src = "#include <arm_neon.h>\n\
+        #include <string.h>\n\
+        static float f(unsigned x) { float r; memcpy(&r, &x, 4); return r; }\n\
+        static int bits4(uint32x4_t v, const unsigned *e) {\n\
+            return v[0] != e[0] || v[1] != e[1] || v[2] != e[2] || v[3] != e[3];\n\
+        }\n\
+        int main(void) {\n\
+            float32x4_t a = {f(0x7fc12345), 0.0f, -0.0f, 1.5f};\n\
+            float32x4_t b = {2.0f, -0.0f, 0.0f, f(0x7f812345)};\n\
+            float32x4_t c = {1e30f, -1e-30f, 3.0f, -2.0f};\n\
+            float32x4_t big = {16777217.0f, 1.0f / 3.0f, 0.1f, 3.0f};\n\
+            float32x4_t sm = {16777215.0f, 3.0f, 10.0f, 1.0f / 3.0f};\n\
+            if (bits4((uint32x4_t)vmaxq_f32(a, b), (unsigned[4]){0x7fc12345, 0x00000000, 0x00000000, 0x7fc12345})) return 1;\n\
+            if (bits4((uint32x4_t)vminq_f32(a, b), (unsigned[4]){0x7fc12345, 0x80000000, 0x80000000, 0x7fc12345})) return 2;\n\
+            if (bits4((uint32x4_t)vmaxq_f32(b, a), (unsigned[4]){0x7fc12345, 0x00000000, 0x00000000, 0x7fc12345})) return 3;\n\
+            if (bits4((uint32x4_t)vminq_f32(b, a), (unsigned[4]){0x7fc12345, 0x80000000, 0x80000000, 0x7fc12345})) return 4;\n\
+            if (bits4((uint32x4_t)vaddq_f32(a, c), (unsigned[4]){0x7fc12345, 0x8da24260, 0x40400000, 0xbf000000})) return 5;\n\
+            if (bits4((uint32x4_t)vsubq_f32(c, b), (unsigned[4]){0x7149f2ca, 0x8da24260, 0x40400000, 0x7fc12345})) return 6;\n\
+            if (bits4((uint32x4_t)vmulq_f32(c, c), (unsigned[4]){0x7f800000, 0x00000000, 0x41100000, 0x40800000})) return 7;\n\
+            if (bits4((uint32x4_t)vdivq_f32(c, a), (unsigned[4]){0x7fc12345, 0xff800000, 0xff800000, 0xbfaaaaab})) return 8;\n\
+            if (bits4((uint32x4_t)vabsq_f32(a), (unsigned[4]){0x7fc12345, 0x00000000, 0x00000000, 0x3fc00000})) return 9;\n\
+            if (bits4((uint32x4_t)vnegq_f32(b), (unsigned[4]){0xc0000000, 0x00000000, 0x80000000, 0xff812345})) return 10;\n\
+            if (bits4((uint32x4_t)vsqrtq_f32(c), (unsigned[4]){0x58635fa9, 0x7fc00000, 0x3fddb3d7, 0x7fc00000})) return 11;\n\
+            if (bits4((uint32x4_t)vceqq_f32(a, b), (unsigned[4]){0x00000000, 0xffffffff, 0xffffffff, 0x00000000})) return 12;\n\
+            if (bits4((uint32x4_t)vcgeq_f32(a, b), (unsigned[4]){0x00000000, 0xffffffff, 0xffffffff, 0x00000000})) return 13;\n\
+            if (bits4((uint32x4_t)vcgtq_f32(c, a), (unsigned[4]){0x00000000, 0x00000000, 0xffffffff, 0x00000000})) return 14;\n\
+            if (bits4((uint32x4_t)vcleq_f32(c, b), (unsigned[4]){0x00000000, 0xffffffff, 0x00000000, 0x00000000})) return 15;\n\
+            if (bits4((uint32x4_t)vcltq_f32(b, c), (unsigned[4]){0xffffffff, 0x00000000, 0xffffffff, 0x00000000})) return 16;\n\
+            if (bits4((uint32x4_t)vfmaq_f32(sm, big, sm), (unsigned[4]){0x57800000, 0x40800000, 0x41300000, 0x3faaaaab})) return 17;\n\
+            if (bits4((uint32x4_t)vfmsq_f32(sm, big, sm), (unsigned[4]){0xd77ffffe, 0x40000000, 0x41100000, 0xbf2aaaab})) return 18;\n\
+            uint32x2_t r = (uint32x2_t)vmax_f32((float32x2_t){f(0xff800001), -0.0f}, (float32x2_t){1.0f, 0.0f});\n\
+            uint32x2_t s = (uint32x2_t)vmin_f32((float32x2_t){f(0xff800001), -0.0f}, (float32x2_t){1.0f, 0.0f});\n\
+            if (r[0] != 0xffc00001 || r[1] != 0x00000000 || s[0] != 0xffc00001 || s[1] != 0x80000000) return 30;\n\
+            uint64x2_t z = (uint64x2_t)vaddq_f64((float64x2_t){0.1, -0.0}, (float64x2_t){0.2, 0.0});\n\
+            uint64x2_t w = (uint64x2_t)vminq_f64((float64x2_t){0.1, -0.0}, (float64x2_t){0.2, 0.0});\n\
+            uint64x1_t q = (uint64x1_t)vsqrt_f64((float64x1_t){2.0});\n\
+            if (z[0] != 0x3fd3333333333334ull || z[1] != 0x0000000000000000ull) return 31;\n\
+            if (w[0] != 0x3fb999999999999aull || w[1] != 0x8000000000000000ull || q[0] != 0x3ff6a09e667f3bcdull) return 32;\n\
+            return 0;\n\
+        }";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the failing check's number"
+    );
+}

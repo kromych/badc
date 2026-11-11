@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{Form, Ret, Sem, SimdOp};
+use super::simd::{FOp, Form, Ret, Sem, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -32,6 +32,9 @@ const fn row(
 macro_rules! sem {
     ($s:ident, $w:expr, -) => {
         Sem::$s
+    };
+    (Float, $w:expr, [$op:ident]) => {
+        Sem::Float(FOp::$op, $w, false)
     };
     ($s:ident, $w:expr, ()) => {
         Sem::$s($w)
@@ -114,6 +117,46 @@ macro_rules! arr {
             8,
         )
     };
+    ($m:literal, $f:ident, $s:ident, $a:tt, f2s) => {
+        row(
+            concat!("__builtin_neon_", $m, "_2s"),
+            $m,
+            Form::$f,
+            Ret::V2sf,
+            sem!($s, 4, $a),
+            8,
+        )
+    };
+    ($m:literal, $f:ident, $s:ident, $a:tt, f4s) => {
+        row(
+            concat!("__builtin_neon_", $m, "_4s"),
+            $m,
+            Form::$f,
+            Ret::V4sf,
+            sem!($s, 4, $a),
+            16,
+        )
+    };
+    ($m:literal, $f:ident, $s:ident, $a:tt, fd) => {
+        row(
+            concat!("__builtin_neon_", $m, "_d"),
+            $m,
+            Form::$f,
+            Ret::V1df,
+            sem!($s, 8, $a),
+            8,
+        )
+    };
+    ($m:literal, $f:ident, $s:ident, $a:tt, f2d) => {
+        row(
+            concat!("__builtin_neon_", $m, "_2d"),
+            $m,
+            Form::$f,
+            Ret::V2df,
+            sem!($s, 8, $a),
+            16,
+        )
+    };
     ($m:literal, $f:ident, $s:ident, $a:tt, d2) => {
         row(
             concat!("__builtin_neon_", $m, "_2d"),
@@ -127,8 +170,10 @@ macro_rules! arr {
 }
 
 /// The rows of each family, one per arrangement it lists: `d1` is the
-/// scalar form over one 64-bit lane in a D register. `-` marks a semantics
-/// without a lane width, `()` one with only the width.
+/// scalar form over one 64-bit lane in a D register, and `f2s` .. `f2d`
+/// the floating arrangements, `fd` the scalar double. `-` marks a
+/// semantics without a lane width, `()` one with only the width, `[op]` a
+/// floating operation.
 macro_rules! table {
     ($($m:literal $f:ident $s:ident $a:tt : $($w:ident)*;)*) => {
         &[$($(arr!($m, $f, $s, $a, $w)),*),*]
@@ -189,6 +234,20 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "shl" Shift Shl (): b8 b16 h4 h8 s2 s4 d1 d2;
     "sshr" Shift Sar (): b8 b16 h4 h8 s2 s4 d1 d2;
     "ushr" Shift Shr (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "fadd" Vv Float [Add]: f2s f4s fd f2d;
+    "fsub" Vv Float [Sub]: f2s f4s fd f2d;
+    "fmul" Vv Float [Mul]: f2s f4s fd f2d;
+    "fdiv" Vv Float [Div]: f2s f4s fd f2d;
+    "fmax" Vv Float [MaxNan]: f2s f4s fd f2d;
+    "fmin" Vv Float [MinNan]: f2s f4s fd f2d;
+    "fsqrt" V Float [Sqrt]: f2s f4s fd f2d;
+    "fabs" V FAbs (): f2s f4s fd f2d;
+    "fneg" V FNeg (): f2s f4s fd f2d;
+    "fcmeq" Vv FloatRel (0): f2s f4s f2d;
+    "fcmge" Vv FloatRel (13): f2s f4s f2d;
+    "fcmgt" Vv FloatRel (14): f2s f4s f2d;
+    "fmla" Vvv FloatFma (false): f2s f4s f2d;
+    "fmls" Vvv FloatFma (true): f2s f4s f2d;
 };
 
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD

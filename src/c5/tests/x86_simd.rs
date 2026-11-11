@@ -1728,7 +1728,12 @@ fn floating_rows_emit_their_instruction() {
 #[test]
 fn floating_rows_compute_in_the_environment() {
     let floating = |sem: Sem| match sem {
-        Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => true,
+        Sem::Float(..)
+        | Sem::FloatCmp(..)
+        | Sem::FloatRel(..)
+        | Sem::FloatFma(..)
+        | Sem::Convert(_)
+        | Sem::ToInt(..) => true,
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
@@ -1808,7 +1813,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::MulAcc(_)
         | Sem::MulSub(_)
         | Sem::AbsDiffAcc(..)
-        | Sem::BitSelect => false,
+        | Sem::BitSelect
+        | Sem::FAbs(_)
+        | Sem::FNeg(_) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);
@@ -1837,10 +1844,15 @@ fn floating_rows_compute_in_the_environment() {
             self.0 += 1;
             a
         }
+        fn fma(&mut self, a: u64, _: u64, _: u64, _: bool) -> u64 {
+            self.0 += 1;
+            a
+        }
     }
     for op in x86_simd::OPS.iter().chain(crate::c5::aarch64_simd::OPS) {
         let (mut env, a) = (Counting(0), [0x3f; 16]);
-        let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some();
+        let packed = simd::eval_float(&mut env, op.sem, &a, &a, 0).is_some()
+            || simd::eval_float_acc(&mut env, op.sem, (&a, &a, &a), 16).is_some();
         let scalar = simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
         assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
         assert_eq!(env.0 > 0, floating(op.sem), "{}", op.name);

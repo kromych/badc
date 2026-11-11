@@ -4049,7 +4049,9 @@ fn run_x86_simd(
     match row.form {
         Form::Vvv if row.bytes <= 16 => {
             let (acc, a, b) = (read(mem, reg(1))?, read(mem, reg(2))?, read(mem, reg(3))?);
-            let Some(out) = simd::eval_acc(row.sem, &acc, &a, &b) else {
+            let out = simd::eval_float_acc(&mut mem.fp, row.sem, (&acc, &a, &b), n)
+                .or_else(|| simd::eval_acc(row.sem, &acc, &a, &b));
+            let Some(out) = out else {
                 return Err(C5Error::Runtime(format!(
                     "vm_ssa: {} has no 16-byte form",
                     row.name
@@ -4073,18 +4075,19 @@ fn run_x86_simd(
         }
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
-            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &b, imm8).unwrap_or_else(|| {
-                if n == 8 {
-                    simd::eval64(row.sem, &a, &b, imm8, 0)
-                } else {
-                    simd::eval(row.sem, &a, &b, imm8, 0)
-                }
-            });
+            let out =
+                simd::eval_float_in(&mut mem.fp, row.sem, &a, &b, imm8, n).unwrap_or_else(|| {
+                    if n == 8 {
+                        simd::eval64(row.sem, &a, &b, imm8, 0)
+                    } else {
+                        simd::eval(row.sem, &a, &b, imm8, 0)
+                    }
+                });
             mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::V | Form::VI => {
             let a = read(mem, reg(1))?;
-            let out = simd::eval_float(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8)
+            let out = simd::eval_float_in(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8, n)
                 .unwrap_or_else(|| simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
             mem.write_bytes(reg(0), &out[..n])?;
         }

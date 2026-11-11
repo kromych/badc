@@ -924,8 +924,12 @@ impl crate::c5::simd::FloatEnv for FpEnv {
             FOp::Div => self.div(a, b, f),
             FOp::Sqrt => self.sqrt(a, f),
             // The row selects an operand by `compare`.
-            FOp::Min | FOp::Max => a,
+            FOp::Min | FOp::Max | FOp::MaxNan | FOp::MinNan => a,
         }
+    }
+
+    fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64 {
+        self.fma(a, b, c, if single { BINARY32 } else { BINARY64 })
     }
 
     fn compare(&mut self, a: u64, b: u64, signaling: bool) -> Option<core::cmp::Ordering> {

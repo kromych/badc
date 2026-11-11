@@ -1189,8 +1189,19 @@ __BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
                 __BADC_NEON_I3("sm4ekey", 4s, 4s, 4s))
 
 /* Floating vectors. The float64x1_t arithmetic is the scalar d-register
- * instruction; its compares and integer conversions are C on the one lane. */
-#define __BADC_NEON_ARITH2(op, insn)                                      \
+ * instruction; its compares and integer conversions are C on the one lane.
+ * ARITH2 and ARITH1 call the rows of `stem`; the A forms are asm. */
+#define __BADC_NEON_ARITH2(op, stem)                                      \
+    __BADC_NEON_B2(op##_f32, float32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B2(op##q_f32, float32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B2(op##q_f64, float64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_NEON_B2(op##_f64, float64x1_t, float64x1_t, float64x1_t, s, stem, stem, d)
+#define __BADC_NEON_ARITH1(op, stem)                                      \
+    __BADC_NEON_B1(op##_f32, float32x2_t, float32x2_t, s, stem, stem, 2s) \
+    __BADC_NEON_B1(op##q_f32, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    __BADC_NEON_B1(op##q_f64, float64x2_t, float64x2_t, s, stem, stem, 2d) \
+    __BADC_NEON_B1(op##_f64, float64x1_t, float64x1_t, s, stem, stem, d)
+#define __BADC_NEON_ARITH2A(op, insn)                                     \
     __BADC_NEON_FN2(op##_f32, float32x2_t, float32x2_t, float32x2_t,      \
                     __BADC_NEON_I3(insn, 2s, 2s, 2s))                     \
     __BADC_NEON_FN2(op##q_f32, float32x4_t, float32x4_t, float32x4_t,     \
@@ -1199,47 +1210,44 @@ __BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
                     __BADC_NEON_I3(insn, 2d, 2d, 2d))                     \
     __BADC_NEON_FN2(op##_f64, float64x1_t, float64x1_t, float64x1_t,      \
                     __BADC_NEON_I3(insn, d, d, d))
-#define __BADC_NEON_ARITH1(op, insn)                                      \
+#define __BADC_NEON_ARITH1A(op, insn)                                     \
     __BADC_NEON_FN1(op##_f32, float32x2_t, float32x2_t, __BADC_NEON_I2(insn, 2s, 2s)) \
     __BADC_NEON_FN1(op##q_f32, float32x4_t, float32x4_t, __BADC_NEON_I2(insn, 4s, 4s)) \
     __BADC_NEON_FN1(op##q_f64, float64x2_t, float64x2_t, __BADC_NEON_I2(insn, 2d, 2d)) \
     __BADC_NEON_FN1(op##_f64, float64x1_t, float64x1_t, __BADC_NEON_I2(insn, d, d))
-/* A compare, operands in I's order; C on the one lane of float64x1_t. */
-#define __BADC_NEON_CMP(op, I, insn, rel)                                 \
-    __BADC_NEON_FN2(op##_f32, uint32x2_t, float32x2_t, float32x2_t, I(insn, 2s, 2s, 2s)) \
-    __BADC_NEON_FN2(op##q_f32, uint32x4_t, float32x4_t, float32x4_t, I(insn, 4s, 4s, 4s)) \
-    __BADC_NEON_FN2(op##q_f64, uint64x2_t, float64x2_t, float64x2_t, I(insn, 2d, 2d, 2d)) \
+/* A compare, operands in B's order; C on the one lane of float64x1_t. */
+#define __BADC_NEON_CMP(op, B, stem, rel)                                 \
+    B(op##_f32, uint32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s)  \
+    B(op##q_f32, uint32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
+    B(op##q_f64, uint64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
     static inline uint64x1_t op##_f64(float64x1_t __a, float64x1_t __b) { \
         return (uint64x1_t){-(uint64_t)(__a[0] rel __b[0])};              \
     }
 
-__BADC_NEON_ARITH2(vadd, "fadd")
-__BADC_NEON_ARITH2(vsub, "fsub")
-__BADC_NEON_ARITH2(vmul, "fmul")
-__BADC_NEON_ARITH2(vdiv, "fdiv")
-__BADC_NEON_ARITH2(vmax, "fmax")
-__BADC_NEON_ARITH2(vmin, "fmin")
-__BADC_NEON_ARITH1(vabs, "fabs")
-__BADC_NEON_ARITH1(vneg, "fneg")
-__BADC_NEON_ARITH1(vsqrt, "fsqrt")
+__BADC_NEON_ARITH2(vadd, __builtin_neon_fadd)
+__BADC_NEON_ARITH2(vsub, __builtin_neon_fsub)
+__BADC_NEON_ARITH2(vmul, __builtin_neon_fmul)
+__BADC_NEON_ARITH2(vdiv, __builtin_neon_fdiv)
+__BADC_NEON_ARITH2(vmax, __builtin_neon_fmax)
+__BADC_NEON_ARITH2(vmin, __builtin_neon_fmin)
+__BADC_NEON_ARITH1(vabs, __builtin_neon_fabs)
+__BADC_NEON_ARITH1(vneg, __builtin_neon_fneg)
+__BADC_NEON_ARITH1(vsqrt, __builtin_neon_fsqrt)
 
 /* The reciprocal and reciprocal square root estimates, and their
  * Newton-Raphson steps: vrecps is 2 - a * b, vrsqrts (3 - a * b) / 2. */
-__BADC_NEON_ARITH1(vrecpe, "frecpe")
-__BADC_NEON_ARITH1(vrsqrte, "frsqrte")
-__BADC_NEON_ARITH2(vrecps, "frecps")
-__BADC_NEON_ARITH2(vrsqrts, "frsqrts")
+__BADC_NEON_ARITH1A(vrecpe, "frecpe")
+__BADC_NEON_ARITH1A(vrsqrte, "frsqrte")
+__BADC_NEON_ARITH2A(vrecps, "frecps")
+__BADC_NEON_ARITH2A(vrsqrts, "frsqrts")
 
 /* vfma: a + b * c, vfms: a - b * c, each rounded once. */
-#define __BADC_NEON_FUSED(op, insn)                                       \
-    __BADC_NEON_FN3(op##_f32, float32x2_t, float32x2_t, float32x2_t,      \
-                    __BADC_NEON_I3(insn, 2s, 2s, 2s))                     \
-    __BADC_NEON_FN3(op##q_f32, float32x4_t, float32x4_t, float32x4_t,     \
-                    __BADC_NEON_I3(insn, 4s, 4s, 4s))                     \
-    __BADC_NEON_FN3(op##q_f64, float64x2_t, float64x2_t, float64x2_t,     \
-                    __BADC_NEON_I3(insn, 2d, 2d, 2d))
-__BADC_NEON_FUSED(vfma, "fmla")
-__BADC_NEON_FUSED(vfms, "fmls")
+#define __BADC_NEON_FUSED(op, stem)                                       \
+    __BADC_NEON_B3(op##_f32, float32x2_t, s, stem, stem, 2s)              \
+    __BADC_NEON_B3(op##q_f32, float32x4_t, s, stem, stem, 4s)             \
+    __BADC_NEON_B3(op##q_f64, float64x2_t, s, stem, stem, 2d)
+__BADC_NEON_FUSED(vfma, __builtin_neon_fmla)
+__BADC_NEON_FUSED(vfms, __builtin_neon_fmls)
 static inline float64x1_t vfma_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
     return (float64x1_t){__builtin_fma(__b[0], __c[0], __a[0])};
 }
@@ -1247,11 +1255,11 @@ static inline float64x1_t vfms_f64(float64x1_t __a, float64x1_t __b, float64x1_t
     return (float64x1_t){__builtin_fma(-__b[0], __c[0], __a[0])};
 }
 
-__BADC_NEON_CMP(vceq, __BADC_NEON_I3, "fcmeq", ==)
-__BADC_NEON_CMP(vcge, __BADC_NEON_I3, "fcmge", >=)
-__BADC_NEON_CMP(vcgt, __BADC_NEON_I3, "fcmgt", >)
-__BADC_NEON_CMP(vcle, __BADC_NEON_I3R, "fcmge", <=)
-__BADC_NEON_CMP(vclt, __BADC_NEON_I3R, "fcmgt", <)
+__BADC_NEON_CMP(vceq, __BADC_NEON_B2, __builtin_neon_fcmeq, ==)
+__BADC_NEON_CMP(vcge, __BADC_NEON_B2, __builtin_neon_fcmge, >=)
+__BADC_NEON_CMP(vcgt, __BADC_NEON_B2, __builtin_neon_fcmgt, >)
+__BADC_NEON_CMP(vcle, __BADC_NEON_B2R, __builtin_neon_fcmge, <=)
+__BADC_NEON_CMP(vclt, __BADC_NEON_B2R, __builtin_neon_fcmgt, <)
 
 /* Integer <-> floating lanes of one width; to integer truncates toward
  * zero and saturates. */

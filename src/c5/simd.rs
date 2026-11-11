@@ -132,7 +132,10 @@ pub(crate) enum Ret {
     V2di,
     V2df,
     V4sf,
-    /// The 8-byte vectors of the MMX forms.
+    /// The 8-byte vectors of the MMX forms, and AArch64's 64-bit
+    /// floating vectors.
+    V2sf,
+    V1df,
     V8qi,
     V4hi,
     V2si,
@@ -175,6 +178,8 @@ impl Ret {
             Ret::V2di => Some(Ty::LongLong),
             Ret::V2df => Some(Ty::Double),
             Ret::V4sf => Some(Ty::Float),
+            Ret::V2sf => Some(Ty::Float),
+            Ret::V1df => Some(Ty::Double),
             Ret::V8qi => Some(Ty::Char),
             Ret::V4hi => Some(Ty::Short),
             Ret::V2si => Some(Ty::Int),
@@ -363,6 +368,16 @@ pub(crate) enum Sem {
     /// Each bit of the accumulator selects the first operand's bit where
     /// set and the second's where clear (`bsl`).
     BitSelect,
+    /// The floating lanes' magnitude and negation, the sign bit cleared or
+    /// flipped, a NaN's included (`fabs`, `fneg`).
+    FAbs(u8),
+    FNeg(u8),
+    /// A floating comparison by a fixed predicate, numbered as
+    /// [`Sem::FloatCmp`]'s immediate (`fcmeq` 0, `fcmge` 13, `fcmgt` 14).
+    FloatRel(u8, u8),
+    /// The accumulator plus, or minus when `true`, the product of the other
+    /// two operands, rounded once (`fmla`, `fmls`).
+    FloatFma(u8, bool),
 }
 
 impl Sem {
@@ -393,6 +408,8 @@ impl Sem {
 
 /// A floating-point lane operation. MIN and MAX give the second operand
 /// unless the first is strictly less (greater), a NaN or two zeros included.
+/// MAXNAN and MINNAN propagate a NaN operand as arithmetic does and order
+/// -0 below +0 (`fmax`, `fmin`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum FOp {
     Add,
@@ -402,6 +419,8 @@ pub(crate) enum FOp {
     Min,
     Max,
     Sqrt,
+    MaxNan,
+    MinNan,
 }
 
 /// A conversion, from the low lanes of the source to the low lanes of the
@@ -436,6 +455,8 @@ pub(crate) trait FloatEnv {
     /// A `float` lane as a `double` result: a signaling NaN quieted, with
     /// invalid.
     fn widen(&mut self, a: u64) -> u64;
+    /// `a * b + c` rounded once.
+    fn fma(&mut self, a: u64, b: u64, c: u64, single: bool) -> u64;
 }
 
 pub(crate) struct SimdOp {
@@ -1139,6 +1160,18 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 o[i] = a[i].count_ones() as u8;
             }
         }
+        Sem::FAbs(w) | Sem::FNeg(w) => {
+            let sign = 1u64 << (8 * u32::from(w) - 1);
+            for i in 0..16 / w as usize {
+                let x = lane(a, w, i);
+                let r = if matches!(sem, Sem::FAbs(_)) {
+                    x & !sign
+                } else {
+                    x ^ sign
+                };
+                set_lane(&mut o, w, i, r);
+            }
+        }
         Sem::Not => {
             for i in 0..16 {
                 o[i] = !a[i];
@@ -1228,6 +1261,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect => {}
+        Sem::FloatRel(..) | Sem::FloatFma(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128
@@ -1405,16 +1439,52 @@ pub(crate) fn eval_float(
     b: &[u8; 16],
     imm: u8,
 ) -> Option<[u8; 16]> {
+    eval_float_in(env, sem, a, b, imm, 16)
+}
+
+/// Whether a lane's `double` bit pattern is a NaN.
+fn is_nan(x: u64) -> bool {
+    x & 0x7FF0_0000_0000_0000 == 0x7FF0_0000_0000_0000 && x & 0x000F_FFFF_FFFF_FFFF != 0
+}
+
+/// [`eval_float`] over the low `bytes` of the operands, the lanes of an
+/// 8-byte form; the others keep the first operand's.
+pub(crate) fn eval_float_in(
+    env: &mut impl FloatEnv,
+    sem: Sem,
+    a: &[u8; 16],
+    b: &[u8; 16],
+    imm: u8,
+    bytes: usize,
+) -> Option<[u8; 16]> {
     use core::cmp::Ordering::{Equal, Greater, Less};
     let mut o = *a;
+    let lanes = |w: u8, scalar: bool| if scalar { 1 } else { bytes / w as usize };
+    let (imm, cmp) = match sem {
+        Sem::FloatCmp(w, scalar) => (imm, Some((w, scalar))),
+        Sem::FloatRel(w, p) => (p, Some((w, false))),
+        _ => (imm, None),
+    };
     match sem {
         Sem::Float(op, w, scalar) => {
-            for i in 0..if scalar { 1 } else { 16 / w as usize } {
+            for i in 0..lanes(w, scalar) {
                 let (x, y) = (flane(a, w, i), flane(b, w, i));
                 match op {
                     FOp::Min | FOp::Max => {
                         let c = env.compare(x, y, true);
                         let first = c == Some(if op == FOp::Min { Less } else { Greater });
+                        set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
+                    }
+                    // A NaN operand propagates as an addition's would.
+                    FOp::MaxNan | FOp::MinNan if is_nan(x) || is_nan(y) => {
+                        set_flane(&mut o, w, i, env.arith(FOp::Add, x, y, w == 4));
+                    }
+                    FOp::MaxNan | FOp::MinNan => {
+                        let max = op == FOp::MaxNan;
+                        let first = match env.compare(x, y, false) {
+                            Some(Equal) => (x >> 63 == 0) == max,
+                            c => (c == Some(Greater)) == max,
+                        };
                         set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
                     }
                     FOp::Sqrt => set_flane(&mut o, w, i, env.arith(op, x, 0, w == 4)),
@@ -1425,8 +1495,9 @@ pub(crate) fn eval_float(
         // The 32 predicates of the VEX form, 0 to 7 those of the SSE one:
         // the relation in bits 3:0, bit 4 flipping whether a quiet NaN
         // signals invalid.
-        Sem::FloatCmp(w, scalar) => {
-            for i in 0..if scalar { 1 } else { 16 / w as usize } {
+        Sem::FloatCmp(..) | Sem::FloatRel(..) => {
+            let (w, scalar) = cmp.unwrap_or((8, false));
+            for i in 0..lanes(w, scalar) {
                 let p = imm & 31;
                 let signals = matches!(p & 3, 1 | 2) ^ (p & 16 != 0);
                 let c = env.compare(flane(a, w, i), flane(b, w, i), signals);
@@ -1487,6 +1558,31 @@ pub(crate) fn eval_float(
             }
         }
         _ => return None,
+    }
+    Some(o)
+}
+
+/// A form that accumulates into its first operand in `env`, over the low
+/// `bytes` of the operands ([`Sem::FloatFma`]); `None` for another
+/// semantics.
+pub(crate) fn eval_float_acc(
+    env: &mut impl FloatEnv,
+    sem: Sem,
+    (acc, a, b): (&[u8; 16], &[u8; 16], &[u8; 16]),
+    bytes: usize,
+) -> Option<[u8; 16]> {
+    let Sem::FloatFma(w, negate) = sem else {
+        return None;
+    };
+    let mut o = *acc;
+    for i in 0..bytes / w as usize {
+        let x = flane(a, w, i) ^ if negate { 1 << 63 } else { 0 };
+        set_flane(
+            &mut o,
+            w,
+            i,
+            env.fma(x, flane(b, w, i), flane(acc, w, i), w == 4),
+        );
     }
     Some(o)
 }

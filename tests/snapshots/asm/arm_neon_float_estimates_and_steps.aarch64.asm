@@ -941,21 +941,19 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0xa0]
                	frsqrte	v0.4s, v0.4s
                	stur	q0, [x29, #-0x80]
-               	ldur	q0, [x29, #-0xa0]
-               	ldur	q1, [x29, #-0x80]
-               	fmul	v0.4s, v0.4s, v1.4s
-               	ldur	q1, [x29, #-0x80]
-               	frsqrts	v0.4s, v0.4s, v1.4s
+               	ldur	q1, [x29, #-0xa0]
+               	ldur	q0, [x29, #-0x80]
+               	fmul	v1.4s, v1.4s, v0.4s
+               	frsqrts	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x80]
                	fmul	v0.4s, v1.4s, v0.4s
                	stur	q0, [x29, #-0x80]
-               	sub	x4, x29, #0xa0
-               	ldur	q0, [x29, #-0xa0]
-               	ldur	q1, [x29, #-0x80]
-               	fmul	v0.4s, v0.4s, v1.4s
-               	sub	x5, x29, #0x80
-               	ldur	q1, [x29, #-0x80]
-               	frsqrts	v0.4s, v0.4s, v1.4s
+               	sub	x4, x29, #0x80
+               	sub	x5, x29, #0xa0
+               	ldur	q1, [x29, #-0xa0]
+               	ldur	q0, [x29, #-0x80]
+               	fmul	v1.4s, v1.4s, v0.4s
+               	frsqrts	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x80]
                	fmul	v0.4s, v1.4s, v0.4s
                	stur	q0, [x29, #-0x80]
@@ -968,7 +966,7 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x6, x3, x1
                	ldr	s2, [x6]
-               	add	x6, x4, x1
+               	add	x6, x5, x1
                	ldr	s3, [x6]
                	fmov	s4, #1.00000000
                	fnmsub	s2, s2, s3, s4
@@ -978,7 +976,7 @@ Disassembly of section .text:
                	ldrsw	x6, [x2, #0x30]
                	orr	x6, x6, #0x10
                	str	w6, [x2, #0x30]
-               	add	x6, x5, x1
+               	add	x6, x4, x1
                	ldr	s2, [x6]
                	sub	x6, x29, #0x80
                	add	x6, x6, x1

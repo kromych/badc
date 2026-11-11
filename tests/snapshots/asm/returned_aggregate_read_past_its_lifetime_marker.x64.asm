@@ -66,10 +66,9 @@ Disassembly of section .text:
                	cmpl	$0x7, %esi
                	movq	(%rax), %rax
                	movq	%rax, (%rdx)
-               	movq	<rip>, %rax # <addr>
-               	movl	$0x1, %edx
-               	cmpq	$0x3, %rax
-               	movq	%rdx, %rax
+               	movl	$0x1, %eax
+               	movq	<rip>, %rdx # <addr>
+               	cmpq	$0x3, %rdx
                	cmoveq	%rcx, %rax
                	leave
                	retq

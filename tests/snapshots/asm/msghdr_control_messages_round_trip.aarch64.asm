@@ -31,9 +31,9 @@ Disassembly of section .text:
                	cmp	w21, #0x0
                	b.ge	<addr>
                	bl	<addr>
-               	ldrsw	x0, [x0]
                	mov	x1, #0x0                // =0
                	mov	x2, #0x14               // =20
+               	ldrsw	x0, [x0]
                	cmp	w0, #0x61
                	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0xf0]
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	bl	<addr>
-               	ldrsw	x0, [x0]
                	mov	x1, #0x0                // =0
                	mov	x2, #0x15               // =21
+               	ldrsw	x0, [x0]
                	cmp	w0, #0x63
                	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0xf0]

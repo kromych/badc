@@ -42,9 +42,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
                	mov	x1, #0x5                // =5
                	mov	x2, #0x6                // =6
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x15
                	csel	x0, x1, x2, eq
                	bl	<addr>

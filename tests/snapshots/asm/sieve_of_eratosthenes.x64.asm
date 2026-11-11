@@ -46,10 +46,9 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x2, %eax
                	leaq	<rip>, %rdx # <addr>
-               	movsbq	(%rdx,%rax), %rsi
-               	leaq	0x1(%rcx), %rdi
-               	testl	%esi, %esi
-               	cmoveq	%rdi, %rcx
+               	leaq	0x1(%rcx), %rsi
+               	cmpb	$0x0, (%rdx,%rax)
+               	cmoveq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>

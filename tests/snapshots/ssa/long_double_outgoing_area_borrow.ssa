@@ -190,28 +190,29 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v128 Imm(32)                                          -> x2
     v129 BinopI { op=add, lhs=v127, rhs_imm=32 }          -> x2
     v130 Load { addr=v127, disp=32, kind=F80 }            -> d0
-    v131 Imm(0)                                           -> x1
-    v132 Imm(0)                                           -> x1
-    v133 Imm(0)                                           -> x1
+    v131 Imm(0)                                           -> x2
+    v132 Imm(0)                                           -> x2
+    v133 Imm(0)                                           -> x2
     v134 Binop { op=add, lhs=v125, rhs=v91 }              -> x0
-    v135 Imm(0)                                           -> x1
-    v136 Imm(4616189618054758400)                         -> x1
-    v137 Binop { op=fmul, lhs=v37, rhs=v136 }             -> d1
-    v138 FpCast { kind=FpToInt, value=v137 }              -> x1
+    v135 Imm(0)                                           -> x2
+    v136 Imm(4616189618054758400)                         -> x2
+    v137 Binop { op=fmul, lhs=v37, rhs=v136 }             -> d0
+    v138 FpCast { kind=FpToInt, value=v137 }              -> x2
     v139 Binop { op=add, lhs=v134, rhs=v138 }             -> x0
-    v140 Imm(0)                                           -> x1
-    v141 Imm(9080133147627747248)                         -> x1
-    v142 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x2
-    v143 Imm(1)                                           -> x2
-    v144 Imm(0)                                           -> x6
-    v145 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x1
-    v146 Select { cond=v145, a=v143, b=v144, kind=I64 }   -> x1
+    v140 Imm(0)                                           -> x2
+    v141 Imm(9080133147627747248)                         -> x2
+    v142 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x6
+    v143 Imm(1)                                           -> x6
+    v144 Imm(0)                                           -> x7
+    v145 Load { addr=v127, disp=32, kind=F80 }            -> d0
+    v146 Binop { op=fgt, lhs=v145, rhs=v141 }             -> x1
+    v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
-    v151 Copy { value=v146, fp=false }                    -> x2
-    v152 Imm(0)                                           -> x2
-    v153 Binop { op=add, lhs=v139, rhs=v146 }             -> x0
-    terminator Return(v153)   (exit_acc=v153)
+    v152 Copy { value=v147, fp=false }                    -> x2
+    v153 Imm(0)                                           -> x2
+    v154 Binop { op=add, lhs=v139, rhs=v147 }             -> x0
+    terminator Return(v154)   (exit_acc=v154)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0

@@ -194,23 +194,23 @@ Disassembly of section .text:
                	callq	*%r13
                	addq	$0x20, %rsp
                	leaq	<rip>, %rcx # <addr>
+               	addq	0x40(%rsp), %rax
+               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
+               	movsd	0x48(%rsp), %xmm14
+               	movq	%rdx, %xmm15
+               	vmulsd	%xmm15, %xmm14, %xmm0
+               	cvttsd2si	%xmm0, %rdx
+               	addq	%rdx, %rax
+               	movabsq	$0x7e031cfd3999f7b0, %rdx # imm = 0x7E031CFD3999F7B0
+               	movl	$0x1, %esi
+               	xorl	%edi, %edi
                	fldt	0x20(%rcx)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	addq	0x40(%rsp), %rax
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movsd	0x48(%rsp), %xmm14
-               	movq	%rcx, %xmm15
-               	vmulsd	%xmm15, %xmm14, %xmm1
-               	cvttsd2si	%xmm1, %rcx
-               	addq	%rcx, %rax
-               	movabsq	$0x7e031cfd3999f7b0, %rcx # imm = 0x7E031CFD3999F7B0
-               	movl	$0x1, %edx
-               	xorl	%esi, %esi
-               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm15
                	comisd	%xmm15, %xmm0
-               	movq	%rsi, %rcx
-               	cmovaq	%rdx, %rcx
+               	movq	%rdi, %rcx
+               	cmovaq	%rsi, %rcx
                	addq	%rcx, %rax
                	popq	%rbx
                	popq	%r12

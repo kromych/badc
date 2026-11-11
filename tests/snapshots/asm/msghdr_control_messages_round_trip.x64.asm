@@ -44,9 +44,9 @@ Disassembly of section .text:
                	jge	<addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	(%rax), %eax
                	xorl	%ecx, %ecx
                	movl	$0x14, %edx
+               	movl	(%rax), %eax
                	cmpl	$0x61, %eax
                	movq	%rdx, %rax
                	cmoveq	%rcx, %rax
@@ -76,9 +76,9 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	(%rax), %eax
                	xorl	%ecx, %ecx
                	movl	$0x15, %edx
+               	movl	(%rax), %eax
                	cmpl	$0x63, %eax
                	movq	%rdx, %rax
                	cmoveq	%rcx, %rax

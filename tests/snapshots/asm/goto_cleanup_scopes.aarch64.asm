@@ -412,9 +412,9 @@ Disassembly of section .text:
                	ldrsw	x3, [x1, #0xa0]
                	add	x3, x3, #0x1
                	str	w3, [x1, #0xa0]
-               	ldrsw	x5, [x0]
                	cmp	w3, #0x1
                	cset	x3, eq
+               	ldrsw	x5, [x0]
                	cmp	w5, #0x0
                	csel	x5, x2, x3, ne
                	adrp	x3, <page>

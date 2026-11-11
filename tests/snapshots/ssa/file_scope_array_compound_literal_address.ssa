@@ -341,18 +341,19 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 33  start_pc=0
     v277 ImmData(336)                                     -> x0
     v278 Load { addr=v277, disp=0, kind=I32 pc_rel }      -> x0
-    v279 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x1
-    v280 Imm(0)                                           -> x1
-    v281 Imm(0)                                           -> x1
-    v282 Imm(8)                                           -> x2
-    v283 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x0
-    v284 Select { cond=v283, a=v281, b=v282, kind=I64 }   -> x0
+    v279 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(0)                                           -> x0
+    v282 Imm(8)                                           -> x1
+    v283 Load { addr=v277, disp=0, kind=I32 pc_rel }      -> x2
+    v284 BinopI { op=eq, lhs=v283, rhs_imm=4 }            -> x2
+    v285 Select { cond=v284, a=v281, b=v282, kind=I64 }   -> x0
     terminator Jmp(b34)
   block 34  start_pc=0
-    v293 Copy { value=v284, fp=false }                    -> x1
-    v294 Imm(0)                                           -> x1
-    v295 Extend { value=v284, kind=I32 }                  -> x1
-    terminator Return(v284)   (exit_acc=v284)
+    v294 Copy { value=v285, fp=false }                    -> x1
+    v295 Imm(0)                                           -> x1
+    v296 Extend { value=v285, kind=I32 }                  -> x1
+    terminator Return(v285)   (exit_acc=v285)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

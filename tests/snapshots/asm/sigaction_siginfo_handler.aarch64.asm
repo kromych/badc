@@ -21,8 +21,8 @@ Disassembly of section .text:
                	add	x4, x4, #0x1
                	str	w4, [x2, #0x30]
                	adrp	x2, <page>
-               	ldrsw	x1, [x1]
                	mov	x4, #-0x1               // =-1
+               	ldrsw	x1, [x1]
                	cmp	w1, w0
                	csel	x0, x0, x4, eq
                	str	w0, [x2, #0x38]

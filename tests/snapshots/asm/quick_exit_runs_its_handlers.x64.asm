@@ -50,12 +50,12 @@ Disassembly of section .text:
 <last>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	<rip>, %eax # <addr>
-               	movl	$0x5, %ecx
-               	movl	$0x6, %edx
-               	cmpl	$0x15, %eax
-               	movq	%rdx, %rdi
-               	cmoveq	%rcx, %rdi
+               	movl	$0x5, %eax
+               	movl	$0x6, %ecx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x15, %edx
+               	movq	%rcx, %rdi
+               	cmoveq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	ud2

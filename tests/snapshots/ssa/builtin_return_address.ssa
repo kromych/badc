@@ -9,17 +9,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 pc_rel } -> -
     v4   ImmData(16)                                      -> x0
     v5   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> x0
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x1
-    v7   Imm(0)                                           -> x1
-    v8   Imm(1)                                           -> x2
-    v9   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x6
-    v10  Select { cond=v5, a=v7, b=v8, kind=I64 }         -> x0
+    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(1)                                           -> x1
+    v9   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> x2
+    v10  BinopI { op=ne, lhs=v9, rhs_imm=0 }              -> x6
+    v11  Select { cond=v9, a=v7, b=v8, kind=I64 }         -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v15  Copy { value=v10, fp=false }                     -> x1
-    v16  Imm(0)                                           -> x1
-    v17  Extend { value=v10, kind=I32 }                   -> x1
-    terminator Return(v10)   (exit_acc=v10)
+    v16  Copy { value=v11, fp=false }                     -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Extend { value=v11, kind=I32 }                   -> x1
+    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

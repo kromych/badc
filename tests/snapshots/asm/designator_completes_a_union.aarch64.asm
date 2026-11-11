@@ -47,9 +47,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
-               	ldur	d1, [x29, #-0x10]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x0                // =0
+               	ldur	d1, [x29, #-0x10]
                	fcmp	d1, d0
                	csel	x0, x0, x1, ne
                	mov	x17, #0x14              // =20

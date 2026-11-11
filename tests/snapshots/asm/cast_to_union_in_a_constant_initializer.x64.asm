@@ -81,12 +81,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
-               	xorl	%ecx, %ecx
-               	movl	$0x4, %edx
-               	cmpl	$0xb, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	xorl	%eax, %eax
+               	movl	$0x4, %ecx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0xb, %edx
+               	cmovneq	%rcx, %rax
                	retq
                	movl	$0x2, %eax
                	retq

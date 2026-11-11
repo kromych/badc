@@ -62,8 +62,8 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	str	x0, [x3]
                	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
                	mov	x1, #0x1                // =1
+               	ldr	x0, [x0, #0x30]
                	cmp	x0, #0x3
                	csel	x0, x2, x1, eq
                	add	sp, sp, #0x10

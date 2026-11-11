@@ -97,21 +97,22 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v63  Imm(0)                                           -> x0
     v64  CallExt { binding_idx=18, args=[v10], fp_arg_mask=0x0 } -> x0
     v65  Imm(0)                                           -> x0
-    v66  ImmData(0)                                       -> x0
-    v67  Load { addr=v66, disp=0, kind=I64 }              -> x0
-    v68  Imm(0)                                           -> x1
-    v69  Binop { op=eq, lhs=v67, rhs=v17 }                -> x1
-    v70  Imm(0)                                           -> x1
-    v71  Imm(10)                                          -> x2
-    v72  Binop { op=eq, lhs=v67, rhs=v17 }                -> x0
-    v73  Select { cond=v72, a=v70, b=v71, kind=I64 }      -> x0
+    v66  Load { addr=v1, disp=0, kind=I64 }               -> x0
+    v67  Imm(0)                                           -> x0
+    v68  Binop { op=eq, lhs=v66, rhs=v17 }                -> x0
+    v69  Imm(0)                                           -> x0
+    v70  Imm(10)                                          -> x1
+    v71  ImmData(0)                                       -> x2
+    v72  Load { addr=v71, disp=0, kind=I64 }              -> x2
+    v73  Binop { op=eq, lhs=v72, rhs=v17 }                -> x2
+    v74  Select { cond=v73, a=v69, b=v70, kind=I64 }      -> x0
     terminator Jmp(b16)
   block 16  start_pc=0
-    v78  Copy { value=v73, fp=false }                     -> x1
-    v79  Imm(0)                                           -> x1
-    v80  Extend { value=v73, kind=I32 }                   -> x1
-    v81  LifetimeEnd(-2)                                  -> -
-    terminator Return(v73)   (exit_acc=v73)
+    v79  Copy { value=v74, fp=false }                     -> x1
+    v80  Imm(0)                                           -> x1
+    v81  Extend { value=v74, kind=I32 }                   -> x1
+    v82  LifetimeEnd(-2)                                  -> -
+    terminator Return(v74)   (exit_acc=v74)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

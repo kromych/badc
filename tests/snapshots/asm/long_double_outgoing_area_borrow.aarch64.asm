@@ -233,6 +233,15 @@ Disassembly of section .text:
                	blr	x9
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	add	x0, x0, x20
+               	fmov	d0, #4.00000000
+               	fmul	d0, d8, d0
+               	fcvtzs	x2, d0
+               	add	x0, x0, x2
+               	adrp	x16, <page>
+               	ldr	d0, [x16]
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
@@ -302,22 +311,13 @@ Disassembly of section .text:
                	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
-               	fmov	d0, x14
+               	fmov	d1, x14
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
-               	add	x0, x0, x20
-               	fmov	d1, #4.00000000
-               	fmul	d1, d8, d1
-               	fcvtzs	x1, d1
-               	add	x0, x0, x1
-               	adrp	x16, <page>
-               	ldr	d1, [x16]
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
-               	fcmpe	d0, d1
-               	csel	x1, x1, x2, gt
+               	fcmpe	d1, d0
+               	csel	x1, x2, x3, gt
                	add	x0, x0, x1
                	ldp	x20, x21, [sp, #0x50]
                	ldr	d8, [sp, #0x40]

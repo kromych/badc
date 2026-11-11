@@ -16,17 +16,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v10  Store { addr=v1, disp=0, value=v8, kind=I32 pc_rel } -> -
     v11  InlineAsm { template="", ops=0, args=[] }        -> -
     v12  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x0
-    v13  BinopI { op=eq, lhs=v12, rhs_imm=8 }             -> x1
-    v14  Imm(0)                                           -> x1
-    v15  Imm(1)                                           -> x2
-    v16  BinopI { op=eq, lhs=v12, rhs_imm=8 }             -> x0
-    v17  Select { cond=v16, a=v14, b=v15, kind=I64 }      -> x0
+    v13  BinopI { op=eq, lhs=v12, rhs_imm=8 }             -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(1)                                           -> x1
+    v16  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x2
+    v17  BinopI { op=eq, lhs=v16, rhs_imm=8 }             -> x2
+    v18  Select { cond=v17, a=v14, b=v15, kind=I64 }      -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v22  Copy { value=v17, fp=false }                     -> x1
-    v23  Imm(0)                                           -> x1
-    v24  Extend { value=v17, kind=I32 }                   -> x1
-    terminator Return(v17)   (exit_acc=v17)
+    v23  Copy { value=v18, fp=false }                     -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Extend { value=v18, kind=I32 }                   -> x1
+    terminator Return(v18)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

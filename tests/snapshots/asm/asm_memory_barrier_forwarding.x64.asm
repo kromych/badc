@@ -30,10 +30,9 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	xorl	%ecx, %ecx
-               	movl	$0x1, %edx
-               	cmpl	$0x8, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x8, %edx
+               	cmovneq	%rcx, %rax
                	retq

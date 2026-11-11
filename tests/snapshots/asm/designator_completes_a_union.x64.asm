@@ -55,10 +55,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	-0x10(%rbp), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movl	$0x1, %ecx
                	xorl	%edx, %edx
+               	movsd	-0x10(%rbp), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	movq	%rdx, %rax

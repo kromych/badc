@@ -246,16 +246,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v82  LifetimeEnd(0)                                   -> -
     v83  ImmData(32)                                      -> x0
     v84  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x0
-    v85  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x2
-    v86  Imm(1)                                           -> x2
-    v87  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x0
-    v88  Select { cond=v87, a=v48, b=v86, kind=I64 }      -> x0
+    v85  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x0
+    v86  Imm(1)                                           -> x0
+    v87  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x2
+    v88  BinopI { op=eq, lhs=v87, rhs_imm=3 }             -> x2
+    v89  Select { cond=v88, a=v48, b=v86, kind=I64 }      -> x0
     terminator Jmp(b3)
   block 3  start_pc=0
-    v61  Copy { value=v88, fp=false }                     -> x1
+    v61  Copy { value=v89, fp=false }                     -> x1
     v62  Imm(0)                                           -> x1
-    v63  Extend { value=v88, kind=I32 }                   -> x1
-    terminator Return(v88)   (exit_acc=v88)
+    v63  Extend { value=v89, kind=I32 }                   -> x1
+    terminator Return(v89)   (exit_acc=v89)
   block 4  start_pc=0
     v71  LocalAddr(-1)                                    -> x6
     v72  LifetimeEnd(0)                                   -> -

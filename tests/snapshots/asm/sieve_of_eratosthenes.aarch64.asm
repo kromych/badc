@@ -39,8 +39,8 @@ Disassembly of section .text:
                	movk	x2, #0x1, lsl #16
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrb	w4, [x3, x0]
-               	cmp	w4, #0x0
+               	ldrb	w5, [x3, x0]
+               	cmp	w5, #0x0
                	cinc	x1, x1, eq
                	add	x0, x0, #0x1
                	cmp	w0, w2

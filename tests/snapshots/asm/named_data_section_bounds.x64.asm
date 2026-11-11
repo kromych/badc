@@ -33,8 +33,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	0x8(%rax), %edi
                	movq	(%rax), %r8
-               	cmpb	$0x0, 0x1(%r8)
                	movl	$0x3e8, %r9d            # imm = 0x3E8
+               	cmpb	$0x0, 0x1(%r8)
                	movq	%rcx, %r8
                	cmovneq	%r9, %r8
                	addq	%r8, %rdi

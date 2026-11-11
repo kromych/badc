@@ -171,11 +171,11 @@ Disassembly of section .text:
                	cmpq	$0xd, %rax
                	movq	%rbx, %rax
                	cmovneq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	movq	%rax, %rdx
-               	orq	$0x80, %rdx
-               	cmpl	$0xa, %ecx
-               	cmovneq	%rdx, %rax
+               	movq	%rax, %rcx
+               	orq	$0x80, %rcx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0xa, %edx
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

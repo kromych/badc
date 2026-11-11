@@ -79,9 +79,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x98]
                	mov	x1, #0x0                // =0
                	mov	x2, #0x4                // =4
+               	ldrsw	x0, [x0, #0x98]
                	cmp	w0, #0xb
                	csel	x0, x1, x2, eq
                	ret

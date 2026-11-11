@@ -162,24 +162,52 @@ fn convert_one(func: &mut FunctionSsa, target: Target) -> bool {
             .iter()
             .flat_map(|&b| live_values(func, &uses, b))
             .collect();
-        let cond_alone =
-            uses.get(cond as usize) == Some(&1) && flags_condition(&func.insts[cond as usize]);
-        apply(
-            func,
-            head,
-            cond,
-            &arm_values,
-            join,
-            (&picks, &dead),
-            cond_alone,
-        );
+        let tail = condition_tail(func, &uses, head, cond);
+        apply(func, head, cond, &arm_values, join, (&picks, &dead), &tail);
         return true;
     }
     false
 }
 
-/// Copy the arms' values to the end of `head`, then a condition only the
-/// branch read, so its flags reach the selects, then the selects.
+/// What follows the arms' copies at the end of `head`, so the condition's
+/// flags reach the selects: a condition only the branch reads, after a
+/// load only it reads where nothing in `head` past the load writes memory,
+/// which a select may then read in its compare.
+fn condition_tail(func: &FunctionSsa, uses: &[u32], head: BlockId, cond: ValueId) -> Vec<ValueId> {
+    let inst = &func.insts[cond as usize];
+    if uses.get(cond as usize) != Some(&1) || !flags_condition(inst) {
+        return Vec::new();
+    }
+    let range = func.blocks[head as usize].inst_range.clone();
+    let lhs = match *inst {
+        Inst::Binop { lhs, .. } | Inst::BinopI { lhs, .. } => lhs,
+        _ => NO_VALUE,
+    };
+    let plain_load = matches!(
+        func.insts.get(lhs as usize),
+        Some(
+            Inst::Load {
+                volatile: false,
+                ..
+            } | Inst::LoadLocal {
+                volatile: false,
+                ..
+            } | Inst::LoadIndexed { .. }
+        )
+    );
+    let moves = plain_load
+        && uses.get(lhs as usize) == Some(&1)
+        && range.contains(&lhs)
+        && (lhs + 1..range.end).all(|v| !func.insts[v as usize].may_write_memory());
+    if moves {
+        alloc::vec![lhs, cond]
+    } else {
+        alloc::vec![cond]
+    }
+}
+
+/// Copy the arms' values to the end of `head`, then the condition's tail
+/// ([`condition_tail`]), then the selects.
 fn apply(
     func: &mut FunctionSsa,
     head: BlockId,
@@ -187,7 +215,7 @@ fn apply(
     arm_values: &[ValueId],
     join: BlockId,
     (picks, dead): (&[Pick], &[ValueId]),
-    cond_alone: bool,
+    tail: &[ValueId],
 ) {
     let n_old = func.insts.len() as ValueId;
     let hrange = func.blocks[head as usize].inst_range.clone();
@@ -199,12 +227,7 @@ fn apply(
     // A copied value's readers name its copy, an insertion past the tape.
     let mut copies: Vec<(ValueId, ValueId)> = Vec::new();
     let mut ins: Vec<Insertion> = Vec::new();
-    let copied = if cond_alone {
-        arm_values.iter().copied().chain([cond]).collect()
-    } else {
-        arm_values.to_vec()
-    };
-    for v in copied {
+    for &v in arm_values.iter().chain(tail) {
         let mut inst = func.insts[v as usize].clone();
         inst.for_each_operand_mut(|o| {
             if let Some(&(_, c)) = copies.iter().find(|e| e.0 == *o) {

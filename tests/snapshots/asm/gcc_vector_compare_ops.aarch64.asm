@@ -162,9 +162,9 @@ Disassembly of section .text:
                	sub	x4, x29, #0x140
                	mov	x0, x1
                	sub	x5, x29, #0x10
-               	ldrb	w6, [x3, x0]
-               	ldrb	w7, [x4, x0]
-               	cmp	w6, w7
+               	ldrb	w6, [x4, x0]
+               	ldrb	w7, [x3, x0]
+               	cmp	w7, w6
                	csel	x6, x2, x1, eq
                	strb	w6, [x5, x0]
                	add	x0, x0, #0x1
@@ -283,11 +283,11 @@ Disassembly of section .text:
                	sub	x4, x29, #0x50
                	ldp	x16, x17, [x3]
                	stp	x16, x17, [x4]
-               	ldrb	w3, [x6, x0]
-               	ldrb	w4, [x7, x0]
-               	mov	x5, #0x0                // =0
-               	cmp	w3, w4
-               	csel	x3, x2, x5, ne
+               	ldrb	w3, [x7, x0]
+               	mov	x4, #0x0                // =0
+               	ldrb	w5, [x6, x0]
+               	cmp	w5, w3
+               	csel	x3, x2, x4, ne
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -405,12 +405,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x6, x0]
-               	ldrb	w3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, lt
+               	ldrb	w2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrb	w5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, lt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -528,12 +528,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x6, x0]
-               	ldrb	w3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, le
+               	ldrb	w2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrb	w5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, le
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -651,12 +651,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x6, x0]
-               	ldrb	w3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, gt
+               	ldrb	w2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrb	w5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, gt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -774,12 +774,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x6, x0]
-               	ldrb	w3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, ge
+               	ldrb	w2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrb	w5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, ge
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -897,12 +897,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, eq
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, eq
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1020,12 +1020,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, ne
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, ne
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1143,12 +1143,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, lt
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, lt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1266,12 +1266,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, le
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, le
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1389,12 +1389,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, gt
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, gt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1512,12 +1512,12 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrsb	x2, [x6, x0]
-               	ldrsb	x3, [x7, x0]
-               	mov	x4, #-0x1               // =-1
-               	mov	x5, #0x0                // =0
-               	cmp	w2, w3
-               	csel	x2, x4, x5, ge
+               	ldrsb	x2, [x7, x0]
+               	mov	x3, #-0x1               // =-1
+               	mov	x4, #0x0                // =0
+               	ldrsb	x5, [x6, x0]
+               	cmp	w5, w2
+               	csel	x2, x3, x4, ge
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1594,11 +1594,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrh	w4, [x4]
                	add	x1, x8, x1
                	ldrh	w1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrh	w4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, eq
                	strh	w1, [x3]
@@ -1677,11 +1677,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrh	w4, [x4]
                	add	x1, x8, x1
                	ldrh	w1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrh	w4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, lt
                	strh	w1, [x3]
@@ -1760,11 +1760,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrh	w4, [x4]
                	add	x1, x8, x1
                	ldrh	w1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrh	w4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, ge
                	strh	w1, [x3]
@@ -1843,11 +1843,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsh	x4, [x4]
                	add	x1, x8, x1
                	ldrsh	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsh	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, ne
                	strh	w1, [x3]
@@ -1926,11 +1926,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsh	x4, [x4]
                	add	x1, x8, x1
                	ldrsh	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsh	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, le
                	strh	w1, [x3]
@@ -2009,11 +2009,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #1
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsh	x4, [x4]
                	add	x1, x8, x1
                	ldrsh	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsh	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, gt
                	strh	w1, [x3]
@@ -2060,11 +2060,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	w4, [x4]
                	add	x1, x8, x1
                	ldr	w1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	w4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, lo
                	str	w1, [x3]
@@ -2111,11 +2111,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	w4, [x4]
                	add	x1, x8, x1
                	ldr	w1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	w4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, eq
                	str	w1, [x3]
@@ -2162,11 +2162,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsw	x4, [x4]
                	add	x1, x8, x1
                	ldrsw	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsw	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, lt
                	str	w1, [x3]
@@ -2213,11 +2213,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsw	x4, [x4]
                	add	x1, x8, x1
                	ldrsw	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsw	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, ge
                	str	w1, [x3]
@@ -2264,11 +2264,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldrsw	x4, [x4]
                	add	x1, x8, x1
                	ldrsw	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldrsw	x4, [x4]
                	cmp	w4, w1
                	csel	x1, x5, x6, ne
                	str	w1, [x3]
@@ -2303,11 +2303,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	x4, [x4]
                	add	x1, x8, x1
                	ldr	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	x4, [x4]
                	cmp	x4, x1
                	csel	x1, x5, x6, lo
                	str	x1, [x3]
@@ -2342,11 +2342,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	x4, [x4]
                	add	x1, x8, x1
                	ldr	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	x4, [x4]
                	cmp	x4, x1
                	csel	x1, x5, x6, hi
                	str	x1, [x3]
@@ -2381,11 +2381,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	x4, [x4]
                	add	x1, x8, x1
                	ldr	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	x4, [x4]
                	cmp	x4, x1
                	csel	x1, x5, x6, lt
                	str	x1, [x3]
@@ -2420,11 +2420,11 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x7, x1
-               	ldr	x4, [x4]
                	add	x1, x8, x1
                	ldr	x1, [x1]
                	mov	x5, #-0x1               // =-1
                	mov	x6, #0x0                // =0
+               	ldr	x4, [x4]
                	cmp	x4, x1
                	csel	x1, x5, x6, eq
                	str	x1, [x3]
@@ -2501,12 +2501,12 @@ Disassembly of section .text:
                	and	x1, x11, #0xff
                	sturb	w1, [x29, #-0x11]
                	sub	x1, x29, #0x8
-               	ldrb	w3, [x7, x0]
-               	ldrb	w4, [x8, x0]
-               	mov	x5, #-0x1               // =-1
-               	mov	x6, #0x0                // =0
-               	cmp	w3, w4
-               	csel	x3, x5, x6, lt
+               	ldrb	w3, [x8, x0]
+               	mov	x4, #-0x1               // =-1
+               	mov	x5, #0x0                // =0
+               	ldrb	w6, [x7, x0]
+               	cmp	w6, w3
+               	csel	x3, x4, x5, lt
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -2566,13 +2566,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x5, x2, x1
                	add	x6, x3, x1
-               	ldr	s0, [x6]
                	add	x1, x4, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x6, #0x0                // =0
-               	fcmp	s0, s1
-               	csel	x1, x1, x6, eq
+               	mov	x7, #0x0                // =0
+               	ldr	s1, [x6]
+               	fcmp	s1, s0
+               	csel	x1, x1, x7, eq
                	str	w1, [x5]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2617,13 +2617,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	s0, [x4]
                	add	x1, x7, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmp	s0, s1
-               	csel	x1, x1, x4, ne
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x4]
+               	fcmp	s1, s0
+               	csel	x1, x1, x5, ne
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2668,13 +2668,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	s0, [x4]
                	add	x1, x7, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	s0, s1
-               	csel	x1, x1, x4, mi
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x4]
+               	fcmpe	s1, s0
+               	csel	x1, x1, x5, mi
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2719,13 +2719,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	s0, [x4]
                	add	x1, x7, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	s0, s1
-               	csel	x1, x1, x4, ls
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x4]
+               	fcmpe	s1, s0
+               	csel	x1, x1, x5, ls
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2770,13 +2770,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	s0, [x4]
                	add	x1, x7, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	s0, s1
-               	csel	x1, x1, x4, gt
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x4]
+               	fcmpe	s1, s0
+               	csel	x1, x1, x5, gt
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2821,13 +2821,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #2
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	s0, [x4]
                	add	x1, x7, x1
-               	ldr	s1, [x1]
+               	ldr	s0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	s0, s1
-               	csel	x1, x1, x4, ge
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x4]
+               	fcmpe	s1, s0
+               	csel	x1, x1, x5, ge
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2868,12 +2868,12 @@ Disassembly of section .text:
                	lsl	x2, x0, #2
                	add	x3, x1, x2
                	add	x2, x6, x2
-               	ldr	s0, [x2]
-               	fmov	s1, #2.00000000
-               	mov	x2, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	s0, s1
-               	csel	x2, x2, x4, gt
+               	fmov	s0, #2.00000000
+               	mov	x4, #-0x1               // =-1
+               	mov	x5, #0x0                // =0
+               	ldr	s1, [x2]
+               	fcmpe	s1, s0
+               	csel	x2, x4, x5, gt
                	str	w2, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2921,13 +2921,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x5, x2, x1
                	add	x6, x3, x1
-               	ldr	d0, [x6]
                	add	x1, x4, x1
-               	ldr	d1, [x1]
+               	ldr	d0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x6, #0x0                // =0
-               	fcmp	d0, d1
-               	csel	x1, x1, x6, eq
+               	mov	x7, #0x0                // =0
+               	ldr	d1, [x6]
+               	fcmp	d1, d0
+               	csel	x1, x1, x7, eq
                	str	x1, [x5]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
@@ -2960,13 +2960,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	d0, [x4]
                	add	x1, x7, x1
-               	ldr	d1, [x1]
+               	ldr	d0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmp	d0, d1
-               	csel	x1, x1, x4, ne
+               	mov	x5, #0x0                // =0
+               	ldr	d1, [x4]
+               	fcmp	d1, d0
+               	csel	x1, x1, x5, ne
                	str	x1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
@@ -2999,13 +2999,13 @@ Disassembly of section .text:
                	lsl	x1, x0, #3
                	add	x3, x2, x1
                	add	x4, x6, x1
-               	ldr	d0, [x4]
                	add	x1, x7, x1
-               	ldr	d1, [x1]
+               	ldr	d0, [x1]
                	mov	x1, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	fcmpe	d0, d1
-               	csel	x1, x1, x4, mi
+               	mov	x5, #0x0                // =0
+               	ldr	d1, [x4]
+               	fcmpe	d1, d0
+               	csel	x1, x1, x5, mi
                	str	x1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
@@ -3106,11 +3106,11 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x5, x0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	cmp	w2, #0x64
-               	csel	x2, x3, x4, gt
+               	mov	x2, #-0x1               // =-1
+               	mov	x3, #0x0                // =0
+               	ldrb	w4, [x5, x0]
+               	cmp	w4, #0x64
+               	csel	x2, x2, x3, gt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -3211,11 +3211,11 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x5, x0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	cmp	w2, #0x3
-               	csel	x2, x3, x4, eq
+               	mov	x2, #-0x1               // =-1
+               	mov	x3, #0x0                // =0
+               	ldrb	w4, [x5, x0]
+               	cmp	w4, #0x3
+               	csel	x2, x2, x3, eq
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -3316,11 +3316,11 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x5, x0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	cmp	w2, #0xff
-               	csel	x2, x3, x4, lt
+               	mov	x2, #-0x1               // =-1
+               	mov	x3, #0x0                // =0
+               	ldrb	w4, [x5, x0]
+               	cmp	w4, #0xff
+               	csel	x2, x2, x3, lt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -3423,11 +3423,11 @@ Disassembly of section .text:
                	ldp	x16, x17, [x3]
                	stp	x16, x17, [x2]
                	mov	x6, #-0x5               // =-5
-               	ldrsb	x2, [x5, x0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	cmp	w2, w6
-               	csel	x2, x3, x4, gt
+               	mov	x2, #-0x1               // =-1
+               	mov	x3, #0x0                // =0
+               	ldrsb	x4, [x5, x0]
+               	cmp	w4, w6
+               	csel	x2, x2, x3, gt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -3467,9 +3467,9 @@ Disassembly of section .text:
                	lsl	x2, x0, #2
                	add	x3, x1, x2
                	add	x2, x6, x2
-               	ldrsw	x2, [x2]
                	mov	x4, #-0x1               // =-1
                	mov	x5, #0x0                // =0
+               	ldrsw	x2, [x2]
                	cmp	w2, #0x0
                	csel	x2, x4, x5, lt
                	str	w2, [x3]
@@ -3501,9 +3501,9 @@ Disassembly of section .text:
                	lsl	x2, x0, #3
                	add	x3, x1, x2
                	add	x2, x6, x2
-               	ldr	x2, [x2]
                	mov	x4, #-0x1               // =-1
                	mov	x5, #0x0                // =0
+               	ldr	x2, [x2]
                	cmp	x2, #0x5
                	csel	x2, x4, x5, ne
                	str	x2, [x3]
@@ -3606,11 +3606,11 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x3]
-               	ldrb	w2, [x5, x0]
-               	mov	x3, #-0x1               // =-1
-               	mov	x4, #0x0                // =0
-               	cmp	w2, #0x64
-               	csel	x2, x3, x4, lt
+               	mov	x2, #-0x1               // =-1
+               	mov	x3, #0x0                // =0
+               	ldrb	w4, [x5, x0]
+               	cmp	w4, #0x64
+               	csel	x2, x2, x3, lt
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -3650,9 +3650,9 @@ Disassembly of section .text:
                	lsl	x2, x0, #2
                	add	x3, x1, x2
                	add	x2, x6, x2
-               	ldrsw	x2, [x2]
                	mov	x4, #-0x1               // =-1
                	mov	x5, #0x0                // =0
+               	ldrsw	x2, [x2]
                	cmp	w2, #0x0
                	csel	x2, x4, x5, ge
                	str	w2, [x3]

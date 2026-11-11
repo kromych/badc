@@ -367,11 +367,10 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
-               	movl	<rip>, %edx # <addr>
                	cmpl	$0x1, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testl	%edx, %edx
+               	cmpl	$0x0, <rip> # <addr>
                	cmoveq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx

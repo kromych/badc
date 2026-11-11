@@ -53,10 +53,10 @@ Disassembly of section .text:
                	cmpl	$-0x5, %ecx
                	je	<addr>
                	orq	$0x8, %rax
-               	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x400e000000000000, %rcx # imm = 0x400E000000000000
                	movq	%rax, %rdx
                	orq	$0x10, %rdx
+               	movsd	<rip>, %xmm0 # <addr>
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	cmovneq	%rdx, %rax
@@ -68,9 +68,9 @@ Disassembly of section .text:
                	cmpl	$0x6, %ecx
                	je	<addr>
                	orq	$0x20, %rax
-               	movl	<rip>, %ecx # <addr>
-               	movq	%rax, %rdx
-               	orq	$0x40, %rdx
-               	cmpl	$0x1e, %ecx
-               	cmovneq	%rdx, %rax
+               	movq	%rax, %rcx
+               	orq	$0x40, %rcx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x1e, %edx
+               	cmovneq	%rcx, %rax
                	retq

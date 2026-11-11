@@ -44,11 +44,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	xorl	%edx, %edx
-               	movl	$0x3, %esi
-               	cmpq	%rcx, %rax
-               	movq	%rsi, %rax
-               	cmoveq	%rdx, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x3, %edx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rax, %rsi
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq

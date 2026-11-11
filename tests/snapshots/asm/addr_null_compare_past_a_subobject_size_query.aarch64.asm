@@ -23,15 +23,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lo	<addr>
-               	ldur	x0, [x29, #-0x10]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x2                // =2
+               	ldur	x2, [x29, #-0x10]
                	mov	x17, #0x908             // =2312
                	movk	x17, #0xb0a, lsl #16
                	movk	x17, #0xd0c, lsl #32
                	movk	x17, #0xf0e, lsl #48
-               	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	cmp	x2, x17
+               	csel	x0, x0, x1, eq
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

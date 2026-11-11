@@ -123,13 +123,12 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	xorl	%ecx, %ecx
-               	movl	$0xa, %edx
-               	cmpq	%r12, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	xorl	%eax, %eax
+               	movl	$0xa, %ecx
+               	movq	<rip>, %rdx # <addr>
+               	movq	(%rdx), %rdx
+               	cmpq	%r12, %rdx
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave

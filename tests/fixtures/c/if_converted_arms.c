@@ -90,6 +90,13 @@ NOINLINE long on_int_zero(const int *p, long a, long b) { return *p == 0 ? a : b
 NOINLINE long on_long(const long long *p, long a, long b) { return !*p ? a : b; }
 NOINLINE long on_param(int c, long a, long b) { return c == 0 ? a : b; }
 
+/* The tested value is read before the store that clears it. */
+NOINLINE long load_then_store(signed char *p, long a, long b) {
+    signed char v = *p;
+    *p = 0;
+    return v != 0 ? a : b;
+}
+
 int main(void) {
     if (!narrow_compare_in_arm(18)) return 1;
     if (narrow_compare_in_arm(17)) return 2;
@@ -123,5 +130,7 @@ int main(void) {
         if (on_long(&longs[i], 5, 7) != (i ? 7 : 5)) return 18;
         if (on_param(i, 5, 7) != (i ? 7 : 5)) return 19;
     }
+    signed char flag = 3;
+    if (load_then_store(&flag, 5, 7) != 5 || flag != 0) return 20;
     return 0;
 }

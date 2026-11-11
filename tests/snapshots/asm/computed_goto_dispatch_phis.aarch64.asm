@@ -381,9 +381,9 @@ Disassembly of section .text:
                	mul	x21, x1, x15
                	sub	x1, x14, x21
                	ldrb	w1, [x0, x1]
-               	ldr	x1, [x20, x1, lsl #3]
                	adr	x22, <addr>
                	add	x23, x2, #0x3e8
+               	ldr	x1, [x20, x1, lsl #3]
                	cmp	x1, x22
                	csel	x2, x23, x2, eq
                	eor	x12, x12, x2

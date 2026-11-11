@@ -556,23 +556,24 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
   block 42  start_pc=0
     v489 BinopI { op=add, lhs=v313, rhs_imm=92 }          -> x0
     v490 Load { addr=v313, disp=92, kind=I32 pc_rel }     -> x0
-    v491 BinopI { op=ne, lhs=v490, rhs_imm=42 }           -> x1
-    v492 Imm(23)                                          -> x1
-    v493 Imm(0)                                           -> x2
-    v494 BinopI { op=ne, lhs=v490, rhs_imm=42 }           -> x0
-    v495 Select { cond=v494, a=v492, b=v493, kind=I64 }   -> x0
+    v491 BinopI { op=ne, lhs=v490, rhs_imm=42 }           -> x0
+    v492 Imm(23)                                          -> x0
+    v493 Imm(0)                                           -> x1
+    v494 Load { addr=v313, disp=92, kind=I32 pc_rel }     -> x2
+    v495 BinopI { op=ne, lhs=v494, rhs_imm=42 }           -> x2
+    v496 Select { cond=v495, a=v492, b=v493, kind=I64 }   -> x0
     terminator Jmp(b43)
   block 43  start_pc=0
-    v502 Copy { value=v495, fp=false }                    -> x1
-    v503 Extend { value=v495, kind=I32 }                  -> x1
-    v504 Imm(0)                                           -> x1
+    v503 Copy { value=v496, fp=false }                    -> x1
+    v504 Extend { value=v496, kind=I32 }                  -> x1
     v505 Imm(0)                                           -> x1
-    terminator Bz { cond=v495, target=b45, fall=b44 }   (exit_acc=v495)
+    v506 Imm(0)                                           -> x1
+    terminator Bz { cond=v496, target=b45, fall=b44 }   (exit_acc=v496)
   block 44  start_pc=0
     v477 Imm(0)                                           -> x1
-    v478 Extend { value=v495, kind=I32 }                  -> x1
+    v478 Extend { value=v496, kind=I32 }                  -> x1
     v479 LifetimeEnd(-6)                                  -> -
-    terminator Return(v495)   (exit_acc=v495)
+    terminator Return(v496)   (exit_acc=v496)
   block 45  start_pc=0
     v480 Imm(0)                                           -> x0
     v481 LifetimeEnd(-6)                                  -> -

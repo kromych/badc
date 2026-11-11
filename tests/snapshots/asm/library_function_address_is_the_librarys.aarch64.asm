@@ -32,11 +32,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
                	mov	x2, #0x0                // =0
                	mov	x3, #0x3                // =3
+               	ldr	x0, [x0, #0x18]
                	cmp	x0, x1
                	csel	x0, x2, x3, eq
                	ldp	x29, x30, [sp], #0x10

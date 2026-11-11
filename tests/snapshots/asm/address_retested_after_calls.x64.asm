@@ -107,12 +107,11 @@ Disassembly of section .text:
                	addq	0x40(%rsp), %rcx
                	addq	0x38(%rsp), %rcx
                	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	xorl	%edx, %edx
-               	movl	$0x4, %esi
-               	cmpl	$0x2, %ecx
-               	movq	%rsi, %rcx
-               	cmoveq	%rdx, %rcx
+               	xorl	%ecx, %ecx
+               	movl	$0x4, %edx
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x2, %esi
+               	cmovneq	%rdx, %rcx
                	addq	%rcx, %rax
                	popq	%rbx
                	popq	%r12

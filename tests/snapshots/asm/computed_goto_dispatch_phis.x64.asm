@@ -485,14 +485,14 @@ Disassembly of section .text:
                	subq	%r10, %rcx
                	movq	0x58(%rsp), %r10
                	movzbq	(%r10,%rcx), %rcx
+               	leaq	<rip>, %r10 # <addr>
+               	movq	%r10, 0x40(%rsp)
+               	leaq	0x3e8(%rax), %r10
+               	movq	%r10, 0x38(%rsp)
                	movq	0x48(%rsp), %r10
                	movq	(%r10,%rcx,8), %rcx
-               	leaq	<rip>, %r10 # <addr>
-               	movq	%r10, 0x48(%rsp)
-               	leaq	0x3e8(%rax), %r10
-               	movq	%r10, 0x40(%rsp)
-               	cmpq	0x48(%rsp), %rcx
-               	movq	0x40(%rsp), %r10
+               	cmpq	0x40(%rsp), %rcx
+               	movq	0x38(%rsp), %r10
                	cmoveq	%r10, %rax
                	movq	0x68(%rsp), %r10
                	xorq	%rax, %r10

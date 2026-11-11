@@ -35,18 +35,19 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v39  LocalAddr(-3)                                    -> x0
     v40  BinopI { op=add, lhs=v39, rhs_imm=8 }            -> x0
     v41  LoadLocal { off=-3, disp=8, kind=I64 }           -> x0
-    v42  BinopI { op=eq, lhs=v41, rhs_imm=1084818905618843912 } -> x1
-    v43  Imm(0)                                           -> x1
-    v44  Imm(2)                                           -> x2
-    v45  BinopI { op=eq, lhs=v41, rhs_imm=1084818905618843912 } -> x0
-    v46  Select { cond=v45, a=v43, b=v44, kind=I64 }      -> x0
+    v42  BinopI { op=eq, lhs=v41, rhs_imm=1084818905618843912 } -> x0
+    v43  Imm(0)                                           -> x0
+    v44  Imm(2)                                           -> x1
+    v45  LoadLocal { off=-3, disp=8, kind=I64 }           -> x2
+    v46  BinopI { op=eq, lhs=v45, rhs_imm=1084818905618843912 } -> x2
+    v47  Select { cond=v46, a=v43, b=v44, kind=I64 }      -> x0
     terminator Jmp(b4)
   block 4  start_pc=0
-    v20  Copy { value=v46, fp=false }                     -> x1
+    v20  Copy { value=v47, fp=false }                     -> x1
     v21  Imm(0)                                           -> x1
-    v22  Extend { value=v46, kind=I32 }                   -> x1
+    v22  Extend { value=v47, kind=I32 }                   -> x1
     v23  LifetimeEnd(-3)                                  -> -
-    terminator Return(v46)   (exit_acc=v46)
+    terminator Return(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

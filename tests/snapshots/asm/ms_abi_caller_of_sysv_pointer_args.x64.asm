@@ -171,14 +171,14 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	je	<addr>
                	orq	$0x2, %rax
-               	movq	<rip>, %rcx # <addr>
-               	leaq	0x1(%rbx), %rdx
-               	leaq	(%rdx,%rdx,2), %rdx
-               	addq	$0x5, %rdx
-               	movq	%rax, %rsi
-               	orq	$0x4, %rsi
-               	cmpq	%rdx, %rcx
-               	cmovneq	%rsi, %rax
+               	leaq	0x1(%rbx), %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	$0x5, %rcx
+               	movq	%rax, %rdx
+               	orq	$0x4, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rcx, %rsi
+               	cmovneq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
                	leaq	0x1(%r14), %rdx
                	leaq	(%rdx,%rdx,2), %rdx
@@ -189,15 +189,15 @@ Disassembly of section .text:
                	cmpq	$0x134ac, %rcx          # imm = 0x134AC
                	je	<addr>
                	orq	$0x8, %rax
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rbx, %rdx
-               	shlq	%rdx
-               	addq	$0x5, %rdx
-               	movl	%edx, %edx
-               	movq	%rax, %rsi
-               	orq	$0x10, %rsi
-               	cmpq	%rdx, %rcx
-               	cmovneq	%rsi, %rax
+               	movq	%rbx, %rcx
+               	shlq	%rcx
+               	addq	$0x5, %rcx
+               	movl	%ecx, %ecx
+               	movq	%rax, %rdx
+               	orq	$0x10, %rdx
+               	movq	<rip>, %rsi # <addr>
+               	cmpq	%rcx, %rsi
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

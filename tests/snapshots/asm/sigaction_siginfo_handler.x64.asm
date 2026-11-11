@@ -31,10 +31,9 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
-               	movl	(%rsi), %ecx
-               	movq	$-0x1, %rdx
-               	cmpl	%edi, %ecx
-               	movq	%rdx, %rcx
+               	movq	$-0x1, %rcx
+               	movl	(%rsi), %edx
+               	cmpl	%edi, %edx
                	cmoveq	%rdi, %rcx
                	movl	%ecx, <rip> # <addr>
                	movq	<rip>, %rcx # <addr>

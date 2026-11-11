@@ -44,14 +44,14 @@ Disassembly of section .text:
 <late_operands>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	ldrsb	x8, [x29, #0x10]
-               	ldrsh	x9, [x29, #0x18]
-               	ldrsw	x10, [x29, #0x20]
+               	ldrsh	x8, [x29, #0x18]
+               	ldrsw	x9, [x29, #0x20]
                	mov	x17, #0x3               // =3
-               	mul	x9, x9, x17
-               	sub	x10, x10, #0x1
-               	cmp	w8, #0x0
-               	csel	x8, x9, x10, gt
+               	mul	x8, x8, x17
+               	sub	x9, x9, #0x1
+               	ldrsb	x10, [x29, #0x10]
+               	cmp	w10, #0x0
+               	csel	x8, x8, x9, gt
                	mov	x17, #0x5               // =5
                	mul	x8, x8, x17
                	sxtw	x8, w8
@@ -90,8 +90,8 @@ Disassembly of section .text:
                	mov	x3, x0
                	cmp	w0, w1
                	b.ge	<addr>
-               	ldrsw	x5, [x4, x0, lsl #2]
-               	cmp	w5, w2
+               	ldrsw	x6, [x4, x0, lsl #2]
+               	cmp	w6, w2
                	cinc	x3, x3, lt
                	add	x0, x0, #0x1
                	cmp	w0, w1
@@ -154,6 +154,13 @@ Disassembly of section .text:
 <on_param>:
                	cmp	w0, #0x0
                	csel	x0, x2, x1, ne
+               	ret
+
+<load_then_store>:
+               	ldrsb	x3, [x0]
+               	strb	wzr, [x0]
+               	cmp	w3, #0x0
+               	csel	x0, x1, x2, ne
                	ret
 
 <main>:
@@ -474,12 +481,12 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x23, x29, #0x48
+               	sub	x23, x29, #0x50
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrh	w16, [x0]
                	strh	w16, [x23]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x48
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
@@ -500,7 +507,7 @@ Disassembly of section .text:
                	csel	x1, x1, x2, ne
                	cmp	x0, x1
                	b.ne	<addr>
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x48
                	add	x0, x0, x20, lsl #2
                	mov	x1, #0x5                // =5
                	mov	x2, #0x7                // =7
@@ -535,6 +542,23 @@ Disassembly of section .text:
                	add	x20, x20, #0x1
                	cmp	w20, #0x2
                	b.lt	<addr>
+               	mov	x0, #0x3                // =3
+               	sturb	w0, [x29, #-0x40]
+               	sub	x0, x29, #0x40
+               	mov	x1, #0x5                // =5
+               	mov	x2, #0x7                // =7
+               	bl	<addr>
+               	cmp	x0, #0x5
+               	b.ne	<addr>
+               	ldursb	x0, [x29, #-0x40]
+               	cbz	w0, <addr>
+               	mov	x0, #0x14               // =20
+               	ldp	x22, x23, [sp, #0x40]
+               	ldp	x20, x21, [sp, #0x30]
+               	ldr	d8, [sp, #0x20]
+               	add	sp, sp, #0xa0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x0, #0x0                // =0
                	ldp	x22, x23, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x30]

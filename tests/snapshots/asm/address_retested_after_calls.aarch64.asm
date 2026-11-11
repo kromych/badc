@@ -94,9 +94,9 @@ Disassembly of section .text:
                	add	x1, x1, x27
                	add	x0, x0, x1
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x30]
                	mov	x2, #0x0                // =0
                	mov	x3, #0x4                // =4
+               	ldrsw	x1, [x1, #0x30]
                	cmp	w1, #0x2
                	csel	x1, x2, x3, eq
                	add	x0, x0, x1

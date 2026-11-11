@@ -54,11 +54,10 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movzbq	<rip>, %rax # <addr>
-               	movl	$0x20, %ecx
-               	cmpl	$0x7, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	movl	$0x20, %eax
+               	movzbq	<rip>, %rcx # <addr>
+               	cmpl	$0x7, %ecx
+               	cmoveq	%rdx, %rax
                	movb	$0x6, <rip> # <addr>
                	movzbq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx

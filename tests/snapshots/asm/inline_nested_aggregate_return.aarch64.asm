@@ -153,8 +153,8 @@ Disassembly of section .text:
                	cmp	x0, #0xd
                	csel	x0, x1, x20, ne
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x30]
                	orr	x2, x0, #0x80
+               	ldrsw	x1, [x1, #0x30]
                	cmp	w1, #0xa
                	csel	x0, x2, x0, ne
                	ldp	x29, x30, [sp, #0x60]

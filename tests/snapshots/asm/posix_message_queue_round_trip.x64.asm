@@ -79,9 +79,9 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	(%rax), %eax
                	xorl	%ecx, %ecx
                	movl	$0xb, %edx
+               	movl	(%rax), %eax
                	cmpl	$0x26, %eax
                	movq	%rdx, %rax
                	cmoveq	%rcx, %rax

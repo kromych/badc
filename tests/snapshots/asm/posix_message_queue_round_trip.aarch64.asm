@@ -64,9 +64,9 @@ Disassembly of section .text:
                	cmp	w21, w17
                	b.ne	<addr>
                	bl	<addr>
-               	ldrsw	x0, [x0]
                	mov	x1, #0x0                // =0
                	mov	x2, #0xb                // =11
+               	ldrsw	x0, [x0]
                	cmp	w0, #0x26
                	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x120]

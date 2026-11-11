@@ -93,13 +93,13 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
-               	ldr	x0, [x0]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0xa                // =10
-               	cmp	x0, x21
-               	csel	x0, x1, x2, eq
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0xa                // =10
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
+               	ldr	x2, [x2]
+               	cmp	x2, x21
+               	csel	x0, x0, x1, eq
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret

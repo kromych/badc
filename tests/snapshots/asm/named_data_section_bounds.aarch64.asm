@@ -25,8 +25,8 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldrsw	x5, [x0, #0x8]
                	ldr	x6, [x0]
-               	ldrb	w6, [x6, #0x1]
                	mov	x7, #0x3e8              // =1000
+               	ldrb	w6, [x6, #0x1]
                	cmp	w6, #0x0
                	csel	x6, x7, x1, ne
                	add	x5, x5, x6

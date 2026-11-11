@@ -34,10 +34,10 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
-               	movl	$0x2a, %edx
+               	movl	$0x2a, %ecx
+               	movq	-0x8(%rbp), %rdx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
-               	cmpq	%r11, %rcx
-               	cmoveq	%rdx, %rax
+               	cmpq	%r11, %rdx
+               	cmoveq	%rcx, %rax
                	leave
                	retq

@@ -191,12 +191,11 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, -0x48(%rbp)
                	movq	%rax, -0x38(%rbp)
-               	movl	<rip>, %eax # <addr>
-               	movl	$0x17, %ecx
-               	xorl	%edx, %edx
-               	cmpl	$0x2a, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	movl	$0x17, %eax
+               	xorl	%ecx, %ecx
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x2a, %edx
+               	cmoveq	%rcx, %rax
                	testq	%rax, %rax
                	je	<addr>
                	leave

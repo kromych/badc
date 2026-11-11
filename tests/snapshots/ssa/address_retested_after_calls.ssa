@@ -175,19 +175,20 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v54  Extend { value=v53, kind=I32, nsw }              -> x1
     v55  ImmData(16)                                      -> x1
     v56  Load { addr=v55, disp=0, kind=I32 pc_rel }       -> x1
-    v57  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> x2
-    v58  Imm(0)                                           -> x2
-    v59  Imm(4)                                           -> x6
-    v60  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> x1
-    v61  Select { cond=v60, a=v58, b=v59, kind=I64 }      -> x1
+    v57  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> x1
+    v58  Imm(0)                                           -> x1
+    v59  Imm(4)                                           -> x2
+    v60  Load { addr=v55, disp=0, kind=I32 pc_rel }       -> x6
+    v61  BinopI { op=eq, lhs=v60, rhs_imm=2 }             -> x6
+    v62  Select { cond=v61, a=v58, b=v59, kind=I64 }      -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
-    v66  Copy { value=v61, fp=false }                     -> x2
-    v67  Imm(0)                                           -> x2
-    v68  Binop { op=add, lhs=v53, rhs=v61 }               -> x0
-    v69  Extend { value=v68, kind=I32, nsw }              -> x1
-    v70  Extend { value=v68, kind=I32 }                   -> x1
-    terminator Return(v68)   (exit_acc=v68)
+    v67  Copy { value=v62, fp=false }                     -> x2
+    v68  Imm(0)                                           -> x2
+    v69  Binop { op=add, lhs=v53, rhs=v62 }               -> x0
+    v70  Extend { value=v69, kind=I32, nsw }              -> x1
+    v71  Extend { value=v69, kind=I32 }                   -> x1
+    terminator Return(v69)   (exit_acc=v69)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

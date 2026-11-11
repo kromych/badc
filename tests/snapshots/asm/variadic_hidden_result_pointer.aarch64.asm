@@ -123,13 +123,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x50
                	stur	x8, [x29, #-0x8]
-               	ldr	x0, [x29, #0x10]
-               	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	ldr	x3, [x0, #0x10]
-               	ldr	x4, [x0, #0x18]
+               	ldr	x1, [x29, #0x10]
                	sub	x0, x29, #0x48
-               	add	x5, x29, #0x18
+               	add	x2, x29, #0x18
                	mov	x16, x0
                	add	x17, x29, #0xd0
                	str	x17, [x16]
@@ -161,29 +157,33 @@ Disassembly of section .text:
                	ldr	x16, [x16]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x5, [x0]
-               	ldr	x6, [x0, #0x8]
-               	ldr	x7, [x0, #0x10]
-               	ldr	x8, [x0, #0x18]
+               	ldr	x2, [x0]
+               	ldr	x3, [x0, #0x8]
+               	ldr	x4, [x0, #0x10]
+               	ldr	x5, [x0, #0x18]
                	sub	x0, x29, #0x48
                	sub	x0, x29, #0x28
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
+               	ldr	x6, [x1]
+               	mov	x17, #0xa               // =10
+               	mul	x6, x6, x17
+               	add	x2, x6, x2
+               	stur	x2, [x29, #-0x28]
+               	ldr	x2, [x1, #0x8]
+               	mov	x17, #0xa               // =10
+               	mul	x2, x2, x17
+               	add	x2, x2, x3
+               	stur	x2, [x29, #-0x20]
+               	ldr	x2, [x1, #0x10]
+               	mov	x17, #0xa               // =10
+               	mul	x2, x2, x17
+               	add	x2, x2, x4
+               	stur	x2, [x29, #-0x18]
+               	ldr	x1, [x1, #0x18]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x1, x1, x5
-               	stur	x1, [x29, #-0x28]
-               	mov	x17, #0xa               // =10
-               	mul	x1, x2, x17
-               	add	x1, x1, x6
-               	stur	x1, [x29, #-0x20]
-               	mov	x17, #0xa               // =10
-               	mul	x1, x3, x17
-               	add	x1, x1, x7
-               	stur	x1, [x29, #-0x18]
-               	mov	x17, #0xa               // =10
-               	mul	x1, x4, x17
-               	add	x1, x1, x8
                	ldrsw	x2, [x29, #0x18]
                	add	x1, x1, x2
                	stur	x1, [x29, #-0x10]

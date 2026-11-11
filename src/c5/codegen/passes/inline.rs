@@ -3636,6 +3636,8 @@ fn splice_multi_block(
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
         array_slots: merged_array_slots,
+        // The callee's parameters are the call's arguments here.
+        owned_params: original.owned_params,
         over_aligned: merged_over_aligned,
         frame_align: merged_frame_align,
         realign_region_bytes: merged_region_bytes,

@@ -14,27 +14,15 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum20>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x0, [x29, #-0x30]
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x30]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	w16, [x1, #0x10]
-               	str	w16, [x0, #0x10]
-               	ldur	s0, [x29, #-0x18]
-               	ldur	s1, [x29, #-0x14]
+               	ldr	s0, [x0]
+               	ldr	s1, [x0, #0x4]
                	fadd	s0, s0, s1
-               	ldur	s1, [x29, #-0x10]
+               	ldr	s1, [x0, #0x8]
                	fadd	s0, s0, s1
-               	ldur	s1, [x29, #-0xc]
+               	ldr	s1, [x0, #0xc]
                	fadd	s0, s0, s1
-               	ldur	s1, [x29, #-0x8]
+               	ldr	s1, [x0, #0x10]
                	fadd	s0, s0, s1
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sum_bytes>:
@@ -56,57 +44,24 @@ Disassembly of section .text:
 <sum22>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x0, [x29, #-0x30]
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x30]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	w16, [x1, #0x10]
-               	str	w16, [x0, #0x10]
-               	ldrh	w16, [x1, #0x14]
-               	strh	w16, [x0, #0x14]
                	mov	x1, #0x16               // =22
                	bl	<addr>
-               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sum23>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x0, [x29, #-0x30]
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x30]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	w16, [x1, #0x10]
-               	str	w16, [x0, #0x10]
-               	ldrh	w16, [x1, #0x14]
-               	strh	w16, [x0, #0x14]
-               	ldrb	w16, [x1, #0x16]
-               	strb	w16, [x0, #0x16]
                	mov	x1, #0x17               // =23
                	bl	<addr>
-               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <sum17>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x0, [x29, #-0x30]
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x30]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldrb	w16, [x1, #0x10]
-               	strb	w16, [x0, #0x10]
                	mov	x1, #0x11               // =17
                	bl	<addr>
-               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
 

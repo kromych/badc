@@ -245,24 +245,18 @@ Disassembly of section .text:
                	ret
 
 <param_U1>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	sturb	w0, [x29, #-0x38]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturb	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
+               	ldrb	w16, [x0]
+               	strb	w16, [x20]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -271,8 +265,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U1>:
@@ -334,24 +328,18 @@ Disassembly of section .text:
                	ret
 
 <param_U2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	sturh	w0, [x29, #-0x38]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturh	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
+               	ldrh	w16, [x0]
+               	strh	w16, [x20]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -360,8 +348,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U2>:
@@ -425,26 +413,22 @@ Disassembly of section .text:
                	ret
 
 <param_U3>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	sturh	w0, [x29, #-0x38]
+               	sturh	w0, [x29, #-0x10]
                	lsr	x0, x0, #16
-               	sturb	w0, [x29, #-0x36]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturb	w0, [x29, #-0xe]
+               	sub	x0, x29, #0x10
+               	ldrh	w16, [x0]
+               	strh	w16, [x20]
+               	ldrb	w16, [x0, #0x2]
+               	strb	w16, [x20, #0x2]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -453,8 +437,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U3>:
@@ -517,24 +501,18 @@ Disassembly of section .text:
                	ret
 
 <param_B4>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	w0, [x29, #-0x38]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	stur	w0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
+               	ldr	w16, [x0]
+               	str	w16, [x20]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -543,8 +521,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_B4>:
@@ -609,26 +587,22 @@ Disassembly of section .text:
                	ret
 
 <param_U5>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	w0, [x29, #-0x38]
+               	stur	w0, [x29, #-0x10]
                	lsr	x0, x0, #32
-               	sturb	w0, [x29, #-0x34]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturb	w0, [x29, #-0xc]
+               	sub	x0, x29, #0x10
+               	ldr	w16, [x0]
+               	str	w16, [x20]
+               	ldrb	w16, [x0, #0x4]
+               	strb	w16, [x20, #0x4]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -637,8 +611,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U5>:
@@ -702,26 +676,22 @@ Disassembly of section .text:
                	ret
 
 <param_U6>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	w0, [x29, #-0x38]
+               	stur	w0, [x29, #-0x10]
                	lsr	x0, x0, #32
-               	sturh	w0, [x29, #-0x34]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturh	w0, [x29, #-0xc]
+               	sub	x0, x29, #0x10
+               	ldr	w16, [x0]
+               	str	w16, [x20]
+               	ldrh	w16, [x0, #0x4]
+               	strh	w16, [x20, #0x4]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -730,8 +700,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U6>:
@@ -797,28 +767,26 @@ Disassembly of section .text:
                	ret
 
 <param_U7>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x38
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	w0, [x29, #-0x38]
+               	stur	w0, [x29, #-0x10]
                	lsr	x0, x0, #32
-               	sturh	w0, [x29, #-0x34]
+               	sturh	w0, [x29, #-0xc]
                	lsr	x0, x0, #16
-               	sturb	w0, [x29, #-0x32]
-               	sub	x0, x29, #0x38
-               	mov	x16, x0
+               	sturb	w0, [x29, #-0xa]
+               	sub	x0, x29, #0x10
+               	ldr	w16, [x0]
+               	str	w16, [x20]
+               	ldrh	w16, [x0, #0x4]
+               	strh	w16, [x20, #0x4]
+               	ldrb	w16, [x0, #0x6]
+               	strb	w16, [x20, #0x6]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -827,8 +795,8 @@ Disassembly of section .text:
                	ldp	x0, x1, [x16, #0x20]
                	stp	x0, x1, [x17, #0x20]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_U7>:
@@ -891,27 +859,21 @@ Disassembly of section .text:
                	ret
 
 <param_U12>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x40
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
-               	ldr	x16, [x2, #0x30]
-               	str	x16, [x0, #0x30]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	x0, [x29, #-0x40]
-               	stur	w1, [x29, #-0x38]
-               	sub	x0, x29, #0x40
-               	mov	x16, x0
+               	stur	x0, [x29, #-0x18]
+               	stur	w1, [x29, #-0x10]
+               	sub	x0, x29, #0x18
+               	ldr	x16, [x0]
+               	str	x16, [x20]
+               	ldr	w16, [x0, #0x8]
+               	str	w16, [x20, #0x8]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -922,8 +884,8 @@ Disassembly of section .text:
                	ldr	x0, [x16, #0x30]
                	str	x0, [x17, #0x30]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x20, [sp], #0x40
                	ret
 
 <check_param_U12>:
@@ -991,34 +953,17 @@ Disassembly of section .text:
                	ret
 
 <param_F3>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x70]
-               	sub	x0, x29, #0x40
-               	ldur	x2, [x29, #-0x70]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
-               	ldr	x16, [x2, #0x30]
-               	str	x16, [x0, #0x30]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	s0, [x29, #-0x50]
-               	sub	x0, x29, #0x50
-               	stur	s1, [x29, #-0x4c]
-               	stur	s2, [x29, #-0x48]
-               	sub	x1, x29, #0x40
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	ldr	w16, [x0, #0x8]
-               	str	w16, [x1, #0x8]
-               	sub	x0, x29, #0x40
-               	mov	x16, x0
+               	str	s0, [x20]
+               	str	s1, [x20, #0x4]
+               	str	s2, [x20, #0x8]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -1029,8 +974,8 @@ Disassembly of section .text:
                	ldr	x0, [x16, #0x30]
                	str	x0, [x17, #0x30]
                	mov	x0, x17
-               	add	sp, sp, #0x70
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
 
 <check_param_F3>:
@@ -1099,27 +1044,21 @@ Disassembly of section .text:
                	ret
 
 <param_FI>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	str	x20, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	stur	x8, [x29, #-0x8]
-               	stur	x0, [x29, #-0x60]
-               	sub	x0, x29, #0x40
-               	ldur	x2, [x29, #-0x60]
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
-               	stp	x16, x17, [x0, #0x10]
-               	ldp	x16, x17, [x2, #0x20]
-               	stp	x16, x17, [x0, #0x20]
-               	ldr	x16, [x2, #0x30]
-               	str	x16, [x0, #0x30]
+               	mov	x20, x0
                	mov	x0, x1
                	bl	<addr>
-               	stur	x0, [x29, #-0x40]
-               	stur	w1, [x29, #-0x38]
-               	sub	x0, x29, #0x40
-               	mov	x16, x0
+               	stur	x0, [x29, #-0x18]
+               	stur	w1, [x29, #-0x10]
+               	sub	x0, x29, #0x18
+               	ldr	x16, [x0]
+               	str	x16, [x20]
+               	ldr	w16, [x0, #0x8]
+               	str	w16, [x20, #0x8]
+               	mov	x16, x20
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
@@ -1130,8 +1069,8 @@ Disassembly of section .text:
                	ldr	x0, [x16, #0x30]
                	str	x0, [x17, #0x30]
                	mov	x0, x17
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x20, [sp], #0x40
                	ret
 
 <check_param_FI>:
@@ -1225,7 +1164,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x40]
-               	adrp	x0, <addr>
+               	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x38]
                	adrp	x0, <addr>

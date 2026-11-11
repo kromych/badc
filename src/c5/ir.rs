@@ -2478,6 +2478,17 @@ pub(crate) struct InstSrc {
     pub offset: u32,
 }
 
+/// A parameter object at the address argument cell `cell` holds, copied on
+/// entry into the `cells` frame slots from `base`; `align` is its
+/// [`Inst::Load`] alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OwnedParam {
+    pub base: i64,
+    pub cells: i64,
+    pub cell: i64,
+    pub align: u8,
+}
+
 /// Per-function SSA program. Consumed by the allocator and the
 /// per-arch lowering.
 #[derive(Debug, Clone, Default)]
@@ -2740,6 +2751,9 @@ pub(crate) struct FunctionSsa {
     /// array reaches the canary before it reaches another object. Empty for
     /// a function that holds none.
     pub array_slots: Vec<i64>,
+    /// Aggregate parameters the caller passes as the address of a copy the
+    /// callee owns, copied into their slot groups on entry.
+    pub owned_params: Vec<OwnedParam>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
     /// alignment is 16). The prologue reserves a `frame_align`-aligned
@@ -3119,6 +3133,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             synthetic_base: _,
             multi_cell_slots: _,
             array_slots: _,
+            owned_params: _,
             over_aligned: _,
             frame_align: _,
             realign_region_bytes: _,

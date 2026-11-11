@@ -16,59 +16,35 @@ Disassembly of section .text:
 <take_many>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	stur	x0, [x29, #-0x8]
-               	stur	x2, [x29, #-0x18]
-               	stur	w3, [x29, #-0x10]
-               	stur	w4, [x29, #-0x20]
-               	stur	x5, [x29, #-0x30]
-               	sub	x0, x29, #0x30
-               	str	x6, [x0, #0x8]
-               	sub	x0, x29, #0x48
                	ldr	x1, [x29, #0x10]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	x16, [x1, #0x10]
-               	str	x16, [x0, #0x10]
-               	adrp	x0, <page>
-               	ldursw	x1, [x29, #-0x8]
-               	ldursw	x2, [x29, #-0x4]
-               	add	x1, x1, x2
-               	add	x1, x1, #0x3e8
-               	ldursw	x2, [x29, #-0x18]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x14]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x10]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x20]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x30]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x2c]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x28]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x24]
-               	add	x1, x1, x2
-               	add	x1, x1, #0x7d0
-               	ldursw	x2, [x29, #-0x48]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x44]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x40]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x3c]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x38]
-               	add	x1, x1, x2
-               	ldursw	x2, [x29, #-0x34]
-               	add	x1, x1, x2
-               	ldrsw	x2, [x29, #0x18]
-               	add	x1, x1, x2
-               	sxtw	x1, w1
-               	str	x1, [x0, #0x30]
-               	add	sp, sp, #0x50
+               	adrp	x7, <page>
+               	add	x0, x0, x0, lsr #32
+               	add	x0, x0, #0x3e8
+               	add	x0, x0, x2
+               	add	x0, x0, x2, lsr #32
+               	add	x0, x0, x3
+               	add	x0, x0, x4
+               	add	x0, x0, x5
+               	add	x0, x0, x5, lsr #32
+               	add	x0, x0, x6
+               	add	x0, x0, x6, lsr #32
+               	add	x0, x0, #0x7d0
+               	ldrsw	x2, [x1]
+               	add	x0, x0, x2
+               	ldrsw	x2, [x1, #0x4]
+               	add	x0, x0, x2
+               	ldrsw	x2, [x1, #0x8]
+               	add	x0, x0, x2
+               	ldrsw	x2, [x1, #0xc]
+               	add	x0, x0, x2
+               	ldrsw	x2, [x1, #0x10]
+               	add	x0, x0, x2
+               	ldrsw	x1, [x1, #0x14]
+               	add	x0, x0, x1
+               	ldrsw	x1, [x29, #0x18]
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	str	x0, [x7, #0x30]
                	ldp	x29, x30, [sp], #0x10
                	ret
 

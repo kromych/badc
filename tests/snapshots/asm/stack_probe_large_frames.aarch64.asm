@@ -36,21 +36,15 @@ Disassembly of section .text:
                	ret
 
 <by_value>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	x0, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x10]
                	ldr	x1, [x0]
+               	ldr	x2, [x0, #0x2330]
+               	add	x1, x1, x2
                	ldrb	w2, [x0, #0x8]
-               	add	x17, x0, #0x2, lsl #12  // =0x2000
-               	ldrb	w3, [x17, #0x32f]
-               	ldr	x0, [x0, #0x2330]
+               	add	x1, x1, x2
+               	mov	x17, #0x232f            // =9007
+               	add	x0, x0, x17
+               	ldrb	w0, [x0]
                	add	x0, x1, x0
-               	add	x0, x0, x2
-               	add	x0, x0, x3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <recurse>:

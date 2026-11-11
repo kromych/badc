@@ -26,6 +26,7 @@ pub(crate) mod merge_blocks;
 pub(crate) mod mul_add;
 pub(crate) mod narrow;
 pub(crate) mod noreturn;
+pub(crate) mod owned_params;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
 pub(crate) mod return_call;

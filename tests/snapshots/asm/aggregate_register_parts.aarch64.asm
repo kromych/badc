@@ -172,29 +172,22 @@ Disassembly of section .text:
 <big>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x8, [x29, #-0x20]
-               	stur	x0, [x29, #-0x30]
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x30]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	x16, [x1, #0x10]
-               	str	x16, [x0, #0x10]
-               	ldur	x1, [x29, #-0x8]
-               	ldur	x2, [x29, #-0x18]
-               	ldur	x3, [x29, #-0x10]
+               	sub	sp, sp, #0x10
+               	stur	x8, [x29, #-0x8]
+               	ldr	x1, [x0, #0x10]
+               	ldr	x2, [x0]
+               	ldr	x3, [x0, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	stur	x1, [x29, #-0x8]
+               	str	x1, [x0, #0x10]
                	mov	x16, x0
-               	ldur	x17, [x29, #-0x20]
+               	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
                	ldr	x0, [x16, #0x10]
                	str	x0, [x17, #0x10]
                	mov	x0, x17
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

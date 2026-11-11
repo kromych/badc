@@ -198,6 +198,11 @@ struct ParamEntry<'a> {
     plan: CallPlan,
     /// The target whose scalar widths the parameter homes take.
     target: Target,
+    /// The definition's convention, which decides what passes by reference.
+    conv: CallConv,
+    /// No `__try` statement, whose funclets would read a parameter in
+    /// this frame.
+    no_seh: bool,
 }
 
 impl<'a> ParamEntry<'a> {
@@ -289,6 +294,9 @@ impl<'a> ParamEntry<'a> {
             aggs,
             plan,
             target,
+            conv: fun.conv,
+            no_seh: !(fun.ast.stmts.iter())
+                .any(|s| matches!(s, crate::c5::ast::Stmt::SehTry { .. })),
         }
     }
 
@@ -315,13 +323,24 @@ impl<'a> ParamEntry<'a> {
         }
         for i in 0..self.param_tys.len() {
             let pty = self.param_tys[i];
+            if is_struct_value_ty(pty) {
+                // The register of one passed by address holds the address
+                // `emit_entry_copies` reads.
+                if self.aggs.get(self.shift + i).copied().flatten().is_none()
+                    && matches!(
+                        self.plan.placements.get(self.shift + i),
+                        Some(ArgPlacement::IntReg(_))
+                    )
+                {
+                    let pr = b.param_ref((self.shift + i) as u32, LoadKind::I64);
+                    b.store_local((i as i64) + self.arg_slot_base, pr, StoreKind::I64);
+                }
+                continue;
+            }
             if self.param_local_slots[i] < 0 {
                 continue;
             }
             let stripped = strip_unsigned(pty);
-            if is_struct_value_ty(pty) {
-                continue;
-            }
             // A `double` keeps its positive cell and takes an FP
             // `ParamRef`. The parser repointed a `float` to a negative
             // narrow-storage local, skipped above, which
@@ -389,6 +408,26 @@ impl<'a> ParamEntry<'a> {
                 }
                 let size = self.structs[id].size as i64;
                 let align = self.structs[id].align.max(1) as u32;
+                // The caller's copy is the callee's to read and write
+                // (AAPCS64 B.4, Microsoft x64), which `owned_params` may use
+                // in place of this one.
+                if self.no_seh
+                    && !is_volatile_ty(pty)
+                    && crate::c5::compiler::passes_by_reference(
+                        self.structs,
+                        self.target,
+                        self.conv,
+                        pty,
+                        false,
+                    )
+                {
+                    b.add_owned_param(crate::c5::ir::OwnedParam {
+                        base: local_slot,
+                        cells: (size + 7) / 8,
+                        cell: arg_slot,
+                        align: if align < 8 { align as u8 } else { 0 },
+                    });
+                }
                 let dst = b.local_addr(local_slot);
                 let src = b.load_local(arg_slot, LoadKind::I64);
                 if is_volatile_ty(pty) {

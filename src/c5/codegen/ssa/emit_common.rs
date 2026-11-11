@@ -2663,6 +2663,19 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::factor_gotos::run", &mut ssa_funcs, |funcs| {
             super::super::passes::factor_gotos::run(funcs);
         });
+        // A parameter the caller already copied for the callee is used in
+        // place of its entry copy; its slots lose their frame location.
+        pipeline.run("passes::owned_params::run", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
+                let freed = super::super::passes::owned_params::run(f);
+                if !freed.is_empty() {
+                    promoted_local_slots
+                        .entry(f.ent_pc)
+                        .or_default()
+                        .extend(freed);
+                }
+            }
+        });
         // Vector slots become `V128` slot accesses, and inline-asm register
         // outputs into slots the statements' own values, for mem2reg to
         // promote.

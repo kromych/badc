@@ -270,6 +270,7 @@ impl SsaBuilder {
             synthetic_base: -1,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            owned_params: Vec::new(),
             over_aligned: Vec::new(),
             frame_align: 0,
             realign_region_bytes: 0,
@@ -511,6 +512,11 @@ impl SsaBuilder {
         if let Some(base) = self.own_slot(base) {
             self.func.multi_cell_slots.push((base, cells));
         }
+    }
+
+    /// Record a parameter whose entry copy [`crate::c5::ir::OwnedParam`] describes.
+    pub(crate) fn add_owned_param(&mut self, p: crate::c5::ir::OwnedParam) {
+        self.func.owned_params.push(p);
     }
 
     /// Record a declared array based at `slot`.

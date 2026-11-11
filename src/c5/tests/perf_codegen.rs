@@ -4227,6 +4227,45 @@ long pick_ne(double x, double y, long a, long b) { long r = b; if (x != y) r = a
     m.finish();
 }
 
+/// A parameter the caller passes as the address of a copy the callee owns
+/// is used in place when the callee only reads it or lets its address
+/// escape: `h` and `r` make no entry copy (an `ldp` / `stp` pair through
+/// x16 / x17), and `r` stores nothing. `w` writes its parameter only
+/// through its own accesses, so the copy stays and its loop touches no
+/// memory.
+#[test]
+fn a64_by_reference_parameter_is_used_in_place() {
+    const SRC: &str = "struct S { long a, b, c; };\n\
+long g(struct S *);\n\
+long h(struct S s) { s.a = 5; return g(&s); }\n\
+long r(struct S s) { return s.a + s.b + s.c; }\n\
+long w(struct S s) { long t = 0; for (; s.a < s.b; s.a++) t += s.c; return t; }\n";
+    let pair_copy = |w: u32| w & 0xFFC0_7C1F == 0xA900_4410;
+    // The A64 loads-and-stores encoding group.
+    let memory = |w: u32| w & 0x0A00_0000 == 0x0800_0000;
+    let store = |w: u32| memory(w) && w & 0x0040_0000 == 0;
+    let mut m = Misses::default();
+    let h = a64(SRC, "h");
+    m.expect(!h.iter().any(|&w| pair_copy(w)), || {
+        format!("h copies: {h:08x?}")
+    });
+    let r = a64(SRC, "r");
+    m.expect(!r.iter().any(|&w| store(w)), || {
+        format!("r stores: {r:08x?}")
+    });
+    let w = a64(SRC, "w");
+    let back = (w.iter().enumerate())
+        .find_map(|(i, &x)| match a64_branch(x, i) {
+            Some((t, false)) if t < i as i64 => Some(t as usize..i),
+            _ => None,
+        })
+        .expect("w's loop");
+    m.expect(!w[back].iter().any(|&x| memory(x)), || {
+        format!("w's loop reaches memory: {w:08x?}")
+    });
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

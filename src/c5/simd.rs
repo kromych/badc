@@ -410,6 +410,26 @@ pub(crate) enum Sem {
     /// and saturating a left one when the third is (`sshl`, `urshl`,
     /// `sqshl`).
     ShlReg(u8, bool, bool, bool),
+    /// The sum, largest or smallest of the source's lanes of the width,
+    /// signed when `true`, over its first `bytes`, into lane 0, the rest
+    /// zero; a long sum is as wide as twice the lanes (`addv`, `smaxv`,
+    /// `uaddlv`).
+    Across(AcrossOp, u8, bool, u8),
+    /// The sums of adjacent lane pairs into lanes twice as wide, signed
+    /// when `true` (`saddlp`, `uaddlp`).
+    PairAddLong(u8, bool),
+    /// The lanes of the width reversed within each group of the second
+    /// width (`rev16`, `rev32`, `rev64`).
+    Rev(u8, u8),
+}
+
+/// The reduction of an across-lanes form.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AcrossOp {
+    Add,
+    AddLong,
+    Max,
+    Min,
 }
 
 /// The operation of a widening form: on the narrow lanes, its result as
@@ -646,11 +666,18 @@ impl SimdOp {
     /// its arrangements.
     pub(crate) fn arrangement(&self, i: usize) -> (u8, u8) {
         let lane = self.ret.lane_bytes();
+        // A reduction writes the scalar view of its lane width.
+        if i == 0
+            && let Sem::Across(op, w, ..) = self.sem
+        {
+            let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
+            return (rw, rw);
+        }
         if i == 0 {
             return (lane, self.ret_bytes());
         }
         let src = match self.sem {
-            Sem::Long(_, w, ..) => w,
+            Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
             Sem::Narrow(w, _) => w,
             Sem::Extend(from, ..) => from,
@@ -1305,6 +1332,36 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 };
                 let r = if sat { r.clamp(lo, hi) } else { r };
                 set_lane(&mut o, w, i, r as u64 & mask(w));
+            }
+        }
+        Sem::Across(op, w, signed, bytes) => {
+            let get = |i: usize| match signed {
+                true => i128::from(slane(a, w, i)),
+                false => i128::from(lane(a, w, i)),
+            };
+            let lanes = (0..usize::from(bytes / w)).map(get);
+            let r = match op {
+                AcrossOp::Add | AcrossOp::AddLong => lanes.sum(),
+                AcrossOp::Max => lanes.max().unwrap_or(0),
+                AcrossOp::Min => lanes.min().unwrap_or(0),
+            };
+            let rw = if op == AcrossOp::AddLong { 2 * w } else { w };
+            set_lane(&mut o, rw, 0, r as u64 & mask(rw));
+        }
+        Sem::PairAddLong(w, signed) => {
+            for i in 0..8 / w as usize {
+                let (x, y) = match signed {
+                    true => (slane(a, w, 2 * i) as i128, slane(a, w, 2 * i + 1) as i128),
+                    false => (lane(a, w, 2 * i) as i128, lane(a, w, 2 * i + 1) as i128),
+                };
+                set_lane(&mut o, 2 * w, i, (x + y) as u64 & mask(2 * w));
+            }
+        }
+        Sem::Rev(w, group) => {
+            let per = usize::from(group / w);
+            for i in 0..16 / w as usize {
+                let base = i - i % per;
+                set_lane(&mut o, w, i, lane(a, w, base + per - 1 - i % per));
             }
         }
         Sem::Narrow(w, kind) => {

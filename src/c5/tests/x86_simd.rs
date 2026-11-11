@@ -1820,7 +1820,10 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Wide(..)
         | Sem::LongAcc(..)
         | Sem::Narrow(..)
-        | Sem::ShlReg(..) => false,
+        | Sem::ShlReg(..)
+        | Sem::Across(..)
+        | Sem::PairAddLong(..)
+        | Sem::Rev(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

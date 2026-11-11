@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{FOp, Form, LongOp, NarrowKind, Ret, Sem, SimdOp};
+use super::simd::{AcrossOp, FOp, Form, LongOp, NarrowKind, Ret, Sem, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -348,6 +348,96 @@ const fn extend(name: &'static str, mnem: &'static str, ret: Ret, w: u8, signed:
     row(name, mnem, Form::V, ret, Sem::Extend(w, 2 * w, signed), 8)
 }
 
+/// A reduction across the lanes of a `bytes`-byte source of `w`-byte lanes.
+const fn across(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    op: AcrossOp,
+    w: u8,
+    signed: bool,
+    bytes: u8,
+) -> SimdOp {
+    row(
+        name,
+        mnem,
+        Form::V,
+        ret,
+        Sem::Across(op, w, signed, bytes),
+        bytes,
+    )
+}
+
+/// The reductions of a family over the 8b, 16b, 4h, 8h and 4s sources; a
+/// long one's result is twice as wide.
+macro_rules! reductions {
+    ($m:literal, $op:ident, $sg:expr, $r8:ident, $r16:ident, $r32:ident) => {
+        [
+            across(
+                concat!("__builtin_neon_", $m, "_8b"),
+                $m,
+                Ret::$r8,
+                AcrossOp::$op,
+                1,
+                $sg,
+                8,
+            ),
+            across(
+                concat!("__builtin_neon_", $m, "_16b"),
+                $m,
+                Ret::$r8,
+                AcrossOp::$op,
+                1,
+                $sg,
+                16,
+            ),
+            across(
+                concat!("__builtin_neon_", $m, "_4h"),
+                $m,
+                Ret::$r16,
+                AcrossOp::$op,
+                2,
+                $sg,
+                8,
+            ),
+            across(
+                concat!("__builtin_neon_", $m, "_8h"),
+                $m,
+                Ret::$r16,
+                AcrossOp::$op,
+                2,
+                $sg,
+                16,
+            ),
+            across(
+                concat!("__builtin_neon_", $m, "_4s"),
+                $m,
+                Ret::$r32,
+                AcrossOp::$op,
+                4,
+                $sg,
+                16,
+            ),
+        ]
+    };
+}
+
+#[rustfmt::skip]
+const ACROSS: &[[SimdOp; 5]] = &[
+    reductions!("addv", Add, false, V16qi, V8hi, V4si),
+    reductions!("smaxv", Max, true, V16qi, V8hi, V4si),
+    reductions!("umaxv", Max, false, V16qi, V8hi, V4si),
+    reductions!("sminv", Min, true, V16qi, V8hi, V4si),
+    reductions!("uminv", Min, false, V16qi, V8hi, V4si),
+    reductions!("saddlv", AddLong, true, V8hi, V4si, V2di),
+    reductions!("uaddlv", AddLong, false, V8hi, V4si, V2di),
+];
+
+/// A pairwise long sum or a lane reversal, one source.
+const fn unary(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem, bytes: u8) -> SimdOp {
+    row(name, mnem, Form::V, ret, sem, bytes)
+}
+
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
     narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
@@ -368,25 +458,57 @@ const NARROW: &[SimdOp] = &[
     extend("__builtin_neon_uxtl_8b", "uxtl", Ret::V8hi, 1, false),
     extend("__builtin_neon_uxtl_4h", "uxtl", Ret::V4si, 2, false),
     extend("__builtin_neon_uxtl_2s", "uxtl", Ret::V2di, 4, false),
+    unary("__builtin_neon_saddlp_8b", "saddlp", Ret::V4hi, Sem::PairAddLong(1, true), 8),
+    unary("__builtin_neon_saddlp_16b", "saddlp", Ret::V8hi, Sem::PairAddLong(1, true), 16),
+    unary("__builtin_neon_saddlp_4h", "saddlp", Ret::V2si, Sem::PairAddLong(2, true), 8),
+    unary("__builtin_neon_saddlp_8h", "saddlp", Ret::V4si, Sem::PairAddLong(2, true), 16),
+    unary("__builtin_neon_saddlp_2s", "saddlp", Ret::V1di, Sem::PairAddLong(4, true), 8),
+    unary("__builtin_neon_saddlp_4s", "saddlp", Ret::V2di, Sem::PairAddLong(4, true), 16),
+    unary("__builtin_neon_uaddlp_8b", "uaddlp", Ret::V4hi, Sem::PairAddLong(1, false), 8),
+    unary("__builtin_neon_uaddlp_16b", "uaddlp", Ret::V8hi, Sem::PairAddLong(1, false), 16),
+    unary("__builtin_neon_uaddlp_4h", "uaddlp", Ret::V2si, Sem::PairAddLong(2, false), 8),
+    unary("__builtin_neon_uaddlp_8h", "uaddlp", Ret::V4si, Sem::PairAddLong(2, false), 16),
+    unary("__builtin_neon_uaddlp_2s", "uaddlp", Ret::V1di, Sem::PairAddLong(4, false), 8),
+    unary("__builtin_neon_uaddlp_4s", "uaddlp", Ret::V2di, Sem::PairAddLong(4, false), 16),
+    unary("__builtin_neon_rev16_8b", "rev16", Ret::V8qi, Sem::Rev(1, 2), 8),
+    unary("__builtin_neon_rev16_16b", "rev16", Ret::V16qi, Sem::Rev(1, 2), 16),
+    unary("__builtin_neon_rev32_8b", "rev32", Ret::V8qi, Sem::Rev(1, 4), 8),
+    unary("__builtin_neon_rev32_16b", "rev32", Ret::V16qi, Sem::Rev(1, 4), 16),
+    unary("__builtin_neon_rev32_4h", "rev32", Ret::V4hi, Sem::Rev(2, 4), 8),
+    unary("__builtin_neon_rev32_8h", "rev32", Ret::V8hi, Sem::Rev(2, 4), 16),
+    unary("__builtin_neon_rev64_8b", "rev64", Ret::V8qi, Sem::Rev(1, 8), 8),
+    unary("__builtin_neon_rev64_16b", "rev64", Ret::V16qi, Sem::Rev(1, 8), 16),
+    unary("__builtin_neon_rev64_4h", "rev64", Ret::V4hi, Sem::Rev(2, 8), 8),
+    unary("__builtin_neon_rev64_8h", "rev64", Ret::V8hi, Sem::Rev(2, 8), 16),
+    unary("__builtin_neon_rev64_2s", "rev64", Ret::V2si, Sem::Rev(4, 8), 8),
+    unary("__builtin_neon_rev64_4s", "rev64", Ret::V4si, Sem::Rev(4, 8), 16),
 ];
 
-/// The row at index `i` of the rows [`OPS`], then the widening and the
-/// narrowing ones, numbered in that order.
+/// The row at index `i` of the rows [`OPS`], then the widening, the
+/// narrowing and other one-source, and the reduction ones, numbered in
+/// that order.
 pub(crate) fn get(i: usize) -> &'static SimdOp {
     let long = LONG.len() * 3;
+    let narrow = long + NARROW.len();
     if i < OPS.len() {
         &OPS[i]
     } else if i < OPS.len() + long {
         let k = i - OPS.len();
         &LONG[k / 3][k % 3]
-    } else {
+    } else if i < OPS.len() + narrow {
         &NARROW[i - OPS.len() - long]
+    } else {
+        let k = i - OPS.len() - narrow;
+        &ACROSS[k / 5][k % 5]
     }
 }
 
 /// Every AArch64 row, in [`get`]'s numbering.
 pub(crate) fn rows() -> impl Iterator<Item = &'static SimdOp> {
-    OPS.iter().chain(LONG.iter().flatten()).chain(NARROW)
+    OPS.iter()
+        .chain(LONG.iter().flatten())
+        .chain(NARROW)
+        .chain(ACROSS.iter().flatten())
 }
 
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD

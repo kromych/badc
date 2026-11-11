@@ -362,13 +362,13 @@ __BADC_NEON_PAIRS(f32, float32x2, float32x4)
 #define __BADC_NEON_F_UN(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)        \
     __BADC_NEON_B1(op##_##sfx, D, D, k, si, ui, AD)                       \
     __BADC_NEON_B1(op##q_##sfx, Q, Q, k, si, ui, AQ)
-#define __BADC_NEON_F_UNX(op, insn, sfx, k, E, D, Q, AD, AQ, ...)         \
-    __BADC_NEON_FN1(op##_##sfx, D, D, __BADC_NEON_I2(insn, AD, AD))       \
-    __BADC_NEON_FN1(op##q_##sfx, Q, Q, __BADC_NEON_I2(insn, AQ, AQ))
-__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev16, "rev16")
-__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev32, "rev32")
-__BADC_NEON_E16(__BADC_NEON_F_UNX, vrev32, "rev32")
-__BADC_NEON_LANES(__BADC_NEON_F_UNX, vrev64, "rev64")
+#define __BADC_NEON_F_UNX(op, stem, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_B1(op##_##sfx, D, D, s, stem, stem, AD)                   \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, s, stem, stem, AQ)
+__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev16, __builtin_neon_rev16)
+__BADC_NEON_E8(__BADC_NEON_F_UNX, vrev32, __builtin_neon_rev32)
+__BADC_NEON_E16(__BADC_NEON_F_UNX, vrev32, __builtin_neon_rev32)
+__BADC_NEON_LANES(__BADC_NEON_F_UNX, vrev64, __builtin_neon_rev64)
 
 /* Bitwise select: the mask's set bits take the first operand's. */
 #define __BADC_NEON_BSL(name, M, T, A)                                    \
@@ -494,10 +494,8 @@ __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, __builtin_neon_sqshl, __builtin_neon_u
     __BADC_NEON_B1(vmovl_##n, WQ, ND, k, __builtin_neon_sxtl, __builtin_neon_uxtl, NA) \
     __BADC_NEON_FN1(vmovl_high_##n, WQ, NQ,                               \
                     __BADC_NEON_I2(__BADC_NEON_PICK(k, "sxtl2", "uxtl2"), WAQ, NAQ)) \
-    __BADC_NEON_FN1(vpaddl_##n, WD, ND,                                   \
-                    __BADC_NEON_I2(__BADC_NEON_PICK(k, "saddlp", "uaddlp"), WAD, NA)) \
-    __BADC_NEON_FN1(vpaddlq_##n, WQ, NQ,                                  \
-                    __BADC_NEON_I2(__BADC_NEON_PICK(k, "saddlp", "uaddlp"), WAQ, NAQ))
+    __BADC_NEON_B1(vpaddl_##n, WD, ND, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NA) \
+    __BADC_NEON_B1(vpaddlq_##n, WQ, NQ, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NAQ)
 #define __BADC_NEON_F_MOVN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
     __BADC_NEON_B1(op##_##w, ND, WQ, k, si, ui, WAQ)                      \
     static inline NQ op##_high_##w(ND __r, WQ __a) {                      \
@@ -522,39 +520,44 @@ __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, __builtin_neon_xtn, __builtin_neon_x
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, __builtin_neon_sqxtn, __builtin_neon_uqxtn)
 __BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
 
-/* Across lanes, into the scalar view `view` of the result. A 2-lane
- * 32-bit vector takes the pairwise form, whose lane 0 is the result. */
-#define __BADC_NEON_F_ACROSS(op, si, ui, view, sfx, k, E, D, Q, AD, AQ, ...) \
-    __BADC_NEON_FN1(op##_##sfx, E, D,                                     \
-                    __BADC_NEON_PICK(k, si, ui) " %" view "0, " __BADC_NEON_V(AD, 1)) \
-    __BADC_NEON_FN1(op##q_##sfx, E, Q,                                    \
-                    __BADC_NEON_PICK(k, si, ui) " %" view "0, " __BADC_NEON_V(AQ, 1))
+/* Across lanes: lane 0 of the reduction's row. A 2-lane 32-bit or 64-bit
+ * vector takes the pairwise form of the vector with itself. */
+#define __BADC_NEON_RED(name, R, T, stem, A)                              \
+    static inline R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a)[0]; }
+#define __BADC_NEON_RED2(name, R, T, stem, A)                             \
+    static inline R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a, __a)[0]; }
+#define __BADC_NEON_F_ACROSS(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)    \
+    __BADC_NEON_RED(op##_##sfx, E, D, __BADC_NEON_PICK(k, si, ui), AD)    \
+    __BADC_NEON_RED(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui), AQ)
 #define __BADC_NEON_F_ACROSS2(op, si, ui, sp, up, sfx, k, E, D, Q, ...)   \
-    __BADC_NEON_FN1(op##_##sfx, E, D, __BADC_NEON_PICK(k, sp, up) " %0.2s, %1.2s, %1.2s") \
-    __BADC_NEON_FN1(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui) " %s0, %1.4s")
-#define __BADC_NEON_F_ADDLV(view, ws, wu, sfx, k, E, D, Q, AD, AQ, ...)   \
-    __BADC_NEON_FN1(vaddlv_##sfx, __BADC_NEON_PICK(k, ws, wu), D,         \
-                    __BADC_NEON_PICK(k, "saddlv", "uaddlv") " %" view "0, " __BADC_NEON_V(AD, 1)) \
-    __BADC_NEON_FN1(vaddlvq_##sfx, __BADC_NEON_PICK(k, ws, wu), Q,        \
-                    __BADC_NEON_PICK(k, "saddlv", "uaddlv") " %" view "0, " __BADC_NEON_V(AQ, 1))
+    __BADC_NEON_RED2(op##_##sfx, E, D, __BADC_NEON_PICK(k, sp, up), 2s)   \
+    __BADC_NEON_RED(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui), 4s)
+#define __BADC_NEON_F_ADDLV(ws, wu, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_RED(vaddlv_##sfx, __BADC_NEON_PICK(k, ws, wu), D,         \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), AD) \
+    __BADC_NEON_RED(vaddlvq_##sfx, __BADC_NEON_PICK(k, ws, wu), Q,        \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), AQ)
 #define __BADC_NEON_F_ADDLV2(_, sfx, k, E, D, Q, ...)                     \
-    __BADC_NEON_FN1(vaddlv_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), D, \
-                    __BADC_NEON_PICK(k, "saddlp", "uaddlp") " %0.1d, %1.2s") \
-    __BADC_NEON_FN1(vaddlvq_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), Q, \
-                    __BADC_NEON_PICK(k, "saddlv", "uaddlv") " %d0, %1.4s")
-__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vaddv, "addv", "addv", "b")
-__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vaddv, "addv", "addv", "h")
-__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vaddv, "addv", "addv", "addp", "addp")
-__BADC_NEON_FN1(vaddvq_s64, int64_t, int64x2_t, "addp %d0, %1.2d")
-__BADC_NEON_FN1(vaddvq_u64, uint64_t, uint64x2_t, "addp %d0, %1.2d")
-__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vmaxv, "smaxv", "umaxv", "b")
-__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vmaxv, "smaxv", "umaxv", "h")
-__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vmaxv, "smaxv", "umaxv", "smaxp", "umaxp")
-__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vminv, "sminv", "uminv", "b")
-__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vminv, "sminv", "uminv", "h")
-__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vminv, "sminv", "uminv", "sminp", "uminp")
-__BADC_NEON_I8(__BADC_NEON_F_ADDLV, "h", int16_t, uint16_t)
-__BADC_NEON_I16(__BADC_NEON_F_ADDLV, "s", int32_t, uint32_t)
+    __BADC_NEON_RED(vaddlv_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), D, \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlp, __builtin_neon_uaddlp), 2s) \
+    __BADC_NEON_RED(vaddlvq_##sfx, __BADC_NEON_PICK(k, int64_t, uint64_t), Q, \
+                    __BADC_NEON_PICK(k, __builtin_neon_saddlv, __builtin_neon_uaddlv), 4s)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vaddv, __builtin_neon_addv, __builtin_neon_addv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vaddv, __builtin_neon_addv, __builtin_neon_addv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vaddv, __builtin_neon_addv, __builtin_neon_addv,
+                __builtin_neon_addp, __builtin_neon_addp)
+__BADC_NEON_RED2(vaddvq_s64, int64_t, int64x2_t, __builtin_neon_addp, 2d)
+__BADC_NEON_RED2(vaddvq_u64, uint64_t, uint64x2_t, __builtin_neon_addp, 2d)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vmaxv, __builtin_neon_smaxv, __builtin_neon_umaxv,
+                __builtin_neon_smaxp, __builtin_neon_umaxp)
+__BADC_NEON_I8(__BADC_NEON_F_ACROSS, vminv, __builtin_neon_sminv, __builtin_neon_uminv)
+__BADC_NEON_I16(__BADC_NEON_F_ACROSS, vminv, __builtin_neon_sminv, __builtin_neon_uminv)
+__BADC_NEON_I32(__BADC_NEON_F_ACROSS2, vminv, __builtin_neon_sminv, __builtin_neon_uminv,
+                __builtin_neon_sminp, __builtin_neon_uminp)
+__BADC_NEON_I8(__BADC_NEON_F_ADDLV, int16_t, uint16_t)
+__BADC_NEON_I16(__BADC_NEON_F_ADDLV, int32_t, uint32_t)
 __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 
 /* Lane reads and writes, lane loads and stores, and the lane broadcasts:

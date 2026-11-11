@@ -268,3 +268,17 @@ fn the_interpreter_runs_the_register_shifts() {
         "the failing check's number"
     );
 }
+
+/// The reductions across lanes, the pairwise long sums and the reversals,
+/// checked against the operations computed lane by lane: the fixture runs
+/// natively on the AArch64 lanes, and here under the interpreter.
+#[test]
+fn the_interpreter_runs_the_reductions() {
+    let src = super::load_fixture("arm_neon_reductions_and_reversals.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "a failing group sets its bit in the exit code"
+    );
+}

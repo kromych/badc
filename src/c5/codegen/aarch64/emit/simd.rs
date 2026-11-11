@@ -34,9 +34,14 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
         .map(|(k, &num)| {
             let (lane, bytes) = row.arrangement(if k == 0 { 0 } else { k + skip });
             let size = lane.trailing_zeros() as u8;
-            // One 64-bit lane is the scalar form on the D view.
+            // One lane is the scalar view of its width: the scalar form
+            // over a 64-bit lane, or a reduction's destination; a pairwise
+            // long sum into one 64-bit lane is the vector form `.1d`.
+            let pairwise = matches!(row.sem, crate::c5::simd::Sem::PairAddLong(..));
             match (size, bytes) {
-                (3, 8) => Opnd::VReg { num, is_d: true },
+                (3, 8) if !pairwise => Opnd::VReg { num, is_d: true },
+                (0 | 1, b) if b == lane => Opnd::VScalar { num, size },
+                (2, 4) => Opnd::VReg { num, is_d: false },
                 _ => Opnd::VecReg {
                     num,
                     size,

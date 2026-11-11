@@ -146,18 +146,15 @@ Disassembly of section .text:
                	mov	x0, x2
                	ldrb	w6, [x5, x0]
                	ldrb	w3, [x1, x0]
-               	tbz	w3, #0x7, <addr>
-               	mov	x7, x4
+               	tst	x3, #0x80
+               	csel	x7, x4, x2, ne
                	eor	x3, x7, x3, lsl #1
                	and	x3, x3, #0xff
                	sub	x7, x29, #0x40
                	ldrb	w7, [x7, x0]
                	eor	x3, x3, x7
                	cmp	w6, w3
-               	b.eq	<addr>
-               	b	<addr>
-               	mov	x7, x2
-               	b	<addr>
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

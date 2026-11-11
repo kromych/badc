@@ -43,12 +43,13 @@ Disassembly of section .text:
                	jge	<addr>
                	movq	%r12, %rdx
                	subq	%rax, %rdx
-               	movl	(%r13,%rax,4), %esi
+               	movslq	(%r13,%rax,4), %rsi
                	movq	%rbx, %rcx
                	subq	%rsi, %rcx
+               	movq	%rcx, %rsi
+               	negq	%rsi
                	testl	%ecx, %ecx
-               	jge	<addr>
-               	negq	%rcx
+               	cmovlq	%rsi, %rcx
                	movl	(%r13,%rax,4), %esi
                	cmpl	%ebx, %esi
                	je	<addr>

@@ -67,13 +67,12 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	cmpq	$0x1000, %rsi           # imm = 0x1000
-               	jne	<addr>
                	movl	$0x2a, %eax
+               	movl	$0x2, %ecx
+               	cmpq	$0x1000, %rsi           # imm = 0x1000
+               	cmovneq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
                	movl	$0x1, %eax
                	leave
                	retq

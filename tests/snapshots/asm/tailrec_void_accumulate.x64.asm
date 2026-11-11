@@ -41,10 +41,10 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x13ba, %rax           # imm = 0x13BA
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

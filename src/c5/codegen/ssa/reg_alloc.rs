@@ -137,13 +137,17 @@ pub(crate) struct Allocation {
     /// that the allocator recognized as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that terminator
     /// and every instruction between the compare and the block's end
-    /// leaving the host flags untouched. The emit pass skips the
-    /// `cset` / `setcc` materialization and the terminator emits
-    /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
-    /// the compare set. The compare's value keeps its place: on
-    /// x86_64 the destination register doubles as the operand-staging
-    /// scratch, so its color stays in the used sets.
+    /// leaving the host flags untouched; also a comparison only selects
+    /// after it in its block read, under the same window. The emit pass
+    /// skips the `cset` / `setcc` materialization and the terminator
+    /// emits `b.cond` (aarch64) or `j.cond` (x86_64), a select `csel` or
+    /// `cmov`, directly off the flags the compare set. The compare's
+    /// value keeps its place: on x86_64 the destination register doubles
+    /// as the operand-staging scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
+    /// Per value: a mask in `branch_fused` that selects read, which sets
+    /// the flags with aarch64 `tst` where a branch's mask is its `tbz`.
+    pub mask_tests: Vec<bool>,
     /// True for a store that writes its value, an `Imm`, from its own
     /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
     /// a store, so its use count is zero and it is never materialized;
@@ -366,6 +370,7 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecExtract { .. }
+        | Inst::Select { .. }
         | Inst::InlineAsm { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
@@ -578,6 +583,12 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
             for (k, &p) in parts.iter().enumerate() {
                 f(p, fp_mask.has(k));
             }
+        }
+        Inst::Select { cond, a, b, kind } => {
+            let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+            f(*cond, false);
+            f(*a, fp);
+            f(*b, fp);
         }
         _ => for_each_operand(inst, |v| f(v, false)),
     }
@@ -1397,6 +1408,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            mask_tests: Vec::new(),
             imm_store: Vec::new(),
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
@@ -1707,7 +1719,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::X86SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
-            | Inst::VecExtract { .. } => true,
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. } => true,
             // AArch64 `madd` / `msub` write only the result; the x86-64
             // lowering may form the product in a multiplicand's register.
             Inst::MulAdd { .. } => !target.is_x86_64(),
@@ -1961,6 +1974,58 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         branch_fused[cond as usize] = true;
     }
+    // Likewise a comparison or a mask only later selects in its block
+    // read, the mask one `test` / `bt` or aarch64 `tst` holds.
+    let mut mask_tests: Vec<bool> = vec![false; func.insts.len()];
+    for block in &func.blocks {
+        for c in block.inst_range.clone() {
+            let (fuses, tests) = match func.insts[c as usize] {
+                Inst::BinopI {
+                    op: BinOp::And,
+                    rhs_imm,
+                    ..
+                } if is_x86 => (branch_mask_fuses(rhs_imm, false, true), false),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    rhs_imm,
+                    ..
+                } => {
+                    let tst = crate::c5::codegen::aarch64::encode::encode_logical_imm(
+                        rhs_imm as u64,
+                        true,
+                    );
+                    (tst.is_some(), true)
+                }
+                Inst::Binop { op, .. } | Inst::BinopI { op, .. } => (
+                    is_compare_op(op)
+                        && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(op)),
+                    false,
+                ),
+                _ => (false, false),
+            };
+            if !fuses || branch_fused[c as usize] {
+                continue;
+            }
+            let reads = |p: ValueId| matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c);
+            let (n, last) = ((c + 1)..block.inst_range.end)
+                .filter(|&p| reads(p))
+                .fold((0, c), |(n, _), p| (n + 1, p));
+            if n == 0 || use_counts.get(c as usize).copied().unwrap_or(0) != n {
+                continue;
+            }
+            let window_ok = ((c + 1)..last).all(|p| {
+                let inst = &func.insts[p as usize];
+                reads(p)
+                    || inst.is_lifetime_marker()
+                    || (inst.is_pure() && use_counts[p as usize] == 0)
+                    || flags_survive(inst)
+            });
+            if window_ok {
+                branch_fused[c as usize] = true;
+                mask_tests[c as usize] = tests;
+            }
+        }
+    }
     // Drop the "value-also-in-acc" propagate slot for stores and copies
     // whose defined value is unread. c5 store ops leave the stored value
     // in the accumulator and a copy yields its destination; if nothing
@@ -2099,6 +2164,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_source,
         sxtw_k,
         branch_fused,
+        mask_tests,
         imm_store,
         stack_imm,
         stack_load,
@@ -3568,6 +3634,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
         VecBinop { .. } | VecInsert { .. } => ResultKind::Fp,
         VecExtract { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::V128 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
+        Select { kind, .. } => match kind {
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         X86SimdVal { op, .. } => {

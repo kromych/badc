@@ -110,24 +110,29 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldrsb	x1, [x1, #0x58]
-               	cbz	x1, <addr>
-               	mov	x0, #0x1                // =1
+               	mov	x2, #0x1                // =1
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	adrp	x1, <page>
                	ldrsh	x1, [x1, #0x50]
-               	cbz	x1, <addr>
-               	orr	x0, x0, #0x2
+               	orr	x2, x0, #0x2
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x48]
-               	cbz	x1, <addr>
-               	orr	x0, x0, #0x4
+               	orr	x2, x0, #0x4
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	cbz	x1, <addr>
-               	orr	x0, x0, #0x8
+               	orr	x2, x0, #0x8
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	adrp	x1, <page>
                	ldrb	w1, [x1, #0x60]
-               	cbz	x1, <addr>
-               	orr	x0, x0, #0x10
+               	orr	x2, x0, #0x10
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	ret
 
 <floats>:

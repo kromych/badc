@@ -36,14 +36,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x3, %edx
                	cmpq	$0x10, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -58,14 +58,13 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpl	$0x7, %ebx
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x2, %ecx
+               	cmpl	$0x7, %ebx
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
 
 <reentrant>:
                	pushq	%rbp

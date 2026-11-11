@@ -294,6 +294,11 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *rhs);
             }
             Inst::VecExtract { vec, .. } => observe(&mut hi, &mut work, *vec),
+            Inst::Select { cond, a, b, .. } => {
+                observe(&mut hi, &mut work, *cond);
+                observe(&mut hi, &mut work, *a);
+                observe(&mut hi, &mut work, *b);
+            }
             Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
             | Inst::X86SimdVal { args, .. }

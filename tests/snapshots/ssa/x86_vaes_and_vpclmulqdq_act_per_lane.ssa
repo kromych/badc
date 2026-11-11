@@ -1848,32 +1848,28 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1720 Extend { value=v1717, kind=I32 }                 -> x1
     v1721 LifetimeEnd(0)                                   -> -
     v1722 Extend { value=v1717, kind=I32 }                 -> x1
-    v1723 BinopI { op=eq, lhs=v1717, rhs_imm=65535 }       -> x0
+    v1723 BinopI { op=eq, lhs=v1717, rhs_imm=65535 }       -> x1
     v1724 Extend { value=v1723, kind=I32 }                 -> x1
     v1725 LifetimeEnd(0)                                   -> -
     v1726 LifetimeEnd(0)                                   -> -
     v1727 Extend { value=v1723, kind=I32 }                 -> x1
-    terminator Bz { cond=v1723, target=b15, fall=b13 }   (exit_acc=v1723)
+    v1728 Imm(0)                                           -> x1
+    v1729 Imm(7)                                           -> x2
+    v1730 BinopI { op=eq, lhs=v1717, rhs_imm=65535 }       -> x0
+    v1731 Select { cond=v1730, a=v1728, b=v1729, kind=I64 } -> x0
+    terminator Jmp(b13)
   block 13  start_pc=0
-    v1728 Imm(0)                                           -> x0
-    v1729 Imm(0)                                           -> x1
-    terminator Jmp(b14)   (exit_acc=v1728)
-  block 14  start_pc=0
-    v1732 Phi { incoming=[b13:v1728, b15:v1730], kind=I64 } -> x0
-    v1733 Imm(0)                                           -> x1
-    v1734 Extend { value=v1732, kind=I32 }                 -> x1
-    v1735 LifetimeEnd(0)                                   -> -
-    v1736 LifetimeEnd(0)                                   -> -
-    v1737 LifetimeEnd(0)                                   -> -
-    v1738 LifetimeEnd(0)                                   -> -
+    v1736 Copy { value=v1731, fp=false }                   -> x1
+    v1737 Imm(0)                                           -> x1
+    v1738 Extend { value=v1731, kind=I32 }                 -> x1
     v1739 LifetimeEnd(0)                                   -> -
     v1740 LifetimeEnd(0)                                   -> -
     v1741 LifetimeEnd(0)                                   -> -
-    terminator Return(v1732)   (exit_acc=v1732)
-  block 15  start_pc=0
-    v1730 Imm(7)                                           -> x0
-    v1731 Imm(0)                                           -> x1
-    terminator Jmp(b14)   (exit_acc=v1730)
+    v1742 LifetimeEnd(0)                                   -> -
+    v1743 LifetimeEnd(0)                                   -> -
+    v1744 LifetimeEnd(0)                                   -> -
+    v1745 LifetimeEnd(0)                                   -> -
+    terminator Return(v1731)   (exit_acc=v1731)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

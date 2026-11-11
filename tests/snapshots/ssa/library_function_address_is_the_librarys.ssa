@@ -26,21 +26,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v12  ImmData(16)                                      -> x0
     v13  Load { addr=v12, disp=0, kind=I64 pc_rel }       -> x0
     v14  ImmExtCode(binding=40)                           -> x1
-    v15  Binop { op=eq, lhs=v13, rhs=v14 }                -> x0
-    terminator Bz { cond=v15, target=b7, fall=b5 }   (exit_acc=v15)
+    v15  Binop { op=eq, lhs=v13, rhs=v14 }                -> x2
+    v16  Imm(0)                                           -> x2
+    v17  Imm(3)                                           -> x6
+    v18  Binop { op=eq, lhs=v13, rhs=v14 }                -> x0
+    v19  Select { cond=v18, a=v16, b=v17, kind=I64 }      -> x0
+    terminator Jmp(b5)
   block 5  start_pc=0
-    v16  Imm(0)                                           -> x0
-    v17  Imm(0)                                           -> x1
-    terminator Jmp(b6)   (exit_acc=v16)
-  block 6  start_pc=0
-    v20  Phi { incoming=[b5:v16, b7:v18], kind=I64 }      -> x0
-    v21  Imm(0)                                           -> x1
-    v22  Extend { value=v20, kind=I32 }                   -> x1
-    terminator Return(v20)   (exit_acc=v20)
-  block 7  start_pc=0
-    v18  Imm(3)                                           -> x0
-    v19  Imm(0)                                           -> x1
-    terminator Jmp(b6)   (exit_acc=v18)
+    v24  Copy { value=v19, fp=false }                     -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Extend { value=v19, kind=I32 }                   -> x1
+    terminator Return(v19)   (exit_acc=v19)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

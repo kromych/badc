@@ -305,16 +305,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzbq	-0x30(%rbp), %rcx
-               	movzbq	-0x2f(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzbq	-0x30(%rbp), %rax
+               	movzbq	-0x2f(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -411,16 +409,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzwq	-0x30(%rbp), %rcx
-               	movzbq	-0x2e(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzwq	-0x30(%rbp), %rax
+               	movzbq	-0x2e(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -523,16 +519,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzbq	-0x30(%rbp), %rcx
-               	movzbq	-0x2d(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzbq	-0x30(%rbp), %rax
+               	movzbq	-0x2d(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -630,17 +624,15 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movl	-0x30(%rbp), %ecx
-               	movzbq	-0x2c(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	andq	$0xfffff, %rcx          # imm = 0xFFFFF
-               	cmpl	%ebx, %ecx
+               	movl	-0x30(%rbp), %eax
+               	movzbq	-0x2c(%rbp), %rcx
+               	xorl	%edx, %edx
+               	andq	$0xfffff, %rax          # imm = 0xFFFFF
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -743,16 +735,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzbq	-0x30(%rbp), %rcx
-               	movzbq	-0x2b(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzbq	-0x30(%rbp), %rax
+               	movzbq	-0x2b(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -855,16 +845,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzwq	-0x30(%rbp), %rcx
-               	movzbq	-0x2a(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzwq	-0x30(%rbp), %rax
+               	movzbq	-0x2a(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -973,16 +961,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movzbq	-0x30(%rbp), %rcx
-               	movzbq	-0x29(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movzbq	-0x30(%rbp), %rax
+               	movzbq	-0x29(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -1090,16 +1076,14 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	addq	$0x40, %rsp
-               	movl	-0x38(%rbp), %ecx
-               	movzbq	-0x2c(%rbp), %rax
-               	movq	%rax, %rdx
-               	xorq	$0x55, %rdx
-               	xorl	%eax, %eax
-               	testl	%edx, %edx
-               	jne	<addr>
-               	cmpl	%ebx, %ecx
+               	movl	-0x38(%rbp), %eax
+               	movzbq	-0x2c(%rbp), %rcx
+               	xorl	%edx, %edx
+               	cmpl	%ebx, %eax
                	sete	%al
                	movzbq	%al, %rax
+               	cmpl	$0x55, %ecx
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq

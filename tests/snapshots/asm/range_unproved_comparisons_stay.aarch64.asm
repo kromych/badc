@@ -28,8 +28,9 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x30]
                	and	x5, x1, #0xff
                	cbnz	w5, <addr>
-               	cbnz	x1, <addr>
-               	mov	x1, #0x1                // =1
+               	mov	x5, #0x1                // =1
+               	cmp	x1, #0x0
+               	csel	x1, x5, x0, eq
                	cbz	x1, <addr>
                	mov	x0, x1
                	add	sp, sp, #0x10
@@ -93,8 +94,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x3, x0
-               	b	<addr>
-               	mov	x1, x0
                	b	<addr>
                	mov	x1, x0
                	b	<addr>

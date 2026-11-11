@@ -32,10 +32,10 @@ Disassembly of section .text:
 
 <join_masked>:
                	xorl	%eax, %eax
+               	movq	%rdi, %rcx
+               	andq	$0xff, %rcx
                	cmpl	$0x80, %edi
-               	jae	<addr>
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
+               	cmovbq	%rcx, %rax
                	cmpl	$0x2a, %eax
                	setne	%al
                	movzbq	%al, %rax
@@ -98,29 +98,27 @@ Disassembly of section .text:
 
 <join_u16>:
                	movl	$0x7, %eax
+               	movq	%rdi, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	cmpl	$0x3e8, %edi            # imm = 0x3E8
-               	jle	<addr>
-               	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	cmovgq	%rcx, %rax
                	incq	%rax
                	retq
 
 <join_unmasked>:
-               	movq	%rsi, %rax
-               	xorl	%esi, %esi
+               	movslq	%esi, %rsi
+               	xorl	%eax, %eax
                	testl	%edi, %edi
-               	jle	<addr>
-               	movq	%rax, %rsi
-               	movq	%rsi, %rax
+               	cmovgq	%rsi, %rax
                	andq	$0xff, %rax
                	retq
 
 <join_byte_as_signed>:
                	xorl	%eax, %eax
+               	movq	%rdi, %rcx
+               	andq	$0xff, %rcx
                	testl	%edi, %edi
-               	jle	<addr>
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
+               	cmovgq	%rcx, %rax
                	movsbq	%al, %rax
                	retq
 

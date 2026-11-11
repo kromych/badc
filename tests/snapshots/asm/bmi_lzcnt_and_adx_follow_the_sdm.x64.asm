@@ -226,9 +226,10 @@ Disassembly of section .text:
                	negq	%r13
                	movl	%r13d, %r13d
                	andq	%rax, %r13
+               	movq	%rdx, %rax
+               	orq	%rsi, %rax
                	testq	%r13, %r13
-               	je	<addr>
-               	orq	%rsi, %rdx
+               	cmovneq	%rax, %rdx
                	shlq	%rsi
                	leaq	-0x1(%rcx), %rax
                	andq	%rax, %rcx
@@ -245,9 +246,10 @@ Disassembly of section .text:
                	negq	%r13
                	movl	%r13d, %r13d
                	andq	%rax, %r13
+               	movq	%rdx, %rax
+               	orq	%rsi, %rax
                	testq	%r13, %r13
-               	je	<addr>
-               	orq	%rsi, %rdx
+               	cmovneq	%rax, %rdx
                	shlq	%rsi
                	leaq	-0x1(%rcx), %rax
                	andq	%rax, %rcx
@@ -283,9 +285,10 @@ Disassembly of section .text:
                	movq	%rcx, %r13
                	negq	%r13
                	andq	%rax, %r13
+               	movq	%rdx, %rax
+               	orq	%rsi, %rax
                	testq	%r13, %r13
-               	je	<addr>
-               	orq	%rsi, %rdx
+               	cmovneq	%rax, %rdx
                	shlq	%rsi
                	leaq	-0x1(%rcx), %rax
                	andq	%rax, %rcx

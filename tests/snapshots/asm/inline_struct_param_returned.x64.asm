@@ -82,15 +82,13 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %rdx
                	movq	%rdx, -0x8(%rbp)
                	testq	%rsi, %rsi
-               	je	<addr>
+               	cmoveq	%rcx, %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
                	leave
                	retq
-               	movq	%rcx, %rax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

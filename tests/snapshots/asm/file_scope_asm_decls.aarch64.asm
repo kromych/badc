@@ -37,9 +37,10 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x2, x0, x1
+               	sub	x3, x1, x0
                	cmp	x0, x1
-               	b.ls	<addr>
-               	sub	x0, x0, x1
+               	csel	x0, x2, x3, hi
                	mov	x17, #0x10000           // =65536
                	cmp	x0, x17
                	b.ls	<addr>
@@ -49,5 +50,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x1, x0
-               	b	<addr>

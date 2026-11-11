@@ -3101,6 +3101,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::super::passes::simplify_branches::run_late(funcs);
             },
         );
+        // Short branches that only choose values become selects.
+        pipeline.run("passes::if_convert::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::if_convert::run(funcs, target);
+        });
         b.late_opt_passes(&mut ssa_funcs, pipeline);
         // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
         // inline run exposed -- the post-inline promotions and the

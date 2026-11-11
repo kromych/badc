@@ -42,10 +42,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x5, %eax
                	jl	<addr>
-               	cmpq	$0x5dc, %rcx            # imm = 0x5DC
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpq	$0x5dc, %rcx            # imm = 0x5DC
+               	cmovneq	%rdx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

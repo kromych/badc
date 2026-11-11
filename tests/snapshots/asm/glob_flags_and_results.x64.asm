@@ -333,9 +333,9 @@ Disassembly of section .text:
                	leaq	-0x1c8(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
+               	xorl	%eax, %eax
+               	movl	$0x9, %ecx
                	testq	%rbx, %rbx
-               	je	<addr>
-               	xorl	%ebx, %ebx
-               	jmp	<addr>
-               	movl	$0x9, %ebx
+               	movq	%rcx, %rbx
+               	cmovneq	%rax, %rbx
                	jmp	<addr>

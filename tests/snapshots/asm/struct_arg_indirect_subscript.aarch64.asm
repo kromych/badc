@@ -63,10 +63,12 @@ Disassembly of section .text:
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x1, x5, x1
-               	add	x5, x1, #0x3
-               	cbz	x4, <addr>
-               	mov	x1, #0x1                // =1
-               	add	x1, x5, x1
+               	add	x1, x1, #0x3
+               	mov	x5, #0x1                // =1
+               	mov	x6, #0x0                // =0
+               	cmp	x4, #0x0
+               	csel	x4, x5, x6, ne
+               	add	x1, x1, x4
                	cmp	x1, #0xfc2
                	b.eq	<addr>
                	add	sp, sp, #0xa0
@@ -110,5 +112,3 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	b	<addr>

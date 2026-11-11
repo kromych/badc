@@ -86,9 +86,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp
+               	movl	$0x14, %eax
+               	xorl	%ecx, %ecx
                	testl	%edi, %edi
-               	jle	<addr>
-               	movl	$0x14, %ecx
+               	cmovgq	%rax, %rcx
                	xorl	%eax, %eax
                	cmpl	%ecx, %eax
                	jge	<addr>
@@ -154,12 +155,10 @@ Disassembly of section .text:
                	cmpl	$0x14, %ecx
                	jl	<addr>
                	leaq	0x521c(%rdx), %rcx
+               	xorl	%edx, %edx
+               	movl	$0x1, %esi
                	cmpq	%rcx, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rsi, %rax
+               	cmoveq	%rdx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>

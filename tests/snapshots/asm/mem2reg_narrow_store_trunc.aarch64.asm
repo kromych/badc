@@ -15,12 +15,11 @@ Disassembly of section .text:
 
 <check>:
                	and	x0, x0, #0xff
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	w0, #0x2c
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>
 
 <main>:
                	mov	x0, #0x0                // =0

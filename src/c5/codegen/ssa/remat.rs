@@ -304,6 +304,25 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
     uses
 }
 
+/// Where a definition read at `at` goes: ahead of the reader, or of the
+/// condition in `block` whose flags a reading select takes, which no call
+/// separates from it.
+fn flags_reader_start(func: &FunctionSsa, layout: &Layout, block: BlockId, at: u32) -> u32 {
+    match func.insts[at as usize] {
+        Inst::Select { cond, .. }
+            if cond < at
+                && func.blocks[block as usize].inst_range.contains(&cond)
+                && layout.calls_in(cond, at) == 0
+                && crate::c5::codegen::passes::if_convert::flags_condition(
+                    &func.insts[cond as usize],
+                ) =>
+        {
+            cond
+        }
+        _ => at,
+    }
+}
+
 /// The runs of `uses` reached across a call; a value with such a run in a loop keeps every use.
 fn plan(func: &FunctionSsa, layout: &Layout, uses: &[Use]) -> Vec<Run> {
     let weights = block_weights(func);
@@ -350,7 +369,7 @@ fn plan(func: &FunctionSsa, layout: &Layout, uses: &[Use]) -> Vec<Run> {
             let at = if u.at == END {
                 end_position(func, layout, u.block)
             } else {
-                At::Before(u.at)
+                At::Before(flags_reader_start(func, layout, u.block, u.at))
             };
             // A reader that is a call ends the run: it clobbers what it read.
             let mut j = i + 1;
@@ -415,6 +434,7 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
                 at: runs[k].at,
                 inst: func.insts[m as usize].clone(),
                 is_f32: func.f32_values.get(m as usize).copied().unwrap_or(false),
+                copy_of: None,
             });
             members.push(m);
         }

@@ -79,17 +79,16 @@ Disassembly of section .text:
                	stur	x3, [x29, #-0x10]
                	ldur	x3, [x29, #-0x20]
                	stur	x3, [x29, #-0x8]
-               	cbz	x1, <addr>
-               	ldr	x0, [x2]
-               	ldr	x1, [x2, #0x8]
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, x1
+               	mul	x1, x1, x17
+               	add	x0, x1, x0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, x0
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

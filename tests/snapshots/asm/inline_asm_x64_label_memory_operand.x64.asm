@@ -152,13 +152,12 @@ Disassembly of section .text:
                	setne	%al
                	movzbq	%al, %rax
                	addq	%rbx, %rax
+               	movl	$0x2a, %ecx
                	testq	%rax, %rax
-               	je	<addr>
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, %eax
-               	jmp	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
                	movl	$0x2, %eax

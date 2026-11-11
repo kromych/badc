@@ -577,6 +577,8 @@ pub(crate) enum LogicalOp {
     And = 0,
     Orr = 1,
     Eor = 2,
+    /// Sets the flags; Rd = 31 is XZR, which makes it `tst`.
+    Ands = 3,
 }
 
 /// `<op> Rd, Rn, #value` in the 64-bit form, or in the 32-bit form over the
@@ -1432,6 +1434,24 @@ pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
         | ((cond as u32) << 12)
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32)
+}
+
+/// `CSEL <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm`.
+pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x9A80_0000
+        | ((rm.0 as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `FCSEL <Dd|Sd>, <Dn|Sn>, <Dm|Sm>, <cond>`: `d = cond ? n : m`.
+pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> u32 {
+    (if single { 0x1E20_0C00u32 } else { 0x1E60_0C00 })
+        | ((dm as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((dn as u32) << 5)
+        | (dd as u32)
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
@@ -3694,5 +3714,14 @@ mod tests {
                 assert_eq!(got, want, "{mnemonic} {value:#x}");
             }
         }
+    }
+
+    /// Words from LLVM's assembler.
+    #[test]
+    fn csel_and_fcsel() {
+        assert_eq!(enc_csel(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1041);
+        assert_eq!(enc_csel(Reg(30), Reg(0), Reg(29), Cond::Lt), 0x9A9D_B01E);
+        assert_eq!(enc_fcsel(1, 2, 3, Cond::Ne, false), 0x1E63_1C41);
+        assert_eq!(enc_fcsel(4, 5, 6, Cond::Gt, true), 0x1E26_CCA4);
     }
 }

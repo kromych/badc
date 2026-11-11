@@ -86,37 +86,36 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	movswq	%ax, %rcx
-               	movq	%rcx, %rax
-               	shlq	$0xe, %rax
                	movswq	%ax, %rax
-               	cmpl	$0x4000, %eax           # imm = 0x4000
+               	movq	%rax, %rcx
+               	shlq	$0xe, %rcx
+               	movswq	%cx, %rcx
+               	cmpl	$0x4000, %ecx           # imm = 0x4000
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	movq	%rcx, %rax
-               	shlq	$0x10, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	testl	$0x8000, %eax           # imm = 0x8000
-               	je	<addr>
-               	subq	$0x10000, %rax          # imm = 0x10000
-               	movswq	%ax, %rax
-               	testl	%eax, %eax
+               	movq	%rax, %rcx
+               	shlq	$0x10, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	leaq	-0x10000(%rcx), %rdx
+               	testl	$0x8000, %ecx           # imm = 0x8000
+               	cmovneq	%rdx, %rcx
+               	movswq	%cx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	movq	%rcx, %rax
                	shlq	$0xf, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
+               	leaq	-0x10000(%rax), %rcx
                	testl	$0x8000, %eax           # imm = 0x8000
-               	je	<addr>
-               	subq	$0x10000, %rax          # imm = 0x10000
+               	cmovneq	%rcx, %rax
                	movswq	%ax, %rax
                	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
                	je	<addr>
@@ -228,9 +227,9 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
+               	leaq	-0x10000(%rax), %rcx
                	testl	$0x8000, %eax           # imm = 0x8000
-               	je	<addr>
-               	subq	$0x10000, %rax          # imm = 0x10000
+               	cmovneq	%rcx, %rax
                	movswq	%ax, %rax
                	testl	%eax, %eax
                	je	<addr>

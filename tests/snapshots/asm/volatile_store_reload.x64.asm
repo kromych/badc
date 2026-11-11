@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movl	$0x5, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x5, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

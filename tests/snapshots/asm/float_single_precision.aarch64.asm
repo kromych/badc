@@ -15,23 +15,24 @@ Disassembly of section .text:
 
 <main>:
                	movi	d0, #0000000000000000
+               	mov	x16, #0x80000000        // =2147483648
+               	fmov	s1, w16
                	fcmpe	s0, s0
-               	b.pl	<addr>
-               	mov	x17, #0x80000000        // =2147483648
-               	fmov	s1, w17
+               	fcsel	s1, s1, s0, mi
                	adrp	x16, <page>
                	ldr	s2, [x16]
-               	fcmpe	s1, s2
-               	b.le	<addr>
                	mov	x0, #0x1                // =1
+               	mov	x1, #0x0                // =0
+               	fcmpe	s1, s2
+               	csel	x0, x0, x1, gt
                	cbz	x0, <addr>
                	ret
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x4]
+               	mov	x16, #0x80000000        // =2147483648
+               	fmov	s2, w16
                	fcmpe	s0, s0
-               	b.pl	<addr>
-               	mov	x17, #0x80000000        // =2147483648
-               	fmov	s2, w17
+               	fcsel	s2, s2, s0, mi
                	adrp	x16, <page>
                	ldr	s3, [x16, #0x8]
                	fcmpe	s2, s3
@@ -39,33 +40,24 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	cbz	w0, <addr>
                	ret
+               	mov	x16, #0x80000000        // =2147483648
+               	fmov	s1, w16
                	fcmpe	s0, s0
-               	b.pl	<addr>
-               	mov	x17, #0x80000000        // =2147483648
-               	fmov	s0, w17
+               	fcsel	s0, s1, s0, mi
                	adrp	x16, <page>
                	ldr	s1, [x16, #0xc]
-               	fcmpe	s0, s1
-               	b.le	<addr>
                	mov	x0, #0x4                // =4
+               	mov	x1, #0x0                // =0
+               	fcmpe	s0, s1
+               	csel	x0, x0, x1, gt
                	cbz	w0, <addr>
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	movi	d0, #0000000000000000
-               	b	<addr>
                	fmov	s2, #1.00000000
                	fcmp	s1, s2
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	movi	d2, #0000000000000000
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	movi	d1, #0000000000000000
                	b	<addr>

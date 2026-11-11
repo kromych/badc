@@ -281,7 +281,16 @@ pub(crate) fn apply(
                 .get(r.value as usize)
                 .copied()
                 .unwrap_or(false);
-            placed.push((k, b, Insertion { at, inst, is_f32 }));
+            placed.push((
+                k,
+                b,
+                Insertion {
+                    at,
+                    inst,
+                    is_f32,
+                    copy_of: None,
+                },
+            ));
         }
     }
     placed.sort_by_key(|(_, _, i)| i.at.order(&func.blocks));

@@ -53,7 +53,7 @@ Disassembly of section .text:
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
                	sub	x1, x3, x1
                	cmp	x0, x1
-               	b.hs	<addr>
+               	csel	x0, x0, x1, lo
                	cmp	w0, #0x7
                	b.ne	<addr>
                	adrp	x0, <page>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
                	sub	x1, x3, x1
                	cmp	x0, x1
-               	b.hs	<addr>
+               	csel	x0, x0, x1, lo
                	cmp	w0, #0x3
                	b.ne	<addr>
                	adrp	x0, <page>
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	mov	x2, #0x7fffffffffffffff // =9223372036854775807
                	sub	x1, x2, x1
                	cmp	x0, x1
-               	b.hs	<addr>
+               	csel	x0, x0, x1, lo
                	mov	x17, #-0x16             // =-22
                	cmp	w0, w17
                	b.eq	<addr>
@@ -112,9 +112,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x1
-               	b	<addr>
-               	mov	x0, x1
-               	b	<addr>
-               	mov	x0, x1
-               	b	<addr>

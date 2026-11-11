@@ -70,11 +70,13 @@ Disassembly of section .text:
                	movq	0x8(%rax), %rax
                	imulq	$0xa, %rax, %rax
                	addq	%rdx, %rax
-               	leaq	0x3(%rax), %rdx
+               	addq	$0x3, %rax
+               	movl	$0x1, %edx
+               	xorl	%esi, %esi
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	%rdx, %rax
+               	movq	%rsi, %rcx
+               	cmovneq	%rdx, %rcx
+               	addq	%rcx, %rax
                	cmpq	$0xfc2, %rax            # imm = 0xFC2
                	je	<addr>
                	movl	$0x3, %eax
@@ -124,5 +126,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>

@@ -42,11 +42,11 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	callq	<addr>
                	addq	%rbx, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpl	$0x19a, %eax            # imm = 0x19A
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

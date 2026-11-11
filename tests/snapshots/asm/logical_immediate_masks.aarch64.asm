@@ -179,19 +179,22 @@ Disassembly of section .text:
                	ret
 
 <classify>:
-               	mov	x1, x0
-               	mov	x0, #0x0                // =0
-               	tbz	w1, #0x6, <addr>
-               	mov	x0, #0x1                // =1
-               	and	x2, x1, #0xf0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	tst	x0, #0x40
+               	csel	x1, x2, x1, ne
+               	and	x2, x0, #0xf0
+               	orr	x3, x1, #0x2
                	cmp	w2, #0x30
-               	b.ne	<addr>
-               	orr	x0, x0, #0x2
-               	tbnz	x1, #0x3f, <addr>
-               	orr	x0, x0, #0x4
-               	and	w1, w1, #0xf0f0f0f
-               	cbz	x1, <addr>
-               	orr	x0, x0, #0x8
+               	csel	x1, x3, x1, eq
+               	and	x2, x0, #0x8000000000000000
+               	orr	x3, x1, #0x4
+               	cmp	x2, #0x0
+               	csel	x1, x3, x1, eq
+               	orr	x2, x1, #0x8
+               	and	w0, w0, #0xf0f0f0f
+               	cmp	x0, #0x0
+               	csel	x0, x2, x1, ne
                	ret
 
 <update>:
@@ -399,22 +402,25 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	ldur	x2, [x29, #-0x20]
                	and	x2, x20, x2
-               	cbz	x2, <addr>
-               	mov	x1, #0x1                // =1
+               	mov	x3, #0x1                // =1
+               	cmp	x2, #0x0
+               	csel	x1, x3, x1, ne
                	ldur	x2, [x29, #-0x18]
                	and	x2, x20, x2
+               	orr	x3, x1, #0x2
                	cmp	x2, #0x30
-               	b.ne	<addr>
-               	orr	x1, x1, #0x2
+               	csel	x1, x3, x1, eq
                	ldur	x2, [x29, #-0x10]
                	and	x2, x20, x2
-               	cbnz	x2, <addr>
-               	orr	x1, x1, #0x4
+               	orr	x3, x1, #0x4
+               	cmp	x2, #0x0
+               	csel	x1, x3, x1, eq
                	mov	w2, w20
                	ldur	w3, [x29, #-0x8]
                	and	x2, x2, x3
-               	cbz	x2, <addr>
-               	orr	x1, x1, #0x8
+               	orr	x3, x1, #0x8
+               	cmp	x2, #0x0
+               	csel	x1, x3, x1, ne
                	cmp	w0, w1
                	b.ne	<addr>
                	add	x21, x21, #0x1

@@ -154,7 +154,12 @@ struct Plan {
 
 impl Plan {
     fn push(&mut self, at: At, inst: Inst, is_f32: bool) -> ValueId {
-        self.ins.push(Insertion { at, inst, is_f32 });
+        self.ins.push(Insertion {
+            at,
+            inst,
+            is_f32,
+            copy_of: None,
+        });
         self.base + (self.ins.len() - 1) as ValueId
     }
 }

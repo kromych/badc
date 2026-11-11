@@ -46,9 +46,10 @@ Disassembly of section .text:
                	cset	x1, ne
                	add	x0, x0, x1
                	fmov	d1, #6.25000000
+               	fmov	d2, #2.50000000
+               	movi	d3, #0000000000000000
                	fcmp	d1, d1
-               	b.ne	<addr>
-               	fmov	d1, #2.50000000
+               	fcsel	d1, d2, d3, eq
                	fmov	d2, #2.50000000
                	fcmp	d1, d2
                	cset	x1, ne
@@ -89,13 +90,12 @@ Disassembly of section .text:
                	fcmp	s0, s1
                	cset	x0, ne
                	add	x0, x1, x0
-               	cbz	w0, <addr>
+               	sxtw	x1, w0
+               	mov	x2, #0x2a               // =42
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2a               // =42
-               	b	<addr>
                	mov	x1, x0
-               	b	<addr>
-               	movi	d1, #0000000000000000
                	b	<addr>

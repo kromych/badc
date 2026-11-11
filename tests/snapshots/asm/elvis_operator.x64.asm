@@ -100,9 +100,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	-0x8(%rbp), %rax
+               	movl	$0x63, %ecx
                	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x63, %eax
+               	cmoveq	%rcx, %rax
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
                	testq	%rax, %rax

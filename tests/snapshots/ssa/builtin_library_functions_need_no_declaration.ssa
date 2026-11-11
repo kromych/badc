@@ -311,21 +311,17 @@ fn ent_pc=7 n_params=0 variadic=false locals=11
     v221 Imm(0)                                           -> x0
     v222 CallExt { binding_idx=123, args=[v205], fp_arg_mask=0x0 } -> x0
     v223 Extend { value=v219, kind=I32 }                  -> x0
-    terminator Bnz { cond=v218, target=b33, fall=b31 }   (exit_acc=v219)
-  block 31  start_pc=0
     v224 Imm(0)                                           -> x0
-    v225 Imm(0)                                           -> x1
-    terminator Jmp(b32)   (exit_acc=v224)
-  block 32  start_pc=0
-    v228 Phi { incoming=[b31:v224, b33:v226], kind=I64 }  -> x0
-    v229 Imm(0)                                           -> x1
-    v230 Extend { value=v228, kind=I32 }                  -> x1
-    v231 LifetimeEnd(-11)                                 -> -
-    terminator Return(v228)   (exit_acc=v228)
-  block 33  start_pc=0
-    v226 Imm(12)                                          -> x0
-    v227 Imm(0)                                           -> x1
-    terminator Jmp(b32)   (exit_acc=v226)
+    v225 Imm(12)                                          -> x1
+    v226 BinopI { op=eq, lhs=v218, rhs_imm=0 }            -> x2
+    v227 Select { cond=v226, a=v224, b=v225, kind=I64 }   -> x0
+    terminator Jmp(b31)
+  block 31  start_pc=0
+    v232 Copy { value=v227, fp=false }                    -> x1
+    v233 Imm(0)                                           -> x1
+    v234 Extend { value=v227, kind=I32 }                  -> x1
+    v235 LifetimeEnd(-11)                                 -> -
+    terminator Return(v227)   (exit_acc=v227)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

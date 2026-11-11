@@ -141,9 +141,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movl	$0x6, %ecx
+               	xorl	%edx, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %ebx
+               	movq	%rdx, %rbx
+               	cmovneq	%rcx, %rbx
                	movl	$0x7, %esi
                	movl	$0x3, %edx
                	leaq	<rip>, %rcx
@@ -185,6 +187,4 @@ Disassembly of section .text:
                	testl	%ebx, %ebx
                	jne	<addr>
                	movl	$0x9, %ebx
-               	jmp	<addr>
-               	xorl	%ebx, %ebx
                	jmp	<addr>

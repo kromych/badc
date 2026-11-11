@@ -55,21 +55,21 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	<rip>, %rdx # <addr>
-               	leaq	-0x8(%rbp), %rcx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
-               	xorl	%eax, %eax
-               	movb	%al, <rip> # <addr>
-               	movb	%al, <rip> # <addr>
+               	leaq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	xorl	%ecx, %ecx
+               	movb	%cl, <rip> # <addr>
+               	movb	%cl, <rip> # <addr>
                	movzbq	<rip>, %rsi # <addr>
                	cmpl	$0x7, %esi
-               	movq	(%rcx), %rcx
-               	movq	%rcx, (%rdx)
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x3, %rcx
-               	jne	<addr>
+               	movq	(%rax), %rax
+               	movq	%rax, (%rdx)
+               	movq	<rip>, %rax # <addr>
+               	movl	$0x1, %edx
+               	cmpq	$0x3, %rax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

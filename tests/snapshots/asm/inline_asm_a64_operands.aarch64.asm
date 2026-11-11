@@ -22,12 +22,12 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	cbz	x1, <addr>
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	lsl	x0, x0, #1
                	mrs	x1, CNTVCT_EL0
-               	cbz	x1, <addr>
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

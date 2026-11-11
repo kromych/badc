@@ -169,23 +169,24 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	movl	$0x14, %esi
                	callq	<addr>
+               	movl	$0x1, %ecx
+               	xorl	%edx, %edx
                	cmpq	$0xe77, %rax            # imm = 0xE77
-               	je	<addr>
-               	movl	$0x1, %ebx
+               	movq	%rdx, %rbx
+               	cmovneq	%rcx, %rbx
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movabsq	$0x3fd0000000000000, %rcx # imm = 0x3FD0000000000000
                	movq	%rax, %xmm0
                	movq	%rcx, %xmm1
                	callq	<addr>
                	movabsq	$0x4069980000000000, %rax # imm = 0x4069980000000000
+               	movq	%rbx, %rcx
+               	orq	$0x2, %rcx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	orq	$0x2, %rbx
                	movq	%rbx, %rax
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	xorl	%ebx, %ebx
-               	jmp	<addr>

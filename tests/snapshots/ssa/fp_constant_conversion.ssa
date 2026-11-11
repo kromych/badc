@@ -73,37 +73,33 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1 [f32]
     v22  LoadLocal { off=-1, kind=F32, volatile }         -> d0 [f32]
-    v23  Imm(1036831949)                                  -> x1 [f32]
-    v24  Binop { op=fne, lhs=v23, rhs=v22 }               -> x1
-    terminator Bz { cond=v24, target=b3, fall=b1 }   (exit_acc=v24)
+    v23  Binop { op=fne, lhs=v1, rhs=v22 }                -> x1
+    v24  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x1
+    v25  Imm(1036831949)                                  -> x2 [f32]
+    v26  Binop { op=fne, lhs=v25, rhs=v22 }               -> x2
+    v27  Select { cond=v26, a=v24, b=v18, kind=I64 }      -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v25  Imm(0)                                           -> x1
-    v26  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x0
-    v27  Extend { value=v26, kind=I32, nsw }              -> x1
-    terminator Jmp(b2)   (exit_acc=v26)
-  block 2  start_pc=0
-    v28  Phi { incoming=[b3:v18, b1:v26], kind=I64 }      -> x0
-    v29  Imm(4613374868287651840)                         -> x1
-    v30  Imm(-4609997168567123968)                        -> x1
-    v31  Imm(-2)                                          -> x1
-    v32  Imm(0)                                           -> x1
-    v33  Imm(0)                                           -> x1
-    v34  Imm(4748581863621132288)                         -> x1
-    v35  Imm(3000000000)                                  -> x1
+    v31  Copy { value=v27, fp=false }                     -> x1
+    v32  Imm(4613374868287651840)                         -> x1
+    v33  Imm(-4609997168567123968)                        -> x1
+    v34  Imm(-2)                                          -> x1
+    v35  Imm(0)                                           -> x1
     v36  Imm(0)                                           -> x1
-    v37  Imm(0)                                           -> x1
-    v38  Imm(0)                                           -> x1
+    v37  Imm(4748581863621132288)                         -> x1
+    v38  Imm(3000000000)                                  -> x1
     v39  Imm(0)                                           -> x1
-    v40  Imm(4890909195324358656)                         -> x1
-    v41  Imm(-4332462841530417152)                        -> x1
-    v42  Imm(-9223372036854775808)                        -> x1
-    v43  Imm(-9223372036854775808)                        -> x1
-    v44  Imm(0)                                           -> x1
-    v45  Extend { value=v28, kind=I32 }                   -> x1
-    v46  Extend { value=v28, kind=I32 }                   -> x1
-    terminator Return(v28)   (exit_acc=v28)
-  block 3  start_pc=0
-    terminator Jmp(b2)
+    v40  Imm(0)                                           -> x1
+    v41  Imm(0)                                           -> x1
+    v42  Imm(0)                                           -> x1
+    v43  Imm(4890909195324358656)                         -> x1
+    v44  Imm(-4332462841530417152)                        -> x1
+    v45  Imm(-9223372036854775808)                        -> x1
+    v46  Imm(-9223372036854775808)                        -> x1
+    v47  Imm(0)                                           -> x1
+    v48  Extend { value=v27, kind=I32 }                   -> x1
+    v49  Extend { value=v27, kind=I32 }                   -> x1
+    terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

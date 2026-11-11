@@ -104,15 +104,14 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	add	x0, x22, x0
+               	mov	x1, #0x7                // =7
+               	mov	x2, #0x0                // =0
                	cmp	x0, #0x2e
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
+               	csel	x0, x1, x2, ne
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <shadow_global>:
                	stp	x20, x21, [sp, #-0x30]!

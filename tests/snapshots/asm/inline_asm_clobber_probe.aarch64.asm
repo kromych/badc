@@ -19,10 +19,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x2, #0x0                // =0
                	mov	x3, #0x0                // =0
+               	mov	x0, #0x2a               // =42
+               	mov	x1, #0x1                // =1
                	mov	x17, #0x1234            // =4660
                	cmp	w4, w17
-               	b.ne	<addr>
-               	mov	x0, #0x2a               // =42
+               	csel	x0, x0, x1, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

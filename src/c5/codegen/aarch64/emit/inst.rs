@@ -471,6 +471,15 @@ pub(super) fn emit_inst(
             emit_intrinsic(code, func, abi, *kind, args, dst, v, alloc, frame, scratch)
         }
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame, scratch),
+        Inst::Select { cond, a, b, kind } => super::arith::emit_select(
+            code,
+            dst,
+            (*cond, *a, *b, *kind),
+            func,
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
         Inst::VecBinop {
             op,

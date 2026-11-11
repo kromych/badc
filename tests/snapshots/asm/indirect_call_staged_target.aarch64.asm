@@ -133,10 +133,9 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	mov	x2, #0x5                // =5
                	bl	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x4bf
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

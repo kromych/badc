@@ -315,12 +315,11 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	testq	%r12, %r12
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0xc, %ecx
+               	testq	%r12, %r12
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
-               	movl	$0xc, %eax
-               	jmp	<addr>

@@ -204,13 +204,12 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%r12d, %eax
                	jl	<addr>
-               	cmpq	%rcx, %rdi
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpq	%rcx, %rdi
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

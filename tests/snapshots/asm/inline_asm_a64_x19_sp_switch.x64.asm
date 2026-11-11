@@ -62,10 +62,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
                	callq	<addr>
+               	movl	$0x2a, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x7e, %rax
-               	jne	<addr>
-               	movl	$0x2a, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

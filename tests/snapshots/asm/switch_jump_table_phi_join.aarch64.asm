@@ -548,13 +548,12 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	cmp	w2, #0xe
                	b.lt	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
                	mov	x17, #0x2760            // =10080
                	movk	x17, #0x4634, lsl #16
                	movk	x17, #0xf948, lsl #32
                	movk	x17, #0xd14a, lsl #48
                	cmp	x6, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x0, x1, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

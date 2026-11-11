@@ -194,29 +194,29 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v23  ImmData(64)                                      -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-1)                                    -> x1
-    v27  ImmData(8)                                       -> x0
+    v26  LocalAddr(-1)                                    -> x0
+    v27  ImmData(8)                                       -> x1
     v28  Mcpy { dst=v26, src=v27, size=8, align=8 }       -> -
-    v29  Imm(0)                                           -> x0
-    v30  Imm(0)                                           -> x0
-    v31  Imm(1)                                           -> x0
-    v32  Imm(0)                                           -> x0
-    v33  Imm(0)                                           -> x0
-    v34  Imm(0)                                           -> x0
-    v35  Imm(1)                                           -> x0
-    v36  Imm(0)                                           -> x0
-    v37  Imm(0)                                           -> x0
-    v38  Imm(0)                                           -> x0
-    v39  Imm(1)                                           -> x0
-    v40  Imm(0)                                           -> x0
-    v41  Imm(0)                                           -> x0
-    v42  Imm(0)                                           -> x0
-    v43  Imm(0)                                           -> x0
-    v44  Imm(1)                                           -> x0
-    v45  Imm(0)                                           -> x0
-    v46  Imm(0)                                           -> x0
-    v47  ImmData(56)                                      -> x0
-    v48  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x1
+    v30  Imm(0)                                           -> x1
+    v31  Imm(1)                                           -> x1
+    v32  Imm(0)                                           -> x1
+    v33  Imm(0)                                           -> x1
+    v34  Imm(0)                                           -> x1
+    v35  Imm(1)                                           -> x1
+    v36  Imm(0)                                           -> x1
+    v37  Imm(0)                                           -> x1
+    v38  Imm(0)                                           -> x1
+    v39  Imm(1)                                           -> x1
+    v40  Imm(0)                                           -> x1
+    v41  Imm(0)                                           -> x1
+    v42  Imm(0)                                           -> x1
+    v43  Imm(0)                                           -> x1
+    v44  Imm(1)                                           -> x1
+    v45  Imm(0)                                           -> x1
+    v46  Imm(0)                                           -> x1
+    v47  ImmData(56)                                      -> x1
+    v48  Imm(0)                                           -> x1
     v49  Store { addr=v47, disp=0, value=v48, kind=I8 pc_rel } -> -
     v50  Store { addr=v47, disp=0, value=v48, kind=I8 pc_rel } -> -
     v51  Imm(0)                                           -> x6
@@ -225,7 +225,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v54  BinopI { op=ne, lhs=v53, rhs_imm=7 }             -> x6
     v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x7
     v56  BinopI { op=ne, lhs=v53, rhs_imm=7 }             -> x7
-    terminator Bz { cond=v54, target=b6, fall=b1 }   (exit_acc=v56)
+    terminator Bz { cond=v54, target=b4, fall=b1 }   (exit_acc=v56)
   block 1  start_pc=0
     v64  Imm(5)                                           -> x6
     v65  Imm(0)                                           -> x6
@@ -236,32 +236,27 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v70  LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
-    v75  Phi { incoming=[b6:v26, b1:v26], kind=I64 }      -> x1
+    v75  Phi { incoming=[b4:v26, b1:v26], kind=I64 }      -> x0
     v76  Imm(0)                                           -> x6
-    v77  Load { addr=v75, disp=0, kind=I64 }              -> x1
+    v77  Load { addr=v75, disp=0, kind=I64 }              -> x0
     v78  Imm(0)                                           -> x6
     v79  LifetimeEnd(-1)                                  -> -
     v80  Imm(0)                                           -> x6
     v81  Store { addr=v2, disp=0, value=v77, kind=I64 }   -> -
     v82  LifetimeEnd(0)                                   -> -
-    v83  ImmData(32)                                      -> x1
-    v84  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x1
-    v85  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x1
-    terminator Bz { cond=v85, target=b5, fall=b3 }   (exit_acc=v85)
+    v83  ImmData(32)                                      -> x0
+    v84  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x0
+    v85  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x2
+    v86  Imm(1)                                           -> x2
+    v87  BinopI { op=eq, lhs=v84, rhs_imm=3 }             -> x0
+    v88  Select { cond=v87, a=v48, b=v86, kind=I64 }      -> x0
+    terminator Jmp(b3)
   block 3  start_pc=0
-    v57  Imm(0)                                           -> x1
-    v58  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v48)
-  block 4  start_pc=0
-    v61  Phi { incoming=[b3:v48, b5:v59], kind=I64 }      -> x0
+    v61  Copy { value=v88, fp=false }                     -> x1
     v62  Imm(0)                                           -> x1
-    v63  Extend { value=v61, kind=I32 }                   -> x1
-    terminator Return(v61)   (exit_acc=v61)
-  block 5  start_pc=0
-    v59  Imm(1)                                           -> x0
-    v60  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v59)
-  block 6  start_pc=0
+    v63  Extend { value=v88, kind=I32 }                   -> x1
+    terminator Return(v88)   (exit_acc=v88)
+  block 4  start_pc=0
     v71  LocalAddr(-1)                                    -> x6
     v72  LifetimeEnd(0)                                   -> -
     v73  LifetimeEnd(0)                                   -> -

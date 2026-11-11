@@ -142,8 +142,8 @@ Disassembly of section .text:
                	casal	w2, w3, [x0]
                	cmp	w2, #0x7
                	cset	x3, eq
-               	cbz	x3, <addr>
-               	mov	x2, x1
+               	cmp	x3, #0x0
+               	csel	x2, x1, x2, ne
                	cbnz	w3, <addr>
                	ldursw	x3, [x29, #-0x10]
                	cmp	w3, #0x8

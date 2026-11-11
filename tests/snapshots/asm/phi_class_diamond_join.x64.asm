@@ -27,12 +27,13 @@ Disassembly of section .text:
 
 <test>:
                	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
+               	movslq	%edx, %rdx
+               	movslq	%esi, %rsi
                	leaq	0x1(%rsi), %rax
+               	leaq	-0x1(%rdx), %rcx
+               	testq	%rdi, %rdi
+               	cmoveq	%rcx, %rax
                	retq
-               	leaq	-0x1(%rdx), %rax
-               	jmp	<addr>
 
 <main>:
                	movl	$0x1e, %eax

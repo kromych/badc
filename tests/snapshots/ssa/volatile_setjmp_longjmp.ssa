@@ -19,21 +19,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Unreachable
   block 2  start_pc=0
     v11  LoadLocal { off=-1, kind=I32, volatile }         -> x0
-    v12  BinopI { op=eq, lhs=v11, rhs_imm=2 }             -> x0
-    terminator Bz { cond=v12, target=b5, fall=b3 }   (exit_acc=v12)
+    v12  BinopI { op=eq, lhs=v11, rhs_imm=2 }             -> x1
+    v13  Imm(0)                                           -> x1
+    v14  Imm(1)                                           -> x2
+    v15  BinopI { op=eq, lhs=v11, rhs_imm=2 }             -> x0
+    v16  Select { cond=v15, a=v13, b=v14, kind=I64 }      -> x0
+    terminator Jmp(b3)
   block 3  start_pc=0
-    v13  Imm(0)                                           -> x0
-    v14  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v13)
-  block 4  start_pc=0
-    v17  Phi { incoming=[b3:v13, b5:v15], kind=I64 }      -> x0
-    v18  Imm(0)                                           -> x1
-    v19  Extend { value=v17, kind=I32 }                   -> x1
-    terminator Return(v17)   (exit_acc=v17)
-  block 5  start_pc=0
-    v15  Imm(1)                                           -> x0
-    v16  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v15)
+    v21  Copy { value=v16, fp=false }                     -> x1
+    v22  Imm(0)                                           -> x1
+    v23  Extend { value=v16, kind=I32 }                   -> x1
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

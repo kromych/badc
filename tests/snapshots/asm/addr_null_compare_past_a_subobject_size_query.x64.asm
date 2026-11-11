@@ -36,11 +36,11 @@ Disassembly of section .text:
                	cmpl	$0x18, %eax
                	jb	<addr>
                	movq	-0x10(%rbp), %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	movabsq	$0xf0e0d0c0b0a0908, %r11 # imm = 0xF0E0D0C0B0A0908
                	cmpq	%r11, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

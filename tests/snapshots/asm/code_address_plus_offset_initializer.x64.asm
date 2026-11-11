@@ -70,9 +70,9 @@ Disassembly of section .text:
                	cmpq	$0x10, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
+               	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
+               	cmovneq	%rdx, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax

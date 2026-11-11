@@ -187,13 +187,12 @@ Disassembly of section .text:
                	cmpq	$0x59c, %rax            # imm = 0x59C
                	je	<addr>
                	movl	$0x1, %eax
+               	movl	$0x2a, %ecx
                	testq	%rax, %rax
-               	je	<addr>
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, %eax
-               	jmp	<addr>
                	movq	%rbx, %rsi
                	shlq	%rsi
                	movq	%rbx, %rdi

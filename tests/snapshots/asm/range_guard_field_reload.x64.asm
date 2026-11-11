@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	subq	%rsi, %rcx
                	cmpq	%rcx, %rax
-               	jae	<addr>
+               	cmovaeq	%rcx, %rax
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movabsq	$0x7ffffffffffffffc, %rax # imm = 0x7FFFFFFFFFFFFFFC
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	subq	%rsi, %rcx
                	cmpq	%rcx, %rax
-               	jae	<addr>
+               	cmovaeq	%rcx, %rax
                	cmpl	$0x3, %eax
                	jne	<addr>
                	movabsq	$-0x7ffffffffffffffc, %rax # imm = 0x8000000000000004
@@ -98,15 +98,9 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
                	subq	%rdx, %rcx
                	cmpq	%rcx, %rax
-               	jae	<addr>
+               	cmovaeq	%rcx, %rax
                	cmpl	$-0x16, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	movq	%rcx, %rax
-               	jmp	<addr>
-               	movq	%rcx, %rax
-               	jmp	<addr>

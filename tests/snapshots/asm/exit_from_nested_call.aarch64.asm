@@ -48,9 +48,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	cbnz	w0, <addr>
-               	mov	x0, #0x4                // =4
+               	mov	x1, #0x4                // =4
+               	mov	x2, #0x5                // =5
+               	cmp	w0, #0x0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x5                // =5
-               	b	<addr>

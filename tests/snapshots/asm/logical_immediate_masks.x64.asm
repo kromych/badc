@@ -202,20 +202,25 @@ Disassembly of section .text:
 
 <classify>:
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
                	testb	$0x40, %dil
-               	je	<addr>
-               	movl	$0x1, %eax
+               	cmovneq	%rcx, %rax
                	movq	%rdi, %rcx
                	andq	$0xf0, %rcx
+               	movq	%rax, %rdx
+               	orq	$0x2, %rdx
                	cmpl	$0x30, %ecx
-               	jne	<addr>
-               	orq	$0x2, %rax
-               	btq	$0x3f, %rdi
-               	jb	<addr>
-               	orq	$0x4, %rax
+               	cmoveq	%rdx, %rax
+               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
+               	andq	%rdi, %rcx
+               	movq	%rax, %rdx
+               	orq	$0x4, %rdx
+               	testq	%rcx, %rcx
+               	cmoveq	%rdx, %rax
+               	movq	%rax, %rcx
+               	orq	$0x8, %rcx
                	testl	$0xf0f0f0f, %edi        # imm = 0xF0F0F0F
-               	je	<addr>
-               	orq	$0x8, %rax
+               	cmovneq	%rcx, %rax
                	retq
 
 <update>:
@@ -423,25 +428,28 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	-0x20(%rbp), %rdx
                	andq	%rbx, %rdx
+               	movl	$0x1, %esi
                	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	$0x1, %ecx
+               	cmovneq	%rsi, %rcx
                	movq	-0x18(%rbp), %rdx
                	andq	%rbx, %rdx
+               	movq	%rcx, %rsi
+               	orq	$0x2, %rsi
                	cmpq	$0x30, %rdx
-               	jne	<addr>
-               	orq	$0x2, %rcx
+               	cmoveq	%rsi, %rcx
                	movq	-0x10(%rbp), %rdx
                	andq	%rbx, %rdx
+               	movq	%rcx, %rsi
+               	orq	$0x4, %rsi
                	testq	%rdx, %rdx
-               	jne	<addr>
-               	orq	$0x4, %rcx
+               	cmoveq	%rsi, %rcx
                	movl	%ebx, %edx
                	movl	-0x8(%rbp), %esi
                	andq	%rsi, %rdx
+               	movq	%rcx, %rsi
+               	orq	$0x8, %rsi
                	testq	%rdx, %rdx
-               	je	<addr>
-               	orq	$0x8, %rcx
+               	cmovneq	%rsi, %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
                	incq	%r12

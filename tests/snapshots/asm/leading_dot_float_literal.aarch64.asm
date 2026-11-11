@@ -18,15 +18,15 @@ Disassembly of section .text:
                	fmov	d1, #0.25000000
                	fmov	d2, #25.00000000
                	mov	x0, #0x1                // =1
+               	mov	x1, #0x0                // =0
                	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x0, ne
+               	mov	x1, #0x0                // =0
                	fcmp	d1, d1
-               	b.eq	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x0, ne
+               	mov	x1, #0x0                // =0
                	fcmp	d2, d2
-               	b.eq	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x0, ne
                	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0x0                // =0

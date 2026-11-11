@@ -18,9 +18,8 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	str	w1, [x0, #0x30]
                	ldrsw	x0, [x0, #0x30]
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	w0, #0x5
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

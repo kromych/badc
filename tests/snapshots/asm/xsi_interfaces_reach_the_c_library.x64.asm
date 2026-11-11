@@ -391,11 +391,11 @@ Disassembly of section .text:
                	movl	$0x21, %eax
                	jmp	<addr>
                	movq	<rip>, %rax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x22, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x22, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	jmp	<addr>
                	xorl	%edi, %edi
                	xorl	%eax, %eax

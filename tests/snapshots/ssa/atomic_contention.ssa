@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x8
     v10  Imm(0)                                           -> x0
-    terminator Jmp(b11)   (exit_acc=v9)
+    terminator Jmp(b9)   (exit_acc=v9)
   block 1  start_pc=0
     v14  ImmData(72)                                      -> x7
     v15  AtomicLoad { addr=v14, width=8, order=Relaxed }  -> x1
@@ -37,65 +37,61 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v32  BinopI { op=and, lhs=v31, rhs_imm=4294967295 }   -> x0
     terminator Jmp(b2)   (exit_acc=v31)
   block 2  start_pc=0
-    v34  Phi { incoming=[b1:v15, b5:v41], kind=I64 }      -> x1
+    v34  Phi { incoming=[b1:v15, b4:v40], kind=I64 }      -> x1
     v35  ImmData(72)                                      -> x0
     v36  Imm(0)                                           -> x0
     v37  BinopI { op=add, lhs=v34, rhs_imm=1 }            -> x6
     v38  AtomicCas { addr=v14, expected=v34, desired=v37, width=8, order=AcqRel } -> x0
     v39  Binop { op=eq, lhs=v38, rhs=v34 }                -> x6
-    terminator Bz { cond=v39, target=b6, fall=b3 }   (exit_acc=v39)
+    v40  Select { cond=v39, a=v34, b=v38, kind=I64 }      -> x1
+    terminator Jmp(b3)
   block 3  start_pc=0
-    terminator Jmp(b4)
+    v42  Copy { value=v40, fp=false }                     -> x0
+    v43  BinopI { op=eq, lhs=v39, rhs_imm=0 }             -> x0
+    terminator Bnz { cond=v39, target=b5, fall=b4 }   (low word)   (exit_acc=v43)
   block 4  start_pc=0
-    v41  Phi { incoming=[b3:v34, b6:v38], kind=I64 }      -> x1
-    v42  BinopI { op=eq, lhs=v39, rhs_imm=0 }             -> x0
-    terminator Bnz { cond=v39, target=b7, fall=b5 }   (low word)   (exit_acc=v42)
-  block 5  start_pc=0
     terminator Jmp(b2)
+  block 5  start_pc=0
+    v44  ImmData(96)                                      -> x0
+    v45  Imm(1)                                           -> x1
+    v46  AtomicRmw { op=Xchg, addr=v44, value=v18, width=4, order=Acquire } -> x1
+    v47  BinopI { op=shl, lhs=v46, rhs_imm=32 }           -> x0
+    v48  Extend { value=v46, kind=I32 }                   -> x0
+    terminator Bz { cond=v46, target=b6, fall=b5 }   (low word)   (exit_acc=v48)
   block 6  start_pc=0
-    v40  Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v38)
+    v49  ImmData(112)                                     -> x0
+    v50  Load { addr=v49, disp=0, kind=I64 pc_rel }       -> x0
+    v51  BinopI { op=add, lhs=v50, rhs_imm=1 }            -> x0
+    v52  Store { addr=v49, disp=0, value=v51, kind=I64 pc_rel } -> -
+    v53  ImmData(96)                                      -> x0
+    v54  Imm(0)                                           -> x1
+    v55  AtomicStore { addr=v53, value=v54, width=4, order=Release } -> -
+    terminator Jmp(b7)   (exit_acc=v55)
   block 7  start_pc=0
-    v43  ImmData(96)                                      -> x0
-    v44  Imm(1)                                           -> x1
-    v45  AtomicRmw { op=Xchg, addr=v43, value=v18, width=4, order=Acquire } -> x1
-    v46  BinopI { op=shl, lhs=v45, rhs_imm=32 }           -> x0
-    v47  Extend { value=v45, kind=I32 }                   -> x0
-    terminator Bz { cond=v45, target=b8, fall=b7 }   (low word)   (exit_acc=v47)
+    v56  ImmData(104)                                     -> x0
+    v57  Imm(1)                                           -> x1
+    v58  AtomicRmw { op=Xchg, addr=v56, value=v18, width=1, order=Acquire } -> x1
+    v59  BinopI { op=and, lhs=v58, rhs_imm=255 }          -> x1
+    terminator Bz { cond=v59, target=b8, fall=b7 }   (exit_acc=v59)
   block 8  start_pc=0
-    v48  ImmData(112)                                     -> x0
-    v49  Load { addr=v48, disp=0, kind=I64 pc_rel }       -> x0
-    v50  BinopI { op=add, lhs=v49, rhs_imm=1 }            -> x0
-    v51  Store { addr=v48, disp=0, value=v50, kind=I64 pc_rel } -> -
-    v52  ImmData(96)                                      -> x0
-    v53  Imm(0)                                           -> x1
-    v54  AtomicStore { addr=v52, value=v53, width=4, order=Release } -> -
-    terminator Jmp(b9)   (exit_acc=v54)
+    v60  ImmData(120)                                     -> x0
+    v61  Load { addr=v60, disp=0, kind=I64 pc_rel }       -> x0
+    v62  BinopI { op=add, lhs=v61, rhs_imm=1 }            -> x0
+    v63  Store { addr=v60, disp=0, value=v62, kind=I64 pc_rel } -> -
+    v64  ImmData(104)                                     -> x0
+    v65  Imm(0)                                           -> x1
+    v66  AtomicStore { addr=v64, value=v65, width=1, order=Release } -> -
+    v67  LifetimeEnd(0)                                   -> -
+    v68  Extend { value=v11, kind=I32 }                   -> x0
+    v69  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x8
+    v70  Extend { value=v69, kind=I32, nsw }              -> x0
+    terminator Jmp(b9)   (exit_acc=v69)
   block 9  start_pc=0
-    v55  ImmData(104)                                     -> x0
-    v56  Imm(1)                                           -> x1
-    v57  AtomicRmw { op=Xchg, addr=v55, value=v18, width=1, order=Acquire } -> x1
-    v58  BinopI { op=and, lhs=v57, rhs_imm=255 }          -> x1
-    terminator Bz { cond=v58, target=b10, fall=b9 }   (exit_acc=v58)
-  block 10  start_pc=0
-    v59  ImmData(120)                                     -> x0
-    v60  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x0
-    v61  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x0
-    v62  Store { addr=v59, disp=0, value=v61, kind=I64 pc_rel } -> -
-    v63  ImmData(104)                                     -> x0
-    v64  Imm(0)                                           -> x1
-    v65  AtomicStore { addr=v63, value=v64, width=1, order=Release } -> -
-    v66  LifetimeEnd(0)                                   -> -
-    v67  Extend { value=v11, kind=I32 }                   -> x0
-    v68  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x8
-    v69  Extend { value=v68, kind=I32, nsw }              -> x0
-    terminator Jmp(b11)   (exit_acc=v68)
-  block 11  start_pc=0
-    v11  Phi { incoming=[b0:v9, b10:v68], kind=I64 }      -> x8
+    v11  Phi { incoming=[b0:v9, b8:v69], kind=I64 }       -> x8
     v12  Extend { value=v11, kind=I32 }                   -> x0
     v13  BinopI { op=lt, lhs=v11, rhs_imm=10000 }         -> x0
-    terminator Bz { cond=v13, target=b12, fall=b1 }   (exit_acc=v13)
-  block 12  start_pc=0
+    terminator Bz { cond=v13, target=b10, fall=b1 }   (exit_acc=v13)
+  block 10  start_pc=0
     v33  Imm(0)                                           -> x0
     terminator Return(v33)   (exit_acc=v33)
 ; --- SSA dump (ok=true) ent_pc=3 ---

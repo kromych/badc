@@ -341,24 +341,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 33  start_pc=0
     v277 ImmData(336)                                     -> x0
     v278 Load { addr=v277, disp=0, kind=I32 pc_rel }      -> x0
-    v279 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x0
+    v279 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x1
     v280 Imm(0)                                           -> x1
-    terminator Bz { cond=v279, target=b36, fall=b34 }   (exit_acc=v279)
+    v281 Imm(0)                                           -> x1
+    v282 Imm(8)                                           -> x2
+    v283 BinopI { op=eq, lhs=v278, rhs_imm=4 }            -> x0
+    v284 Select { cond=v283, a=v281, b=v282, kind=I64 }   -> x0
+    terminator Jmp(b34)
   block 34  start_pc=0
-    v281 Imm(1)                                           -> x0
-    v282 Imm(0)                                           -> x0
-    v283 Imm(0)                                           -> x0
-    v284 Imm(0)                                           -> x1
-    terminator Jmp(b35)   (exit_acc=v283)
-  block 35  start_pc=0
-    v289 Phi { incoming=[b34:v283, b36:v287], kind=I64 }  -> x0
-    v290 Imm(0)                                           -> x1
-    v291 Extend { value=v289, kind=I32 }                  -> x1
-    terminator Return(v289)   (exit_acc=v289)
-  block 36  start_pc=0
-    v287 Imm(8)                                           -> x0
-    v288 Imm(0)                                           -> x1
-    terminator Jmp(b35)   (exit_acc=v287)
+    v293 Copy { value=v284, fp=false }                    -> x1
+    v294 Imm(0)                                           -> x1
+    v295 Extend { value=v284, kind=I32 }                  -> x1
+    terminator Return(v284)   (exit_acc=v284)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

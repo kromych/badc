@@ -809,17 +809,17 @@ Disassembly of section .text:
                	cmpl	$0x12, %eax
                	jl	<addr>
                	movl	<rip>, %eax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1e, %edx
                	cmpl	$0x2d, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leaq	-0x490(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	vzeroupper
                	leave
                	retq
-               	movl	$0x1e, %eax
-               	jmp	<addr>
                	addq	$0xa, %rax
                	leaq	-0x490(%rbp), %rsp
                	popq	%rbx

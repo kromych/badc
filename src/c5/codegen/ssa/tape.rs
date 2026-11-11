@@ -174,6 +174,9 @@ pub(crate) struct Insertion {
     pub inst: Inst,
     /// `FunctionSsa::f32_values` entry for the inserted value.
     pub is_f32: bool,
+    /// The old value the inserted one copies, whose `cmp32` and `div32`
+    /// marks it takes; a materialization has none.
+    pub copy_of: Option<ValueId>,
 }
 
 /// Old-to-new value ids, and the id each insertion received.
@@ -310,8 +313,6 @@ fn insert_keeping(
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + ins.len());
     let mut new_src: Vec<crate::c5::ir::InstSrc> = Vec::with_capacity(n_old + ins.len());
     let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + ins.len());
-    // An inserted value is a copy or a materialization, never a
-    // comparison or division, so it carries no narrow-op mark.
     let mut new_cmp: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut new_div: Vec<bool> = Vec::with_capacity(n_old + ins.len());
     let mut remap: Vec<ValueId> = vec![NO_VALUE; n_old];
@@ -338,8 +339,13 @@ fn insert_keeping(
                     At::Empty(_) => src,
                 });
                 new_f32.push(ins[cur].is_f32);
-                new_cmp.push(false);
-                new_div.push(false);
+                let mark = |t: &[bool]| {
+                    ins[cur]
+                        .copy_of
+                        .is_some_and(|v| t.get(v as usize) == Some(&true))
+                };
+                new_cmp.push(mark(cmp32));
+                new_div.push(mark(div32));
                 cur += 1;
             }
         };
@@ -578,6 +584,7 @@ mod tests {
                 at: At::Before(0),
                 inst: Inst::Imm(5),
                 is_f32: true,
+                copy_of: None,
             }],
         );
         assert_eq!(rw.ids, alloc::vec![0]);
@@ -605,6 +612,7 @@ mod tests {
                 at: At::Before(1),
                 inst: Inst::Imm(9),
                 is_f32: false,
+                copy_of: None,
             }],
         );
         assert_eq!(f.insts.len(), 3);
@@ -634,11 +642,13 @@ mod tests {
                     at: At::After(0),
                     inst: Inst::Imm(8),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Before(1),
                     inst: Inst::Imm(9),
                     is_f32: false,
+                    copy_of: None,
                 },
             ],
         );
@@ -673,21 +683,25 @@ mod tests {
                     at: At::After(0),
                     inst: Inst::Imm(7),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Empty(1),
                     inst: Inst::Imm(8),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Empty(2),
                     inst: Inst::Imm(9),
                     is_f32: false,
+                    copy_of: None,
                 },
                 Insertion {
                     at: At::Before(1),
                     inst: Inst::Imm(6),
                     is_f32: false,
+                    copy_of: None,
                 },
             ],
         );
@@ -717,6 +731,7 @@ mod tests {
             at,
             inst,
             is_f32: false,
+            copy_of: None,
         };
         let mut ins = alloc::vec![
             put(At::After(1), Inst::Imm(5)),
@@ -877,6 +892,7 @@ mod tests {
                 at: At::Empty(3),
                 inst: Inst::Imm(7),
                 is_f32: false,
+                copy_of: None,
             }],
         );
         assert_eq!(rw.ids, alloc::vec![3]);

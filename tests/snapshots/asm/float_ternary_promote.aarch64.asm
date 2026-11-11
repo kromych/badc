@@ -28,12 +28,12 @@ Disassembly of section .text:
                	ret
                	fmov	s0, #3.25000000
                	movi	d1, #0000000000000000
+               	fmov	s2, #-3.25000000
                	fcmpe	s0, s1
-               	b.le	<addr>
-               	fmov	s2, #3.25000000
+               	fcsel	s2, s0, s2, gt
+               	fmov	s3, #-3.25000000
                	fcmpe	s0, s1
-               	b.pl	<addr>
-               	fmov	s0, #-3.25000000
+               	fcsel	s0, s3, s0, mi
                	fadd	s0, s2, s0
                	fmov	s1, #6.50000000
                	fcmp	s0, s1
@@ -48,7 +48,3 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	fmov	s0, #3.25000000
-               	b	<addr>
-               	fmov	s2, #-3.25000000
-               	b	<addr>

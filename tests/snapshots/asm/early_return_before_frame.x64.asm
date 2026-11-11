@@ -345,10 +345,10 @@ Disassembly of section .text:
                	movq	%rax, %r8
                	shlq	%r8
                	leaq	0x1(%r8), %r9
+               	imulq	$0x18, %r9, %rbx
+               	addq	%rbx, %rcx
                	cmpl	$0x7, %r9d
-               	jge	<addr>
-               	imulq	$0x18, %r9, %r9
-               	addq	%r9, %rcx
+               	cmovgeq	%rdx, %rcx
                	movq	%rcx, (%rdi)
                	leaq	-0x2a8(%rbp), %rcx
                	addq	%rcx, %rsi
@@ -362,9 +362,6 @@ Disassembly of section .text:
                	addq	%rdi, %rcx
                	jmp	<addr>
                	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	movq	%rdx, %rcx
-               	jmp	<addr>
                	movq	%rcx, 0x8(%rsi)
                	incq	%rax
                	cmpl	$0x7, %eax

@@ -57,9 +57,9 @@ Disassembly of section .text:
                	jae	<addr>
                	leaq	(%rdi,%rcx), %rdx
                	movzbq	(%rdx), %rdx
+               	leaq	0x1(%rax), %r8
                	testl	%edx, %edx
-               	je	<addr>
-               	incq	%rax
+               	cmovneq	%r8, %rax
                	incq	%rcx
                	cmpq	%rsi, %rcx
                	jb	<addr>
@@ -268,6 +268,8 @@ Disassembly of section .text:
 <loop_block>:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
+               	testl	%ecx, %ecx
+               	cmovneq	%rax, %rax
                	incq	%rcx
                	cmpl	$0x2, %ecx
                	jl	<addr>
@@ -355,9 +357,9 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	callq	<addr>
                	addq	%rbx, %rax
+               	movl	$0x64, %ecx
                	cmpl	$0x64, %eax
-               	jle	<addr>
-               	movl	$0x64, %eax
+               	cmovgq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

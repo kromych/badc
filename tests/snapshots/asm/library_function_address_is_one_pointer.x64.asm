@@ -54,11 +54,11 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	addq	%rbx, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpq	$0x6, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

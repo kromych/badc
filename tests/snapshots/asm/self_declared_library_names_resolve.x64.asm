@@ -43,10 +43,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	-0x8(%rbp), %rax
                	callq	*%rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpq	$0x3, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

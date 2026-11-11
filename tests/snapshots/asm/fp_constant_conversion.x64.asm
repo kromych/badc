@@ -110,11 +110,11 @@ Disassembly of section .text:
                	movb	$0x5, %al
                	callq	<addr>
                	movss	-0x8(%rbp), %xmm0
-               	movl	$0x3dcccccd, %ecx       # imm = 0x3DCCCCCD
-               	movq	%rcx, %xmm14
+               	leaq	0x1(%rax), %rcx
+               	movl	$0x3dcccccd, %edx       # imm = 0x3DCCCCCD
+               	movq	%rdx, %xmm14
                	ucomiss	%xmm0, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	incq	%rax
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	leave
                	retq

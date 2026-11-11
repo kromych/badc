@@ -70,13 +70,14 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	callq	<addr>
                	leaq	(%rsp), %rax
-               	testb	$0x3f, %al
-               	jne	<addr>
-               	movl	$0x3, %eax
+               	andq	$0x3f, %rax
+               	movl	$0x3, %ecx
+               	movl	$0x64, %edx
+               	testl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x64, %eax
-               	jmp	<addr>
 
 <vla_saves>:
                	pushq	%rbp
@@ -145,18 +146,19 @@ Disassembly of section .text:
                	leaq	(%rbx,%r12), %rax
                	leaq	(%rsp), %rcx
                	movsbq	(%rsp), %rdx
-               	addq	%rax, %rdx
-               	testb	$0x3f, %cl
-               	jne	<addr>
-               	xorl	%eax, %eax
                	addq	%rdx, %rax
+               	andq	$0x3f, %rcx
+               	xorl	%edx, %edx
+               	movl	$0x3e8, %esi            # imm = 0x3E8
+               	testl	%ecx, %ecx
+               	movq	%rsi, %rcx
+               	cmoveq	%rdx, %rcx
+               	addq	%rcx, %rax
                	leaq	-0x10(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
                	retq
-               	movl	$0x3e8, %eax            # imm = 0x3E8
-               	jmp	<addr>
 
 <far_alloca>:
                	pushq	%rbp
@@ -457,9 +459,11 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
+               	xorl	%ecx, %ecx
+               	movl	$0x3, %edx
                	cmpq	$0xed11, %rax           # imm = 0xED11
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -467,5 +471,3 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>

@@ -59,22 +59,22 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	bl	<addr>
                	mov	x0, sp
-               	ldur	x2, [x29, #-0x8]
-               	and	x1, x0, #0x3f
-               	cmp	w1, #0x0
-               	cset	x1, ne
+               	ldur	x1, [x29, #-0x8]
+               	and	x2, x0, #0x3f
+               	cmp	w2, #0x0
+               	cset	x2, ne
                	ldrb	w3, [sp, #0x3f]
                	cmp	w3, #0x3
                	cset	x3, ne
-               	orr	x3, x1, x3, lsl #1
-               	cmp	x0, x2
-               	mov	x1, #0x1                // =1
-               	b.lo	<addr>
-               	sub	x0, x0, x2
+               	orr	x2, x2, x3, lsl #1
+               	mov	x3, #0x1                // =1
+               	sub	x4, x0, x1
                	mov	x17, #0x1000            // =4096
-               	cmp	x0, x17
-               	cset	x1, hi
-               	orr	x0, x3, x1, lsl #2
+               	cmp	x4, x17
+               	cset	x4, hi
+               	cmp	x0, x1
+               	csel	x0, x3, x4, lo
+               	orr	x0, x2, x0, lsl #2
                	sub	sp, x29, #0x80
                	ldr	x28, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]
@@ -129,15 +129,15 @@ Disassembly of section .text:
                	ldrb	w2, [sp, #0x3f]
                	cmp	w2, #0x3
                	cset	x2, ne
-               	orr	x2, x1, x2, lsl #1
-               	cmp	x0, x20
-               	mov	x1, #0x1                // =1
-               	b.lo	<addr>
-               	sub	x0, x0, x20
+               	orr	x1, x1, x2, lsl #1
+               	mov	x2, #0x1                // =1
+               	sub	x3, x0, x20
                	mov	x17, #0x1000            // =4096
-               	cmp	x0, x17
-               	cset	x1, hi
-               	orr	x0, x2, x1, lsl #2
+               	cmp	x3, x17
+               	cset	x3, hi
+               	cmp	x0, x20
+               	csel	x0, x2, x3, lo
+               	orr	x0, x1, x0, lsl #2
                	sub	sp, x29, #0x80
                	ldr	x28, [sp, #0x40]
                	ldp	x26, x27, [sp, #0x30]

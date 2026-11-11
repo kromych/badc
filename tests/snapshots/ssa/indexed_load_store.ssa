@@ -226,22 +226,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v223 Extend { value=v189, kind=I32 }                  -> x0
     v224 Extend { value=v189, kind=I32 }                  -> x0
     v225 BinopI { op=eq, lhs=v189, rhs_imm=2940 }         -> x0
-    terminator Bz { cond=v225, target=b6, fall=b4 }   (exit_acc=v225)
+    v226 Imm(0)                                           -> x0
+    v227 Imm(1)                                           -> x2
+    v228 BinopI { op=eq, lhs=v189, rhs_imm=2940 }         -> x1
+    v229 Select { cond=v228, a=v226, b=v227, kind=I64 }   -> x0
+    terminator Jmp(b4)
   block 4  start_pc=0
-    v180 Imm(0)                                           -> x0
-    v181 Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v180)
-  block 5  start_pc=0
-    v184 Phi { incoming=[b4:v180, b6:v182], kind=I64 }    -> x0
+    v184 Copy { value=v229, fp=false }                    -> x1
     v185 Imm(0)                                           -> x1
-    v186 Extend { value=v184, kind=I32 }                  -> x1
+    v186 Extend { value=v229, kind=I32 }                  -> x1
     v187 LifetimeEnd(-4)                                  -> -
     v188 LifetimeEnd(-8)                                  -> -
-    terminator Return(v184)   (exit_acc=v184)
-  block 6  start_pc=0
-    v182 Imm(1)                                           -> x0
-    v183 Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v182)
+    terminator Return(v229)   (exit_acc=v229)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

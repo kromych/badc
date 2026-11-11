@@ -43,10 +43,10 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
                	movl	-0x8(%rbp), %eax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x2, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

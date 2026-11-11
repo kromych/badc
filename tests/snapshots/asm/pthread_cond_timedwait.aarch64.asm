@@ -64,10 +64,10 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0xa0
                	bl	<addr>
-               	cbz	w20, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x4                // =4
+               	cmp	w20, #0x0
+               	csel	x0, x0, x1, ne
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x20, [sp], #0xd0
                	ret
-               	mov	x0, #0x4                // =4
-               	b	<addr>

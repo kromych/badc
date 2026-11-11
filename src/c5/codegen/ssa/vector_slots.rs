@@ -180,6 +180,7 @@ pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
                 at,
                 inst,
                 is_f32: false,
+                copy_of: None,
             })
         };
         put(
@@ -266,6 +267,7 @@ fn split_wide_reads(func: &mut FunctionSsa) {
                     bytes,
                 },
                 is_f32: false,
+                copy_of: None,
             }),
             _ => None,
         })
@@ -750,6 +752,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                 at: At::Before(at),
                 inst,
                 is_f32: false,
+                copy_of: None,
             })
         };
         match e {
@@ -760,6 +763,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     at: At::After(*at),
                     inst: slot_store(*base, *at, w),
                     is_f32: false,
+                    copy_of: None,
                 });
             }
             Edit::Copy { at, src, .. } => put(

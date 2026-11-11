@@ -26,13 +26,13 @@ Disassembly of section .text:
                	int3
 
 <abs>:
-               	testl	%edi, %edi
-               	jge	<addr>
+               	movslq	%edi, %rdi
                	movl	$0x1, %eax
                	subq	%rdi, %rax
+               	leaq	0x1(%rdi), %rcx
+               	testl	%edi, %edi
+               	cmovgeq	%rcx, %rax
                	retq
-               	leaq	0x1(%rdi), %rax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

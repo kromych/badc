@@ -21,15 +21,15 @@ Disassembly of section .text:
                	ldur	w1, [x29, #-0x8]
                	ldur	w0, [x29, #-0x4]
                	lsl	x1, x1, #2
-               	orr	x2, x1, x0, lsr #30
-               	lsl	x1, x0, #2
-               	ldur	w0, [x29, #-0x8]
+               	orr	x1, x1, x0, lsr #30
+               	lsl	x0, x0, #2
+               	ldur	w2, [x29, #-0x8]
                	ldur	w3, [x29, #-0x4]
-               	add	x0, x2, x0
-               	add	x2, x1, x3
-               	cmp	w2, w1
-               	b.hs	<addr>
-               	add	x0, x0, #0x1
+               	add	x1, x1, x2
+               	add	x2, x0, x3
+               	add	x3, x1, #0x1
+               	cmp	w2, w0
+               	csel	x0, x3, x1, lo
                	mov	w0, w0
                	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10
@@ -44,15 +44,15 @@ Disassembly of section .text:
                	ldur	w1, [x29, #-0x8]
                	ldur	w0, [x29, #-0x4]
                	lsl	x1, x1, #3
-               	orr	x2, x1, x0, lsr #29
-               	lsl	x1, x0, #3
-               	ldur	w0, [x29, #-0x8]
+               	orr	x1, x1, x0, lsr #29
+               	lsl	x0, x0, #3
+               	ldur	w2, [x29, #-0x8]
                	ldur	w3, [x29, #-0x4]
-               	add	x0, x2, x0
-               	add	x2, x1, x3
-               	cmp	w2, w1
-               	b.hs	<addr>
-               	add	x0, x0, #0x1
+               	add	x1, x1, x2
+               	add	x2, x0, x3
+               	add	x3, x1, #0x1
+               	cmp	w2, w0
+               	csel	x0, x3, x1, lo
                	mov	w0, w0
                	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10

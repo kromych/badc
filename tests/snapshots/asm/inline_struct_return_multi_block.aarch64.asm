@@ -79,13 +79,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]
-               	cbz	x0, <addr>
-               	mov	x0, #0x7                // =7
+               	mov	x1, #0x7                // =7
+               	mov	x2, #0x0                // =0
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
                	and	x0, x1, #0x3
                	ldrsw	x0, [x2, x0, lsl #2]
                	b	<addr>

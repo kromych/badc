@@ -158,10 +158,10 @@ Disassembly of section .text:
                	movl	$0x14, %edx
                	movb	$0x0, %al
                	callq	<addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x160, %rax            # imm = 0x160
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

@@ -36,9 +36,9 @@ Disassembly of section .text:
 <store_consumed_after_branch_is_silenced>:
                	movslq	%edi, %rdi
                	movl	$0x1, %eax
+               	movl	$0x2, %ecx
                	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x2, %eax
+               	cmovneq	%rcx, %rax
                	retq
 
 <address_escapes_silences>:

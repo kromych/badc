@@ -125,12 +125,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
+               	xorl	%ecx, %ecx
+               	movl	$0xa, %edx
                	cmpq	%r12, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
-               	movl	$0xa, %eax
-               	jmp	<addr>

@@ -23,13 +23,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x3                // =3
                	cmp	w0, #0x7
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	b	<addr>
+               	udf	#0x0
 
 <asm_fn>:
                	mov	w0, #0x7                // =7

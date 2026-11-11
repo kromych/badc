@@ -230,10 +230,10 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	addq	%rcx, %rax
-               	testl	%eax, %eax
-               	je	<addr>
+               	movslq	%eax, %rcx
+               	movl	$0x2a, %edx
+               	testq	%rcx, %rcx
+               	cmoveq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2a, %eax
-               	jmp	<addr>

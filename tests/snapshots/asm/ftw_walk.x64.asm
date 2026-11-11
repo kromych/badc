@@ -71,12 +71,11 @@ Disassembly of section .text:
                	retq
 
 <stop_at_file>:
-               	testl	%edx, %edx
-               	jne	<addr>
                	movl	$0x2a, %eax
+               	xorl	%ecx, %ecx
+               	testl	%edx, %edx
+               	cmovneq	%rcx, %rax
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -27,12 +27,12 @@ Disassembly of section .text:
 
 <main>:
                	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
+               	movl	$0x2a, %ecx
+               	xorl	%edx, %edx
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movl	$0x2a, %eax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
+               	cmovpq	%rdx, %rax
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>

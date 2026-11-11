@@ -86,13 +86,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
+               	movslq	%eax, %rax
+               	movl	$0x3, %ecx
+               	movl	$0x5, %edx
+               	testq	%rax, %rax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x5, %eax
-               	jmp	<addr>
 
 <as_index>:
                	pushq	%rbp

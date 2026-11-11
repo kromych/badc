@@ -653,7 +653,8 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::X86SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
-                | Inst::VecExtract { .. },
+                | Inst::VecExtract { .. }
+                | Inst::Select { .. },
             ) => "a vector result",
             Some(
                 Inst::AtomicRmw { .. }

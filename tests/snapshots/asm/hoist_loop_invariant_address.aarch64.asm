@@ -71,11 +71,9 @@ Disassembly of section .text:
                	add	x2, x1, x0, lsl #4
                	add	x0, x0, #0x1
                	str	w0, [x2]
-               	cmp	w0, #0x18
-               	b.ge	<addr>
                	add	x3, x1, x0, lsl #4
-               	b	<addr>
-               	mov	x3, x9
+               	cmp	w0, #0x18
+               	csel	x3, x3, x9, lt
                	str	x3, [x2, #0x8]
                	cmp	w0, #0x18
                	b.lt	<addr>

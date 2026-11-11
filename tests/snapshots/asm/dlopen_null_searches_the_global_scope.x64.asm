@@ -89,11 +89,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x5, %edx
                	testq	%rax, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x5, %eax
-               	jmp	<addr>

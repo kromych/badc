@@ -300,9 +300,10 @@ Disassembly of section .text:
                	fmov	d1, #2.50000000
                	fcmp	d0, d1
                	cset	x1, eq
-               	cbz	x1, <addr>
                	cmp	w2, #0x7
-               	cset	x0, eq
+               	cset	x2, eq
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0

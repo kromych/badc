@@ -100,9 +100,10 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %ecx
+               	movq	%rax, %rcx
+               	cmovneq	%rdx, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rcx
@@ -138,8 +139,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	popq	%rbp
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rcx

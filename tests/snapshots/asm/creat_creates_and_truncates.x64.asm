@@ -151,12 +151,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movl	$0x7, %ecx
+               	xorl	%edx, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>

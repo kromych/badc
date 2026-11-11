@@ -264,9 +264,9 @@ Disassembly of section .text:
                	movb	$0x0, (%rcx,%r8)
                	movq	%r9, %rsp
                	jmp	<addr>
+               	movl	$0x1, %r12d
                	cmpq	%rdi, %r8
-               	je	<addr>
-               	movl	$0x1, %edx
+               	cmovneq	%r12, %rdx
                	jmp	<addr>
                	movslq	<rip>, %r8 # <addr>
                	leaq	0x1(%r8), %r12

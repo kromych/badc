@@ -34,23 +34,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v28  Imm(0)                                           -> x1
     v29  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v30  Imm(1109917696)                                  -> x1 [f32]
-    v31  Binop { op=feq, lhs=v29, rhs=v30 }               -> x1
-    terminator Bz { cond=v31, target=b3, fall=b1 }   (exit_acc=v31)
+    v31  Binop { op=feq, lhs=v29, rhs=v30 }               -> x2
+    v32  Imm(42)                                          -> x2
+    v33  Binop { op=feq, lhs=v29, rhs=v30 }               -> x1
+    v34  Select { cond=v33, a=v32, b=v10, kind=I64 }      -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v32  Imm(42)                                          -> x0
-    v33  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v32)
-  block 2  start_pc=0
-    v36  Phi { incoming=[b1:v32, b3:v10], kind=I64 }      -> x0
-    v37  Imm(0)                                           -> x1
-    v38  Extend { value=v36, kind=I32 }                   -> x1
-    v39  LifetimeEnd(-1)                                  -> -
-    v40  LifetimeEnd(0)                                   -> -
-    terminator Return(v36)   (exit_acc=v36)
-  block 3  start_pc=0
-    v34  Imm(0)                                           -> x1
-    v35  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v10)
+    v39  Copy { value=v34, fp=false }                     -> x1
+    v40  Imm(0)                                           -> x1
+    v41  Extend { value=v34, kind=I32 }                   -> x1
+    v42  LifetimeEnd(-1)                                  -> -
+    v43  LifetimeEnd(0)                                   -> -
+    terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

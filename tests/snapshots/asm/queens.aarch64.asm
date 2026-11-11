@@ -30,13 +30,13 @@ Disassembly of section .text:
                	sub	x0, x21, x2
                	ldrsw	x1, [x22, x2, lsl #2]
                	sub	x3, x20, x1
+               	neg	x1, x3
                	cmp	w3, #0x0
-               	b.ge	<addr>
-               	neg	x3, x3
-               	ldrsw	x1, [x22, x2, lsl #2]
-               	cmp	w1, w20
+               	csel	x1, x1, x3, lt
+               	ldrsw	x3, [x22, x2, lsl #2]
+               	cmp	w3, w20
                	b.eq	<addr>
-               	cmp	w0, w3
+               	cmp	w0, w1
                	b.eq	<addr>
                	add	x2, x2, #0x1
                	cmp	w2, w21

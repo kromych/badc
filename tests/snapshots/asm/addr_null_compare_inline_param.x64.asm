@@ -36,10 +36,10 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	addq	$0x5, %rax
                	movl	%eax, <rip> # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpl	$0x6, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

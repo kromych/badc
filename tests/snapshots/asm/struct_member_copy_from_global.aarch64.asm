@@ -18,15 +18,14 @@ Disassembly of section .text:
                	ldr	w1, [x0, #0x18]
                	mov	x2, #0x9                // =9
                	str	w2, [x0, #0x18]
+               	mov	x0, #0x1                // =1
+               	mov	x2, #-0x64              // =-100
                	mov	x17, #-0x1              // =-1
                	cmp	w1, w17
-               	b.lt	<addr>
-               	mov	x0, #0x1                // =1
+               	csel	x0, x0, x2, ge
                	add	x0, x0, #0x1
                	add	x0, x0, #0x1
                	ret
-               	mov	x0, #-0x64              // =-100
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

@@ -131,9 +131,9 @@ Disassembly of section .text:
                	movl	$0x0, -0x438(%rbp)
                	movl	$0x0, -0x434(%rbp)
                	movq	-0x440(%rbp), %rcx
+               	movl	$0x40, %edx
                	cmpq	$0x40, %rcx
-               	jbe	<addr>
-               	movl	$0x40, %ecx
+               	cmovaq	%rdx, %rcx
                	movups	0x160(%rsp), %xmm15
                	movq	%rcx, %xmm14
                	pslld	%xmm14, %xmm15

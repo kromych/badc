@@ -301,8 +301,8 @@ Disassembly of section .text:
                	cset	x20, eq
                	sub	x0, x29, #0x1c8
                	bl	<addr>
-               	cbz	x20, <addr>
-               	mov	x20, #0x0               // =0
-               	b	<addr>
-               	mov	x20, #0x9               // =9
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x9                // =9
+               	cmp	x20, #0x0
+               	csel	x20, x0, x1, ne
                	b	<addr>

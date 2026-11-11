@@ -57,16 +57,16 @@ Disassembly of section .text:
                	movups	%xmm14, (%rcx)
                	movsd	-0x10(%rbp), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
+               	movl	$0x1, %ecx
+               	xorl	%edx, %edx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
+               	cmovpq	%rcx, %rax
                	imulq	$0x14, %rax, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>
                	movl	$0xb, %eax
                	leave
                	retq

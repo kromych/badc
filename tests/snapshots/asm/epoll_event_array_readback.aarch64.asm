@@ -127,11 +127,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldursw	x0, [x29, #-0x34]
                	bl	<addr>
-               	cmp	w20, #0x3
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x9                // =9
+               	mov	x1, #0x9                // =9
+               	cmp	w20, #0x3
+               	csel	x0, x0, x1, eq
                	b	<addr>
                	mov	x0, #0x8                // =8
                	b	<addr>

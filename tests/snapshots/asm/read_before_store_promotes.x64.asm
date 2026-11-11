@@ -27,12 +27,11 @@ Disassembly of section .text:
 
 <maybe>:
                	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
                	movl	$0x1, %eax
+               	movl	$0x2, %ecx
+               	testq	%rdi, %rdi
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
 
 <self_init>:
                	movl	$0x5, %eax
@@ -66,28 +65,26 @@ Disassembly of section .text:
 
 <narrow_maybe>:
                	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
                	movq	$-0x3, %rax
+               	movl	$0x7, %ecx
+               	testq	%rdi, %rdi
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x7, %eax
-               	jmp	<addr>
 
 <u8_maybe>:
                	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
                	movl	$0xc8, %eax
+               	movl	$0x9, %ecx
+               	testq	%rdi, %rdi
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x9, %eax
-               	jmp	<addr>
 
 <loop_first>:
                	xorl	%eax, %eax
                	movq	%rax, %rcx
+               	addq	%rcx, %rdx
                	testl	%eax, %eax
-               	jle	<addr>
-               	addq	%rdx, %rcx
+               	cmovgq	%rdx, %rcx
                	movq	%rax, %rdx
                	shlq	%rdx
                	incq	%rax
@@ -130,17 +127,18 @@ Disassembly of section .text:
                	retq
 
 <inlined>:
+               	movslq	%edi, %rdi
+               	xorl	%eax, %eax
+               	imulq	$0xa, %rdi, %rcx
                	cmpl	$0x2, %edi
-               	jle	<addr>
-               	imulq	$0xa, %rdi, %rax
+               	cmovgq	%rcx, %rax
+               	movq	$-0x1, %rcx
                	cmpl	$0x2, %edi
-               	jle	<addr>
+               	cmovleq	%rcx, %rax
                	leaq	0x3(%rdi), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
                	retq
-               	movq	$-0x1, %rax
-               	jmp	<addr>
 
 <stack_arg>:
                	pushq	%rbp

@@ -188,12 +188,11 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w21
                	b.lt	<addr>
-               	cmp	x5, x1
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	cmp	x5, x1
+               	csel	x0, x0, x2, eq
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

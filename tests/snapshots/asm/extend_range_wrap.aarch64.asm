@@ -31,11 +31,11 @@ Disassembly of section .text:
                	ret
 
 <guarded>:
-               	sxtw	x1, w0
-               	mov	x0, #0x0                // =0
-               	cmp	w1, #0x64
-               	b.ge	<addr>
-               	add	x0, x1, #0x1
+               	sxtw	x0, w0
+               	mov	x1, #0x0                // =0
+               	add	x2, x0, #0x1
+               	cmp	w0, #0x64
+               	csel	x0, x2, x1, lt
                	ret
 
 <uwrap>:
@@ -137,11 +137,11 @@ Disassembly of section .text:
 
 <diff_zero>:
                	sub	x0, x0, x1
-               	cbnz	w0, <addr>
-               	mov	x0, #0x7                // =7
+               	mov	x1, #0x7                // =7
+               	mov	x2, #0x9                // =9
+               	cmp	w0, #0x0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x9                // =9
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

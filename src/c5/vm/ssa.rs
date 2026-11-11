@@ -1663,6 +1663,15 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = frame.regs[*value as usize];
             return Ok(());
         }
+        Inst::Select { cond, a, b, .. } => {
+            let pick = if frame.regs[*cond as usize] != 0 {
+                a
+            } else {
+                b
+            };
+            frame.regs[v as usize] = frame.regs[*pick as usize];
+            return Ok(());
+        }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
             let f = format_of(frame, v);

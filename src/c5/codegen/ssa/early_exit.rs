@@ -99,7 +99,8 @@ fn pure(inst: &Inst) -> bool {
         | Inst::X86SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
-        | Inst::VecExtract { .. } => true,
+        | Inst::VecExtract { .. }
+        | Inst::Select { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }

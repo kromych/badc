@@ -84,20 +84,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
     v62  Binop { op=eq, lhs=v5, rhs=v49 }                 -> x0
-    terminator Bz { cond=v62, target=b12, fall=b10 }   (exit_acc=v62)
-  block 10  start_pc=0
     v63  Imm(0)                                           -> x0
-    v64  Imm(0)                                           -> x1
-    terminator Jmp(b11)   (exit_acc=v63)
-  block 11  start_pc=0
-    v67  Phi { incoming=[b10:v63, b12:v65], kind=I64 }    -> x0
-    v68  Imm(0)                                           -> x1
-    v69  Extend { value=v67, kind=I32 }                   -> x1
-    terminator Return(v67)   (exit_acc=v67)
-  block 12  start_pc=0
-    v65  Imm(1)                                           -> x0
-    v66  Imm(0)                                           -> x1
-    terminator Jmp(b11)   (exit_acc=v65)
+    v64  Imm(1)                                           -> x2
+    v65  Binop { op=eq, lhs=v5, rhs=v49 }                 -> x1
+    v66  Select { cond=v65, a=v63, b=v64, kind=I64 }      -> x0
+    terminator Jmp(b10)
+  block 10  start_pc=0
+    v71  Copy { value=v66, fp=false }                     -> x1
+    v72  Imm(0)                                           -> x1
+    v73  Extend { value=v66, kind=I32 }                   -> x1
+    terminator Return(v66)   (exit_acc=v66)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

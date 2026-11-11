@@ -1226,6 +1226,7 @@ fn is_inline_candidate(
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }
+            | Inst::Select { .. }
             | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
@@ -2248,6 +2249,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecExtract { .. }
+        | Inst::Select { .. }
         | Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
         | Inst::ParamRef { .. }

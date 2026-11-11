@@ -30,9 +30,10 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpl	%esi, %eax
                	jge	<addr>
-               	cmpb	$0x0, (%rdi,%rax)
-               	jne	<addr>
-               	incq	%rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	leaq	0x1(%rcx), %r8
+               	testl	%edx, %edx
+               	cmoveq	%r8, %rcx
                	incq	%rax
                	cmpl	%esi, %eax
                	jl	<addr>
@@ -270,16 +271,12 @@ Disassembly of section .text:
                	retq
 
 <guarded_negate>:
-               	testq	%rdi, %rdi
-               	setg	%cl
-               	movzbq	%cl, %rcx
                	movq	%rsi, %rax
                	negq	%rax
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	xorl	%ecx, %ecx
+               	testq	%rdi, %rdi
+               	cmovleq	%rcx, %rax
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -95,20 +95,17 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Call { target_pc=0, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7   BinopI { op=gt, lhs=v6, rhs_imm=3 }              -> x0
-    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
+    v7   BinopI { op=gt, lhs=v6, rhs_imm=3 }              -> x1
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x2
+    v10  BinopI { op=gt, lhs=v6, rhs_imm=3 }              -> x0
+    v11  Select { cond=v10, a=v8, b=v9, kind=I64 }        -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v8)
-  block 2  start_pc=0
-    v10  Phi { incoming=[b3:v13, b1:v8], kind=I64 }       -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x1
-    v12  Extend { value=v10, kind=I32 }                   -> x1
-    terminator Return(v10)   (exit_acc=v10)
-  block 3  start_pc=0
-    v13  Imm(1)                                           -> x0
-    terminator Jmp(b2)
+    v14  Copy { value=v11, fp=false }                     -> x1
+    v15  Extend { value=v11, kind=I32 }                   -> x1
+    v16  Extend { value=v11, kind=I32 }                   -> x1
+    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=returned_constant
 fn ent_pc=5 n_params=1 variadic=false locals=0

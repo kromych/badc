@@ -311,20 +311,19 @@ Disassembly of section .text:
                	fmov	d1, #4.00000000
                	fmul	d1, d8, d1
                	fcvtzs	x1, d1
-               	add	x1, x0, x1
+               	add	x0, x0, x1
                	adrp	x16, <page>
                	ldr	d1, [x16]
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x0                // =0
                	fcmpe	d0, d1
-               	b.le	<addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x1, x0
+               	csel	x1, x1, x2, gt
+               	add	x0, x0, x1
                	ldp	x20, x21, [sp, #0x50]
                	ldr	d8, [sp, #0x40]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

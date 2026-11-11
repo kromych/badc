@@ -56,10 +56,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x3, %edx
                	testq	%rax, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>

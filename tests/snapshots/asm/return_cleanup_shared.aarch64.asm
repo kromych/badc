@@ -63,9 +63,10 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x8]
+               	mov	x1, #0x3                // =3
+               	mov	x2, #0x14               // =20
                	cmp	w0, #0x1
-               	b.ne	<addr>
-               	mov	x0, #0x3                // =3
+               	csel	x0, x1, x2, eq
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x1, <page>
@@ -86,8 +87,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x14               // =20
-               	b	<addr>
 
 <nested>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -129,9 +128,10 @@ Disassembly of section .text:
                	str	w4, [x1, #0x70]
                	mov	x4, #0x63               // =99
                	strb	w4, [x3, x0]
-               	cmp	w2, #0x2
-               	b.ne	<addr>
                	mov	x0, #0x1e               // =30
+               	mov	x4, #0x28               // =40
+               	cmp	w2, #0x2
+               	csel	x0, x0, x4, eq
                	ldrsw	x2, [x1, #0x70]
                	add	x4, x2, #0x1
                	str	w4, [x1, #0x70]
@@ -142,8 +142,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x28               // =40
-               	b	<addr>
 
 <void_returns>:
                	stp	x29, x30, [sp, #-0x10]!

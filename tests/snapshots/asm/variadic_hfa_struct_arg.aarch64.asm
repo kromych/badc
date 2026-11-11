@@ -97,11 +97,10 @@ Disassembly of section .text:
                	ldr	d1, [x7, #0x8]
                	bl	<addr>
                	fmov	d1, #3.75000000
-               	fcmp	d0, d1
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	fcmp	d0, d1
+               	csel	x0, x0, x1, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

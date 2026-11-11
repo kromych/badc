@@ -63,6 +63,7 @@ fn run_one(func: &mut FunctionSsa) {
             at,
             inst,
             is_f32: false,
+            copy_of: None,
         });
         ins.len() - 1
     };

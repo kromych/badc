@@ -29,32 +29,31 @@ Disassembly of section .text:
                	mov	x1, #0xc2               // =194
                	mov	x2, #0x180              // =384
                	bl	<addr>
-               	mov	x21, x0
-               	cmp	w21, #0x0
+               	mov	x20, x0
+               	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0xd0]
                	ldp	x20, x21, [sp], #0xe0
                	ret
                	sub	x1, x29, #0x80
-               	mov	x0, x21
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	mov	x20, #0x2               // =2
-               	mov	x0, x21
+               	mov	x21, #0x2               // =2
+               	mov	x0, x20
                	bl	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, x21
                	ldp	x29, x30, [sp, #0xd0]
                	ldp	x20, x21, [sp], #0xe0
                	ret
                	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0x1ff
+               	mov	x1, #0x3                // =3
+               	mov	x2, #0x0                // =0
                	cmp	w0, #0x180
-               	b.eq	<addr>
-               	mov	x20, #0x3               // =3
-               	b	<addr>
-               	mov	x20, #0x0               // =0
+               	csel	x21, x1, x2, ne
                	b	<addr>

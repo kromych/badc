@@ -42,12 +42,11 @@ Disassembly of section .text:
                	add	x1, x1, #0x18
                	ldr	x1, [x1]
                	sub	x0, x0, x1
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x2                // =2
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
-               	b	<addr>

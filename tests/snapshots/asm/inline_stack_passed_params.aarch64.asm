@@ -27,12 +27,12 @@ Disassembly of section .text:
                	cmp	w0, w11
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	cbnz	w0, <addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
+               	add	x2, x0, #0x14
+               	cmp	w0, #0x0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x14
-               	b	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x20]
                	cmp	w1, w0

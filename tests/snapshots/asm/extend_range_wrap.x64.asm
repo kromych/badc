@@ -44,9 +44,9 @@ Disassembly of section .text:
 <guarded>:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
+               	leaq	0x1(%rdi), %rcx
                	cmpl	$0x64, %edi
-               	jge	<addr>
-               	leaq	0x1(%rdi), %rax
+               	cmovlq	%rcx, %rax
                	retq
 
 <uwrap>:
@@ -147,12 +147,11 @@ Disassembly of section .text:
 
 <diff_zero>:
                	subq	%rsi, %rdi
-               	testl	%edi, %edi
-               	jne	<addr>
                	movl	$0x7, %eax
+               	movl	$0x9, %ecx
+               	testl	%edi, %edi
+               	cmovneq	%rcx, %rax
                	retq
-               	movl	$0x9, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

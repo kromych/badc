@@ -171,19 +171,19 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
-               	je	<addr>
+               	cmovneq	%rdx, %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x11, %eax
                	leave
                	retq
-               	movl	-0x20(%rbp), %eax
-               	cmpl	$0x63, %eax
+               	movl	-0x20(%rbp), %ecx
+               	cmpl	$0x63, %ecx
                	je	<addr>
                	movl	$0x12, %eax
                	leave
                	retq
-               	cmpl	$0x63, %edx
+               	cmpl	$0x63, %eax
                	je	<addr>
                	movl	$0x13, %eax
                	leave
@@ -243,5 +243,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	movq	%rax, %rdx
-               	jmp	<addr>

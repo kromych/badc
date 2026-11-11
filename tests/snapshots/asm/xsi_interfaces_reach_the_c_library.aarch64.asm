@@ -337,10 +337,10 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	cbz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x22               // =34
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x22               // =34
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	b	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>

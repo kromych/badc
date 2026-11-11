@@ -543,11 +543,10 @@ Disassembly of section .text:
                	incq	%rdx
                	cmpl	$0xe, %edx
                	jl	<addr>
-               	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
-               	movq	%rsi, %rax
-               	cmpq	%r11, %rsi
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
+               	movq	%rsi, %rdx
+               	cmpq	%r11, %rsi
+               	cmovneq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

@@ -89,10 +89,9 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	ldr	x0, [x0, #0x10]
                	ldr	x1, [x1, #0x18]
-               	cbz	x2, <addr>
+               	cmp	x2, #0x0
+               	csel	x0, x0, x1, ne
                	ret
-               	mov	x0, x1
-               	b	<addr>
 
 <use_find>:
                	ldr	x2, [x0]

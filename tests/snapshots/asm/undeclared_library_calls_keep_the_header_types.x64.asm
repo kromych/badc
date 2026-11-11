@@ -39,19 +39,19 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
+               	xorl	%edx, %edx
+               	movl	$0x1, %esi
                	movsd	0x8(%rsp), %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	xorl	%ecx, %ecx
+               	movq	%rdx, %rcx
+               	cmovneq	%rsi, %rcx
+               	cmovpq	%rsi, %rcx
+               	xorl	%edx, %edx
+               	movl	$0x2, %esi
                	cmpl	$0x5, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rsi, %rax
+               	cmoveq	%rdx, %rax
                	orq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
-               	movl	$0x1, %ecx
-               	jmp	<addr>

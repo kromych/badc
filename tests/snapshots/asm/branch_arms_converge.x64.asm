@@ -44,9 +44,9 @@ Disassembly of section .text:
 <keeps_values>:
                	movslq	%edi, %rdi
                	movl	$0x1, %eax
+               	movl	$0x2, %ecx
                	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x2, %eax
+               	cmovneq	%rcx, %rax
                	retq
 
 <keeps_store>:

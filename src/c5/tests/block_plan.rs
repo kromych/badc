@@ -8,10 +8,11 @@ use super::perf_codegen::{
 };
 
 /// The `if` arm only renames, so its block is empty and its edge to the
-/// join swaps the two carried values; the skip edge moves nothing.
-const SWAP_WALK: &str = "long swap_walk(long a, long b, int n) {\n\
-    for (int i = 0; i < n; i++) { if (i & 1) { long t = a; a = b; b = t; } }\n\
-    return a * 3 + b;\n}\n";
+/// join rotates the three carried values; the skip edge moves nothing.
+/// Three merged values keep the branch, which if-conversion leaves alone.
+const SWAP_WALK: &str = "long swap_walk(long a, long b, long c, int n) {\n\
+    for (int i = 0; i < n; i++) { if (i & 1) { long t = a; a = b; b = c; c = t; } }\n\
+    return a * 3 + b * 5 + c;\n}\n";
 
 /// Run-once loops sharing `done`, whose body assigns `len`, read after
 /// them. `scoped` adds a cleanup variable and an `asm goto` with an output
@@ -103,43 +104,40 @@ fn a64_mov_rr(w: u32) -> Option<(u32, u32)> {
     (w & 0xFFE0_FFE0 == 0xAA00_03E0).then_some((w & 31, (w >> 16) & 31))
 }
 
-/// An empty block whose edge moves values keeps its place: the swap is in
-/// the loop, the branch over it lands past it, and nothing lands on a
+/// An empty block whose edge moves values keeps its place: the rotation is
+/// in the loop, the branch over it lands past it, and nothing lands on a
 /// branch.
 #[test]
 fn edge_block_with_moves_keeps_them() {
     let ws = a64_at(SWAP_WALK, "swap_walk", true);
     assert!(a64_branches_land_on_code(&ws), "{ws:08x?}");
-    // Three register copies in a row closing a cycle: d0 <- s0, s0 <- s1,
-    // s1 <- d0.
-    let cycle =
-        ws.windows(3).position(
-            |w| match (a64_mov_rr(w[0]), a64_mov_rr(w[1]), a64_mov_rr(w[2])) {
-                (Some((t, a)), Some((a2, b)), Some((b2, t2))) => a == a2 && b == b2 && t == t2,
-                _ => false,
-            },
-        );
-    let at = cycle.unwrap_or_else(|| panic!("aarch64: no swap in the loop: {ws:08x?}"));
+    // Four register copies in a row closing a cycle: t <- s0, s0 <- s1,
+    // s1 <- s2, s2 <- t.
+    let cycle = ws.windows(4).position(|w| {
+        let m: Option<Vec<(u32, u32)>> = w.iter().map(|&x| a64_mov_rr(x)).collect();
+        m.is_some_and(|m| (0..4).all(|k| m[k].1 == m[(k + 1) % 4].0))
+    });
+    let at = cycle.unwrap_or_else(|| panic!("aarch64: no rotation in the loop: {ws:08x?}"));
     let skips = ws.iter().enumerate().any(
-        |(i, &w)| matches!(a64_branch(w, i), Some((t, false)) if i < at && t == at as i64 + 3),
+        |(i, &w)| matches!(a64_branch(w, i), Some((t, false)) if i < at && t == at as i64 + 4),
     );
     assert!(
         skips,
-        "aarch64: no conditional branch over the swap: {ws:08x?}"
+        "aarch64: no conditional branch over the rotation: {ws:08x?}"
     );
 
     let insns = x64_at(SWAP_WALK, "swap_walk", true);
     assert!(x64_branches_land_on_code(&insns), "{insns:x?}");
     let at = insns
         .iter()
-        .position(|i| i.op == 0x87)
+        .rposition(|i| i.op == 0x87)
         .unwrap_or_else(|| panic!("x86-64: no xchg in the loop: {insns:x?}"));
     let after = insns[at].at + insns[at].len;
     assert!(
         insns[..at]
             .iter()
             .any(|i| i.is_jcc() && i.target() == after),
-        "x86-64: no conditional branch over the swap: {insns:x?}"
+        "x86-64: no conditional branch over the rotation: {insns:x?}"
     );
 }
 

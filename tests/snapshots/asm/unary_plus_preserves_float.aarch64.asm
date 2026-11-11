@@ -21,44 +21,45 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x0                // =0
+               	fmov	d2, #-0.50000000
+               	fmov	d3, #0.50000000
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	b.pl	<addr>
-               	fmov	d3, #-0.50000000
+               	fcsel	d3, d2, d3, mi
                	fmov	d2, #0.50000000
                	fcmp	d3, d2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fadd	d2, d0, d3
-               	fcmp	d2, d1
+               	fadd	d3, d0, d3
+               	fcmp	d3, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
+               	fmov	d3, #-0.50000000
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	b.pl	<addr>
-               	fmov	d2, #-0.50000000
-               	fadd	d2, d0, d2
-               	fcmp	d2, d1
+               	fcsel	d3, d3, d2, mi
+               	fadd	d3, d0, d3
+               	fcmp	d3, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
+               	fmov	d3, #-0.50000000
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	b.pl	<addr>
-               	fmov	d2, #-0.50000000
-               	fadd	d2, d0, d2
-               	fcvtzs	x1, d2
+               	fcsel	d3, d3, d2, mi
+               	fadd	d3, d0, d3
+               	fcvtzs	x1, d3
                	cmp	x1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
+               	fmov	d3, #-0.50000000
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	b.pl	<addr>
-               	fmov	d2, #-0.50000000
-               	fadd	d0, d0, d2
+               	fcsel	d3, d3, d2, mi
+               	fadd	d0, d0, d3
                	fcvtzs	x1, d0
                	scvtf	d0, x1
                	fcmp	d0, d1
@@ -66,10 +67,10 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	fmov	d0, #-1.50000000
+               	fmov	d1, #-0.50000000
                	fmov	d17, x0
                	fcmpe	d0, d17
-               	b.pl	<addr>
-               	fmov	d1, #-0.50000000
+               	fcsel	d1, d1, d2, mi
                	fadd	d0, d0, d1
                	fcvtzs	x1, d0
                	scvtf	d0, x1
@@ -79,13 +80,3 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ret
                	ret
-               	fmov	d1, #0.50000000
-               	b	<addr>
-               	fmov	d2, #0.50000000
-               	b	<addr>
-               	fmov	d2, #0.50000000
-               	b	<addr>
-               	fmov	d2, #0.50000000
-               	b	<addr>
-               	fmov	d3, #0.50000000
-               	b	<addr>

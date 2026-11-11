@@ -17,12 +17,13 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	and	x1, x0, #0x1
                	add	x1, x1, #0xa
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
+               	and	x0, x0, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w0, #0x0
+               	csel	x0, x2, x3, ne
                	add	x0, x1, x0
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -33,107 +34,144 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x8]
                	ldur	x2, [x29, #-0x8]
-               	tbz	w2, #0x3, <addr>
-               	mov	x2, x0
+               	and	x2, x2, #0x8
+               	cmp	w2, #0x0
+               	csel	x2, x0, x1, ne
                	add	x2, x2, #0xb
                	add	x2, x2, #0xa
                	mov	x3, #0x2                // =2
                	stur	x3, [x29, #-0x8]
                	ldur	x3, [x29, #-0x8]
-               	tbz	w3, #0x3, <addr>
-               	mov	x3, x0
+               	and	x3, x3, #0x8
+               	cmp	w3, #0x0
+               	csel	x3, x0, x1, ne
                	add	x3, x3, #0xa
                	add	x2, x2, x3
                	mov	x3, #0x3                // =3
                	stur	x3, [x29, #-0x8]
                	ldur	x3, [x29, #-0x8]
-               	tbz	w3, #0x3, <addr>
-               	mov	x3, x0
+               	and	x3, x3, #0x8
+               	cmp	w3, #0x0
+               	csel	x3, x0, x1, ne
                	add	x3, x3, #0xb
                	add	x2, x2, x3
                	mov	x3, #0x4                // =4
                	stur	x3, [x29, #-0x8]
                	ldur	x3, [x29, #-0x8]
-               	tbz	w3, #0x3, <addr>
-               	mov	x1, x0
+               	and	x3, x3, #0x8
+               	cmp	w3, #0x0
+               	csel	x1, x0, x1, ne
                	add	x1, x1, #0xa
                	add	x1, x2, x1
                	mov	x2, #0x5                // =5
                	stur	x2, [x29, #-0x8]
                	ldur	x2, [x29, #-0x8]
-               	tbz	w2, #0x3, <addr>
-               	add	x0, x0, #0xb
-               	add	x1, x1, x0
-               	mov	x0, #0x6                // =6
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xa
-               	add	x1, x1, x0
-               	mov	x0, #0x7                // =7
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xb
-               	add	x1, x1, x0
-               	mov	x0, #0x8                // =8
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xa
-               	add	x1, x1, x0
-               	mov	x0, #0x9                // =9
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xb
-               	add	x1, x1, x0
-               	mov	x0, #0xa                // =10
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xa
-               	add	x1, x1, x0
-               	mov	x0, #0xb                // =11
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xb
-               	add	x1, x1, x0
-               	mov	x0, #0xc                // =12
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xa
-               	add	x1, x1, x0
-               	mov	x0, #0xd                // =13
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xb
-               	add	x1, x1, x0
-               	mov	x0, #0xe                // =14
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
-               	add	x0, x0, #0xa
-               	add	x1, x1, x0
-               	mov	x0, #0xf                // =15
-               	stur	x0, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	tbz	w0, #0x3, <addr>
-               	mov	x0, #0x1                // =1
+               	and	x2, x2, #0x8
+               	mov	x3, #0x0                // =0
+               	cmp	w2, #0x0
+               	csel	x0, x0, x3, ne
                	add	x0, x0, #0xb
                	add	x0, x1, x0
+               	mov	x1, #0x6                // =6
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xa
+               	add	x0, x0, x1
+               	mov	x1, #0x7                // =7
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xb
+               	add	x0, x0, x1
+               	mov	x1, #0x8                // =8
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xa
+               	add	x0, x0, x1
+               	mov	x1, #0x9                // =9
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xb
+               	add	x0, x0, x1
+               	mov	x1, #0xa                // =10
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xa
+               	add	x0, x0, x1
+               	mov	x1, #0xb                // =11
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xb
+               	add	x0, x0, x1
+               	mov	x1, #0xc                // =12
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xa
+               	add	x0, x0, x1
+               	mov	x1, #0xd                // =13
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xb
+               	add	x0, x0, x1
+               	mov	x1, #0xe                // =14
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xa
+               	add	x0, x0, x1
+               	mov	x1, #0xf                // =15
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
+               	and	x1, x1, #0x8
+               	mov	x2, #0x1                // =1
+               	mov	x3, #0x0                // =0
+               	cmp	w1, #0x0
+               	csel	x1, x2, x3, ne
+               	add	x1, x1, #0xb
+               	add	x0, x0, x1
                	cmp	w0, #0xb0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -150,31 +188,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x3, x1
-               	b	<addr>
-               	mov	x3, x1
-               	b	<addr>
-               	mov	x2, x1
-               	b	<addr>

@@ -198,24 +198,20 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v136 Imm(4616189618054758400)                         -> x1
     v137 Binop { op=fmul, lhs=v37, rhs=v136 }             -> d1
     v138 FpCast { kind=FpToInt, value=v137 }              -> x1
-    v139 Binop { op=add, lhs=v134, rhs=v138 }             -> x1
-    v140 Imm(0)                                           -> x0
-    v141 Imm(9080133147627747248)                         -> x0
-    v142 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x0
-    terminator Bz { cond=v142, target=b3, fall=b1 }   (exit_acc=v142)
+    v139 Binop { op=add, lhs=v134, rhs=v138 }             -> x0
+    v140 Imm(0)                                           -> x1
+    v141 Imm(9080133147627747248)                         -> x1
+    v142 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x2
+    v143 Imm(1)                                           -> x2
+    v144 Imm(0)                                           -> x6
+    v145 Binop { op=fgt, lhs=v130, rhs=v141 }             -> x1
+    v146 Select { cond=v145, a=v143, b=v144, kind=I64 }   -> x1
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v143 Imm(1)                                           -> x0
-    v144 Imm(0)                                           -> x2
-    terminator Jmp(b2)   (exit_acc=v143)
-  block 2  start_pc=0
-    v147 Phi { incoming=[b1:v143, b3:v145], kind=I64 }    -> x0
-    v148 Imm(0)                                           -> x2
-    v149 Binop { op=add, lhs=v139, rhs=v147 }             -> x0
-    terminator Return(v149)   (exit_acc=v149)
-  block 3  start_pc=0
-    v145 Imm(0)                                           -> x0
-    v146 Imm(0)                                           -> x2
-    terminator Jmp(b2)   (exit_acc=v145)
+    v151 Copy { value=v146, fp=false }                    -> x2
+    v152 Imm(0)                                           -> x2
+    v153 Binop { op=add, lhs=v139, rhs=v146 }             -> x0
+    terminator Return(v153)   (exit_acc=v153)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0

@@ -352,6 +352,7 @@ fn apply(func: &mut FunctionSsa, folds: &mut [(ValueId, Folded)]) -> bool {
                 at: At::Before(at),
                 inst: a.base(),
                 is_f32: false,
+                copy_of: None,
             }),
             _ => None,
         })

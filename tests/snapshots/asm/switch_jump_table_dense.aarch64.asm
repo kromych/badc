@@ -17,9 +17,10 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	cmp	w1, #0xf
                	b.eq	<addr>
+               	sub	x0, x1, #0x2
+               	sub	x2, x1, #0x3
                	cmp	w1, #0xf
-               	b.ge	<addr>
-               	sub	x2, x1, #0x2
+               	csel	x2, x0, x2, lt
                	sub	x0, x1, #0x3
                	adrp	x17, <page>
                	add	x17, x17, <lo12>
@@ -60,9 +61,8 @@ Disassembly of section .text:
                	mov	x0, #0xf                // =15
                	b	<addr>
                	mov	x0, #0x10               // =16
-               	b	<addr>
-               	sub	x2, x1, #0x3
-               	b	<addr>
+               	cmp	w0, w2
+               	b.ne	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x13
                	b.le	<addr>

@@ -104,12 +104,12 @@ Disassembly of section .text:
                	movb	$0x2, %al
                	callq	<addr>
                	movabsq	$0x400e000000000000, %rax # imm = 0x400E000000000000
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rcx, %rax
+               	cmovneq	%rdx, %rax
+               	cmovpq	%rdx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

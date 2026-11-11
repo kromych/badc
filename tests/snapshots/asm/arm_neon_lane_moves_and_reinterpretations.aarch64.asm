@@ -25,19 +25,20 @@ Disassembly of section .text:
                	ret
 
 <at_set>:
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	w0, w2
-               	b.ne	<addr>
-               	mov	x0, x1
+               	csel	x0, x1, x0, eq
                	ret
-               	mov	x1, x0
-               	b	<addr>
 
 <at_st1>:
-               	cbnz	w0, <addr>
-               	mov	x0, x2
+               	sxtw	x0, w0
+               	sxtw	x2, w2
+               	sxtw	x1, w1
+               	add	x1, x1, x0
+               	cmp	w0, #0x0
+               	csel	x0, x2, x1, eq
                	ret
-               	add	x2, x1, x0
-               	b	<addr>
 
 <at_rev>:
                	sdiv	w1, w0, w2
@@ -50,15 +51,16 @@ Disassembly of section .text:
 
 <at_zip1>:
                	sxtw	x0, w0
+               	sxtw	x1, w1
                	lsr	x2, x0, #63
                	add	x0, x0, x2
                	and	x3, x0, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
+               	mov	x3, #0x0                // =0
+               	cmp	x2, #0x0
+               	csel	x1, x1, x3, ne
                	add	x0, x1, x0, asr #1
                	ret
-               	mov	x1, #0x0                // =0
-               	b	<addr>
 
 <at_zip2>:
                	sxtw	x0, w0
@@ -67,14 +69,13 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	and	x3, x0, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	mov	x2, x1
+               	mov	x3, #0x0                // =0
+               	cmp	x2, #0x0
+               	csel	x2, x1, x3, ne
                	add	x1, x1, x1, lsr #63
                	add	x1, x2, x1, asr #1
                	add	x0, x1, x0, asr #1
                	ret
-               	mov	x2, #0x0                // =0
-               	b	<addr>
 
 <at_uzp1>:
                	lsl	x0, x0, #1
@@ -87,26 +88,29 @@ Disassembly of section .text:
 
 <at_trn1>:
                	sxtw	x0, w0
+               	sxtw	x1, w1
                	lsr	x2, x0, #63
                	add	x3, x0, x2
                	and	x3, x3, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	add	x0, x1, x0
-               	sub	x0, x0, #0x1
+               	add	x1, x1, x0
+               	sub	x1, x1, #0x1
+               	cmp	x2, #0x0
+               	csel	x0, x1, x0, ne
                	ret
 
 <at_trn2>:
                	sxtw	x0, w0
+               	sxtw	x1, w1
                	lsr	x2, x0, #63
                	add	x3, x0, x2
                	and	x3, x3, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	add	x0, x1, x0
-               	ret
+               	add	x1, x1, x0
                	add	x0, x0, #0x1
-               	b	<addr>
+               	cmp	x2, #0x0
+               	csel	x0, x1, x0, ne
+               	ret
 
 <at_zip>:
                	sxtw	x0, w0
@@ -117,24 +121,23 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	and	x3, x0, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
+               	mov	x3, #0x0                // =0
+               	cmp	x2, #0x0
+               	csel	x1, x1, x3, ne
                	add	x0, x1, x0, asr #1
                	ret
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	sub	x0, x0, x1
                	sxtw	x0, w0
                	lsr	x2, x0, #63
                	add	x0, x0, x2
                	and	x3, x0, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	mov	x2, x1
+               	mov	x3, #0x0                // =0
+               	cmp	x2, #0x0
+               	csel	x2, x1, x3, ne
                	add	x1, x1, x1, lsr #63
                	add	x1, x2, x1, asr #1
                	add	x0, x1, x0, asr #1
-               	b	<addr>
-               	mov	x2, #0x0                // =0
                	b	<addr>
 
 <at_uzp>:
@@ -149,15 +152,17 @@ Disassembly of section .text:
 
 <at_trn>:
                	sxtw	x0, w0
+               	sxtw	x1, w1
                	cmp	w0, w1
                	b.ge	<addr>
                	lsr	x2, x0, #63
                	add	x3, x0, x2
                	and	x3, x3, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	add	x0, x1, x0
-               	sub	x0, x0, #0x1
+               	add	x1, x1, x0
+               	sub	x1, x1, #0x1
+               	cmp	x2, #0x0
+               	csel	x0, x1, x0, ne
                	ret
                	sub	x0, x0, x1
                	sxtw	x0, w0
@@ -165,10 +170,10 @@ Disassembly of section .text:
                	add	x3, x0, x2
                	and	x3, x3, #0x1
                	sub	x2, x3, x2
-               	cbz	x2, <addr>
-               	add	x0, x1, x0
-               	b	<addr>
+               	add	x1, x1, x0
                	add	x0, x0, #0x1
+               	cmp	x2, #0x0
+               	csel	x0, x1, x0, ne
                	b	<addr>
 
 <w_vld1_s8>:

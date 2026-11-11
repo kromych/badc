@@ -388,11 +388,11 @@ Disassembly of section .text:
                	mov	x21, x0
                	mov	x0, x20
                	bl	<addr>
-               	cbnz	x21, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0xc                // =12
+               	cmp	x21, #0x0
+               	csel	x0, x0, x1, eq
                	ldp	x20, x21, [sp, #0x40]
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xc                // =12
-               	b	<addr>

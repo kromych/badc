@@ -497,11 +497,11 @@ Disassembly of section .text:
                	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
                	pcmpeqb	%xmm3, %xmm0
                	pmovmskb	%xmm0, %eax
+               	xorl	%ecx, %ecx
+               	movl	$0x7, %edx
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	vzeroupper
                	leave
                	retq
-               	movl	$0x7, %eax
-               	jmp	<addr>

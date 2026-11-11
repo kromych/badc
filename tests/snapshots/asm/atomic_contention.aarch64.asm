@@ -48,10 +48,8 @@ Disassembly of section .text:
                	casal	x2, x3, [x4]
                	cmp	x2, x0
                	cset	x3, eq
-               	cbz	x3, <addr>
-               	cbnz	w3, <addr>
-               	b	<addr>
-               	mov	x0, x2
+               	cmp	x3, #0x0
+               	csel	x0, x0, x2, ne
                	cbz	w3, <addr>
                	swpa	w1, w0, [x5]
                	cbnz	w0, <addr>

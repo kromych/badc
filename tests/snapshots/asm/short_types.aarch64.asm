@@ -73,30 +73,32 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	sxth	x1, w0
-               	lsl	x0, x1, #14
                	sxth	x0, w0
+               	lsl	x1, x0, #14
+               	sxth	x1, w1
                	mov	x17, #0x4000            // =16384
-               	cmp	w0, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	lsl	x0, x1, #16
-               	and	x0, x0, #0xffff
-               	tbz	w0, #0xf, <addr>
-               	sub	x0, x0, #0x10, lsl #12  // =0x10000
-               	sxth	x0, w0
-               	cbz	w0, <addr>
+               	lsl	x1, x0, #16
+               	and	x1, x1, #0xffff
+               	sub	x2, x1, #0x10, lsl #12  // =0x10000
+               	tst	x1, #0x8000
+               	csel	x1, x2, x1, ne
+               	sxth	x1, w1
+               	cbz	w1, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	lsl	x0, x1, #15
+               	lsl	x0, x0, #15
                	and	x0, x0, #0xffff
-               	tbz	w0, #0xf, <addr>
-               	sub	x0, x0, #0x10, lsl #12  // =0x10000
+               	sub	x1, x0, #0x10, lsl #12  // =0x10000
+               	tst	x0, #0x8000
+               	csel	x0, x1, x0, ne
                	sxth	x0, w0
                	mov	x17, #-0x8000           // =-32768
                	cmp	w0, w17
@@ -200,8 +202,9 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	add	x0, x1, x0
                	and	x0, x0, #0xffff
-               	tbz	w0, #0xf, <addr>
-               	sub	x0, x0, #0x10, lsl #12  // =0x10000
+               	sub	x1, x0, #0x10, lsl #12  // =0x10000
+               	tst	x0, #0x8000
+               	csel	x0, x1, x0, ne
                	sxth	x0, w0
                	cbz	w0, <addr>
                	mov	x0, #0x13               // =19

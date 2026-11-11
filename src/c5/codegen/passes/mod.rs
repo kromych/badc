@@ -16,6 +16,7 @@ pub(crate) mod drop_redundant_extend;
 pub(crate) mod factor_gotos;
 pub(crate) mod fma;
 pub(crate) mod general_regs;
+pub(crate) mod if_convert;
 pub(crate) mod index_ext;
 pub(crate) mod index_fold;
 pub(crate) mod inline;

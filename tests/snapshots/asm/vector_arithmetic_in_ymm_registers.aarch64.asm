@@ -2323,15 +2323,14 @@ Disassembly of section .text:
                	b.lt	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1e               // =30
                	cmp	w0, #0x2d
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x20, x21, [sp]
                	add	sp, sp, #0x8b0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1e               // =30
-               	b	<addr>
                	add	x0, x0, #0xa
                	ldp	x20, x21, [sp]
                	add	sp, sp, #0x8b0

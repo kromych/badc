@@ -58,11 +58,11 @@ Disassembly of section .text:
                	callq	*%rbx
                	movslq	-0x48(%rbp), %rcx
                	addq	%rcx, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0xc0d, %rax            # imm = 0xC0D
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

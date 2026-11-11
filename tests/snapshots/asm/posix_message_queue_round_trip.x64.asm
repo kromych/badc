@@ -80,17 +80,17 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movl	(%rax), %eax
+               	xorl	%ecx, %ecx
+               	movl	$0xb, %edx
                	cmpl	$0x26, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	leave
                	retq
-               	movl	$0xb, %eax
-               	jmp	<addr>
                	leaq	-0xe0(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -262,9 +262,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movl	$0x17, %ecx
+               	xorl	%edx, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x17, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	jmp	<addr>

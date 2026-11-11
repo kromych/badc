@@ -10,21 +10,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v4   Load { addr=v1, disp=0, kind=I32, volatile pc_rel } -> x0
     v5   Imm(0)                                           -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x1
-    v7   BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> x0
-    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
+    v7   BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> x1
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x2
+    v10  BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> x0
+    v11  Select { cond=v10, a=v8, b=v9, kind=I64 }        -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v8)
-  block 2  start_pc=0
-    v12  Phi { incoming=[b1:v8, b3:v10], kind=I64 }       -> x0
-    v13  Imm(0)                                           -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x1
-    terminator Return(v12)   (exit_acc=v12)
-  block 3  start_pc=0
-    v10  Imm(1)                                           -> x0
-    v11  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v10)
+    v16  Copy { value=v11, fp=false }                     -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Extend { value=v11, kind=I32 }                   -> x1
+    terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

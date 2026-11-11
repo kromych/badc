@@ -88,21 +88,30 @@ Disassembly of section .text:
 
 <zero_tests>:
                	xorl	%eax, %eax
-               	cmpb	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	cmpw	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x2, %rax
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x4, %rax
-               	cmpq	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x8, %rax
-               	cmpb	$0x0, <rip> # <addr>
-               	je	<addr>
-               	orq	$0x10, %rax
+               	movsbq	<rip>, %rcx # <addr>
+               	movl	$0x1, %edx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movswq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x2, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movslq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x4, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x8, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	orq	$0x10, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
                	retq
 
 <floats>:

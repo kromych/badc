@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=8
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -488,7 +488,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v482 Imm(15)                                          -> x0
     v483 Imm(15)                                          -> x0
     v484 Imm(1)                                           -> x0
-    v485 LocalAddr(-8)                                    -> x2
+    v485 LocalAddr(-8)                                    -> x1
     v486 Imm(15)                                          -> x0
     v487 BinopI { op=add, lhs=v485, rhs_imm=15 }          -> x0
     v488 Imm(465)                                         -> x0
@@ -521,10 +521,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v515 Imm(16)                                          -> x0
     v516 Imm(0)                                           -> x0
     v517 Imm(0)                                           -> x0
-    v518 Imm(0)                                           -> x1
-    terminator Jmp(b10)   (exit_acc=v517)
+    v518 Imm(0)                                           -> x2
+    terminator Jmp(b6)   (exit_acc=v517)
   block 1  start_pc=0
-    v525 LocalAddr(-2)                                    -> x1
+    v525 LocalAddr(-2)                                    -> x2
     v526 Extend { value=v519, kind=I32 }                  -> x6
     v527 Binop { op=add, lhs=v525, rhs=v519 }             -> x6
     v528 LocalAddr(-8)                                    -> x6
@@ -541,7 +541,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v539 LocalAddr(-2)                                    -> x6
     v540 Extend { value=v519, kind=I32 }                  -> x6
     v541 Binop { op=add, lhs=v525, rhs=v519 }             -> x6
-    v542 LoadIndexed { base=v525, index=v519, scale=1, kind=U8 } -> x1
+    v542 LoadIndexed { base=v525, index=v519, scale=1, kind=U8 } -> x2
     v543 LocalAddr(-8)                                    -> x6
     v544 Extend { value=v519, kind=I32 }                  -> x6
     v545 Binop { op=add, lhs=v485, rhs=v519 }             -> x6
@@ -552,81 +552,75 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v550 LoadIndexed { base=v547, index=v519, scale=1, kind=U8 } -> x8
     v551 Binop { op=xor, lhs=v546, rhs=v550 }             -> x6
     v552 BinopI { op=and, lhs=v551, rhs_imm=255 }         -> x8
-    v553 Binop { op=ne, lhs=v542, rhs=v551 }              -> x1
-    terminator Bz { cond=v553, target=b2, fall=b13 }   (exit_acc=v553)
+    v553 Binop { op=ne, lhs=v542, rhs=v551 }              -> x2
+    terminator Bz { cond=v553, target=b2, fall=b9 }   (exit_acc=v553)
   block 2  start_pc=0
-    v564 LocalAddr(-4)                                    -> x6
-    v565 Extend { value=v519, kind=I32 }                  -> x1
-    v566 Binop { op=add, lhs=v564, rhs=v519 }             -> x1
-    v567 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x1
+    v564 LocalAddr(-4)                                    -> x2
+    v565 Extend { value=v519, kind=I32 }                  -> x6
+    v566 Binop { op=add, lhs=v564, rhs=v519 }             -> x6
+    v567 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x6
     v568 BinopI { op=and, lhs=v567, rhs_imm=255 }         -> x8
     v569 BinopI { op=shl, lhs=v567, rhs_imm=1 }           -> x8
     v570 Extend { value=v569, kind=I32 }                  -> x9
-    v571 BinopI { op=and, lhs=v567, rhs_imm=128 }         -> x1
-    terminator Bz { cond=v571, target=b8, fall=b3 }   (exit_acc=v571)
+    v571 BinopI { op=and, lhs=v567, rhs_imm=128 }         -> x9
+    v572 Imm(29)                                          -> x9
+    v573 Imm(0)                                           -> x3
+    v574 BinopI { op=and, lhs=v567, rhs_imm=128 }         -> x6
+    v575 Select { cond=v574, a=v572, b=v573, kind=I64 }   -> x6
+    terminator Jmp(b3)
   block 3  start_pc=0
-    v586 Imm(29)                                          -> x1
-    terminator Jmp(b4)   (exit_acc=v586)
+    v592 Copy { value=v575, fp=false }                    -> x9
+    v593 Binop { op=xor, lhs=v569, rhs=v575 }             -> x6
+    v594 BinopI { op=and, lhs=v593, rhs_imm=255 }         -> x6
+    v595 BinopI { op=and, lhs=v594, rhs_imm=255 }         -> x8
+    v596 LocalAddr(-4)                                    -> x8
+    v597 Extend { value=v519, kind=I32 }                  -> x8
+    v598 Binop { op=add, lhs=v564, rhs=v519 }             -> x8
+    v599 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x2
+    v600 BinopI { op=shl, lhs=v599, rhs_imm=1 }           -> x8
+    v601 Extend { value=v600, kind=I32 }                  -> x9
+    v602 LocalAddr(-4)                                    -> x9
+    v603 Extend { value=v519, kind=I32 }                  -> x9
+    v604 Binop { op=add, lhs=v564, rhs=v519 }             -> x9
+    v605 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x9
+    v606 BinopI { op=and, lhs=v599, rhs_imm=128 }         -> x9
+    v607 Imm(29)                                          -> x9
+    v608 Imm(0)                                           -> x3
+    v609 BinopI { op=and, lhs=v599, rhs_imm=128 }         -> x2
+    v610 Select { cond=v609, a=v607, b=v608, kind=I64 }   -> x2
+    terminator Jmp(b4)
   block 4  start_pc=0
-    v588 Phi { incoming=[b3:v586, b8:v587], kind=I64 }    -> x1
-    v589 Binop { op=xor, lhs=v569, rhs=v588 }             -> x1
-    v590 BinopI { op=and, lhs=v589, rhs_imm=255 }         -> x8
-    v591 BinopI { op=and, lhs=v590, rhs_imm=255 }         -> x1
-    v592 LocalAddr(-4)                                    -> x1
-    v593 Extend { value=v519, kind=I32 }                  -> x1
-    v594 Binop { op=add, lhs=v564, rhs=v519 }             -> x1
-    v595 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x1
-    v596 BinopI { op=shl, lhs=v595, rhs_imm=1 }           -> x6
-    v597 Extend { value=v596, kind=I32 }                  -> x9
-    v598 LocalAddr(-4)                                    -> x9
-    v599 Extend { value=v519, kind=I32 }                  -> x9
-    v600 Binop { op=add, lhs=v564, rhs=v519 }             -> x9
-    v601 LoadIndexed { base=v564, index=v519, scale=1, kind=U8 } -> x9
-    v602 BinopI { op=and, lhs=v595, rhs_imm=128 }         -> x1
-    terminator Bz { cond=v602, target=b7, fall=b5 }   (exit_acc=v602)
+    v580 Copy { value=v610, fp=false }                    -> x9
+    v581 Imm(0)                                           -> x9
+    v582 Binop { op=xor, lhs=v600, rhs=v610 }             -> x2
+    v583 BinopI { op=and, lhs=v582, rhs_imm=255 }         -> x2
+    v584 Binop { op=ne, lhs=v594, rhs=v583 }              -> x2
+    terminator Bz { cond=v584, target=b5, fall=b8 }   (exit_acc=v584)
   block 5  start_pc=0
-    v572 Imm(29)                                          -> x1
-    v573 Imm(0)                                           -> x9
-    terminator Jmp(b6)   (exit_acc=v572)
-  block 6  start_pc=0
-    v576 Phi { incoming=[b5:v572, b7:v574], kind=I64 }    -> x1
-    v577 Imm(0)                                           -> x9
-    v578 Binop { op=xor, lhs=v596, rhs=v576 }             -> x1
-    v579 BinopI { op=and, lhs=v578, rhs_imm=255 }         -> x1
-    v580 Binop { op=ne, lhs=v590, rhs=v579 }              -> x1
-    terminator Bz { cond=v580, target=b9, fall=b12 }   (exit_acc=v580)
-  block 7  start_pc=0
-    v574 Imm(0)                                           -> x1
-    v575 Imm(0)                                           -> x9
-    terminator Jmp(b6)   (exit_acc=v574)
-  block 8  start_pc=0
-    v587 Imm(0)                                           -> x1
-    terminator Jmp(b4)   (exit_acc=v587)
-  block 9  start_pc=0
-    v522 Extend { value=v519, kind=I32 }                  -> x1
+    v522 Extend { value=v519, kind=I32 }                  -> x2
     v523 BinopI { op=add, lhs=v519, rhs_imm=1 }           -> x0
-    v524 Extend { value=v523, kind=I32, nsw }             -> x1
-    terminator Jmp(b10)   (exit_acc=v523)
-  block 10  start_pc=0
-    v519 Phi { incoming=[b0:v517, b9:v523], kind=I64 }    -> x0
-    v520 Extend { value=v519, kind=I32 }                  -> x1
-    v521 BinopI { op=lt, lhs=v519, rhs_imm=16 }           -> x1
-    terminator Bz { cond=v521, target=b11, fall=b1 }   (exit_acc=v521)
-  block 11  start_pc=0
+    v524 Extend { value=v523, kind=I32, nsw }             -> x2
+    terminator Jmp(b6)   (exit_acc=v523)
+  block 6  start_pc=0
+    v519 Phi { incoming=[b0:v517, b5:v523], kind=I64 }    -> x0
+    v520 Extend { value=v519, kind=I32 }                  -> x2
+    v521 BinopI { op=lt, lhs=v519, rhs_imm=16 }           -> x2
+    terminator Bz { cond=v521, target=b7, fall=b1 }   (exit_acc=v521)
+  block 7  start_pc=0
     v554 Imm(42)                                          -> x0
     v555 LifetimeEnd(-2)                                  -> -
     v556 LifetimeEnd(-4)                                  -> -
     v557 LifetimeEnd(-6)                                  -> -
     v558 LifetimeEnd(-8)                                  -> -
     terminator Return(v554)   (exit_acc=v554)
-  block 12  start_pc=0
-    v581 Imm(2)                                           -> x0
-    v582 LifetimeEnd(-2)                                  -> -
-    v583 LifetimeEnd(-4)                                  -> -
-    v584 LifetimeEnd(-6)                                  -> -
-    v585 LifetimeEnd(-8)                                  -> -
-    terminator Return(v581)   (exit_acc=v581)
-  block 13  start_pc=0
+  block 8  start_pc=0
+    v585 Imm(2)                                           -> x0
+    v586 LifetimeEnd(-2)                                  -> -
+    v587 LifetimeEnd(-4)                                  -> -
+    v588 LifetimeEnd(-6)                                  -> -
+    v589 LifetimeEnd(-8)                                  -> -
+    terminator Return(v585)   (exit_acc=v585)
+  block 9  start_pc=0
     v559 Imm(1)                                           -> x0
     v560 LifetimeEnd(-2)                                  -> -
     v561 LifetimeEnd(-4)                                  -> -

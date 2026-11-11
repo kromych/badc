@@ -1548,7 +1548,13 @@ impl Rules<'_> {
             Inst::Phi {
                 kind: LoadKind::F32 | LoadKind::F64,
                 ..
+            }
+            | Inst::Select {
+                kind: LoadKind::F32 | LoadKind::F64,
+                ..
             } => Some(UNIVERSE),
+            // A select is one of its arms: their hull.
+            Inst::Select { a, b: other, .. } => Some(seen(b, *a)?.hull(seen(b, *other)?)),
             // An incoming value is read at the end of its predecessor,
             // under that block's bounds and the edge's own condition.
             Inst::Phi { incoming, .. } => incoming

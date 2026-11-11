@@ -33,12 +33,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%edi, %rdi
+               	movl	$0x1, %eax
+               	movl	$0x2, %ecx
                	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x1, %edi
+               	movq	%rcx, %rdi
+               	cmovneq	%rax, %rdi
                	popq	%rbp
-               	jmp	<addr>
-               	movl	$0x2, %edi
                	jmp	<addr>
 
 <main>:

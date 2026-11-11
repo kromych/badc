@@ -135,20 +135,18 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	mov	x1, #0x14               // =20
                	bl	<addr>
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x0                // =0
                	cmp	x0, #0xe77
-               	b.eq	<addr>
-               	mov	x20, #0x1               // =1
+               	csel	x20, x1, x2, ne
                	fmov	d0, #0.50000000
                	fmov	d1, #0.25000000
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16]
+               	orr	x0, x20, #0x2
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x20, x20, #0x2
-               	mov	x0, x20
+               	csel	x0, x0, x20, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x20, #0x0               // =0
-               	b	<addr>

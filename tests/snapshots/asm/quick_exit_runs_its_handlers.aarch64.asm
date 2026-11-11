@@ -43,13 +43,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]
+               	mov	x1, #0x5                // =5
+               	mov	x2, #0x6                // =6
                	cmp	w0, #0x15
-               	b.ne	<addr>
-               	mov	x0, #0x5                // =5
+               	csel	x0, x1, x2, eq
                	bl	<addr>
                	brk	#0x1
-               	mov	x0, #0x6                // =6
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

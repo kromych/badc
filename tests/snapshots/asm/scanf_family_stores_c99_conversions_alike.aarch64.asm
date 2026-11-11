@@ -238,11 +238,11 @@ Disassembly of section .text:
                	cmp	w0, #0xaa
                	mov	x0, #0x1                // =1
                	b.eq	<addr>
-               	cmp	w20, #0x4
                	mov	x0, #0x0                // =0
-               	b.lt	<addr>
                	cmp	w22, #0x0
                	cset	x3, ne
+               	cmp	w20, #0x4
+               	csel	x3, x3, x0, ge
                	cbz	x3, <addr>
                	sub	x3, x22, #0x1
                	ldrb	w3, [x2, w3, sxtw]
@@ -257,8 +257,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cbz	w1, <addr>
                	cbnz	w0, <addr>
-               	b	<addr>
-               	mov	x3, x0
                	b	<addr>
                	mov	x3, x0
                	b	<addr>

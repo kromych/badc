@@ -81,14 +81,15 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpq	$0x100f1, %rax          # imm = 0x100F1
                	jne	<addr>
-               	cmpl	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x7, %eax
+               	movslq	<rip>, %rax # <addr>
+               	movl	$0x7, %ecx
+               	xorl	%edx, %edx
+               	testq	%rax, %rax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	movq	%rcx, %rax
                	andq	$0x3, %rax
                	movslq	(%rdx,%rax,4), %rax

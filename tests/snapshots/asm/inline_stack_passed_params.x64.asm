@@ -45,9 +45,11 @@ Disassembly of section .text:
                	cmpl	%r15d, %edi
                	je	<addr>
                	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	leaq	0x14(%rax), %rdx
                	testl	%eax, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -55,8 +57,6 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	addq	$0x14, %rax
-               	jmp	<addr>
                	movl	<rip>, %edi # <addr>
                	cmpl	%edi, %esi
                	je	<addr>

@@ -59,11 +59,7 @@ Disassembly of section .text:
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi
-               	je	<addr>
-               	testl	%esi, %esi
-               	jne	<addr>
-               	jmp	<addr>
-               	movq	%rax, %rcx
+               	cmoveq	%rax, %rcx
                	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rax # <addr>

@@ -759,14 +759,13 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x40
                	sub	x0, x29, #0x60
+               	fmov	d2, #-1.00000000
                	fcmp	d0, d1
-               	b.ne	<addr>
+               	fcsel	d0, d0, d2, eq
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
-               	fmov	d0, #-1.00000000
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

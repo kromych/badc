@@ -301,14 +301,35 @@ fn double_negate_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     }
 }
 
-/// Redirect every consumer of an instruction [`forwarded_operand`]
-/// answers to that operand, leaving the instruction dead. The operand
-/// dominates each redirected use, since it dominates the instruction.
+/// The arm a select yields when that does not depend on its condition's
+/// value at run time: the condition is a constant, or both arms are one
+/// value.
+fn select_arm(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
+    let Inst::Select { cond, a, b, .. } = func.insts[idx] else {
+        return None;
+    };
+    if a == b {
+        return Some(a);
+    }
+    match func.insts.get(cond as usize) {
+        Some(Inst::Imm(k)) => Some(if *k != 0 { a } else { b }),
+        _ => None,
+    }
+}
+
+/// Redirect every consumer of an instruction [`forwarded_operand`],
+/// [`double_negate_operand`] or [`select_arm`] answers to that operand,
+/// leaving the instruction dead. The operand dominates each redirected
+/// use, since it dominates the instruction.
 /// Returns whether any operand actually changed.
 fn forward_identities(func: &mut FunctionSsa) -> bool {
     let n = func.insts.len();
     let redirect: Vec<Option<ValueId>> = (0..n)
-        .map(|i| forwarded_operand(func, i).or_else(|| double_negate_operand(func, i)))
+        .map(|i| {
+            forwarded_operand(func, i)
+                .or_else(|| double_negate_operand(func, i))
+                .or_else(|| select_arm(func, i))
+        })
         .collect();
     let any = redirect.iter().any(Option::is_some);
     if !any {

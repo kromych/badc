@@ -85,14 +85,13 @@ Disassembly of section .text:
                	add	x0, x0, #0x3
                	bl	<addr>
                	add	x0, x20, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #0x8adc            // =35548
                	movk	x17, #0xac62, lsl #16
                	movk	x17, #0x1, lsl #32
                	cmp	x0, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

@@ -57,11 +57,11 @@ Disassembly of section .text:
                	ret
 
 <stop_at_file>:
-               	cbnz	w2, <addr>
                	mov	x0, #0x2a               // =42
+               	mov	x1, #0x0                // =0
+               	cmp	w2, #0x0
+               	csel	x0, x0, x1, eq
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

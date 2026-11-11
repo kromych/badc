@@ -55,12 +55,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x1f40, %eax           # imm = 0x1F40
                	jl	<addr>
-               	cmpl	$0x5dc0, %ecx           # imm = 0x5DC0
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpl	$0x5dc0, %ecx           # imm = 0x5DC0
+               	cmovneq	%rdx, %rax
                	leaq	-0x20(%rbp), %rsp
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

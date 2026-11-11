@@ -14,31 +14,32 @@ Disassembly of section .text:
                	brk	#0x1
 
 <build_packed>:
-               	and	x0, x0, #0xf
-               	and	x3, x1, #0xf
-               	orr	x1, x0, x3, lsl #4
-               	and	x4, x2, #0x1f
-               	and	x1, x1, #0xffffffffffffe0ff
-               	orr	x1, x1, x4, lsl #8
+               	and	x3, x0, #0xf
                	and	x4, x1, #0xf
-               	cmp	w4, w0
-               	mov	x0, #0x0                // =0
+               	orr	x0, x3, x4, lsl #4
+               	and	x1, x2, #0x1f
+               	and	x0, x0, #0xffffffffffffe0ff
+               	orr	x0, x0, x1, lsl #8
+               	and	x1, x0, #0xf
+               	cmp	w1, w3
+               	mov	x1, #0x0                // =0
                	b.ne	<addr>
-               	mov	w4, w1
-               	ubfx	x4, x4, #4, #4
-               	cmp	w4, w3
+               	mov	w3, w0
+               	ubfx	x3, x3, #4, #4
+               	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
-               	mov	w1, w1
-               	sbfx	x1, x1, #8, #5
-               	cmp	w1, w2
-               	cset	x1, eq
-               	cbz	x1, <addr>
-               	mov	x0, #0x1                // =1
+               	mov	w0, w0
+               	sbfx	x0, x0, #8, #5
+               	cmp	w0, w2
+               	cset	x0, eq
+               	mov	x2, #0x1                // =1
+               	cmp	x0, #0x0
+               	csel	x0, x2, x1, ne
                	ret
-               	mov	x1, x0
+               	mov	x0, x1
                	b	<addr>
-               	mov	x3, x0
+               	mov	x3, x1
                	b	<addr>
 
 <build_mixed>:
@@ -75,15 +76,15 @@ Disassembly of section .text:
                	ubfx	x1, x1, #19, #10
                	cmp	w1, w2
                	cset	x1, eq
-               	cbz	x1, <addr>
-               	mov	x1, #0x1                // =1
-               	cbz	x1, <addr>
-               	mov	x0, #0x1                // =1
+               	mov	x2, #0x1                // =1
+               	cmp	x1, #0x0
+               	csel	x1, x2, x0, ne
+               	mov	x2, #0x1                // =1
+               	cmp	x1, #0x0
+               	csel	x0, x2, x0, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
-               	b	<addr>
                	mov	x1, x0
                	b	<addr>
                	mov	x3, x0

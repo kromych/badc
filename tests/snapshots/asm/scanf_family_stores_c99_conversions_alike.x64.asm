@@ -245,15 +245,12 @@ Disassembly of section .text:
                	cmpl	$0xaa, %ecx
                	movl	$0x1, %ecx
                	je	<addr>
-               	cmpl	$0x4, %ebx
-               	setge	%dl
-               	movzbq	%dl, %rdx
                	xorl	%ecx, %ecx
-               	testq	%rdx, %rdx
-               	je	<addr>
                	testl	%r13d, %r13d
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	$0x4, %ebx
+               	cmovgeq	%rdx, %rcx
                	xorl	%edx, %edx
                	testq	%rcx, %rcx
                	je	<addr>

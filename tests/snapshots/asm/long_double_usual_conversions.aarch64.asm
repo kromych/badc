@@ -3073,8 +3073,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbz	x20, <addr>
-               	fmov	d4, #1.00000000
+               	cmp	x20, #0x0
+               	fcsel	d4, d0, d1, ne
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
@@ -3115,8 +3115,8 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]
-               	cbnz	w20, <addr>
-               	fmov	d4, #1.00000000
+               	cmp	w20, #0x0
+               	fcsel	d4, d0, d1, eq
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
@@ -3753,10 +3753,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d4, #2.00000000
-               	b	<addr>
-               	fmov	d4, #2.00000000
-               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stp	x9, x10, [sp]

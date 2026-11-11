@@ -17426,10 +17426,10 @@ fn a_void_function_returns_no_value() {
     assert!(returns_zero(main), "a void `main` returns 0 at its end");
 }
 
-/// The narrowing read of a join whose incoming values already fit it is
-/// dropped: a byte merged with zero across a branch, and a byte and a
-/// signed byte carried around a loop. A join reached by a full `int`
-/// keeps its mask.
+/// The narrowing read of a join -- a phi, or the select a short branch
+/// becomes -- whose incoming values already fit it is dropped: a byte
+/// merged with zero across a branch, and a byte and a signed byte carried
+/// around a loop. A join reached by a full `int` keeps its mask.
 #[test]
 fn narrow_read_of_a_join_that_fits_is_dropped() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -17491,7 +17491,11 @@ fn narrow_read_of_a_join_that_fits_is_dropped() {
                     continue;
                 };
                 let ops = operands(text);
-                let phi = |o: &u32| insts.get(o).is_some_and(|t| t.starts_with("Phi"));
+                let phi = |o: &u32| {
+                    insts
+                        .get(o)
+                        .is_some_and(|t| t.starts_with("Phi") || t.starts_with("Select"))
+                };
                 if read(text) && ops.iter().any(phi) {
                     hits.push(text);
                 }

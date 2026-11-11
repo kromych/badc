@@ -50,10 +50,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	cmpl	$0x46, %ecx
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpl	$0x46, %ecx
+               	cmovneq	%rdx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

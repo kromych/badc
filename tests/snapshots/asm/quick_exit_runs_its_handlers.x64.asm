@@ -51,14 +51,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	<rip>, %eax # <addr>
+               	movl	$0x5, %ecx
+               	movl	$0x6, %edx
                	cmpl	$0x15, %eax
-               	jne	<addr>
-               	movl	$0x5, %edi
+               	movq	%rdx, %rdi
+               	cmoveq	%rcx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	ud2
-               	movl	$0x6, %edi
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

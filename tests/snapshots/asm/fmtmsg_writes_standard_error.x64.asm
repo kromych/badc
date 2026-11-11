@@ -134,14 +134,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movl	$0x4, %ecx
+               	xorl	%edx, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>

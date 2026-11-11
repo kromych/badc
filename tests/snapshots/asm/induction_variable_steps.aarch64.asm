@@ -207,10 +207,10 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	mov	x2, x0
                	ldrsw	x4, [x3, x0, lsl #2]
-               	tbz	w4, #0x0, <addr>
-               	sub	x1, x1, #0x1
-               	b	<addr>
+               	sub	x5, x1, #0x1
                	add	x1, x1, #0x2
+               	tst	x4, #0x1
+               	csel	x1, x5, x1, ne
                	ldrsw	x4, [x3, x1, lsl #2]
                	add	x2, x2, x4
                	add	x0, x0, #0x1
@@ -227,11 +227,10 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.ge	<addr>
                	ldrsw	x5, [x4, x0, lsl #2]
-               	cmp	w5, #0x64
-               	b.le	<addr>
-               	asr	x2, x0, #1
-               	b	<addr>
+               	asr	x6, x0, #1
                	add	x2, x2, #0x1
+               	cmp	w5, #0x64
+               	csel	x2, x6, x2, gt
                	ldrsw	x5, [x4, w2, sxtw #2]
                	add	x3, x3, x5
                	add	x0, x0, #0x1

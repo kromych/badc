@@ -53,9 +53,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	ldr	d0, [x1, #0x50]
                	fmov	d1, #3.75000000
+               	orr	x1, x0, #0x10
                	fcmp	d0, d1
-               	b.eq	<addr>
-               	orr	x0, x0, #0x10
+               	csel	x0, x1, x0, ne
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x58]
                	mov	x17, #0x304             // =772
@@ -69,8 +69,7 @@ Disassembly of section .text:
                	orr	x0, x0, #0x20
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x68]
+               	orr	x2, x0, #0x40
                	cmp	w1, #0x1e
-               	b.ne	<addr>
+               	csel	x0, x2, x0, ne
                	ret
-               	orr	x0, x0, #0x40
-               	b	<addr>

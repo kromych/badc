@@ -89,11 +89,10 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%ebx, %ebx
-               	je	<addr>
                	xorl	%eax, %eax
+               	movl	$0x4, %ecx
+               	testl	%ebx, %ebx
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x4, %eax
-               	jmp	<addr>

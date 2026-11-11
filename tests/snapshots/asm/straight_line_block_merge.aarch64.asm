@@ -56,15 +56,15 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	sxtw	x1, w1
                	cbz	x0, <addr>
-               	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	cmp	x1, #0x0
+               	csel	x0, x0, x2, ne
                	ret
-               	mov	x0, #0x2                // =2
-               	b	<addr>
-               	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
-               	b	<addr>
-               	mov	x0, #0x4                // =4
+               	mov	x1, #0x4                // =4
+               	cmp	x2, #0x0
+               	csel	x0, x0, x1, ne
                	b	<addr>
 
 <carry>:

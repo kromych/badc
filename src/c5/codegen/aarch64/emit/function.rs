@@ -2154,7 +2154,7 @@ fn emit_frame_and_saves(
 /// `Cond::flip` is an exact NZCV complement, so an inverted FP branch is
 /// taken on the unordered state exactly when C99 6.5.8p6 / 6.5.9p3
 /// require the negated comparison to hold.
-fn fused_branch_cond(
+pub(super) fn fused_branch_cond(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     cond: super::super::ir::ValueId,

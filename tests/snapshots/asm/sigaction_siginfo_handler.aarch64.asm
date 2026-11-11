@@ -14,6 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <on_usr1>:
+               	sxtw	x0, w0
                	ldr	x3, [x2, #0x1b0]
                	adrp	x2, <page>
                	ldrsw	x4, [x2, #0x30]
@@ -21,8 +22,9 @@ Disassembly of section .text:
                	str	w4, [x2, #0x30]
                	adrp	x2, <page>
                	ldrsw	x1, [x1]
+               	mov	x4, #-0x1               // =-1
                	cmp	w1, w0
-               	b.ne	<addr>
+               	csel	x0, x0, x4, eq
                	str	w0, [x2, #0x38]
                	adrp	x0, <page>
                	adrp	x1, <page>
@@ -33,8 +35,6 @@ Disassembly of section .text:
                	cset	x1, lo
                	str	w1, [x0, #0x40]
                	ret
-               	mov	x0, #-0x1               // =-1
-               	b	<addr>
 
 <check>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -137,13 +137,13 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x40]
-               	cbz	x0, <addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x6                // =6
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x6                // =6
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

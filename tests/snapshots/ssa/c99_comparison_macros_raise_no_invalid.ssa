@@ -341,20 +341,15 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
   block 37  start_pc=0
     v262 Imm(1)                                           -> x7
     v263 CallExt { binding_idx=3, args=[v262], fp_arg_mask=0x0 } -> x0
-    terminator Bz { cond=v263, target=b40, fall=b38 }   (exit_acc=v263)
+    v264 Imm(9)                                           -> x1
+    v265 Imm(0)                                           -> x2
+    v266 Select { cond=v263, a=v264, b=v265, kind=I64 }   -> x0
+    terminator Jmp(b38)
   block 38  start_pc=0
-    v264 Imm(9)                                           -> x0
-    v265 Imm(0)                                           -> x1
-    terminator Jmp(b39)   (exit_acc=v264)
-  block 39  start_pc=0
-    v268 Phi { incoming=[b38:v264, b40:v266], kind=I64 }  -> x0
-    v269 Imm(0)                                           -> x1
-    v270 Extend { value=v268, kind=I32 }                  -> x1
-    terminator Return(v268)   (exit_acc=v268)
-  block 40  start_pc=0
-    v266 Imm(0)                                           -> x0
-    v267 Imm(0)                                           -> x1
-    terminator Jmp(b39)   (exit_acc=v266)
+    v271 Copy { value=v266, fp=false }                    -> x1
+    v272 Imm(0)                                           -> x1
+    v273 Extend { value=v266, kind=I32 }                  -> x1
+    terminator Return(v266)   (exit_acc=v266)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

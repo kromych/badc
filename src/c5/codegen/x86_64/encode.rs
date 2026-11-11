@@ -1527,6 +1527,14 @@ pub(crate) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
     emit_byte(code, modrm(0b11, 0, dst.lo()));
 }
 
+/// `CMOVcc r64, r64`: `dst = src` when `cc` holds. `REX.W 0F 40+cc /r`.
+pub(crate) fn emit_cmovcc_rr(code: &mut Vec<u8>, cc: Cc, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x40 | (cc as u8));
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `MOVZX r64, byte ptr [base + disp]` -- load a byte zero-extended
 /// into a 64-bit register. Encoding: `REX.W + 0F B6 /r`.
 pub(crate) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
@@ -2511,6 +2519,15 @@ mod tests {
         let mut buf = Vec::new();
         f(&mut buf);
         buf
+    }
+
+    /// Bytes from LLVM's assembler.
+    #[test]
+    fn cmovcc_rr() {
+        let b = |cc, d, s| assemble(|c| emit_cmovcc_rr(c, cc, Reg(d), Reg(s)));
+        assert_eq!(b(Cc::Ne, 0, 1), [0x48, 0x0F, 0x45, 0xC1]);
+        assert_eq!(b(Cc::L, 10, 9), [0x4D, 0x0F, 0x4C, 0xD1]);
+        assert_eq!(b(Cc::Ae, 15, 7), [0x4C, 0x0F, 0x43, 0xFF]);
     }
 
     #[test]

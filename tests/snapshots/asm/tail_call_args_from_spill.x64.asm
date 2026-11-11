@@ -103,11 +103,10 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	cmpl	$0xbf, %ebx
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	cmpl	$0xbf, %ebx
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

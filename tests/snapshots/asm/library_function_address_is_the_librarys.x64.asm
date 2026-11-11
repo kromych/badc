@@ -45,10 +45,10 @@ Disassembly of section .text:
                	retq
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
+               	xorl	%edx, %edx
+               	movl	$0x3, %esi
                	cmpq	%rcx, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rsi, %rax
+               	cmoveq	%rdx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>

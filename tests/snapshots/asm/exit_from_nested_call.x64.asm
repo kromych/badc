@@ -61,10 +61,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x8, %edi
                	callq	<addr>
+               	movl	$0x4, %ecx
+               	movl	$0x5, %edx
                	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x4, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x5, %eax
-               	jmp	<addr>

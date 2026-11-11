@@ -185,15 +185,11 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movl	(%rbx,%rax,4), %esi
+               	movl	(%rbx,%rax,4), %edx
+               	movq	$-0x1, %rsi
                	cmpl	$0xa, %eax
-               	jge	<addr>
-               	movq	%rcx, %rdx
-               	cmpl	%edx, %esi
-               	je	<addr>
-               	jmp	<addr>
-               	movq	$-0x1, %rdx
-               	cmpl	%edx, %esi
+               	cmovlq	%rcx, %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax
@@ -216,15 +212,11 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movsbq	(%rbx,%rax), %rsi
+               	movsbq	(%rbx,%rax), %rdx
+               	leaq	0x1(%rax), %rsi
                	cmpl	$0x28, %eax
-               	jge	<addr>
-               	leaq	0x1(%rax), %rdx
-               	cmpl	%edx, %esi
-               	je	<addr>
-               	jmp	<addr>
-               	movq	%rcx, %rdx
-               	cmpl	%edx, %esi
+               	cmovgeq	%rcx, %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x40, %eax

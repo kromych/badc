@@ -115,10 +115,9 @@ Disassembly of section .text:
                	mov	x0, #0x20               // =32
                	mov	x1, #0x28               // =40
                	bl	<addr>
+               	mov	x1, #0x2a               // =42
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x20f
-               	b.ne	<addr>
-               	mov	x0, #0x2a               // =42
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

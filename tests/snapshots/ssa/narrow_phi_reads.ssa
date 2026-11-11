@@ -26,21 +26,17 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v5   Imm(0)                                           -> x1
     v6   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
     v7   BinopI { op=ult, lhs=v1, rhs_imm=128 }           -> x1
-    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
+    v8   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v9   BinopI { op=ult, lhs=v1, rhs_imm=128 }           -> x2
+    v10  Select { cond=v9, a=v8, b=v3, kind=I64 }         -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v8   Imm(0)                                           -> x0
-    v9   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
-    v10  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v9)
-  block 2  start_pc=0
-    v11  Phi { incoming=[b3:v3, b1:v9], kind=I64 }        -> x0
-    v12  BinopI { op=and, lhs=v11, rhs_imm=255 }          -> x1
-    v13  BinopI { op=xor, lhs=v11, rhs_imm=42 }           -> x1
-    v14  BinopI { op=ne, lhs=v11, rhs_imm=42 }            -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x1
-    terminator Return(v14)   (exit_acc=v14)
-  block 3  start_pc=0
-    terminator Jmp(b2)
+    v14  Copy { value=v10, fp=false }                     -> x1
+    v15  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
+    v16  BinopI { op=xor, lhs=v10, rhs_imm=42 }           -> x1
+    v17  BinopI { op=ne, lhs=v10, rhs_imm=42 }            -> x0
+    v18  Extend { value=v17, kind=I32 }                   -> x1
+    terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=loop_masked
 fn ent_pc=2 n_params=1 variadic=false locals=0
@@ -156,21 +152,17 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
     v6   BinopI { op=gt, lhs=v1, rhs_imm=1000 }           -> x1
-    terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
+    v7   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x1
+    v8   BinopI { op=gt, lhs=v1, rhs_imm=1000 }           -> x2
+    v9   Select { cond=v8, a=v7, b=v3, kind=I64 }         -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v7   Imm(0)                                           -> x0
-    v8   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x0
-    v9   Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v8)
-  block 2  start_pc=0
-    v10  Phi { incoming=[b3:v3, b1:v8], kind=I64 }        -> x0
-    v11  BinopI { op=and, lhs=v10, rhs_imm=65535 }        -> x1
-    v12  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x0
-    v13  Extend { value=v12, kind=I32, nsw }              -> x1
-    v14  Extend { value=v12, kind=I32 }                   -> x1
-    terminator Return(v12)   (exit_acc=v12)
-  block 3  start_pc=0
-    terminator Jmp(b2)
+    v13  Copy { value=v9, fp=false }                      -> x1
+    v14  BinopI { op=and, lhs=v9, rhs_imm=65535 }         -> x1
+    v15  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
+    v16  Extend { value=v15, kind=I32, nsw }              -> x1
+    v17  Extend { value=v15, kind=I32 }                   -> x1
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=join_unmasked
 fn ent_pc=6 n_params=2 variadic=false locals=0
@@ -179,27 +171,23 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ParamRef(1, kind=I32)                            -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x6
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v8, target=b3, fall=b1 }   (exit_acc=v8)
+    v9   BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1
+    v10  Select { cond=v9, a=v3, b=v5, kind=I64 }         -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v9   Imm(0)                                           -> x1
-    v10  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v3)
-  block 2  start_pc=0
-    v11  Phi { incoming=[b3:v5, b1:v3], kind=I64 }        -> x6
-    v12  Extend { value=v11, kind=I32 }                   -> x0
-    v13  BinopI { op=and, lhs=v11, rhs_imm=255 }          -> x0
-    v14  Imm(0)                                           -> x1
-    v15  BinopI { op=and, lhs=v13, rhs_imm=255 }          -> x1
-    v16  Extend { value=v13, kind=I32 }                   -> x1
-    terminator Return(v13)   (exit_acc=v13)
-  block 3  start_pc=0
-    terminator Jmp(b2)
+    v13  Copy { value=v10, fp=false }                     -> x1
+    v14  Extend { value=v10, kind=I32 }                   -> x1
+    v15  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
+    v16  Imm(0)                                           -> x1
+    v17  BinopI { op=and, lhs=v15, rhs_imm=255 }          -> x1
+    v18  Extend { value=v15, kind=I32 }                   -> x1
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=join_byte_as_signed
 fn ent_pc=7 n_params=1 variadic=false locals=0
@@ -212,22 +200,18 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
     v6   BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
+    v7   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v8   BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x2
+    v9   Select { cond=v8, a=v7, b=v3, kind=I64 }         -> x0
+    terminator Jmp(b1)
   block 1  start_pc=0
-    v7   Imm(0)                                           -> x0
-    v8   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
-    v9   Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v8)
-  block 2  start_pc=0
-    v10  Phi { incoming=[b3:v3, b1:v8], kind=I64 }        -> x0
-    v11  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
-    v12  Extend { value=v10, kind=I8 }                    -> x0
-    v13  Imm(0)                                           -> x1
-    v14  Imm(0)                                           -> x1
-    v15  Extend { value=v12, kind=I32 }                   -> x1
-    terminator Return(v12)   (exit_acc=v12)
-  block 3  start_pc=0
-    terminator Jmp(b2)
+    v13  Copy { value=v9, fp=false }                      -> x1
+    v14  BinopI { op=and, lhs=v9, rhs_imm=255 }           -> x1
+    v15  Extend { value=v9, kind=I8 }                     -> x0
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    v18  Extend { value=v15, kind=I32 }                   -> x1
+    terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=0

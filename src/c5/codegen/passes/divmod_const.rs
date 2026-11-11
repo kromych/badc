@@ -289,6 +289,7 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) {
                 at: At::Before(e.at),
                 inst: Inst::Imm(0),
                 is_f32: false,
+                copy_of: None,
             })
         })
         .collect();

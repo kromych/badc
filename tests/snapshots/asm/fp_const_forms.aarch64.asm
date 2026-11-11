@@ -48,21 +48,21 @@ Disassembly of section .text:
 
 <pick>:
                	sxtw	x0, w0
-               	cbz	x0, <addr>
                	fmov	d0, #2.50000000
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
+               	cmp	x0, #0x0
+               	fcsel	d0, d0, d1, ne
                	ret
-               	adrp	x17, <page>
-               	ldr	d0, [x17]
-               	b	<addr>
 
 <pickf>:
                	sxtw	x0, w0
-               	cbz	x0, <addr>
                	fmov	s0, #-0.25000000
+               	adrp	x16, <page>
+               	ldr	s1, [x16, #0x3c]
+               	cmp	x0, #0x0
+               	fcsel	s0, s0, s1, ne
                	ret
-               	adrp	x17, <page>
-               	ldr	s0, [x17, #0x3c]
-               	b	<addr>
 
 <store_all>:
                	adrp	x0, <page>

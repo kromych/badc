@@ -63,9 +63,9 @@ Disassembly of section .text:
                	movq	$0x3, <rip> # <addr>
                	movq	$0x4, <rip> # <addr>
                	addq	$0x7, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x4e, %rax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

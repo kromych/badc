@@ -611,6 +611,14 @@ pub(crate) enum Inst {
         kind: StoreKind,
         bytes: u8,
     },
+    /// `a` when `cond` is nonzero, else `b`, both computed, of an integer
+    /// kind, `F32` or `F64`: `csel`, `fcsel` or `cmov`.
+    Select {
+        cond: ValueId,
+        a: ValueId,
+        b: ValueId,
+        kind: LoadKind,
+    },
     /// The lane at byte `off` of the vector value `vec` of `bytes` bytes,
     /// read as `kind` would read it from memory; `V128` reads a 128-bit
     /// part of a wider vector.
@@ -782,6 +790,7 @@ impl Inst {
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
+                | Inst::Select { .. }
         )
     }
 
@@ -889,6 +898,7 @@ impl Inst {
             Inst::VecBinop { .. } => "VecBinop",
             Inst::VecInsert { .. } => "VecInsert",
             Inst::VecExtract { .. } => "VecExtract",
+            Inst::Select { .. } => "Select",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::LifetimeEnd(_) => "LifetimeEnd",
@@ -962,6 +972,11 @@ impl Inst {
                 f(*rhs);
             }
             Inst::VecExtract { vec, .. } => f(*vec),
+            Inst::Select { cond, a, b, .. } => {
+                f(*cond);
+                f(*a);
+                f(*b);
+            }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
@@ -1092,6 +1107,11 @@ impl Inst {
                 f(rhs);
             }
             Inst::VecExtract { vec, .. } => f(vec),
+            Inst::Select { cond, a, b, .. } => {
+                f(cond);
+                f(a);
+                f(b);
+            }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
             Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
@@ -3031,6 +3051,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecExtract { .. }
+            | Inst::Select { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::LifetimeEnd { .. }

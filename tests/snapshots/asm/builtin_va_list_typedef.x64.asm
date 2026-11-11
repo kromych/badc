@@ -250,11 +250,11 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
                	cmpl	$0x7, %edx
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rcx, %rcx
+               	cmovneq	%rdx, %rax
                	leave
                	retq
                	movq	%rax, %rcx

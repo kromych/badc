@@ -315,11 +315,11 @@ Disassembly of section .text:
                	callq	*%rax
                	addq	%rbx, %rax
                	addq	$0x2, %rax
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %edx
                	cmpl	$0x8, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>

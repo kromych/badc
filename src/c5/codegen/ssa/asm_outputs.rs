@@ -153,6 +153,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
                 at: At::Before(e.at),
                 inst,
                 is_f32,
+                copy_of: None,
             })
         };
         for o in e.outs.iter().filter(|o| o.rw) {

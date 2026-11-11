@@ -100,22 +100,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v66  ImmData(0)                                       -> x0
     v67  Load { addr=v66, disp=0, kind=I64 }              -> x0
     v68  Imm(0)                                           -> x1
-    v69  Binop { op=eq, lhs=v67, rhs=v17 }                -> x0
-    terminator Bz { cond=v69, target=b18, fall=b16 }   (exit_acc=v69)
+    v69  Binop { op=eq, lhs=v67, rhs=v17 }                -> x1
+    v70  Imm(0)                                           -> x1
+    v71  Imm(10)                                          -> x2
+    v72  Binop { op=eq, lhs=v67, rhs=v17 }                -> x0
+    v73  Select { cond=v72, a=v70, b=v71, kind=I64 }      -> x0
+    terminator Jmp(b16)
   block 16  start_pc=0
-    v70  Imm(0)                                           -> x0
-    v71  Imm(0)                                           -> x1
-    terminator Jmp(b17)   (exit_acc=v70)
-  block 17  start_pc=0
-    v74  Phi { incoming=[b16:v70, b18:v72], kind=I64 }    -> x0
-    v75  Imm(0)                                           -> x1
-    v76  Extend { value=v74, kind=I32 }                   -> x1
-    v77  LifetimeEnd(-2)                                  -> -
-    terminator Return(v74)   (exit_acc=v74)
-  block 18  start_pc=0
-    v72  Imm(10)                                          -> x0
-    v73  Imm(0)                                           -> x1
-    terminator Jmp(b17)   (exit_acc=v72)
+    v78  Copy { value=v73, fp=false }                     -> x1
+    v79  Imm(0)                                           -> x1
+    v80  Extend { value=v73, kind=I32 }                   -> x1
+    v81  LifetimeEnd(-2)                                  -> -
+    terminator Return(v73)   (exit_acc=v73)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

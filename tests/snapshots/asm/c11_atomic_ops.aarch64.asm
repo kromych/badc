@@ -149,7 +149,8 @@ Disassembly of section .text:
                	casal	w3, w4, [x1]
                	cmp	w3, #0x5
                	cset	x1, eq
-               	cbz	x1, <addr>
+               	cmp	x1, #0x0
+               	csel	x0, x0, x3, ne
                	cbz	x1, <addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x20
@@ -236,5 +237,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x3
-               	b	<addr>

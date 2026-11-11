@@ -43,18 +43,18 @@ Disassembly of section .text:
                	imulq	%rcx, %rax
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jl	<addr>
-               	xorl	%eax, %eax
-               	movl	$0x2, %ecx
+               	xorl	%ecx, %ecx
+               	movl	$0x2, %eax
                	leaq	<rip>, %rdx # <addr>
-               	cmpb	$0x0, (%rdx,%rcx)
-               	jne	<addr>
+               	movsbq	(%rdx,%rax), %rsi
+               	leaq	0x1(%rcx), %rdi
+               	testl	%esi, %esi
+               	cmoveq	%rdi, %rcx
                	incq	%rax
-               	incq	%rcx
-               	cmpl	$0x186a0, %ecx          # imm = 0x186A0
+               	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>
-               	cmpl	$0x2578, %eax           # imm = 0x2578
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpl	$0x2578, %ecx           # imm = 0x2578
+               	cmovneq	%rdx, %rax
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

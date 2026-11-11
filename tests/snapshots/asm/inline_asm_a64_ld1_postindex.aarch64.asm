@@ -31,11 +31,10 @@ Disassembly of section .text:
                	ld1	{ v1.4s }, [x2], #16
                	mov	w1, v1.s[0]
                	add	x0, x0, x1
+               	mov	x1, #0x2a               // =42
+               	mov	x2, #0x0                // =0
                	cmp	w0, #0x2a
-               	b.ne	<addr>
-               	mov	x0, #0x2a               // =42
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

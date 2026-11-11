@@ -306,12 +306,12 @@ Disassembly of section .text:
                	movq	-0x670(%rbp), %rdx
                	subq	%rdx, %rcx
                	addq	%rcx, %rax
+               	movl	$0xe, %ecx
+               	xorl	%edx, %edx
                	cmpq	$0x1e8480, %rax         # imm = 0x1E8480
-               	jge	<addr>
-               	movl	$0xe, %eax
+               	movq	%rdx, %rax
+               	cmovlq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>

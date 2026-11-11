@@ -35,15 +35,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x3, %edx
                	cmpl	$0x7, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	popq	%rbp
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
+               	addb	%bh, 0x7(%rax)
 
 <asm_fn>:
                	movl	$0x7, %eax

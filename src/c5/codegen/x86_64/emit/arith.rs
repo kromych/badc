@@ -78,6 +78,122 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
     })
 }
 
+/// `Inst::Select`: `cmov` on the flags of the condition the allocator
+/// fused into the select, read as a branch on it would be, or on `test
+/// cond, cond`. A floating compare's `==` and `!=` add `cmovp`. A floating
+/// select moves the bits through r10 / r11; `mov` and `movq` keep the flags.
+pub(super) fn emit_select(
+    code: &mut Vec<u8>,
+    dst: Place,
+    (cond, a, b, kind): (u32, u32, u32, LoadKind),
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::encode::{emit_cmovcc_rr, emit_movq_r_xmm, emit_movq_xmm_r};
+    use super::inst::{FusedBranch, fused_branch_cc, invert_cc};
+    let fused = alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false);
+    let shape = if fused {
+        let Some(shape) = fused_branch_cc(func, alloc, cond, false) else {
+            return fail("Select: fused condition has no condition code");
+        };
+        shape
+    } else {
+        let Some(rc) = materialize_int(code, place_of(alloc, cond), SCRATCH_R10, frame) else {
+            return fail("Select: condition not int reg / spill");
+        };
+        emit_rr(code, Mnem::Test, 8, rc, rc);
+        FusedBranch::Jcc(Cc::Ne)
+    };
+    // `a` when `cc` holds, or PF is set under `parity`; else `b`.
+    let (cc, parity, a_first) = match shape {
+        FusedBranch::Jcc(cc) => (cc, false, true),
+        FusedBranch::JpOr(cc) => (cc, true, true),
+        FusedBranch::JnpAnd(cc) => {
+            let Some(inv) = invert_cc(cc) else {
+                return fail("Select: condition has no inverse");
+            };
+            (inv, true, false)
+        }
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let fp = frame.fp_scratch[0];
+        for (src, r) in [(a, SCRATCH_R10), (b, SCRATCH_R11)] {
+            let Some(x) = materialize_fp(code, place_of(alloc, src), Reg(fp), frame) else {
+                return fail("Select: arm not fp reg / spill");
+            };
+            emit_movq_r_xmm(code, r, x);
+        }
+        let (t, x) = if a_first {
+            (SCRATCH_R11, SCRATCH_R10)
+        } else {
+            (SCRATCH_R10, SCRATCH_R11)
+        };
+        cmov_pick(code, cc, parity, t, x);
+        let Some(xd) = fp_or_spill_dst(dst, frame) else {
+            return fail("Select: dst not fp reg / spill");
+        };
+        emit_movq_xmm_r(code, xd, t);
+        fp_spill_dst_to_slot(code, dst, xd, frame);
+        return Ok(());
+    }
+    let Some(ra) = materialize_int(code, place_of(alloc, a), SCRATCH_R10, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rb) = materialize_int(code, place_of(alloc, b), SCRATCH_R11, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    let (x, y) = if a_first { (ra, rb) } else { (rb, ra) };
+    if rd != x {
+        if rd != y {
+            emit_mov_rr(code, rd, y);
+        }
+        cmov_pick(code, cc, parity, rd, x);
+    } else {
+        // `rd` holds `x` and takes `y` when neither `cc` nor, under
+        // `parity`, PF holds: a scratch copy of `y` takes `x` on PF first.
+        let Some(inv) = invert_cc(cc) else {
+            return fail("Select: condition has no inverse");
+        };
+        let y = if parity {
+            let t = if y == SCRATCH_R10 || y == SCRATCH_R11 {
+                y
+            } else {
+                let t = if x == SCRATCH_R10 {
+                    SCRATCH_R11
+                } else {
+                    SCRATCH_R10
+                };
+                emit_mov_rr(code, t, y);
+                t
+            };
+            emit_cmovcc_rr(code, Cc::P, t, x);
+            t
+        } else {
+            y
+        };
+        emit_cmovcc_rr(code, inv, rd, y);
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// `t = x` when `cc` holds, or when PF is set under `parity`.
+fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
+    use super::encode::emit_cmovcc_rr;
+    emit_cmovcc_rr(code, cc, t, x);
+    if parity {
+        emit_cmovcc_rr(code, Cc::P, t, x);
+    }
+}
+
 /// After a flags-setting compare: `true` when a fused branch consumes
 /// the flags directly and the boolean materialization is elided, else
 /// `setcc` + `movzx` the result into `rd`.

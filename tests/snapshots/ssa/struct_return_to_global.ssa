@@ -160,22 +160,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v148 BinopI { op=add, lhs=v115, rhs_imm=7 }           -> x0
     v149 Imm(0)                                           -> x1
     v150 Imm(0)                                           -> x1
-    v151 BinopI { op=eq, lhs=v148, rhs_imm=78 }           -> x0
-    terminator Bz { cond=v151, target=b6, fall=b4 }   (exit_acc=v151)
+    v151 BinopI { op=eq, lhs=v148, rhs_imm=78 }           -> x1
+    v152 Imm(0)                                           -> x1
+    v153 Imm(1)                                           -> x2
+    v154 BinopI { op=eq, lhs=v148, rhs_imm=78 }           -> x0
+    v155 Select { cond=v154, a=v152, b=v153, kind=I64 }   -> x0
+    terminator Jmp(b4)
   block 4  start_pc=0
-    v152 Imm(0)                                           -> x0
-    v153 Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v152)
-  block 5  start_pc=0
-    v156 Phi { incoming=[b4:v152, b6:v154], kind=I64 }    -> x0
-    v157 Imm(0)                                           -> x1
-    v158 Extend { value=v156, kind=I32 }                  -> x1
-    v159 LifetimeEnd(0)                                   -> -
-    terminator Return(v156)   (exit_acc=v156)
-  block 6  start_pc=0
-    v154 Imm(1)                                           -> x0
-    v155 Imm(0)                                           -> x1
-    terminator Jmp(b5)   (exit_acc=v154)
+    v160 Copy { value=v155, fp=false }                    -> x1
+    v161 Imm(0)                                           -> x1
+    v162 Extend { value=v155, kind=I32 }                  -> x1
+    v163 LifetimeEnd(0)                                   -> -
+    terminator Return(v155)   (exit_acc=v155)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

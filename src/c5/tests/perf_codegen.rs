@@ -728,9 +728,9 @@ fn bounded_counters_hold_no_extension_in_their_loops() {
 }
 
 /// A guard on another value, and a guard whose block has ended, say
-/// nothing about `i + 1`: the sum is renormalized behind the branch for
+/// nothing about `i + 1`: the sum is renormalized past the increment for
 /// its 64-bit read. Under a guard on `i` itself it is not, and the one
-/// extension is the parameter's, ahead of the branch.
+/// extension is the parameter's, ahead of the increment.
 #[test]
 fn unguarded_increment_keeps_its_renormalization() {
     const SRCS: [(&str, bool); 3] = [
@@ -750,19 +750,28 @@ fn unguarded_increment_keeps_its_renormalization() {
     let mut m = Misses::default();
     for (src, renormalized) in SRCS {
         let ws = a64(src, "f");
-        let branch = ws
+        // `add xd, xn, #1`.
+        let inc = ws
             .iter()
-            .enumerate()
-            .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))))
-            .expect("a conditional branch");
+            .position(|&w| w & 0xFFFF_FC00 == 0x9100_0400)
+            .expect("an increment");
         m.expect(
-            ws[branch..].iter().any(|&w| a64_is_sxtw(w)) == renormalized,
+            ws[inc..].iter().any(|&w| a64_is_sxtw(w)) == renormalized,
             || format!("aarch64 `{src}`: {ws:08x?}"),
         );
         let insns = x64(src, "f");
-        let branch = insns.iter().position(X64Insn::is_jcc).expect("a jcc");
+        // `lea r, [r + 1]`, `add r, 1` or `inc r`.
+        let reg_op = |i: &X64Insn| i.modrm.map(|m| (m >> 3) & 7);
+        let inc = insns
+            .iter()
+            .position(|i| {
+                (i.op == 0x8d && i.disp == 1)
+                    || (i.op == 0x83 && reg_op(i) == Some(0) && i.imm == 1)
+                    || (i.op == 0xff && reg_op(i) == Some(0))
+            })
+            .expect("an increment");
         m.expect(
-            insns[branch..].iter().any(X64Insn::is_movsxd_rr) == renormalized,
+            insns[inc..].iter().any(X64Insn::is_movsxd_rr) == renormalized,
             || format!("x86-64 `{src}`: {insns:x?}"),
         );
     }
@@ -1178,10 +1187,13 @@ fn x64_constant_store_keeps_a_register_the_constant_needs() {
     }
 }
 
-/// The zero test of a loaded byte reads memory in the compare.
+/// The zero test of a loaded byte a branch reads takes the byte from
+/// memory in the compare. The arm stores, so the branch stays.
 #[test]
 fn x64_zero_test_of_a_loaded_byte_reads_memory() {
-    let insns = x64(COUNT_ZERO, "count_zero");
+    const SRC: &str = "void mark_zero(const char *p, char *q, int n) {\n\
+    for (int i = 0; i < n; i++) { if (!p[i]) q[i] = 1; }\n}\n";
+    let insns = x64(SRC, "mark_zero");
     // `cmp byte [mem], imm8` is the /7 row of the 0x80 group.
     let cmp_mem =
         |i: &X64Insn| i.op == 0x80 && !i.reg_form() && i.modrm.is_some_and(|b| (b >> 3) & 7 == 7);
@@ -3627,7 +3639,7 @@ fn a64_literal_load(ws: &[u32], single: bool) -> bool {
 /// A floating constant only floating readers take is built in the FP
 /// register they read: `fmov #imm8` in its own precision, `movi` for +0.0,
 /// one integer move and a transfer for a pattern one move builds, and a
-/// read-only literal past that -- also on a phi's edge.
+/// read-only literal past that -- also as a select's arm.
 #[test]
 fn a64_floating_constants_are_built_in_fp_registers() {
     const SRC: &str = "double imm(double x) { return x * 2.5 + 1.0; }\n\
@@ -3677,16 +3689,21 @@ double phi(int c) { return c ? 2.5 : 0.001; }\n";
     m.finish();
 }
 
-/// A constant only a floating phi reads is rebuilt on the phi's edges:
-/// nothing defines it in a general register.
+/// A constant only a floating join reads -- rebuilt on a phi's edge, or an
+/// arm of a select -- is built in the FP register file: nothing defines it
+/// in a general register. `k` becomes a select; the three-way join of `k3`
+/// keeps a phi over a select.
 #[test]
 fn a64_constant_only_a_phi_reads_has_no_definition() {
-    const SRC: &str = "double k(int c, double y) { double r = c ? 1.0 : 0.001; return r * y; }\n";
-    let ws = a64(SRC, "k");
-    assert!(
-        !ws.iter().any(|&w| a64_move_wide(w)),
-        "k: a constant is built in a general register: {ws:08x?}"
-    );
+    const SRC: &str = "double k(int c, double y) { double r = c ? 1.0 : 0.001; return r * y; }\n\
+double k3(int c, double y) { double r = c == 1 ? 1.0 : c == 2 ? 0.5 : 0.001; return r * y; }\n";
+    for name in ["k", "k3"] {
+        let ws = a64(SRC, name);
+        assert!(
+            !ws.iter().any(|&w| a64_move_wide(w)),
+            "{name}: a constant is built in a general register: {ws:08x?}"
+        );
+    }
 }
 
 /// The negative side: a constant an integer store also reads keeps its
@@ -4112,32 +4129,98 @@ fn a64_negation_takes_one_neg() {
     m.finish();
 }
 
-/// A live negation between a comparison and the branch that reads it:
-/// x86-64 `neg` writes the flags, so the comparison cannot be folded
-/// into the branch across it.
+/// A live negation between a comparison and the choice that reads it:
+/// x86-64 `neg` writes the flags, so the comparison cannot reach the
+/// choice across it.
 const NEG_IN_FLAG_WINDOW: &str = "long guard(long a, long b) {\n\
 long c = (a > 0);\n\
 long d = -b;\n\
 return c ? d : 0;\n}\n";
 
-/// The comparison materializes through `setcc` and the branch tests that
-/// value: fusing it into the branch would read the flags the intervening
-/// `negq` left.
+/// The branch or conditional move reads flags a test or a compare set,
+/// never the ones the intervening `negq` left.
 #[test]
 fn x64_negation_does_not_fuse_a_comparison_into_the_branch() {
     let insns = x64(NEG_IN_FLAG_WINDOW, "guard");
-    let jcc = insns
+    let reader = insns
         .iter()
-        .position(X64Insn::is_jcc)
-        .expect("no conditional branch");
-    let before = insns[jcc - 1];
-    // `85 /r` TEST r/m, r and the CMP forms: the flags the branch reads
+        .position(|i| i.is_jcc() || (0x0F40..=0x0F4F).contains(&i.op))
+        .expect("no conditional branch or move");
+    let before = insns[reader - 1];
+    // `85 /r` TEST r/m, r and the CMP forms: the flags the reader takes
     // must come from one of them, not from the negate.
     let mut m = Misses::default();
     m.expect(
         matches!(before.op, 0x85 | 0x39 | 0x3B | 0x81 | 0x83) && before.op != 0xF7,
-        || format!("the branch reads the flags of {before:x?}: {insns:x?}"),
+        || format!("the reader takes the flags of {before:x?}: {insns:x?}"),
     );
+    m.finish();
+}
+
+/// A short branch that only chooses values becomes a select: the
+/// conditional increment is a `csel` / `cmov` inside the loop, whose back
+/// edge is its only conditional branch; a diamond's arms run ahead of the
+/// compare; two values chosen by one compare or one bit test read its
+/// flags; and x86-64 reads a floating `!=` with `cmovne` and `cmovp`. No
+/// `cset` / `setcc` materializes a condition and no zero test reads one.
+#[test]
+fn short_branch_choosing_values_is_a_select() {
+    const SRC: &str = "long count_below(const int *p, int n, int k) {\n\
+    long c = 0;\n\
+    for (int i = 0; i < n; i++) { if (p[i] < k) c++; }\n\
+    return c;\n}\n\
+long diamond(long x, long y) { long r; if (x < y) r = y - x; else r = x - y; return r; }\n\
+void minmax(long a, long b, long *lo, long *hi) {\n\
+    long l = a, h = b;\n\
+    if (b < a) { l = b; h = a; }\n\
+    *lo = l; *hi = h;\n}\n\
+long swap_if(long a, long b, int c) {\n\
+    if (c & 1) { long t = a; a = b; b = t; }\n\
+    return a * 10 + b;\n}\n\
+long pick_ne(double x, double y, long a, long b) { long r = b; if (x != y) r = a; return r; }\n";
+    let csel = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0000;
+    let cmov = |i: &X64Insn| (0x0F40..=0x0F4F).contains(&i.op);
+    let setcc = |i: &X64Insn| (0x0F90..=0x0F9F).contains(&i.op);
+    // `cmp Rn, #0` and `test r, r`.
+    let a64_zero_test = |w: u32| w & 0x7FFF_FC1F == 0x7100_001F;
+    let x64_zero_test = |i: &X64Insn| i.op == 0x85 && i.reg_form() && i.regs().0 == i.regs().1;
+    let mut m = Misses::default();
+    for (name, csels, cmovs) in [
+        ("count_below", 1, 1),
+        ("diamond", 1, 1),
+        ("minmax", 2, 2),
+        ("swap_if", 2, 2),
+        ("pick_ne", 1, 2),
+    ] {
+        let ws = a64(SRC, name);
+        let conds: Vec<(usize, i64)> = (ws.iter().enumerate())
+            .filter_map(|(i, &w)| match a64_branch(w, i) {
+                Some((t, false)) => Some((i, t)),
+                _ => None,
+            })
+            .collect();
+        let body = conds
+            .iter()
+            .find(|&&(i, t)| t <= i as i64)
+            .map_or(0..ws.len(), |&(i, t)| t as usize..i);
+        m.expect(
+            ws[body.clone()].iter().filter(|&&w| csel(w)).count() == csels
+                && !conds.iter().any(|(i, _)| body.contains(i))
+                && !ws.iter().any(|&w| a64_is_cset(w) || a64_zero_test(w)),
+            || format!("aarch64 {name}: {ws:08x?}"),
+        );
+        let insns = x64(SRC, name);
+        let body = (insns.iter())
+            .find(|i| i.is_jcc() && i.target() <= i.at)
+            .map_or(0..usize::MAX, |i| i.target()..i.at);
+        let inside = |i: &&X64Insn| body.contains(&i.at);
+        m.expect(
+            insns.iter().filter(inside).filter(|i| cmov(i)).count() == cmovs
+                && !insns.iter().filter(inside).any(X64Insn::is_jcc)
+                && !insns.iter().any(|i| setcc(i) || x64_zero_test(i)),
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
     m.finish();
 }
 

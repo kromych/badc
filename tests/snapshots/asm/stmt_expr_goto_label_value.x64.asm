@@ -71,8 +71,7 @@ Disassembly of section .text:
                	cmovel	%r11d, %ecx
                	addq	%rcx, %rax
                	cmpq	$0x64, %rax
-               	ja	<addr>
-               	movq	%rax, %rdx
+               	cmovbeq	%rax, %rdx
                	incq	%rdi
                	cmpl	$0x64, %edx
                	jb	<addr>

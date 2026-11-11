@@ -100,14 +100,13 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	testl	%r14d, %r14d
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %ecx
+               	testl	%r14d, %r14d
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

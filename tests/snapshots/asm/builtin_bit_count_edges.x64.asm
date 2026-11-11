@@ -124,9 +124,11 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x20, %ecx
                	jl	<addr>
+               	xorl	%edx, %edx
+               	leaq	0x1(%rcx), %r9
                	cmpl	$0x20, %ecx
-               	jne	<addr>
-               	xorl	%ecx, %ecx
+               	movq	%r9, %rcx
+               	cmoveq	%rdx, %rcx
                	cmpl	%ecx, %r8d
                	je	<addr>
                	movl	$0x5, %eax
@@ -321,8 +323,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	incq	%rcx
-               	jmp	<addr>
 
 <check64>:
                	movq	%rdi, <rip> # <addr>
@@ -410,9 +410,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
+               	xorl	%ecx, %ecx
+               	leaq	0x1(%rax), %r8
                	cmpl	$0x40, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%r8, %rax
+               	cmoveq	%rcx, %rax
                	cmpl	%eax, %esi
                	je	<addr>
                	movl	$0xf, %eax
@@ -530,8 +532,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	retq
-               	incq	%rax
-               	jmp	<addr>
 
 <check_long>:
                	movq	%rdi, <rip> # <addr>
@@ -619,9 +619,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
+               	xorl	%ecx, %ecx
+               	leaq	0x1(%rax), %r8
                	cmpl	$0x40, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%r8, %rax
+               	cmoveq	%rcx, %rax
                	cmpl	%eax, %edx
                	je	<addr>
                	movl	$0x16, %eax
@@ -644,8 +646,6 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	retq
-               	incq	%rax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -69,17 +69,15 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	testq	%rdi, %rdi
                	je	<addr>
-               	testq	%rsi, %rsi
-               	je	<addr>
                	movl	$0x1, %eax
+               	movl	$0x2, %ecx
+               	testq	%rsi, %rsi
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
-               	testq	%rdx, %rdx
-               	je	<addr>
                	movl	$0x3, %eax
-               	jmp	<addr>
-               	movl	$0x4, %eax
+               	movl	$0x4, %ecx
+               	testq	%rdx, %rdx
+               	cmoveq	%rcx, %rax
                	jmp	<addr>
 
 <carry>:

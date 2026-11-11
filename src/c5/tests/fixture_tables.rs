@@ -1585,6 +1585,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -2790,6 +2791,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -3972,6 +3974,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -4921,6 +4924,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("search_tables_trees_and_queues.c", 0),
     ("msvc_pragma_operator_in_place.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -5812,6 +5816,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("search_tables_trees_and_queues.c", 0),
     ("msvc_pragma_operator_in_place.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -6948,6 +6953,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
     ("asm_label_names_the_assembler_symbol.c", 0),
+    ("if_converted_arms.c", 0),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

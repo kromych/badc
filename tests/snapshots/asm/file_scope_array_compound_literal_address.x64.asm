@@ -143,9 +143,9 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	retq
                	movl	<rip>, %eax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x8, %edx
                	cmpl	$0x4, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x8, %eax
-               	jmp	<addr>

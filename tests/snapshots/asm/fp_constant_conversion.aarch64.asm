@@ -105,11 +105,11 @@ Disassembly of section .text:
                	fmov	d4, x16
                	bl	<addr>
                	ldur	s0, [x29, #-0x8]
+               	add	x1, x0, #0x1
                	adrp	x16, <addr>
                	ldr	s1, [x16, #0x28]
                	fcmp	s1, s0
-               	b.eq	<addr>
-               	add	x0, x0, #0x1
+               	csel	x0, x1, x0, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

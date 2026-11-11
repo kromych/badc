@@ -26,14 +26,17 @@ Disassembly of section .text:
                	int3
 
 <on_usr1>:
+               	movslq	%edi, %rdi
                	movq	0xa0(%rdx), %rax
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
                	movl	(%rsi), %ecx
+               	movq	$-0x1, %rdx
                	cmpl	%edi, %ecx
-               	jne	<addr>
-               	movl	%edi, <rip> # <addr>
+               	movq	%rdx, %rcx
+               	cmoveq	%rdi, %rcx
+               	movl	%ecx, <rip> # <addr>
                	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x100000, %rcx         # imm = 0x100000
@@ -41,8 +44,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	movl	%eax, <rip> # <addr>
                	retq
-               	movq	$-0x1, %rdi
-               	jmp	<addr>
 
 <check>:
                	pushq	%rbp
@@ -141,13 +142,13 @@ Disassembly of section .text:
                	leave
                	retq
                	movslq	<rip>, %rax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x6, %edx
                	testq	%rax, %rax
-               	je	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x6, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

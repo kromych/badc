@@ -20,10 +20,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	x0, #0x0
-               	b.le	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, gt
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

@@ -27,43 +27,43 @@ Disassembly of section .text:
 
 <build_packed>:
                	andq	$0xf, %rdi
-               	movq	%rsi, %rax
-               	andq	$0xf, %rax
-               	movq	%rax, %rcx
-               	shlq	$0x4, %rcx
-               	orq	%rdi, %rcx
-               	movq	%rdx, %rsi
-               	andq	$0x1f, %rsi
-               	andq	$-0x1f01, %rcx          # imm = 0xE0FF
-               	shlq	$0x8, %rsi
-               	orq	%rsi, %rcx
-               	movq	%rcx, %rsi
                	andq	$0xf, %rsi
-               	xorq	%rsi, %rdi
-               	xorl	%esi, %esi
+               	movq	%rsi, %rax
+               	shlq	$0x4, %rax
+               	orq	%rdi, %rax
+               	movq	%rdx, %rcx
+               	andq	$0x1f, %rcx
+               	andq	$-0x1f01, %rax          # imm = 0xE0FF
+               	shlq	$0x8, %rcx
+               	orq	%rcx, %rax
+               	movq	%rax, %rcx
+               	andq	$0xf, %rcx
+               	xorq	%rcx, %rdi
+               	xorl	%ecx, %ecx
                	testl	%edi, %edi
                	jne	<addr>
-               	movl	%ecx, %esi
-               	sarq	$0x4, %rsi
-               	andq	$0xf, %rsi
-               	cmpl	%eax, %esi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	xorl	%eax, %eax
-               	testq	%rsi, %rsi
-               	je	<addr>
-               	movl	%ecx, %ecx
-               	sarq	$0x8, %rcx
-               	shlq	$0x3b, %rcx
-               	sarq	$0x3b, %rcx
-               	cmpl	%edx, %ecx
+               	movl	%eax, %ecx
+               	sarq	$0x4, %rcx
+               	andq	$0xf, %rcx
+               	cmpl	%esi, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
+               	xorl	%esi, %esi
                	testq	%rcx, %rcx
                	je	<addr>
-               	movl	$0x1, %eax
+               	movl	%eax, %eax
+               	sarq	$0x8, %rax
+               	shlq	$0x3b, %rax
+               	sarq	$0x3b, %rax
+               	cmpl	%edx, %eax
+               	sete	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %ecx
+               	testq	%rax, %rax
+               	movq	%rsi, %rax
+               	cmovneq	%rcx, %rax
                	retq
-               	movq	%rax, %rcx
+               	movq	%rsi, %rax
                	jmp	<addr>
 
 <build_mixed>:
@@ -124,9 +124,9 @@ Disassembly of section .text:
                	cmpl	%ecx, %r8d
                	sete	%cl
                	movzbq	%cl, %rcx
+               	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq

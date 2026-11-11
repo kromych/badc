@@ -210,6 +210,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
                     .get(r.src as usize)
                     .copied()
                     .unwrap_or(false),
+                copy_of: None,
             }
         })
         .collect();
@@ -397,6 +398,7 @@ mod tests {
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],
+            mask_tests: vec![false; n],
             imm_store: vec![false; n],
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),

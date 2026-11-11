@@ -49,11 +49,10 @@ Disassembly of section .text:
                	ldr	x1, [x1, <lo12>]
                	blr	x1
                	add	x0, x20, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x2                // =2
                	cmp	x0, #0x6
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x2                // =2
-               	b	<addr>

@@ -399,24 +399,19 @@ fn ent_pc=6 n_params=0 variadic=false locals=27
   block 39  start_pc=0
     v316 LocalAddr(-25)                                   -> x7
     v317 CallExt { binding_idx=264, args=[v316], fp_arg_mask=0x0 } -> x0
-    terminator Bz { cond=v317, target=b42, fall=b40 }   (exit_acc=v317)
+    v318 Imm(11)                                          -> x1
+    v319 Imm(0)                                           -> x2
+    v320 Select { cond=v317, a=v318, b=v319, kind=I64 }   -> x0
+    terminator Jmp(b40)
   block 40  start_pc=0
-    v318 Imm(11)                                          -> x0
-    v319 Imm(0)                                           -> x1
-    terminator Jmp(b41)   (exit_acc=v318)
-  block 41  start_pc=0
-    v322 Phi { incoming=[b40:v318, b42:v320], kind=I64 }  -> x0
-    v323 Imm(0)                                           -> x1
-    v324 Extend { value=v322, kind=I32 }                  -> x1
-    v325 LifetimeEnd(-22)                                 -> -
-    v326 LifetimeEnd(-18)                                 -> -
-    v327 LifetimeEnd(-27)                                 -> -
-    v328 LifetimeEnd(-25)                                 -> -
-    terminator Return(v322)   (exit_acc=v322)
-  block 42  start_pc=0
-    v320 Imm(0)                                           -> x0
-    v321 Imm(0)                                           -> x1
-    terminator Jmp(b41)   (exit_acc=v320)
+    v325 Copy { value=v320, fp=false }                    -> x1
+    v326 Imm(0)                                           -> x1
+    v327 Extend { value=v320, kind=I32 }                  -> x1
+    v328 LifetimeEnd(-22)                                 -> -
+    v329 LifetimeEnd(-18)                                 -> -
+    v330 LifetimeEnd(-27)                                 -> -
+    v331 LifetimeEnd(-25)                                 -> -
+    terminator Return(v320)   (exit_acc=v320)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -50,9 +50,8 @@ Disassembly of section .text:
                	ldr	x0, [x1, #0x30]
                	add	x1, x0, #0xc
                	sub	x0, x1, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x3                // =3
                	cmp	x0, #0xc
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x3                // =3
-               	b	<addr>

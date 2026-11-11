@@ -76,11 +76,11 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90
                	ret
-               	cbnz	w23, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	cmp	w23, #0x0
+               	csel	x0, x0, x1, eq
                	ldp	x29, x30, [sp, #0x80]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

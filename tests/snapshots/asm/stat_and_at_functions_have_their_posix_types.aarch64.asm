@@ -272,10 +272,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0xb8
                	bl	<addr>
                	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x0, #0xb                // =11
+               	mov	x1, #0xb                // =11
+               	mov	x2, #0x0                // =0
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, ne
                	ldp	x29, x30, [sp, #0xe0]
                	ldp	x20, x21, [sp], #0xf0
                	ret
-               	mov	x0, #0x0                // =0
-               	b	<addr>

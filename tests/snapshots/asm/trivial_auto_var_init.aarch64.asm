@@ -49,8 +49,9 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x4, x3, x2
                	ldrb	w4, [x4]
-               	cbz	w4, <addr>
-               	add	x0, x0, #0x1
+               	add	x5, x0, #0x1
+               	cmp	w4, #0x0
+               	csel	x0, x5, x0, ne
                	add	x2, x2, #0x1
                	cmp	x2, x1
                	b.lo	<addr>
@@ -257,6 +258,8 @@ Disassembly of section .text:
 <loop_block>:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
+               	cmp	w1, #0x0
+               	csel	x0, x0, x0, eq
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
@@ -344,9 +347,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	add	x0, x20, x0
+               	mov	x1, #0x64               // =100
                	cmp	w0, #0x64
-               	b.le	<addr>
-               	mov	x0, #0x64               // =100
+               	csel	x0, x1, x0, gt
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

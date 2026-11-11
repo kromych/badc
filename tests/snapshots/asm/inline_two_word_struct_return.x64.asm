@@ -82,10 +82,10 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	addq	$0x16665, %rax          # imm = 0x16665
+               	xorl	%ecx, %ecx
+               	movl	$0x1, %edx
                	cmpq	$0x16785, %rax          # imm = 0x16785
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

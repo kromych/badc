@@ -70,13 +70,12 @@ Disassembly of section .text:
                	mov	x17, #0x6665            // =26213
                	movk	x17, #0x1, lsl #16
                	add	x0, x0, x17
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	mov	x17, #0x6785            // =26501
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	b	<addr>

@@ -67,11 +67,10 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	cmpl	$0xb7c, %ecx            # imm = 0xB7C
-               	jne	<addr>
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
+               	cmpl	$0xb7c, %ecx            # imm = 0xB7C
+               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

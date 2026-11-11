@@ -857,11 +857,11 @@ Disassembly of section .text:
                	movq	%rdx, %r13
                	subq	%rdi, %r13
                	jmp	<addr>
+               	movq	$-0x1, %rax
+               	xorl	%ebx, %ebx
                	cmpq	%rdi, %rdx
-               	jne	<addr>
-               	movq	$-0x1, %r13
-               	jmp	<addr>
-               	xorl	%r13d, %r13d
+               	movq	%rbx, %r13
+               	cmoveq	%rax, %r13
                	jmp	<addr>
                	incq	%rsi
                	movl	$0x20, %eax

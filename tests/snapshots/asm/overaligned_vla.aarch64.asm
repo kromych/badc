@@ -199,10 +199,11 @@ Disassembly of section .text:
                	bl	<addr>
                	and	x1, x23, #0x7f
                	mov	x0, #0x1                // =1
-               	cbnz	w1, <addr>
-               	add	x1, x21, #0x3
-               	cmp	w25, w1
-               	cset	x1, ne
+               	add	x2, x21, #0x3
+               	cmp	w25, w2
+               	cset	x2, ne
+               	cmp	w1, #0x0
+               	csel	x1, x0, x2, ne
                	orr	x2, x24, x1
                	add	x1, x21, #0x3
                	sub	x1, x1, #0x1
@@ -223,8 +224,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
-               	mov	x1, x0
                	b	<addr>
                	orr	x24, x2, x0
                	mov	sp, x26

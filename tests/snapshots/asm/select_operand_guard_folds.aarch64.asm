@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <add_page>:
-               	adrp	x2, <page>
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x50]
-               	cbz	x1, <addr>
-               	mov	x1, #0x1                // =1
-               	orr	x0, x1, x0
-               	str	x0, [x2, #0x30]
+               	adrp	x2, <page>
+               	ldrsw	x2, [x2, #0x50]
+               	mov	x3, #0x1                // =1
+               	mov	x4, #0x0                // =0
+               	cmp	x2, #0x0
+               	csel	x2, x3, x4, ne
+               	orr	x0, x2, x0
+               	str	x0, [x1, #0x30]
                	and	x0, x0, #0x3
                	ret
-               	mov	x1, #0x0                // =0
-               	b	<addr>
 
 <main>:
                	adrp	x1, <page>

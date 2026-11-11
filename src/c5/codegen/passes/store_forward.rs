@@ -486,6 +486,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
+                | Inst::Select { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)
@@ -900,6 +901,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecExtract { .. }
+                | Inst::Select { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)

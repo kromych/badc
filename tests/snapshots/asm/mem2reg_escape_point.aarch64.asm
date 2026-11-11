@@ -38,8 +38,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	ldursw	x4, [x29, #-0x8]
                	add	x2, x2, x4
-               	cbnz	w0, <addr>
-               	mov	x1, x3
+               	cmp	w0, #0x0
+               	csel	x1, x3, x1, eq
                	ldrsw	x4, [x1]
                	add	x4, x4, #0x1
                	str	w4, [x1]

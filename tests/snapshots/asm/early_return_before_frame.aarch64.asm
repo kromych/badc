@@ -324,21 +324,16 @@ Disassembly of section .text:
                	str	x5, [x4, #0x10]
                	lsl	x0, x0, #1
                	add	x6, x0, #0x1
+               	mul	x7, x6, x2
+               	add	x7, x3, x7
                	cmp	w6, #0x7
-               	b.ge	<addr>
-               	mul	x6, x6, x2
-               	add	x6, x3, x6
+               	csel	x6, x7, x1, lt
                	str	x6, [x4]
                	add	x0, x0, #0x2
+               	mul	x6, x0, x2
+               	add	x3, x3, x6
                	cmp	w0, #0x7
-               	b.ge	<addr>
-               	mul	x0, x0, x2
-               	add	x0, x3, x0
-               	b	<addr>
-               	mov	x0, x1
-               	b	<addr>
-               	mov	x6, x1
-               	b	<addr>
+               	csel	x0, x3, x1, lt
                	str	x0, [x4, #0x8]
                	mov	x0, x5
                	cmp	w0, #0x7

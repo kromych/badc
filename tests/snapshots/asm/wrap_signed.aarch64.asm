@@ -115,9 +115,9 @@ Disassembly of section .text:
 
 <guard_then_join>:
                	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
                	cmp	w0, #0x64
-               	b.ge	<addr>
-               	mov	x1, #0x1                // =1
+               	csel	x1, x2, x1, lt
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	add	x0, x1, x0

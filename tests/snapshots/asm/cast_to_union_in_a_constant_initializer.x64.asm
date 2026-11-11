@@ -82,11 +82,11 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movl	<rip>, %eax # <addr>
+               	xorl	%ecx, %ecx
+               	movl	$0x4, %edx
                	cmpl	$0xb, %eax
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	movq	%rdx, %rax
+               	cmoveq	%rcx, %rax
                	retq
-               	movl	$0x4, %eax
-               	jmp	<addr>
                	movl	$0x2, %eax
                	retq

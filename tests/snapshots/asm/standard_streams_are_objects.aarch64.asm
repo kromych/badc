@@ -96,11 +96,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0xa                // =10
                	cmp	x0, x21
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	mov	x0, #0xa                // =10
-               	b	<addr>

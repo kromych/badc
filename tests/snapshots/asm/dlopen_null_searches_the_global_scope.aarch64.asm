@@ -71,10 +71,10 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x5                // =5
+               	cmp	x0, #0x0
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	mov	x0, #0x5                // =5
-               	b	<addr>

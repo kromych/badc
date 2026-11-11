@@ -29,79 +29,79 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	movl	$0x1, %esi
                	cmpq	%rdx, %rcx
-               	jge	<addr>
-               	movl	$0x1, %eax
+               	cmovlq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	leaq	0x64(%rax), %rsi
                	cmpq	%rdx, %rcx
-               	jle	<addr>
-               	addq	$0x64, %rax
+               	cmovgq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rax), %rsi
                	cmpq	%rdx, %rcx
-               	jg	<addr>
-               	incq	%rax
+               	cmovleq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	leaq	0x64(%rax), %rsi
                	cmpq	%rdx, %rcx
-               	jl	<addr>
-               	addq	$0x64, %rax
+               	cmovgeq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	leaq	0x1(%rax), %rsi
                	cmpq	%rdx, %rcx
-               	jae	<addr>
-               	incq	%rax
+               	cmovbq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rdx # <addr>
+               	leaq	0x64(%rax), %rsi
                	cmpq	%rdx, %rcx
-               	jbe	<addr>
-               	addq	$0x64, %rax
+               	cmovaq	%rsi, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	cmpq	$0x5, %rcx
-               	jne	<addr>
-               	incq	%rax
+               	cmoveq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x64(%rax), %rdx
                	cmpq	$0x9, %rcx
-               	je	<addr>
-               	addq	$0x64, %rax
+               	cmovneq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x64(%rax), %rdx
                	cmpq	$0x4, %rcx
-               	ja	<addr>
-               	addq	$0x64, %rax
+               	cmovbeq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	cmpq	$0x9, %rcx
-               	jb	<addr>
-               	incq	%rax
+               	cmovaeq	%rdx, %rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	xorl	%eax, %eax
                	movq	<rip>, %rcx # <addr>
+               	movl	$0x64, %edx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x64, %eax
+               	cmovneq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	incq	%rax
+               	cmoveq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	incq	%rax
+               	cmovneq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x64(%rax), %rdx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	addq	$0x64, %rax
+               	cmoveq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	testq	%rcx, %rcx
-               	je	<addr>
-               	incq	%rax
+               	cmovneq	%rdx, %rax
                	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rax), %rdx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	incq	%rax
+               	cmoveq	%rdx, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x2, %eax

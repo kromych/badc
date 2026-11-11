@@ -131,16 +131,16 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x20, %rsp
                	addq	%r13, %rax
+               	movl	$0x7, %ecx
+               	xorl	%edx, %edx
                	cmpq	$0x2e, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
+               	movq	%rdx, %rax
+               	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
 
 <shadow_global>:
                	pushq	%rbp

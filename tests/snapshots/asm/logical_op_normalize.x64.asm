@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <or_ll>:
                	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
                	testq	%rdi, %rdi
-               	jne	<addr>
-               	xorl	%eax, %eax
+               	cmoveq	%rcx, %rax
                	retq
 
 <or_rr>:

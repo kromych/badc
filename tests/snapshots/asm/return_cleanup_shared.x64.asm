@@ -66,9 +66,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2, -0x8(%rbp)
-               	cmpl	$0x1, %edi
-               	jne	<addr>
                	movl	$0x3, %eax
+               	movl	$0x14, %ecx
+               	cmpl	$0x1, %edi
+               	cmovneq	%rcx, %rax
                	leaq	<rip>, %rsi # <addr>
                	movslq	<rip>, %rcx # <addr>
                	leaq	0x1(%rcx), %rdi
@@ -83,8 +84,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
                	leave
                	retq
-               	movl	$0x14, %eax
-               	jmp	<addr>
 
 <nested>:
                	pushq	%rbp
@@ -116,9 +115,10 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rsi
                	movl	%esi, <rip> # <addr>
                	movb	$0x63, (%rcx,%rax)
-               	cmpl	$0x2, %edi
-               	jne	<addr>
                	movl	$0x1e, %eax
+               	movl	$0x28, %edx
+               	cmpl	$0x2, %edi
+               	cmovneq	%rdx, %rax
                	movslq	<rip>, %rdx # <addr>
                	leaq	0x1(%rdx), %rdi
                	movl	%edi, <rip> # <addr>
@@ -126,8 +126,6 @@ Disassembly of section .text:
                	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
                	leave
                	retq
-               	movl	$0x28, %eax
-               	jmp	<addr>
 
 <void_returns>:
                	pushq	%rbp

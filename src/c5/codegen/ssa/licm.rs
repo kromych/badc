@@ -565,6 +565,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
                 at: At::Before(h.at),
                 inst: Inst::ImmData(k),
                 is_f32: false,
+                copy_of: None,
             });
             *addr = n_old + ins.len() as ValueId - 1;
         }
@@ -573,6 +574,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
             at: At::Before(h.at),
             inst,
             is_f32: h.is_f32,
+            copy_of: None,
         });
     }
     let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
@@ -615,6 +617,7 @@ fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
             at: At::Before(h.at),
             inst: h.key.inst(),
             is_f32: h.key.is_f32(),
+            copy_of: None,
         })
         .collect();
     let (rewrite, undo) = super::tape::insert_undoable(func, &ins);

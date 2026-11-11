@@ -136,6 +136,76 @@ pub(super) fn emit_neg(
     Ok(())
 }
 
+/// `Inst::Select`: `csel` / `fcsel` on a fused comparison's flags or on
+/// `cmp cond, #0`, read before the arms take the scratch registers.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_select(
+    code: &mut Vec<u8>,
+    dst: Place,
+    (cond, a, b, kind): (u32, u32, u32, LoadKind),
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{Cond, enc_csel, enc_fcsel, enc_subs_imm};
+    let fused = |t: &[bool]| t.get(cond as usize).copied().unwrap_or(false);
+    let cc = match super::function::fused_branch_cond(func, alloc, cond, false) {
+        Some(cc) => cc,
+        None if fused(&alloc.mask_tests) => Cond::Ne,
+        None if fused(&alloc.branch_fused) => {
+            return fail("Select: fused condition has no condition code");
+        }
+        None => {
+            let Some(rc) = materialize_int(code, place_of(alloc, cond), scratch.primary, frame)
+            else {
+                return fail("Select: condition not int reg / spill");
+            };
+            emit(code, enc_subs_imm(Reg::SP, rc, 0));
+            Cond::Ne
+        }
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        let mut regs = [0u8; 2];
+        for (k, src) in [a, b].into_iter().enumerate() {
+            let Some(d) = materialize_fp_for(
+                code,
+                src,
+                place_of(alloc, src),
+                frame.fp_scratch[k],
+                frame,
+                alloc,
+            ) else {
+                return fail("Select: arm not fp reg / spill");
+            };
+            regs[k] = d;
+        }
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => frame.fp_scratch[2],
+            _ => return fail("Select: dst not fp reg / spill"),
+        };
+        emit(
+            code,
+            enc_fcsel(dd, regs[0], regs[1], cc, kind == LoadKind::F32),
+        );
+        store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
+    let Some(ra) = materialize_int(code, place_of(alloc, a), scratch.primary, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rb) = materialize_int(code, place_of(alloc, b), scratch.secondary, frame) else {
+        return fail("Select: arm not int reg / spill");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    emit(code, enc_csel(rd, ra, rb, cc));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// `Inst::Bswap`: reverse the low `width` bytes, zero-extended: `rev Xd`,
 /// `rev Wd` (zero-extending), or `rev Wd` then `lsr Wd, #16`, which
 /// drops the reversed upper halfword.
@@ -854,8 +924,21 @@ pub(super) fn emit_binop_imm(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`.
+    // A one-bit mask the branch alone reads is the branch's `tbz` / `tbnz`;
+    // one selects read sets the flags with `tst`.
     if op == BinOp::And && alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+        if alloc.mask_tests.get(v as usize).copied().unwrap_or(false) {
+            use super::encode::{LogicalOp, enc_logical_imm};
+            let Some(rn) = materialize_int(code, place_of(alloc, lhs), scratch.primary, frame)
+            else {
+                return fail("BinopI tst: lhs not int reg / spill");
+            };
+            let Some(w) = enc_logical_imm(LogicalOp::Ands, true, Reg(31), rn, rhs_imm as u64)
+            else {
+                return fail("BinopI tst: mask not a bitmask immediate");
+            };
+            emit(code, w);
+        }
         return Ok(());
     }
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {

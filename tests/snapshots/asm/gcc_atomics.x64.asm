@@ -155,8 +155,7 @@ Disassembly of section .text:
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi
-               	je	<addr>
-               	movq	%rcx, %rax
+               	cmovneq	%rcx, %rax
                	testl	%esi, %esi
                	jne	<addr>
                	movl	-0x10(%rbp), %esi

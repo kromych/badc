@@ -151,11 +151,10 @@ Disassembly of section .text:
                	movl	-0x2c(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpl	$0x3, %ebx
-               	jne	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x9, %eax
+               	movl	$0x9, %ecx
+               	cmpl	$0x3, %ebx
+               	cmovneq	%rcx, %rax
                	jmp	<addr>
                	movl	$0x8, %eax
                	jmp	<addr>

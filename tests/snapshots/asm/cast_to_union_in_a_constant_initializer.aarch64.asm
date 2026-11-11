@@ -80,11 +80,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x98]
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x4                // =4
                	cmp	w0, #0xb
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	csel	x0, x1, x2, eq
                	ret
-               	mov	x0, #0x4                // =4
-               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret

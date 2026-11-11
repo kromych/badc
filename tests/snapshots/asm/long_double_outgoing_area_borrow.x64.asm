@@ -203,12 +203,14 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	vmulsd	%xmm15, %xmm14, %xmm1
                	cvttsd2si	%xmm1, %rcx
-               	addq	%rax, %rcx
-               	movabsq	$0x7e031cfd3999f7b0, %rax # imm = 0x7E031CFD3999F7B0
-               	movq	%rax, %xmm15
+               	addq	%rcx, %rax
+               	movabsq	$0x7e031cfd3999f7b0, %rcx # imm = 0x7E031CFD3999F7B0
+               	movl	$0x1, %edx
+               	xorl	%esi, %esi
+               	movq	%rcx, %xmm15
                	comisd	%xmm15, %xmm0
-               	jbe	<addr>
-               	movl	$0x1, %eax
+               	movq	%rsi, %rcx
+               	cmovaq	%rdx, %rcx
                	addq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
@@ -217,8 +219,6 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -28,7 +28,8 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
+               	pushq	%rbx
                	movb	$0x7, -0x40(%rbp)
                	movb	$-0x3d, -0x30(%rbp)
                	movb	$0x1, -0x20(%rbp)
@@ -74,58 +75,59 @@ Disassembly of section .text:
                	movb	$-0x47, -0x32(%rbp)
                	movb	$-0x7b, -0x22(%rbp)
                	movb	$-0x3b, -0x12(%rbp)
-               	leaq	-0x40(%rbp), %rdx
+               	leaq	-0x40(%rbp), %rcx
                	movb	$-0x28, -0x31(%rbp)
                	leaq	-0x30(%rbp), %rdi
                	movb	$-0x78, -0x21(%rbp)
                	movb	$-0x1e, -0x11(%rbp)
                	xorl	%eax, %eax
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	(%rdx,%rax), %rsi
+               	leaq	-0x10(%rbp), %rdx
+               	movzbq	(%rcx,%rax), %rsi
                	movzbq	(%rdi,%rax), %r8
                	xorq	%r8, %rsi
-               	movb	%sil, (%rcx,%rax)
-               	movzbq	(%rcx,%rax), %rcx
-               	movzbq	(%rdx,%rax), %rsi
+               	movb	%sil, (%rdx,%rax)
+               	movzbq	(%rdx,%rax), %rdx
+               	movzbq	(%rcx,%rax), %rsi
                	leaq	-0x30(%rbp), %r8
                	movzbq	(%r8,%rax), %r8
                	xorq	%r8, %rsi
-               	cmpl	%esi, %ecx
+               	cmpl	%esi, %edx
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rsi
-               	movzbq	(%rsi,%rax), %rcx
-               	movq	%rcx, %r8
+               	leaq	-0x20(%rbp), %rdx
+               	movzbq	(%rdx,%rax), %rsi
+               	movq	%rsi, %r8
                	shlq	%r8
-               	testb	$-0x80, %cl
-               	je	<addr>
-               	movl	$0x1d, %ecx
-               	xorq	%r8, %rcx
-               	movq	%rcx, %r8
-               	andq	$0xff, %r8
-               	movzbq	(%rsi,%rax), %rcx
-               	movq	%rcx, %rsi
-               	shlq	%rsi
-               	testb	$-0x80, %cl
-               	je	<addr>
-               	movl	$0x1d, %ecx
-               	xorq	%rsi, %rcx
-               	andq	$0xff, %rcx
-               	cmpl	%ecx, %r8d
-               	je	<addr>
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
+               	movl	$0x1d, %r9d
+               	xorl	%ebx, %ebx
+               	testb	$-0x80, %sil
+               	movq	%rbx, %rsi
+               	cmovneq	%r9, %rsi
+               	xorq	%r8, %rsi
+               	andq	$0xff, %rsi
+               	movzbq	(%rdx,%rax), %rdx
+               	movq	%rdx, %r8
+               	shlq	%r8
+               	movl	$0x1d, %r9d
+               	xorl	%ebx, %ebx
+               	testb	$-0x80, %dl
+               	movq	%rbx, %rdx
+               	cmovneq	%r9, %rdx
+               	xorq	%r8, %rdx
+               	andq	$0xff, %rdx
+               	cmpl	%edx, %esi
+               	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movl	$0x2a, %eax
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x2, %eax
+               	popq	%rbx
                	leave
                	retq
                	movl	$0x1, %eax
+               	popq	%rbx
                	leave
                	retq

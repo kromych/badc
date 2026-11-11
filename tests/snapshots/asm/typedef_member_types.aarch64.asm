@@ -46,12 +46,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	fmov	d0, #6.00000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	bl	<addr>
                	fmov	d0, #3.00000000
                	blr	x0

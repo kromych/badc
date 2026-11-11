@@ -44,56 +44,6 @@ Disassembly of section .text:
                	movq	%rax, -0x18(%rbp)
                	movq	%rcx, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x5, %eax
-               	leave
-               	retq
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x6, %eax
-               	leave
-               	retq
                	leaq	-0x48(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
@@ -177,30 +127,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
-               	retq
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0xb, %eax
-               	leave
-               	retq
-               	movabsq	$0x3fe8000000000000, %rax # imm = 0x3FE8000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0xc, %eax
                	leave
                	retq
                	leaq	-0x8(%rbp), %rax

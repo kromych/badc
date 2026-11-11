@@ -83,52 +83,6 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x4b800000, %eax       # imm = 0x4B800000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x9, %eax
-               	popq	%rbp
-               	retq
-               	movabsq	$0x4170000010000000, %rax # imm = 0x4170000010000000
-               	movabsq	$0x4170000000000000, %rcx # imm = 0x4170000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movl	$0xa, %eax
-               	popq	%rbp
-               	retq
-               	movabsq	$0x3fb999999999999a, %rcx # imm = 0x3FB999999999999A
-               	movabsq	$0x3fb99999a0000000, %rax # imm = 0x3FB99999A0000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movl	$0xb, %eax
-               	popq	%rbp
-               	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0xc, %eax
-               	popq	%rbp
-               	retq
-               	movabsq	$-0x4046666660000000, %rax # imm = 0xBFB99999A0000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0xd, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x2, %edi
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x3fd0000000000000, %rcx # imm = 0x3FD0000000000000
@@ -155,15 +109,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x4b800001, %eax       # imm = 0x4B800001
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0xf, %eax
                	popq	%rbp
                	retq
                	xorl	%eax, %eax

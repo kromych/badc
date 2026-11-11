@@ -64,52 +64,17 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	incq	%rax
                	cmpl	$0x2, %eax
                	jl	<addr>
-               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	incq	%rax
                	cmpl	$0x2, %eax

@@ -16,41 +16,6 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	fmov	d0, #5.00000000
-               	fmov	d1, #3.00000000
-               	fcmpe	d0, d1
-               	b.gt	<addr>
-               	fcmp	d0, d0
-               	b.ne	<addr>
-               	fcmp	d1, d1
-               	b.eq	<addr>
-               	fmov	d2, #2.00000000
-               	fmov	d3, #2.00000000
-               	fcmp	d2, d3
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	fcmpe	d1, d0
-               	b.gt	<addr>
-               	fcmp	d1, d1
-               	b.ne	<addr>
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	fmov	d0, #-2.00000000
-               	movi	d1, #0000000000000000
-               	fcmp	d0, d1
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	movi	d0, #0000000000000000
-               	movi	d1, #0000000000000000
-               	fcmp	d1, d0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	fmov	d0, #1.00000000
                	mov	x0, #0x3                // =3
                	bl	<addr>
@@ -88,14 +53,6 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #5.00000000
-               	fmov	d1, #3.00000000
-               	fcmpe	d0, d1
-               	b.gt	<addr>
-               	fcmp	d0, d0
-               	b.ne	<addr>
-               	fcmp	d1, d1
-               	b.eq	<addr>
                	fmov	d0, #2.00000000
                	fcvt	s0, d0
                	fmov	s1, #2.00000000
@@ -107,9 +64,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	movi	d0, #0000000000000000
-               	b	<addr>
-               	movi	d0, #0000000000000000
-               	b	<addr>
-               	movi	d2, #0000000000000000
-               	b	<addr>

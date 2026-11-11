@@ -90,15 +90,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	movl	$0x41200000, %eax       # imm = 0x41200000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x40e00000, %eax       # imm = 0x40E00000
                	movq	%rax, %xmm0
                	callq	<addr>

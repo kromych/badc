@@ -74,15 +74,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	$0x41240000, %eax       # imm = 0x41240000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	leave
                	retq

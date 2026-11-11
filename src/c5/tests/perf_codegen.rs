@@ -4307,6 +4307,37 @@ fn a64_constant_its_register_holds_is_not_set_again() {
     assert_eq!(ws.iter().filter(|&&w| set_200(w)).count(), 1, "{ws:08x?}");
 }
 
+/// A floating comparison of two constants neither of which is a NaN folds,
+/// since it raises no exception and its result is fixed, at either
+/// precision; one with a NaN operand keeps its compare.
+#[test]
+fn floating_comparison_of_constants_folds() {
+    const SRC: &str = "int gt(void) { return __builtin_isgreater(2.0, 1.0); }\n\
+int eqf(void) { return 1.5f == 1.5f; }\n\
+int zeros(void) { double z = 0.0; return z != -0.0; }\n\
+int nan(void) { return __builtin_isless(__builtin_nan(\"\"), 1.0); }\n";
+    // `fcmp` / `fcmpe` of either precision; `ucomis*` / `comis*`.
+    let a64_fcmp = |w: u32| w & 0xFF20_FC07 == 0x1E20_2000;
+    let x64_fcmp = |i: &X64Insn| matches!(i.op, 0x0F2E | 0x0F2F);
+    let mut m = Misses::default();
+    for (name, compares) in [
+        ("gt", false),
+        ("eqf", false),
+        ("zeros", false),
+        ("nan", true),
+    ] {
+        let ws = a64(SRC, name);
+        m.expect(ws.iter().any(|&w| a64_fcmp(w)) == compares, || {
+            format!("aarch64 {name}: {ws:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(insns.iter().any(x64_fcmp) == compares, || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

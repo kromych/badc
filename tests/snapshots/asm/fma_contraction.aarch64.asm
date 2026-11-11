@@ -38,68 +38,33 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	fmov	d0, #10.00000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	fmov	d2, #2.00000000
-               	fcmp	d2, d2
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
-               	fmov	d1, #-2.00000000
-               	fcmp	d1, d1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	fmov	s3, #10.00000000
-               	fcmp	s3, s3
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
-               	fmov	s4, #2.00000000
-               	fcmp	s4, s4
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ret
-               	fmov	s1, #-2.00000000
-               	fcmp	s1, s1
-               	b.eq	<addr>
-               	mov	x0, #0x6                // =6
-               	ret
-               	fmov	d1, #0.25000000
-               	fcmp	d1, d1
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	ret
-               	fmov	s5, #0.25000000
-               	fcmp	s5, s5
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	ret
-               	fmov	d5, #3.00000000
-               	fmov	d6, #4.00000000
-               	fmadd	d2, d2, d5, d6
-               	fcmp	d2, d0
+               	fmov	d0, #2.00000000
+               	fmov	d1, #3.00000000
+               	fmov	d2, #4.00000000
+               	fmadd	d0, d0, d1, d2
+               	fmov	d1, #10.00000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ret
-               	fmov	d5, #0.50000000
-               	fmov	d6, #0.12500000
-               	fmadd	d5, d5, d1, d6
-               	fcmp	d5, d1
+               	fmov	d3, #0.50000000
+               	fmov	d2, #0.25000000
+               	fmov	d4, #0.12500000
+               	fmadd	d3, d3, d2, d4
+               	fcmp	d3, d2
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	fmov	s1, #3.00000000
-               	fmov	s5, #4.00000000
-               	fmadd	s1, s4, s1, s5
-               	fcmp	s1, s3
+               	fmov	s2, #2.00000000
+               	fmov	s3, #3.00000000
+               	fmov	s4, #4.00000000
+               	fmadd	s2, s2, s3, s4
+               	fmov	s3, #10.00000000
+               	fcmp	s2, s3
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	fcmp	d2, d0
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret

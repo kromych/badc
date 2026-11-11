@@ -51,40 +51,6 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	movl	$0xc0a00000, %eax       # imm = 0xC0A00000
-               	movl	$0xc0a00000, %r11d      # imm = 0xC0A00000
-               	movq	%r11, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
-               	movl	$0x40a00000, %ecx       # imm = 0x40A00000
-               	movl	$0x40a00000, %r11d      # imm = 0x40A00000
-               	movq	%r11, %xmm0
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
-               	movl	$0xc0a00000, %r11d      # imm = 0xC0A00000
-               	movq	%r11, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
-               	movl	$0x40a00000, %r11d      # imm = 0x40A00000
-               	movq	%r11, %xmm0
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	movl	$0x3fc00000, %r11d      # imm = 0x3FC00000
                	movq	%r11, %xmm0
                	movl	$0xc0200000, %r11d      # imm = 0xC0200000

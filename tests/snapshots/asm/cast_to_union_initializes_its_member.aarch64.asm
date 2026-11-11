@@ -19,19 +19,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x78               // =120
                	sturb	w0, [x29, #-0x8]
-               	fmov	d0, #2.50000000
-               	fcmp	d0, d0
-               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x8]
                	cmp	w0, #0x78
                	b.ne	<addr>
-               	fmov	d0, #1.50000000
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	add	x1, x1, x0, lsl #1

@@ -62,12 +62,6 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #10.00000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	fmov	s0, #7.00000000
                	bl	<addr>
                	fmov	s1, #14.00000000

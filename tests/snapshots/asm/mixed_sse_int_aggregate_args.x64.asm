@@ -77,46 +77,5 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movabsq	$0x400c000000000000, %rdx # imm = 0x400C000000000000
-               	movabsq	$0x4012000000000000, %rsi # imm = 0x4012000000000000
-               	movabsq	$0x3ff4000000000000, %rdi # imm = 0x3FF4000000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
-               	movabsq	$0x3ff4000000000000, %rax # imm = 0x3FF4000000000000
-               	movq	%rdi, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x4, %eax
-               	jmp	<addr>
-               	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
-               	movq	%rdx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	movabsq	$0x4012000000000000, %rax # imm = 0x4012000000000000
-               	movq	%rsi, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x5, %eax
-               	jmp	<addr>
                	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
+               	retq

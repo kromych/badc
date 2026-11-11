@@ -18,13 +18,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	fmov	s0, #1.50000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x0, #0x5                // =5
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	add	x2, x1, #0x4
@@ -82,44 +75,6 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0xa                // =10
-               	fmov	s0, #1.50000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x0, #0xb                // =11
-               	fmov	s0, #2.50000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x0, #0xc                // =12
-               	fmov	s0, #1.50000000
-               	fmov	s1, #2.50000000
-               	fcmp	s0, s1
-               	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x0, #0xd                // =13
-               	fmov	s0, #6.50000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	fmov	d0, #6.50000000
-               	bl	<addr>
-               	mov	x0, #0xe                // =14
-               	fmov	s0, #3.25000000
-               	fcmp	s0, s0
-               	b.eq	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	fmov	d0, #3.25000000
-               	bl	<addr>
-               	mov	x0, #0xf                // =15
                	fmov	s0, #1.00000000
                	stur	s0, [x29, #-0x10]
                	sub	x1, x29, #0x8

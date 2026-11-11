@@ -385,10 +385,45 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
 /// emitted compare or division does, since its operands may have lost the
 /// extensions the mark made redundant.
 fn fold_binop_of(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    if crate::c5::ir::is_fp_comparison_op(op) {
+        return fold_fp_compare(func, v, op, l, r);
+    }
     if super::narrow::is_narrow_div(func, v) {
         return super::narrow::fold_div32(op, l, r);
     }
     super::narrow::fold_at_width(op, l, r, super::narrow::is_cmp32(&func.cmp32, v))
+}
+
+/// A floating comparison `v` of the constants `l` and `r`, at the
+/// operands' precision: with neither a NaN it raises no exception (IEEE
+/// 754 5.11), so its result is fixed.
+fn fold_fp_compare(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    let Inst::Binop { lhs, .. } = *func.insts.get(v as usize)? else {
+        return None;
+    };
+    let single = func.f32_values.get(lhs as usize).copied().unwrap_or(false);
+    let value = |bits: i64| {
+        if single {
+            f64::from(f32::from_bits(bits as u32))
+        } else {
+            f64::from_bits(bits as u64)
+        }
+    };
+    let (a, b) = (value(l), value(r));
+    if a.is_nan() || b.is_nan() {
+        return None;
+    }
+    let holds = match crate::c5::ir::fp_relation(op) {
+        BinOp::Feq => a == b,
+        BinOp::Fne | BinOp::Fone => a != b,
+        BinOp::Flt => a < b,
+        BinOp::Fgt => a > b,
+        BinOp::Fle => a <= b,
+        BinOp::Fge => a >= b,
+        BinOp::Funo => false,
+        _ => return None,
+    };
+    Some(i64::from(holds))
 }
 
 /// Node budget for one per-incoming evaluation. A shared operand is
@@ -868,6 +903,16 @@ fn imm_of(func: &FunctionSsa, v: ValueId) -> Option<i64> {
     imm_through_phis(&func.insts, &func.f32_values, v)
 }
 
+/// The constant operand `v` of `op`: a floating comparison reads one of
+/// either precision, which [`fold_fp_compare`] tells apart.
+fn operand_imm(func: &FunctionSsa, op: BinOp, v: ValueId) -> Option<i64> {
+    if crate::c5::ir::is_fp_comparison_op(op) {
+        imm_through_phis(&func.insts, &[], v)
+    } else {
+        imm_of(func, v)
+    }
+}
+
 /// Recursion budget for the multi-incoming phi merge. Each level
 /// multiplies by the operand count, so the bound keeps the walk cheap
 /// while still crossing the few merges a folded control-flow chain
@@ -1273,24 +1318,28 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
                 same_operand_compare(*op).map(Inst::Imm)
             }
-            Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
-                (Some(l), Some(r)) => fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm),
-                (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
-                    op: *op,
-                    lhs: *lhs,
-                    rhs_imm: r,
-                }),
-                (Some(l), None) => {
-                    mirror(*op)
-                        .filter(|m| to_imm_form(*m, *lhs, l))
-                        .map(|m| Inst::BinopI {
-                            op: m,
-                            lhs: *rhs,
-                            rhs_imm: l,
-                        })
+            Inst::Binop { op, lhs, rhs } => {
+                match (operand_imm(func, *op, *lhs), operand_imm(func, *op, *rhs)) {
+                    (Some(l), Some(r)) => {
+                        fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm)
+                    }
+                    (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
+                        op: *op,
+                        lhs: *lhs,
+                        rhs_imm: r,
+                    }),
+                    (Some(l), None) => {
+                        mirror(*op)
+                            .filter(|m| to_imm_form(*m, *lhs, l))
+                            .map(|m| Inst::BinopI {
+                                op: m,
+                                lhs: *rhs,
+                                rhs_imm: l,
+                            })
+                    }
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             // Deferred `__builtin_constant_p`: the operand folded to an
             // integer immediate, so the answer is 1. `imm_of` refuses
             // address-bearing immediates, which are not constants here.

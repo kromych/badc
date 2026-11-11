@@ -22,24 +22,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x16, #-0x8000000000000000 // =-9223372036854775808
-               	fmov	d0, x16
                	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16]
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x8]
-               	fcmp	d0, d0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
                	ret

@@ -161,17 +161,7 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	orq	$0x10, %rcx
                	cmpq	$0x1a, %rax
-               	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
-               	movabsq	$0x4022000000000000, %rcx # imm = 0x4022000000000000
-               	movq	%rax, %rdx
-               	orq	$0x20, %rdx
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	movq	%rax, %rbx
-               	cmovneq	%rdx, %rbx
-               	cmovpq	%rdx, %rbx
+               	cmovneq	%rcx, %rbx
                	movl	$0xa, %esi
                	leaq	-0x30(%rbp), %rdi
                	callq	<addr>

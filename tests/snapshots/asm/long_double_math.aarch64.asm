@@ -7606,12 +7606,6 @@ Disassembly of section .text:
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
-               	fmov	d0, x16
-               	adrp	x16, <page>
-               	ldr	d1, [x16]
-               	fcmpe	d0, d1
-               	b.le	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	stp	x9, x10, [sp]
@@ -7814,10 +7808,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0xd0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x17               // =23
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret

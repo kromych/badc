@@ -34,37 +34,16 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	q1, [x0]
                	fadd	v0.4s, v0.4s, v1.4s
-               	fmov	d1, #3.00000000
-               	fcmp	d1, d1
-               	cset	x0, ne
-               	fmov	s1, #5.00000000
-               	fcmp	s1, s1
-               	cset	x1, ne
-               	add	x0, x0, x1
-               	fmov	d1, #7.50000000
-               	fcmp	d1, d1
-               	cset	x1, ne
-               	add	x0, x0, x1
-               	fmov	d1, #6.25000000
-               	fmov	d2, #2.50000000
-               	movi	d3, #0000000000000000
-               	fcmp	d1, d1
-               	fcsel	d1, d2, d3, eq
-               	fmov	d2, #2.50000000
-               	fcmp	d1, d2
-               	cset	x1, ne
-               	add	x1, x0, x1
                	fmov	d1, #8.00000000
                	stur	d1, [x29, #-0x10]
                	ldur	d2, [x29, #-0x10]
                	fcmp	d2, d1
-               	mov	x0, #0x1                // =1
+               	mov	x1, #0x1                // =1
                	b.ne	<addr>
                	ldur	d1, [x29, #-0x8]
                	fmov	d2, #2.00000000
                	fcmp	d1, d2
-               	cset	x0, ne
-               	add	x2, x1, x0
+               	cset	x1, ne
                	fmov	s1, #8.00000000
                	stur	s1, [x29, #-0x18]
                	ldur	s2, [x29, #-0x18]
@@ -74,10 +53,6 @@ Disassembly of section .text:
                	ldur	s1, [x29, #-0x14]
                	fmov	s2, #2.00000000
                	fcmp	s1, s2
-               	cset	x1, ne
-               	add	x1, x2, x1
-               	fmov	d1, #1.50000000
-               	fcmp	d1, d1
                	cset	x2, ne
                	add	x1, x1, x2
                	mov	s1, v0.s[0]
@@ -97,5 +72,5 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, x0
+               	mov	x2, x0
                	b	<addr>

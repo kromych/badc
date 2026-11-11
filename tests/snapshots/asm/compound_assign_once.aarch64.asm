@@ -97,11 +97,11 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xe]
                	ldrb	w2, [x1, #0xe]
                	ubfx	x2, x2, #4, #1
-               	scvtf	d2, x2
-               	fmov	d1, #0.25000000
-               	fadd	d2, d2, d1
+               	scvtf	d1, x2
+               	fmov	d2, #0.25000000
+               	fadd	d1, d1, d2
                	fmov	d17, x0
-               	fcmp	d2, d17
+               	fcmp	d1, d17
                	cset	x2, ne
                	and	x2, x2, #0x1
                	ldrb	w3, [x1, #0xe]
@@ -122,10 +122,10 @@ Disassembly of section .text:
                	str	w2, [x1, #0x8]
                	ldr	w2, [x1, #0x8]
                	ubfx	x2, x2, #7, #5
-               	scvtf	d3, x2
-               	fmov	d2, #0.50000000
-               	fsub	d3, d3, d2
-               	fcvtzs	x2, d3
+               	scvtf	d2, x2
+               	fmov	d1, #0.50000000
+               	fsub	d2, d2, d1
+               	fcvtzs	x2, d2
                	and	x2, x2, #0x1f
                	ldr	w3, [x1, #0x8]
                	and	x3, x3, #0xfffffffffffff07f
@@ -139,23 +139,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d17, x0
-               	fcmp	d1, d17
-               	cset	x1, ne
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0xc                // =12
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x5, #0x3f               // =63
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	stur	x1, [x29, #-0x8]
-               	ldur	d1, [x29, #-0x8]
+               	ldur	d2, [x29, #-0x8]
                	fmov	d16, x1
-               	fmul	d1, d16, d1
-               	fsub	d1, d1, d2
+               	fmul	d2, d16, d2
+               	fsub	d1, d2, d1
                	stur	d1, [x29, #-0x8]
                	ldur	x2, [x29, #-0x8]
                	asr	x1, x2, #63

@@ -77,23 +77,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v32  Imm(4613937818241073152)                         -> x0
     v33  Imm(4619567317775286272)                         -> x0
     v34  Imm(4622522805030748160)                         -> x0
-    v35  Imm(4622522805030748160)                         -> x1
-    v36  Binop { op=fne, lhs=v34, rhs=v34 }               -> x0
-    terminator Bz { cond=v36, target=b2, fall=b1 }   (exit_acc=v36)
+    v35  Imm(4622522805030748160)                         -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(41)                                          -> x0
+    v38  StoreLocal { off=-1, value=v37, kind=I64 }       -> -
+    v39  LocalAddr(-1)                                    -> x0
+    v40  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v41  Imm(42)                                          -> x0
+    v42  StoreLocal { off=-1, value=v41, kind=I64 }       -> -
+    v43  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v44  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v44)
   block 1  start_pc=0
-    v38  Imm(2)                                           -> x0
-    terminator Return(v38)   (exit_acc=v38)
-  block 2  start_pc=0
-    v39  Imm(41)                                          -> x0
-    v40  StoreLocal { off=-1, value=v39, kind=I64 }       -> -
-    v41  LocalAddr(-1)                                    -> x0
-    v42  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v43  Imm(42)                                          -> x0
-    v44  StoreLocal { off=-1, value=v43, kind=I64 }       -> -
-    v45  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v46  Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v46)
-  block 3  start_pc=0
     v48  Imm(1)                                           -> x0
     v49  Imm(7)                                           -> x0
     v50  Imm(7)                                           -> x0
@@ -104,11 +99,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v55  Imm(30)                                          -> x1
     v56  Call { target_pc=4, args=[v52, v53, v54, v55], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v57  BinopI { op=ne, lhs=v56, rhs_imm=63 }            -> x0
-    terminator Bz { cond=v57, target=b5, fall=b4 }   (exit_acc=v57)
-  block 4  start_pc=0
+    terminator Bz { cond=v57, target=b3, fall=b2 }   (exit_acc=v57)
+  block 2  start_pc=0
     v59  Imm(5)                                           -> x0
     terminator Return(v59)   (exit_acc=v59)
-  block 5  start_pc=0
+  block 3  start_pc=0
     v60  Imm(1)                                           -> x0
     v61  Imm(2)                                           -> x0
     v62  Imm(3)                                           -> x0

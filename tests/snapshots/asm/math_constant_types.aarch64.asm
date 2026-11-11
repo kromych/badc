@@ -40,19 +40,9 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	ldr	s1, [x0, #0x4]
                	adrp	x16, <addr>
-               	ldr	s2, [x16, #0x10]
+               	ldr	s2, [x16, #0x8]
                	fcmpe	s1, s2
                	b.le	<addr>
-               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
-               	fmov	d1, x16
-               	adrp	x16, <addr>
-               	ldr	d2, [x16, #0x8]
-               	fcmpe	d1, d2
-               	b.gt	<addr>
-               	mov	x0, #0x8                // =8
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	stur	s0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
                	lsr	x0, x0, #31
@@ -68,6 +58,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

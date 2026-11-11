@@ -42,17 +42,8 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	movb	$0x2, %al
                	callq	<addr>
-               	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
-               	movabsq	$0x407f900000000000, %rcx # imm = 0x407F900000000000
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	movsd	<rip>, %xmm0 # <addr>
+               	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

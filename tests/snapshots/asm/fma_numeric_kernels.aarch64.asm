@@ -175,22 +175,24 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x3
                	b.lt	<addr>
-               	sub	x0, x29, #0x90
-               	movi	d1, #0000000000000000
+               	sub	x1, x29, #0x90
+               	mov	x0, #0x0                // =0
                	ldur	d0, [x29, #-0x78]
-               	ldur	d2, [x29, #-0x80]
-               	fmadd	d2, d0, d2, d1
-               	add	x1, x0, #0x18
-               	ldr	d3, [x1, #0x8]
-               	ldr	d0, [x1, #0x10]
-               	fmadd	d2, d3, d0, d2
-               	add	x0, x0, #0x30
-               	ldr	d3, [x0, #0x10]
-               	fmadd	d0, d0, d3, d2
+               	ldur	d1, [x29, #-0x80]
+               	fmov	d18, x0
+               	fmadd	d1, d0, d1, d18
+               	add	x2, x1, #0x18
+               	ldr	d2, [x2, #0x8]
+               	ldr	d0, [x2, #0x10]
+               	fmadd	d1, d2, d0, d1
+               	add	x1, x1, #0x30
+               	ldr	d2, [x1, #0x10]
+               	fmadd	d0, d0, d2, d1
                	mov	x16, #0x4058000000000000 // =4636455816377925632
-               	fmov	d2, x16
-               	fsub	d0, d0, d2
-               	fcmpe	d0, d1
+               	fmov	d1, x16
+               	fsub	d0, d0, d1
+               	fmov	d17, x0
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
@@ -198,22 +200,6 @@ Disassembly of section .text:
                	fcmpe	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x10]
-               	mov	x0, #0x0                // =0
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x18]
-               	fmov	d17, x0
-               	fcmpe	d0, d17
-               	fcsel	d0, d1, d0, mi
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x20]
-               	fcmpe	d0, d1
-               	b.le	<addr>
-               	mov	x0, #0x5                // =5
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

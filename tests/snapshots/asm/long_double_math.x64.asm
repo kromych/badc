@@ -1165,12 +1165,6 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	movabsq	$0x7ff0000000000000, %rax # imm = 0x7FF0000000000000
-               	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	comisd	%xmm15, %xmm14
-               	jbe	<addr>
                	movq	<rip>, %rax # <addr>
                	fldt	-0x70(%rbp)
                	fstpl	-0x8(%rsp)
@@ -1200,8 +1194,5 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x17, %eax
                	leave
                	retq

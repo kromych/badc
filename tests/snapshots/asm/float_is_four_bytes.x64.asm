@@ -30,16 +30,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	xorl	%eax, %eax
-               	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x5, %eax
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x4(%rcx), %rsi
                	subq	%rcx, %rsi
@@ -97,61 +87,6 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xa, %eax
-               	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0xb, %eax
-               	movl	$0x40200000, %ecx       # imm = 0x40200000
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0xc, %eax
-               	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
-               	movl	$0x40200000, %edx       # imm = 0x40200000
-               	movq	%rcx, %xmm14
-               	movq	%rdx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	jne	<addr>
-               	leaq	<rip>, %rdi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0xd, %eax
-               	movl	$0x40d00000, %ecx       # imm = 0x40D00000
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movabsq	$0x401a000000000000, %rax # imm = 0x401A000000000000
-               	movq	%rax, %xmm0
-               	movb	$0x1, %al
-               	callq	<addr>
-               	movl	$0xe, %eax
-               	movl	$0x40500000, %ecx       # imm = 0x40500000
-               	movq	%rcx, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movabsq	$0x400a000000000000, %rax # imm = 0x400A000000000000
-               	movq	%rax, %xmm0
-               	movb	$0x1, %al
-               	callq	<addr>
-               	movl	$0xf, %eax
                	movl	$0x3f800000, -0x10(%rbp) # imm = 0x3F800000
                	leaq	-0x8(%rbp), %rcx
                	leaq	-0x10(%rbp), %rdx

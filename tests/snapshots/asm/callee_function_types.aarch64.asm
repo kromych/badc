@@ -117,10 +117,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x0, x0, x1, ne
-               	orr	x1, x0, #0x2
-               	fcmp	d1, d1
-               	csel	x20, x1, x0, ne
+               	csel	x20, x0, x1, ne
                	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
@@ -134,10 +131,7 @@ Disassembly of section .text:
                	fmov	d1, #6.00000000
                	orr	x0, x20, #0x8
                	fcmp	d0, d1
-               	csel	x0, x0, x20, ne
-               	orr	x1, x0, #0x10
-               	fcmp	d1, d1
-               	csel	x20, x1, x0, ne
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
@@ -185,13 +179,7 @@ Disassembly of section .text:
                	fmov	d1, #6.00000000
                	orr	x0, x20, #0x400
                	fcmp	d0, d1
-               	csel	x0, x0, x20, ne
-               	orr	x1, x0, #0x800
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x1000
-               	fcmp	d1, d1
-               	csel	x20, x1, x0, ne
+               	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	fmov	d0, #3.00000000
@@ -203,35 +191,22 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	stur	x1, [x29, #-0x8]
-               	fmov	d0, #1.50000000
-               	orr	x1, x0, #0x4000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0x50
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x2
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x4
-               	fcmp	d1, d1
-               	csel	x20, x1, x0, ne
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	blr	x0
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
-               	orr	x0, x20, #0x8
+               	mov	x0, #0x8                // =8
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x20, ne
+               	csel	x20, x0, x1, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0, #0x8]
@@ -241,28 +216,7 @@ Disassembly of section .text:
                	fmov	d1, #6.00000000
                	orr	x0, x20, #0x10
                	fcmp	d0, d1
-               	csel	x0, x0, x20, ne
-               	orr	x1, x0, #0x20
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x40
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x80
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x100
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x200
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x400
-               	fcmp	d1, d1
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x800
-               	fcmp	d1, d1
-               	csel	x20, x1, x0, ne
+               	csel	x20, x0, x20, ne
                	mov	x0, #0x3                // =3
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
@@ -271,62 +225,23 @@ Disassembly of section .text:
                	orr	x1, x20, #0x1000
                	cmp	x0, #0x6
                	csel	x0, x1, x20, ne
-               	fmov	d0, #3.00000000
-               	orr	x1, x0, #0x2000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
-               	fmov	d0, #6.00000000
-               	orr	x1, x0, #0x4000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x8000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x10000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
-               	orr	x1, x0, #0x20000
-               	fcmp	d0, d0
-               	csel	x0, x1, x0, ne
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0x50
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	orr	x2, x0, #0x2
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	orr	x2, x0, #0x4
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	orr	x2, x0, #0x8
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	orr	x2, x0, #0x10
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	fmov	d0, #6.00000000
-               	orr	x2, x0, #0x20
-               	fcmp	d0, d0
-               	csel	x0, x2, x0, ne
-               	orr	x2, x0, #0x40
-               	fcmp	d0, d0
-               	csel	x20, x2, x0, ne
-               	sub	x0, x1, #0x1
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	sub	x0, x0, #0x1
                	add	x0, x0, #0x1
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
-               	orr	x0, x20, #0x80
+               	mov	x0, #0x80               // =128
+               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x20, ne
+               	csel	x20, x0, x1, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x0, x0, #0x1

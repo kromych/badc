@@ -126,11 +126,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v116 Imm(10)                                          -> x0
     v117 Imm(1092616192)                                  -> x0 [f32]
     v118 Imm(1092878336)                                  -> x0 [f32]
-    v119 Imm(1092878336)                                  -> x1 [f32]
-    v120 Binop { op=fne, lhs=v118, rhs=v118 }             -> x0
-    terminator Bz { cond=v120, target=b4, fall=b3 }   (exit_acc=v120)
-  block 3  start_pc=0
-    v121 Imm(2)                                           -> x0
+    v119 Imm(1092878336)                                  -> x0 [f32]
+    v120 Imm(0)                                           -> x0
+    v121 Imm(0)                                           -> x0
     v122 LifetimeEnd(0)                                   -> -
     v123 LifetimeEnd(0)                                   -> -
     v124 LifetimeEnd(-1)                                  -> -
@@ -138,15 +136,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v126 LifetimeEnd(-3)                                  -> -
     v127 LifetimeEnd(-4)                                  -> -
     terminator Return(v121)   (exit_acc=v121)
-  block 4  start_pc=0
-    v128 Imm(0)                                           -> x0
-    v129 LifetimeEnd(0)                                   -> -
-    v130 LifetimeEnd(0)                                   -> -
-    v131 LifetimeEnd(-1)                                  -> -
-    v132 LifetimeEnd(-2)                                  -> -
-    v133 LifetimeEnd(-3)                                  -> -
-    v134 LifetimeEnd(-4)                                  -> -
-    terminator Return(v128)   (exit_acc=v128)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

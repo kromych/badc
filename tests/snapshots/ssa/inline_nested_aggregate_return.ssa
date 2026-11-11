@@ -407,83 +407,78 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v289 BinopI { op=ne, lhs=v286, rhs_imm=26 }           -> x1
     v290 BinopI { op=or, lhs=v258, rhs_imm=16 }           -> x1
     v291 BinopI { op=ne, lhs=v286, rhs_imm=26 }           -> x0
-    v292 Select { cond=v291, a=v290, b=v258, kind=I64 }   -> x0
+    v292 Select { cond=v291, a=v290, b=v258, kind=I64 }   -> x3
     terminator Jmp(b5)
   block 5  start_pc=0
-    v297 Copy { value=v292, fp=false }                    -> x1
-    v298 Imm(6)                                           -> x1
-    v299 Imm(6)                                           -> x1
-    v300 Imm(0)                                           -> x1
-    v301 Imm(4618441417868443648)                         -> x1
-    v302 Imm(4611686018427387904)                         -> x1
-    v303 Imm(4613937818241073152)                         -> x1
-    v304 Imm(0)                                           -> x1
-    v305 Imm(0)                                           -> x1
-    v306 Imm(0)                                           -> x1
-    v307 Imm(0)                                           -> x1
-    v308 Imm(0)                                           -> x1
-    v309 Imm(0)                                           -> x1
-    v310 Imm(0)                                           -> x1
-    v311 Imm(0)                                           -> x1
-    v312 Imm(0)                                           -> x1
-    v313 Imm(0)                                           -> x1
-    v314 Imm(0)                                           -> x1
+    v297 Copy { value=v292, fp=false }                    -> x0
+    v298 Imm(6)                                           -> x0
+    v299 Imm(6)                                           -> x0
+    v300 Imm(0)                                           -> x0
+    v301 Imm(4618441417868443648)                         -> x0
+    v302 Imm(4611686018427387904)                         -> x0
+    v303 Imm(4613937818241073152)                         -> x0
+    v304 Imm(0)                                           -> x0
+    v305 Imm(0)                                           -> x0
+    v306 Imm(0)                                           -> x0
+    v307 Imm(0)                                           -> x0
+    v308 Imm(0)                                           -> x0
+    v309 Imm(0)                                           -> x0
+    v310 Imm(0)                                           -> x0
+    v311 Imm(0)                                           -> x0
+    v312 Imm(0)                                           -> x0
+    v313 Imm(0)                                           -> x0
+    v314 Imm(0)                                           -> x0
     v315 LifetimeEnd(0)                                   -> -
-    v316 Imm(0)                                           -> x1
-    v317 Imm(0)                                           -> x1
-    v318 Imm(0)                                           -> x1
-    v319 Imm(0)                                           -> x1
-    v320 Imm(0)                                           -> x1
-    v321 Imm(4618441417868443648)                         -> x1
-    v322 Imm(4621256167635550208)                         -> x1
+    v316 Imm(0)                                           -> x0
+    v317 Imm(0)                                           -> x0
+    v318 Imm(0)                                           -> x0
+    v319 Imm(0)                                           -> x0
+    v320 Imm(0)                                           -> x0
+    v321 Imm(4618441417868443648)                         -> x0
+    v322 Imm(4621256167635550208)                         -> x0
     v323 LifetimeEnd(0)                                   -> -
-    v324 Imm(4613937818241073152)                         -> x2
-    v325 Imm(4618441417868443648)                         -> x2
-    v326 Imm(4621256167635550208)                         -> x2
-    v327 Binop { op=fne, lhs=v322, rhs=v322 }             -> x2
-    v328 BinopI { op=or, lhs=v292, rhs_imm=32 }           -> x2
-    v329 Binop { op=fne, lhs=v322, rhs=v322 }             -> x1
-    v330 Select { cond=v329, a=v328, b=v292, kind=I64 }   -> x3
+    v324 Imm(4613937818241073152)                         -> x0
+    v325 Imm(4618441417868443648)                         -> x0
+    v326 Imm(4621256167635550208)                         -> x0
+    v327 Imm(0)                                           -> x0
+    v328 Imm(0)                                           -> x0
+    v329 Imm(10)                                          -> x0
+    v330 Imm(10)                                          -> x6
+    v331 LocalAddr(-6)                                    -> x7
+    v332 Call { target_pc=1, args=[v331, v330], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v333 LocalAddr(-6)                                    -> x0
+    v334 Imm(0)                                           -> x0
+    v335 LoadLocal { off=-6, disp=24, kind=I64 }          -> x0
+    v336 Imm(0)                                           -> x1
+    v337 LifetimeEnd(-6)                                  -> -
+    v338 Imm(0)                                           -> x1
+    v339 Imm(0)                                           -> x1
+    v340 Imm(0)                                           -> x1
+    v341 LifetimeEnd(0)                                   -> -
+    v342 BinopI { op=ne, lhs=v335, rhs_imm=13 }           -> x1
+    v343 BinopI { op=or, lhs=v292, rhs_imm=64 }           -> x1
+    v344 BinopI { op=ne, lhs=v335, rhs_imm=13 }           -> x0
+    v345 Select { cond=v344, a=v343, b=v292, kind=I64 }   -> x0
     terminator Jmp(b6)
   block 6  start_pc=0
-    v335 Copy { value=v330, fp=false }                    -> x0
-    v336 Imm(10)                                          -> x0
-    v337 Imm(10)                                          -> x6
-    v338 LocalAddr(-6)                                    -> x7
-    v339 Call { target_pc=1, args=[v338, v337], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v340 LocalAddr(-6)                                    -> x0
-    v341 Imm(0)                                           -> x0
-    v342 LoadLocal { off=-6, disp=24, kind=I64 }          -> x0
-    v343 Imm(0)                                           -> x1
-    v344 LifetimeEnd(-6)                                  -> -
-    v345 Imm(0)                                           -> x1
-    v346 Imm(0)                                           -> x1
-    v347 Imm(0)                                           -> x1
-    v348 LifetimeEnd(0)                                   -> -
-    v349 BinopI { op=ne, lhs=v342, rhs_imm=13 }           -> x1
-    v350 BinopI { op=or, lhs=v330, rhs_imm=64 }           -> x1
-    v351 BinopI { op=ne, lhs=v342, rhs_imm=13 }           -> x0
-    v352 Select { cond=v351, a=v350, b=v330, kind=I64 }   -> x0
+    v354 Copy { value=v345, fp=false }                    -> x1
+    v355 ImmData(16)                                      -> x1
+    v356 Load { addr=v355, disp=0, kind=I32 pc_rel }      -> x1
+    v357 Imm(4)                                           -> x2
+    v358 Imm(6)                                           -> x2
+    v359 Imm(8)                                           -> x2
+    v360 Imm(9)                                           -> x2
+    v361 Imm(10)                                          -> x2
+    v362 BinopI { op=ne, lhs=v356, rhs_imm=10 }           -> x2
+    v363 BinopI { op=or, lhs=v345, rhs_imm=128 }          -> x2
+    v364 BinopI { op=ne, lhs=v356, rhs_imm=10 }           -> x1
+    v365 Select { cond=v364, a=v363, b=v345, kind=I64 }   -> x0
     terminator Jmp(b7)
   block 7  start_pc=0
-    v357 Copy { value=v352, fp=false }                    -> x1
-    v358 ImmData(16)                                      -> x1
-    v359 Load { addr=v358, disp=0, kind=I32 pc_rel }      -> x1
-    v360 Imm(4)                                           -> x2
-    v361 Imm(6)                                           -> x2
-    v362 Imm(8)                                           -> x2
-    v363 Imm(9)                                           -> x2
-    v364 Imm(10)                                          -> x2
-    v365 BinopI { op=ne, lhs=v359, rhs_imm=10 }           -> x2
-    v366 BinopI { op=or, lhs=v352, rhs_imm=128 }          -> x2
-    v367 BinopI { op=ne, lhs=v359, rhs_imm=10 }           -> x1
-    v368 Select { cond=v367, a=v366, b=v352, kind=I64 }   -> x0
-    terminator Jmp(b8)
-  block 8  start_pc=0
-    v373 Copy { value=v368, fp=false }                    -> x1
-    v374 Extend { value=v368, kind=I32 }                  -> x1
-    v375 Extend { value=v368, kind=I32 }                  -> x1
-    terminator Return(v368)   (exit_acc=v368)
+    v370 Copy { value=v365, fp=false }                    -> x1
+    v371 Extend { value=v365, kind=I32 }                  -> x1
+    v372 Extend { value=v365, kind=I32 }                  -> x1
+    terminator Return(v365)   (exit_acc=v365)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

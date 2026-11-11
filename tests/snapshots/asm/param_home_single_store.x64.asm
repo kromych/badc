@@ -83,15 +83,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movabsq	$0x4026800000000000, %rax # imm = 0x4026800000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
                	movq	$0x29, -0x8(%rbp)
                	movq	$0x2a, -0x8(%rbp)
                	movl	$0x3, %edi

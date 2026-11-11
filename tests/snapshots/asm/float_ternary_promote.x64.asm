@@ -26,37 +26,9 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movl	$0x3fc00000, %r11d      # imm = 0x3FC00000
-               	movq	%r11, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
-               	movl	$0xc0200000, %eax       # imm = 0xC0200000
-               	movl	$0xc0200000, %r11d      # imm = 0xC0200000
-               	movq	%r11, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
-               	movl	$0x40500000, %eax       # imm = 0x40500000
-               	xorl	%ecx, %ecx
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	comiss	%xmm15, %xmm14
-               	jbe	<addr>
                	movl	$0x40500000, %r11d      # imm = 0x40500000
                	movq	%r11, %xmm0
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	comiss	%xmm14, %xmm15
-               	jbe	<addr>
-               	movl	$0xc0500000, %r11d      # imm = 0xC0500000
+               	movl	$0x40500000, %r11d      # imm = 0x40500000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
                	movl	$0x40d00000, %eax       # imm = 0x40D00000
@@ -66,20 +38,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	$0x41a00000, %eax       # imm = 0x41A00000
-               	movl	$0x41a00000, %r11d      # imm = 0x41A00000
-               	movq	%r11, %xmm0
-               	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	xorl	%eax, %eax
                	retq
-               	movl	$0x40500000, %r11d      # imm = 0x40500000
-               	movq	%r11, %xmm1
-               	jmp	<addr>
-               	movl	$0xc0500000, %r11d      # imm = 0xC0500000
-               	movq	%r11, %xmm0
-               	jmp	<addr>

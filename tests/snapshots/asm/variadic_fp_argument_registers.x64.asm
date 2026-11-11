@@ -493,25 +493,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movabsq	$0x403c800000000000, %rax # imm = 0x403C800000000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x6, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	jp	<addr>
-               	je	<addr>
-               	movl	$0x7, %eax
-               	popq	%rbx
-               	leave
-               	retq
                	xorl	%eax, %eax
                	popq	%rbx
                	leave

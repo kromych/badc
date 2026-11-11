@@ -144,11 +144,7 @@ Disassembly of section .text:
                	add	x0, x1, x0, lsl #1
                	orr	x1, x20, #0x10
                	cmp	x0, #0x1a
-               	csel	x0, x1, x20, ne
-               	fmov	d0, #9.00000000
-               	orr	x1, x0, #0x20
-               	fcmp	d0, d0
-               	csel	x20, x1, x0, ne
+               	csel	x20, x1, x20, ne
                	mov	x0, #0xa                // =10
                	sub	x8, x29, #0x30
                	bl	<addr>

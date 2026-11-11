@@ -137,15 +137,15 @@ Disassembly of section .text:
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1
                	b.le	<addr>
-               	ldur	s1, [x29, #-0x18]
-               	fcvt	d1, s1
-               	ldur	d2, [x29, #-0x28]
-               	fcmp	d1, d2
+               	ldur	s0, [x29, #-0x18]
+               	fcvt	d0, s0
+               	ldur	d1, [x29, #-0x28]
+               	fcmp	d0, d1
                	b.pl	<addr>
-               	ldur	s1, [x29, #-0x18]
-               	fcvt	d1, s1
-               	ldur	d2, [x29, #-0x30]
-               	fcmp	d1, d2
+               	ldur	s0, [x29, #-0x18]
+               	fcvt	d0, s0
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
                	cset	x0, mi
                	csinc	x0, x0, xzr, le
                	cbz	x0, <addr>
@@ -154,16 +154,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x0, [x29, #-0x8]
-               	scvtf	s1, x0
-               	ldur	s2, [x29, #-0x10]
-               	fcmp	s1, s2
+               	scvtf	s0, x0
+               	ldur	s1, [x29, #-0x10]
+               	fcmp	s0, s1
                	cset	x0, mi
                	csinc	x0, x0, xzr, le
                	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x8]
-               	scvtf	s1, x0
-               	ldur	s2, [x29, #-0x10]
-               	fcmp	s1, s2
+               	scvtf	s0, x0
+               	ldur	s1, [x29, #-0x10]
+               	fcmp	s0, s1
                	b.ls	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40
@@ -171,29 +171,14 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	str	wzr, [x0, #0x30]
-               	fmov	d1, #1.00000000
                	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x30]
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x30]
-               	fcmp	d1, d0
-               	cset	x1, mi
-               	csinc	x1, x1, xzr, le
-               	cbz	x1, <addr>
-               	ldrsw	x1, [x0, #0x30]
-               	add	x1, x1, #0x1
+               	mov	x1, #0x3                // =3
                	str	w1, [x0, #0x30]
-               	add	x1, x1, #0x1
+               	mov	x1, #0x4                // =4
                	str	w1, [x0, #0x30]
-               	fcmp	d1, d0
-               	b.vs	<addr>
-               	ldrsw	x0, [x0, #0x30]
-               	cmp	w0, #0x4
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1

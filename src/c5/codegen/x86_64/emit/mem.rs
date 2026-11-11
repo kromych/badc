@@ -1549,11 +1549,15 @@ pub(super) fn emit_agg_load_slot_sse(
     strict_align: bool,
     tmp: Reg,
 ) {
-    if class == super::abi_classify::RegClass::Vector {
-        super::encode::emit_movups_xmm_mem(code, dst, base, disp);
-        return;
+    match class {
+        super::abi_classify::RegClass::Vector => {
+            super::encode::emit_movups_xmm_mem(code, dst, base, disp)
+        }
+        super::abi_classify::RegClass::Vector256 => {
+            super::encode::emit_vmovups_ymm_mem(code, dst, base, disp)
+        }
+        _ => emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp),
     }
-    emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp);
 }
 
 /// The partner of [`emit_agg_load_slot_sse`]: store the slot back to
@@ -1565,10 +1569,14 @@ pub(super) fn emit_agg_store_slot_sse(
     disp: i32,
     src: Reg,
 ) {
-    if class == super::abi_classify::RegClass::Vector {
-        super::encode::emit_movups_mem_xmm(code, base, disp, src);
-    } else {
-        emit_movsd_mem_xmm(code, base, disp, src);
+    match class {
+        super::abi_classify::RegClass::Vector => {
+            super::encode::emit_movups_mem_xmm(code, base, disp, src)
+        }
+        super::abi_classify::RegClass::Vector256 => {
+            super::encode::emit_vmovups_mem_ymm(code, base, disp, src)
+        }
+        _ => emit_movsd_mem_xmm(code, base, disp, src),
     }
 }
 

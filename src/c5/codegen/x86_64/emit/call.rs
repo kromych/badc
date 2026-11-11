@@ -543,12 +543,31 @@ fn xmm_arg_count(plan: &super::CallPlan) -> u8 {
 }
 
 /// `vzeroupper` ahead of a call or return out of a body holding 256- or
-/// 512-bit values ([`Frame::wide_regs`]); the call's arguments are in
-/// place and none is that wide.
-pub(super) fn clear_upper(code: &mut Vec<u8>, frame: Frame) {
-    if frame.wide_regs {
+/// 512-bit values ([`Frame::wide_regs`]), unless an argument or the result
+/// is a vector that wide in its register (`wide_live`), whose upper bits it
+/// would clear; gcc leaves the instruction out there too.
+pub(super) fn clear_upper(code: &mut Vec<u8>, frame: Frame, wide_live: bool) {
+    if frame.wide_regs && !wide_live {
         super::encode::emit_vzeroupper(code);
     }
+}
+
+/// Whether a call passes a vector argument in a 256- or 512-bit register:
+/// a value that wide, or an aggregate of the class the plan puts in one.
+pub(super) fn wide_args(
+    args: &[u32],
+    aggs: &[Option<super::ArgAgg>],
+    plan: &super::CallPlan,
+    alloc: &Allocation,
+) -> bool {
+    use super::abi_classify::{AggClass, RegClass};
+    args.iter().any(|&a| alloc.width(a) >= VecWidth::V256)
+        || aggs.iter().zip(&plan.placements).any(|(a, p)| {
+            matches!(p, super::ArgPlacement::StructRegs { .. })
+                && a.as_ref().is_some_and(
+                    |a| matches!(&a.class, AggClass::Regs(c) if c[..] == [RegClass::Vector256]),
+                )
+        })
 }
 
 /// A direct call to `target_pc`: opcode E8 with a rel32 the fixup pass
@@ -632,7 +651,7 @@ pub(super) fn emit_call(
     if let Some(n) = xmm_count {
         super::encode::emit_mov_al_imm8(code, n);
     }
-    clear_upper(code, frame);
+    clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
     emit_call_to(code, fixups, target_pc);
     if ends_path {
         return Ok(());
@@ -717,7 +736,7 @@ pub(super) fn emit_call_ext(
             super::encode::emit_xor_eax_eax(code);
         }
     }
-    clear_upper(code, frame);
+    clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
     let call_site = code.len();
     plt_call_fixups.push(PltCallFixup {
         instr_offset: call_site,
@@ -873,7 +892,7 @@ pub(super) fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        clear_upper(code, frame);
+        clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
         emit_hardened_call_r(code, target_scratch, abi, extern_sites);
         if ends_path {
             return Ok(());
@@ -914,7 +933,7 @@ pub(super) fn emit_call_indirect(
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
-        clear_upper(code, frame);
+        clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
         emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
         if ends_path {
             return Ok(());
@@ -1258,7 +1277,7 @@ pub(super) fn emit_tail_call(
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, frame, alloc);
-    clear_upper(code, frame);
+    clear_upper(code, frame, wide_args(args, &[], &plan, alloc));
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.

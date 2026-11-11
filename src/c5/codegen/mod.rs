@@ -1017,12 +1017,20 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
-            let placement = match &agg.class {
+            // An unnamed 32-byte vector goes in memory, as gcc passes it.
+            let memory = AggClass::ByStack;
+            let class = match &agg.class {
+                AggClass::Regs(c) if i >= fixed_args && c[..] == [RegClass::Vector256] => &memory,
+                c => c,
+            };
+            let placement = match class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
                     let need_fp = classes
                         .iter()
-                        .filter(|c| matches!(c, RegClass::Sse | RegClass::Vector))
+                        .filter(|c| {
+                            matches!(c, RegClass::Sse | RegClass::Vector | RegClass::Vector256)
+                        })
                         .count();
                     if need_int > 0 && need_fp == 0 {
                         int_idx = pair_align16(int_idx, int_max, agg, abi);
@@ -1046,7 +1054,7 @@ pub(super) fn plan_call_args_aggs(
                                 RegClass::X87 | RegClass::NoClass => {
                                     unreachable!("an argument register is never {c:?}")
                                 }
-                                RegClass::Sse | RegClass::Vector => {
+                                RegClass::Sse | RegClass::Vector | RegClass::Vector256 => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;
                                     ClassReg {

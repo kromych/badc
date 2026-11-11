@@ -91,6 +91,8 @@ fn tape_carries(parts: &[RegPart], n_fields: usize) -> bool {
             p.fields.as_slice(),
             [f] if f.offset == p.offset && f.size == 16 && f.kind == ScalarKind::Vector
         ),
+        // A 32-byte vector moves whole whatever its lanes.
+        RegClass::Vector256 => p.offset == 0 && p.width == 32,
         RegClass::X87 | RegClass::NoClass => false,
     })
 }
@@ -102,11 +104,13 @@ fn sorted_fields(p: &RegPart) -> Vec<crate::c5::codegen::abi_classify::FlatField
 }
 
 /// The bank and precision a part's value takes: an 8-byte vector moves as
-/// the 64 bits of a `double`, a 16-byte one as a whole vector register.
+/// the 64 bits of a `double`, a 16- or 32-byte one as a whole vector
+/// register.
 fn part_kind(p: &RegPart) -> LoadKind {
     match (p.class, p.width) {
         (RegClass::Integer, _) => LoadKind::I64,
         (RegClass::Vector, _) => LoadKind::V128,
+        (RegClass::Vector256, _) => LoadKind::V256,
         (_, 4) => LoadKind::F32,
         _ => LoadKind::F64,
     }
@@ -226,7 +230,9 @@ fn scatter(
     split: bool,
 ) {
     let mut pieces: Vec<(u32, u32, StoreKind)> = Vec::new();
-    if p.class == RegClass::Integer && !split {
+    if p.class == RegClass::Vector256 {
+        pieces.push((p.offset, p.width, StoreKind::V256));
+    } else if p.class == RegClass::Integer && !split {
         gap_stores(&mut pieces, p.offset, p.offset + p.width);
     } else {
         let mut pos = p.offset;
@@ -307,6 +313,9 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
             is_f32,
         )
     };
+    if p.class == RegClass::Vector256 {
+        return load(plan, p.offset, p.width, LoadKind::V256, false);
+    }
     if p.class != RegClass::Integer {
         let f = p.fields[0];
         let kind = part_kind(p);

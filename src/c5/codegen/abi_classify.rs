@@ -131,6 +131,11 @@ pub(crate) enum RegClass {
     /// Short Vector (6.4.2) both occupy one register across their full
     /// width, so the slot is 16 bytes wide rather than 8.
     Vector,
+    /// A whole 32-byte vector register: System V SSE followed by three
+    /// SSEUP eightbytes, a ymm register once AVX is enabled (psABI 3.2.3),
+    /// which the x86-64 baseline always is. A named argument and a result
+    /// only; an unnamed argument goes in memory, as gcc passes it.
+    Vector256,
     /// The top of the x87 register stack, `st(0)`: System V AMD64 3.2.3
     /// returns an X87 + X87UP pair there, a sole `long double`. No argument
     /// takes it.
@@ -145,6 +150,7 @@ impl RegClass {
     pub(crate) fn width(self) -> u32 {
         match self {
             RegClass::Vector | RegClass::X87 => 16,
+            RegClass::Vector256 => 32,
             _ => 8,
         }
     }
@@ -256,7 +262,7 @@ pub(crate) fn classify_aggregate(desc: &AggDesc, abi: Abi, is_return: bool) -> A
         if abi.position_indexed_args {
             classify_win64(desc.size, is_return)
         } else {
-            classify_sysv(desc.size, &desc.fields, is_return)
+            classify_sysv(desc, is_return)
         }
     } else {
         // AAPCS64: Linux / macOS aarch64 and Windows aarch64, which
@@ -288,7 +294,8 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 /// x87 value X87UP. SSE followed by SSEUP is one vector register, X87
 /// followed by X87UP the x87 register stack's top, which only a return
 /// value takes, and an eightbyte left NO_CLASS takes no register.
-fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
+fn classify_sysv(desc: &AggDesc, is_return: bool) -> AggClass {
+    let (size, fields) = (desc.size, desc.fields.as_slice());
     let memory = if is_return {
         AggClass::ReturnIndirect
     } else {
@@ -296,6 +303,9 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     };
     if size == 0 {
         return AggClass::Regs(alloc::vec::Vec::new());
+    }
+    if desc.vector && size == 32 {
+        return AggClass::Regs(alloc::vec![RegClass::Vector256]);
     }
     if size > 16
         || fields
@@ -1061,12 +1071,24 @@ mod tests {
     }
 
     #[test]
-    fn vector_wider_than_a_register_goes_to_memory() {
-        // 32 bytes exceeds the register on both, so the lanes reach the
-        // size rules: System V sends the value to memory (the psABI's ymm
-        // form needs AVX), AAPCS64 passes the composite by reference.
+    fn a_32_byte_vector_is_one_ymm_register_on_system_v() {
+        // System V passes and returns a 32-byte vector whole in a ymm
+        // register under AVX, which the x86-64 baseline has; a structure of
+        // the same bytes stays MEMORY. AAPCS64 has no such register and
+        // passes the composite by reference.
         let lanes: alloc::vec::Vec<FlatField> =
             (0..32).map(|i| ff(i, 1, ScalarKind::Int)).collect();
+        let vector = AggDesc {
+            vector: true,
+            ..desc(32, &lanes)
+        };
+        for is_return in [false, true] {
+            assert_eq!(
+                classify_aggregate(&vector, sysv(), is_return),
+                AggClass::Regs(alloc::vec![RegClass::Vector256])
+            );
+        }
+        assert_eq!(classify_aggregate(&vector, aapcs(), false), AggClass::ByRef);
         assert_eq!(
             classify_aggregate(&desc(32, &lanes), sysv(), false),
             AggClass::ByStack

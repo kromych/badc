@@ -890,6 +890,15 @@ fn emit_incoming(
     let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
     let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
         .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
+    if kind == LoadKind::V256 {
+        let Some((true, x)) = incoming else {
+            return fail(alloc::format!(
+                "{name}: vector not in an FP argument register"
+            ));
+        };
+        mirror_wide_dst(code, VecWidth::V256, dst, Reg(x), frame);
+        return Ok(());
+    }
     if kind == LoadKind::V128 {
         let Some((true, x)) = incoming else {
             return fail(alloc::format!(

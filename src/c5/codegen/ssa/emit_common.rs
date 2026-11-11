@@ -2820,12 +2820,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // A vector parameter or result the parts carry leaves its object
         // an ordinary vector local: promote it as the first run would have.
         pipeline.run("ssa::mem2reg::run vector parts", &mut ssa_funcs, |funcs| {
-            use super::super::ir::{FunctionSsa, Inst, LoadKind::V128};
+            use super::super::ir::{FunctionSsa, Inst, LoadKind};
+            let whole = |k: &LoadKind| matches!(k, LoadKind::V128 | LoadKind::V256);
             let vector_parts = |f: &FunctionSsa| {
                 f.insts.iter().any(|i| match i {
-                    Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => *kind == V128,
+                    Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => whole(kind),
                     Inst::AggParts { parts, .. } => parts.iter().any(|&p| {
-                        matches!(f.insts.get(p as usize), Some(Inst::Load { kind: V128, .. }))
+                        matches!(f.insts.get(p as usize), Some(Inst::Load { kind, .. }) if whole(kind))
                     }),
                     _ => false,
                 })

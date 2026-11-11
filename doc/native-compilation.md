@@ -87,7 +87,10 @@ extension of x86-64-v3 the code generator emits, except a vector extension
 under `-mno-sse`. `-mtune=` is accepted and changes nothing.
 
 On x86-64 the 32-byte GNU vectors are values in the ymm registers, and a
-function holding one executes `vzeroupper` before each call and return.
+function holding one executes `vzeroupper` before each call and return that
+passes no such vector in a register. On System V a named 32-byte vector
+argument or result travels in a ymm register, counted with the xmm argument
+registers, as gcc passes it under AVX; an unnamed one goes in memory.
 
 Feature macros:
 

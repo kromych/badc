@@ -1862,6 +1862,16 @@ fn emit_return(
     Ok(())
 }
 
+/// Whether the result returns in a 256-bit register (System V AMD64 3.2.3
+/// with AVX), whose upper bits the return keeps.
+fn wide_result(func: &FunctionSsa, abi: super::Abi) -> bool {
+    use super::abi_classify::{AggClass, RegClass, classify_aggregate};
+    func.ret_agg.is_some_and(|i| {
+        matches!(classify_aggregate(&func.agg_descs[i as usize], abi, true),
+            AggClass::Regs(c) if c[..] == [RegClass::Vector256])
+    })
+}
+
 /// A return in registers (System V AMD64 3.2.3): each part moves into its
 /// class's register, the integer parts as one parallel copy through r10 /
 /// r11, the SSE parts through the FP scratch, and a constant's bit pattern
@@ -1919,7 +1929,7 @@ fn emit_epilogue_ret(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) {
-    clear_upper(code, frame);
+    clear_upper(code, frame, wide_result(func, abi));
     emit_frame_teardown(code, func, frame, alloc, abi);
     emit_hardened_ret(code, abi, extern_sites);
 }

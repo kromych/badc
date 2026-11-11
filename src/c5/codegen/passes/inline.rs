@@ -225,6 +225,8 @@ struct SlotPlacement<'a> {
     /// Per component, the optional splices of its members the caller
     /// may still take.
     cycle_budget: &'a mut BTreeMap<usize, usize>,
+    /// The widest vector one load or store moves: 32 bytes on x86-64.
+    whole_vector: u32,
 }
 
 impl SlotPlacement<'_> {
@@ -2392,8 +2394,9 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// flat fields are used as-is so a caller's field read matches a piece
 /// exactly; overlapping fields (a union) fall back to power-of-two
 /// chunks of the merged ranges. A field whose size is not a load width is
-/// chunked the same way unless it is a 16-byte vector. Padding bytes are not
-/// copied; they hold unspecified values either way (C99 6.2.6.1p6).
+/// chunked the same way unless it is a 16-byte vector; a wider vector one
+/// load moves (`whole_vector`) is one piece. Padding bytes are not copied;
+/// they hold unspecified values either way (C99 6.2.6.1p6).
 /// Alignment an aggregate piece at `off` is proven to have, as
 /// [`Inst::Load`] records it: zero when the object's own alignment
 /// already covers the piece width.
@@ -2402,7 +2405,10 @@ fn piece_align(agg_align: u32, off: u32, size: u32) -> u8 {
     if at >= size { 0 } else { at as u8 }
 }
 
-fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
+fn agg_pieces(d: &crate::c5::ir::AggDesc, whole_vector: u32) -> Vec<(u32, u32)> {
+    if d.vector && d.size > 16 && d.size <= whole_vector {
+        return alloc::vec![(0, d.size)];
+    }
     let mut fields: Vec<(u32, u32)> = d.fields.iter().map(|f| (f.offset, f.size)).collect();
     fields.sort_unstable();
     fields.dedup();
@@ -2449,6 +2455,7 @@ fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
 
 fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     match size {
+        32 => (LoadKind::V256, StoreKind::V256),
         16 => (LoadKind::V128, StoreKind::V128),
         1 => (LoadKind::U8, StoreKind::I8),
         2 => (LoadKind::U16, StoreKind::I16),
@@ -2521,6 +2528,7 @@ fn splice_multi_block(
         regions,
         cyclic,
         sp_tainted,
+        whole_vector,
         ..
     } = placement;
     let n_caller = caller.blocks.len();
@@ -2534,7 +2542,7 @@ fn splice_multi_block(
     // `remap[call_pc]` stays NO_VALUE.
     let ret_pieces: Option<Vec<(u32, u32)>> = callee
         .ret_agg
-        .map(|i| agg_pieces(&callee.agg_descs[i as usize]));
+        .map(|i| agg_pieces(&callee.agg_descs[i as usize], *whole_vector));
     // The pieces are read from the caller's object, so its own
     // alignment bounds each read; the return slot they land in is a
     // frame slot and needs no bound.
@@ -4580,6 +4588,11 @@ pub(crate) fn run(
                         stack,
                         cycle_of: &cycle_of,
                         cycle_budget: cycle_budgets.entry(caller.ent_pc).or_default(),
+                        whole_vector: if abi.arch == crate::c5::codegen::Arch::X86_64 {
+                            32
+                        } else {
+                            16
+                        },
                     },
                 );
                 if spliced {

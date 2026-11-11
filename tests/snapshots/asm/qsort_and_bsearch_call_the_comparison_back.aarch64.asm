@@ -136,16 +136,16 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, #0x7                // =7
                	mov	x0, #0x0                // =0
-               	mov	x17, #0x4e6d            // =20077
-               	movk	x17, #0x41c6, lsl #16
-               	mul	x1, x1, x17
-               	mov	x17, #0x3039            // =12345
-               	add	x1, x1, x17
+               	mov	x3, #0x3039             // =12345
+               	mov	x4, #0x4e6d             // =20077
+               	movk	x4, #0x41c6, lsl #16
+               	mul	x1, x1, x4
+               	add	x1, x1, x3
                	sub	x2, x29, #0x140
                	add	x2, x2, x0, lsl #3
-               	mov	w3, w1
-               	ubfx	x3, x3, #16, #2
-               	str	w3, [x2]
+               	mov	w5, w1
+               	ubfx	x5, x5, #16, #2
+               	str	w5, [x2]
                	str	w0, [x2, #0x4]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28

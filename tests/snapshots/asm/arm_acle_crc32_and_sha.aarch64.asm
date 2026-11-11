@@ -270,12 +270,12 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x10]
                	str	x24, [sp, #0x20]
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x80
-               	mov	x17, #0x25              // =37
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xb
-               	and	x2, x2, #0xff
-               	strb	w2, [x1, x0]
+               	mov	x1, #0x25               // =37
+               	sub	x2, x29, #0x80
+               	mul	x3, x0, x1
+               	add	x3, x3, #0xb
+               	and	x3, x3, #0xff
+               	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3d
                	b.lt	<addr>
@@ -395,9 +395,13 @@ Disassembly of section .text:
                	sub	x16, x29, #0xb0
                	ldr	q3, [x16]
                	ldur	w1, [x29, #-0xa0]
+               	mov	x4, #0x3334             // =13108
+               	movk	x4, #0x3333, lsl #16
+               	adrp	x5, <addr>
+               	add	x5, x5, <lo12>
                	mov	x0, #0x0                // =0
                	sub	x2, x29, #0x260
-               	add	x4, x2, x0, lsl #4
+               	add	x6, x2, x0, lsl #4
                	cmp	w0, #0x4
                	b.ge	<addr>
                	lsl	x2, x0, #2
@@ -406,17 +410,13 @@ Disassembly of section .text:
                	sub	x2, x29, #0x120
                	str	q0, [sp, #0x170]
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
+               	stp	x16, x17, [x6]
                	sub	x2, x29, #0x260
                	add	x2, x2, x0, lsl #4
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	mov	x17, #0x3334            // =13108
-               	movk	x17, #0x3333, lsl #16
-               	mul	x5, x0, x17
-               	lsr	x5, x5, #32
-               	ldr	w4, [x4, x5, lsl #2]
-               	dup	v0.4s, w4
+               	mul	x6, x0, x4
+               	lsr	x6, x6, #32
+               	ldr	w6, [x5, x6, lsl #2]
+               	dup	v0.4s, w6
                	ldr	q1, [x2]
                	add	v2.4s, v1.4s, v0.4s
                	mov	w2, v3.s[0]
@@ -470,15 +470,15 @@ Disassembly of section .text:
                	sub	x1, x29, #0x110
                	str	q0, [sp, #0x180]
                	b	<addr>
-               	sub	x5, x0, #0x4
-               	add	x5, x2, x5, lsl #4
-               	sub	x6, x0, #0x3
-               	add	x6, x2, x6, lsl #4
-               	sub	x7, x0, #0x2
+               	sub	x7, x0, #0x4
                	add	x7, x2, x7, lsl #4
-               	ldr	q0, [x5]
-               	ldr	q1, [x6]
-               	ldr	q2, [x7]
+               	sub	x8, x0, #0x3
+               	add	x8, x2, x8, lsl #4
+               	sub	x9, x0, #0x2
+               	add	x9, x2, x9, lsl #4
+               	ldr	q0, [x7]
+               	ldr	q1, [x8]
+               	ldr	q2, [x9]
                	str	q0, [sp, #0x1a0]
                	str	q1, [sp, #0x1b0]
                	str	q2, [sp, #0x1c0]
@@ -486,8 +486,8 @@ Disassembly of section .text:
                	ldr	q1, [sp, #0x1b0]
                	ldr	q2, [sp, #0x1c0]
                	sha1su0	v0.4s, v1.4s, v2.4s
-               	sub	x5, x0, #0x1
-               	add	x2, x2, x5, lsl #4
+               	sub	x7, x0, #0x1
+               	add	x2, x2, x7, lsl #4
                	ldr	q1, [x2]
                	str	q0, [sp, #0x1a0]
                	str	q1, [sp, #0x1b0]

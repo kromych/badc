@@ -1382,22 +1382,22 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	0x40(%r14), %rdx
+               	movabsq	$0x2545f4914f6cdd1d, %rsi # imm = 0x2545F4914F6CDD1D
                	xorl	%eax, %eax
                	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %rsi
-               	shrq	$0xc, %rsi
-               	xorq	%rsi, %rcx
+               	movq	%rcx, %rdi
+               	shrq	$0xc, %rdi
+               	xorq	%rdi, %rcx
                	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rsi
-               	shlq	$0x19, %rsi
-               	xorq	%rsi, %rcx
+               	movq	%rcx, %rdi
+               	shlq	$0x19, %rdi
+               	xorq	%rdi, %rcx
                	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rsi
-               	shrq	$0x1b, %rsi
-               	xorq	%rsi, %rcx
+               	movq	%rcx, %rdi
+               	shrq	$0x1b, %rdi
+               	xorq	%rdi, %rcx
                	movq	%rcx, <rip> # <addr>
-               	movabsq	$0x2545f4914f6cdd1d, %r11 # imm = 0x2545F4914F6CDD1D
-               	imulq	%r11, %rcx
+               	imulq	%rsi, %rcx
                	shrq	$0x18, %rcx
                	andq	$0xff, %rcx
                	movb	%cl, (%rdx,%rax)

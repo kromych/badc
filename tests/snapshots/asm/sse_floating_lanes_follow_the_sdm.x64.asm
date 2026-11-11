@@ -3779,24 +3779,24 @@ Disassembly of section .text:
                	movabsq	$0xa3dad741c2e2d3f, %r11 # imm = 0xA3DAD741C2E2D3F
                	cmpq	%r11, %rcx
                	jne	<addr>
+               	movabsq	$-0x61c8864680b583eb, %rdi # imm = 0x9E3779B97F4A7C15
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	<rip>, %rsi # <addr>
-               	movq	%rsi, %rdi
-               	shrq	$0xc, %rdi
-               	xorq	%rdi, %rsi
+               	movq	%rsi, %r8
+               	shrq	$0xc, %r8
+               	xorq	%r8, %rsi
                	movq	%rsi, <rip> # <addr>
-               	movq	%rsi, %rdi
-               	shlq	$0x19, %rdi
-               	xorq	%rdi, %rsi
+               	movq	%rsi, %r8
+               	shlq	$0x19, %r8
+               	xorq	%r8, %rsi
                	movq	%rsi, <rip> # <addr>
-               	movq	%rsi, %rdi
-               	shrq	$0x1b, %rdi
-               	xorq	%rdi, %rsi
+               	movq	%rsi, %r8
+               	shrq	$0x1b, %r8
+               	xorq	%r8, %rsi
                	movq	%rsi, <rip> # <addr>
-               	movabsq	$-0x61c8864680b583eb, %r11 # imm = 0x9E3779B97F4A7C15
-               	imulq	%r11, %rsi
+               	imulq	%rdi, %rsi
                	shrq	$0x29, %rsi
                	xorps	%xmm0, %xmm0
                	movq	%rsi, %r10

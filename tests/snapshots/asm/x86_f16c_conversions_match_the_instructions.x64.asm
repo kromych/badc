@@ -474,11 +474,11 @@ Disassembly of section .text:
                	cmpl	$0x54, %r13d
                	jb	<addr>
                	xorl	%esi, %esi
+               	leaq	<rip>, %r9 # <addr>
                	movq	%rsi, %rdx
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdx, %rcx
-               	shlq	$0x3, %rcx
-               	leaq	(%rax,%rcx), %r8
+               	movq	%rdx, %rax
+               	shlq	$0x3, %rax
+               	leaq	(%r9,%rax), %r8
                	movzwq	(%r8), %rcx
                	movl	%esi, -0x18(%rbp)
                	movq	%rcx, %rax
@@ -517,15 +517,15 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x1f, %edi
-               	bsrl	%ecx, %r9d
-               	xorl	$0x1f, %r9d
-               	subq	%r9, %rdi
-               	leaq	0x67(%rdi), %r9
-               	shlq	$0x17, %r9
-               	orq	%r9, %rax
-               	movl	$0x17, %r9d
-               	subq	%rdi, %r9
-               	shlxq	%r9, %rcx, %rcx
+               	bsrl	%ecx, %ebx
+               	xorl	$0x1f, %ebx
+               	subq	%rbx, %rdi
+               	leaq	0x67(%rdi), %rbx
+               	shlq	$0x17, %rbx
+               	orq	%rbx, %rax
+               	movl	$0x17, %ebx
+               	subq	%rdi, %rbx
+               	shlxq	%rbx, %rcx, %rcx
                	andq	$0x7fffff, %rcx         # imm = 0x7FFFFF
                	orq	%rcx, %rax
                	jmp	<addr>
@@ -626,12 +626,12 @@ Disassembly of section .text:
                	movups	%xmm14, -0x20(%rbp)
                	movups	%xmm0, -0x30(%rbp)
                	xorl	%eax, %eax
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	<rip>, %rdx # <addr>
+               	leaq	-0x20(%rbp), %rsi
                	movq	%rax, %rcx
                	shlq	%rcx
-               	addq	%rcx, %rdx
-               	movzwq	(%rdx), %rsi
-               	leaq	<rip>, %rdx # <addr>
+               	addq	%rcx, %rsi
+               	movzwq	(%rsi), %rsi
                	addq	%rdx, %rcx
                	movzwq	(%rcx), %rcx
                	cmpl	%ecx, %esi

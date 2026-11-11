@@ -4338,6 +4338,30 @@ int nan(void) { return __builtin_isless(__builtin_nan(\"\"), 1.0); }\n";
     m.finish();
 }
 
+/// A table address the call-free first loop reads is set before it, even
+/// though setting the second loop's before it would hold a callee-saved
+/// register across its calls, which rejects the whole plan.
+#[test]
+fn a64_call_free_loop_keeps_its_hoisted_address() {
+    const SRC: &str = "extern void g(int);\n\
+static const unsigned char t1[256] = {1, 2, 3};\n\
+static const unsigned char t2[256] = {4, 5, 6};\n\
+int f(const unsigned char *p, int n) {\n\
+    int s = 0;\n\
+    for (int i = 0; i < n; i++) s += t1[p[i]];\n\
+    for (int i = 0; i < n; i++) g(t2[p[i]]);\n\
+    return s;\n}\n";
+    let ws = a64(SRC, "f");
+    let adrp = |w: u32| w & 0x9F00_0000 == 0x9000_0000;
+    let first = (ws.iter().enumerate())
+        .find_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, false)) if t < i as i64 => Some(t as usize..i),
+            _ => None,
+        })
+        .expect("the first loop");
+    assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

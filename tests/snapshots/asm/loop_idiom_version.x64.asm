@@ -265,12 +265,12 @@ Disassembly of section .text:
                	incq	%r13
                	cmpl	$0x8, %r13d
                	jl	<addr>
-               	xorl	%eax, %eax
                	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	xorl	%eax, %eax
                	leaq	0x1(%rax), %rcx
                	movb	%cl, (%rdx,%rax)
-               	leaq	<rip>, %rdx # <addr>
-               	movb	%cl, (%rdx,%rax)
+               	movb	%cl, (%rsi,%rax)
                	movq	%rcx, %rax
                	cmpl	$0x40, %eax
                	jl	<addr>
@@ -401,10 +401,10 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	<rip>, %rsi # <addr>
                	leaq	0x20(%rsi), %rdi
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
                	leaq	0x1(%rax), %rcx
                	movb	%cl, (%rsi,%rax)
-               	leaq	<rip>, %rdx # <addr>
                	movb	%cl, (%rdx,%rax)
                	movq	%rcx, %rax
                	cmpl	$0x40, %eax

@@ -115,6 +115,7 @@ enum SymTable {
 }
 
 /// One materialization placed outside a loop, with the sites it serves.
+#[derive(Clone)]
 struct Hoist {
     key: Key,
     /// Tape index the copy goes ahead of; inside the destination block.
@@ -126,6 +127,9 @@ struct Hoist {
     redirect: Vec<ValueId>,
     /// `BinopI` sites rewritten to the register form over the copy.
     unfold: Vec<ValueId>,
+    /// No call in the loops the copy is live across, so it never takes a
+    /// callee-saved register.
+    call_free: bool,
 }
 
 /// Native instructions the target spends materializing `k`.
@@ -311,6 +315,16 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
         observed && !operand_clear
     };
     let mut at_of: Vec<Option<ValueId>> = vec![None; func.blocks.len()];
+    let tls_call = super::reg_alloc::tls_addr_is_call(target, func);
+    let mut calls = vec![false; func.blocks.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        if dest[b] != NO_BLOCK
+            && (block.inst_range.clone())
+                .any(|v| super::reg_alloc::is_call_site(&func.insts[v as usize], tls_call))
+        {
+            calls[dest[b] as usize] = true;
+        }
+    }
     let mut out: Vec<Hoist> = Vec::new();
     let mut slot_of: HashMap<(BlockId, Key), usize> = HashMap::new();
     for (b, block) in func.blocks.iter().enumerate() {
@@ -356,6 +370,7 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
                     profit: 0,
                     redirect: Vec::new(),
                     unfold: Vec::new(),
+                    call_free: !calls[to as usize],
                 });
                 out.len() - 1
             });
@@ -741,13 +756,37 @@ pub(crate) fn allocate_hoisted(
                 Some((_, alt, cost)) if cost <= base_cost => alt,
                 Some((undo, _, _)) => {
                     undo.restore(func);
-                    base
+                    call_free_only(func, target, fixed, &hoists, base_cost).unwrap_or(base)
                 }
                 None => base,
             }
         }
     };
     super::split_ranges::allocate_split_with(func, target, fixed, picked)
+}
+
+/// With the whole plan rejected, the copies for loops without a call: a
+/// copy live across a call takes a callee-saved register, whose save can
+/// outweigh the plan, while these take none. The allocation when they do
+/// not cost more than `base_cost`.
+fn call_free_only(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    hoists: &[Hoist],
+    base_cost: u64,
+) -> Option<Allocation> {
+    let free: Vec<Hoist> = hoists.iter().filter(|h| h.call_free).cloned().collect();
+    if free.is_empty() || free.len() == hoists.len() {
+        return None;
+    }
+    let undo = apply(func, &free);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
+    if placement_cost(func, &alt) <= base_cost {
+        return Some(alt);
+    }
+    undo.restore(func);
+    None
 }
 
 #[cfg(test)]

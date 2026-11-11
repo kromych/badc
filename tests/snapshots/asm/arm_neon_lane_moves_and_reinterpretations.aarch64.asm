@@ -7574,15 +7574,15 @@ Disassembly of section .text:
                	mov	x1, #0xe667             // =58983
                	movk	x1, #0x6a09, lsl #16
                	mov	x0, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	eor	x1, x1, x1, lsl #13
                	mov	w1, w1
                	eor	x1, x1, x1, lsr #17
                	eor	x1, x1, x1, lsl #5
-               	mov	w2, w1
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ubfx	x2, x2, #7, #8
-               	strb	w2, [x3, x0]
+               	mov	w3, w1
+               	ubfx	x3, x3, #7, #8
+               	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lo	<addr>

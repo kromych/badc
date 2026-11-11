@@ -552,18 +552,16 @@ CORE_LIBS = ["kernel32", "user32", "gdi32", "winspool", "comdlg32", "advapi32",
              "shell32", "ole32", "oleaut32", "uuid", "odbc32", "odbccp32"]
 CRT_LIBS = ["ucrt", "vcruntime", "oldnames"]
 
-# Instruction-set capabilities PCbuild assumes of cl. badc's <immintrin.h>
-# carries the SSE family and a 256-bit integer subset, so the units needing
-# the rest of AVX2 and AVX-512 are not built and the code that dispatches to
-# them is configured off, as a configure probe of the compiler would.
-# TODO(#1979): the AVX2 and AVX-512 intrinsics.
-NO_WIDE_VECTORS = {
-    "pythoncore": {"undef": ["_Py_HACL_CAN_COMPILE_VEC256"],
-                   "skip": ["Hacl_Hash_Blake2b_Simd256.c"]},
-    "zlib-ng": {"undef": ["X86_AVX2", "X86_AVX512", "X86_AVX512VNNI", "X86_VPCLMULQDQ_CRC"],
-                "skip": ["slide_hash_avx2.c", "chunkset_avx2.c", "compare256_avx2.c",
-                         "adler32_avx2.c", "adler32_avx512.c", "chunkset_avx512.c",
-                         "adler32_avx512_vnni.c", "crc32_vpclmulqdq.c"]},
+# A unit's EnableEnhancedInstructionSet as the extensions cl's /arch level
+# enables: /arch:AVX512 is AVX-512F, CD, BW, DQ and VL. cl takes any
+# intrinsic at any level; badc, as clang-cl, takes those of the extensions
+# enabled, so a unit also gets the -m options the ClangCL toolset adds to it
+# (-mavx512vnni, -mvpclmulqdq, ...).
+ARCH_EXTENSIONS = {
+    "AdvancedVectorExtensions": ["-mavx"],
+    "AdvancedVectorExtensions2": ["-mavx2"],
+    "AdvancedVectorExtensions512": ["-mavx512f", "-mavx512cd", "-mavx512bw", "-mavx512dq",
+                                    "-mavx512vl"],
 }
 
 
@@ -576,8 +574,10 @@ class Build:
         self.results: dict[str, str] = {}
         self.outputs: dict[str, Path] = {}
 
-    def evaluate(self, name: str) -> Project:
+    def evaluate(self, name: str, toolset: str | None = None) -> Project:
         g = dict(self.globals)
+        if toolset:
+            g["PlatformToolset"] = toolset
         xy = g["MajorVersionNumber"] + g["MinorVersionNumber"]
         g["ProjectName"] = name
         g["MSBuildProjectName"] = name
@@ -603,23 +603,26 @@ class Build:
     def compile_units(self, name: str, proj: Project) -> tuple[list[Path], list[str]]:
         int_dir = Path(proj.props["IntDir"])
         int_dir.mkdir(parents=True, exist_ok=True)
-        tweak = NO_WIDE_VECTORS.get(name, {}) if self.target == "windows-x64" else {}
+        clang_cl: dict[Path, list[str]] = {}
+        if self.target == "windows-x64":
+            for src, meta in self.evaluate(name, "ClangCL").files("ClCompile"):
+                clang_cl[src] = [o for o in meta.get("AdditionalOptions", "").split()
+                                 if o.startswith("-m")]
         jobs, seen = [], set()
         for src, meta in proj.files("ClCompile"):
-            if src.name in tweak.get("skip", []):
-                continue
             stem = src.stem
             while stem in seen:
                 stem += "_"
             seen.add(stem)
-            defs = [d for d in proj.list_meta(meta, "PreprocessorDefinitions")
-                    if d.split("=", 1)[0] not in tweak.get("undef", [])]
+            defs = proj.list_meta(meta, "PreprocessorDefinitions")
+            isa = ARCH_EXTENSIONS.get(meta.get("EnableEnhancedInstructionSet", ""), [])
+            isa = isa + [o for o in clang_cl.get(src, []) if o not in isa]
             if name == "pythoncore" and src.name == "getbuildinfo.c":
                 defs += ['GITVERSION=""', 'GITTAG=""', 'GITBRANCH=""']
             defs = self.implicit_defines(proj, meta) + defs
             incs = [proj.resolve(d) for d in proj.list_meta(meta, "AdditionalIncludeDirectories")]
             obj = int_dir / f"{stem}.obj"
-            jobs.append((src, obj, self.tc.compile_cmd(src, obj, defs, incs), None))
+            jobs.append((src, obj, self.tc.compile_cmd(src, obj, defs, incs, isa), None))
         for src, meta in proj.files("CustomBuild"):
             if src.suffix.lower() != ".asm":
                 continue

@@ -1938,6 +1938,16 @@ static inline __m512i _mm512_set1_epi8(char __A) {
 #define _mm512_set_epi64(H, G, F, E, D, C, B, A) ((__m512i){(A), (B), (C), (D), (E), (F), (G), (H)})
 #define _mm512_setr_epi64(A, B, C, D, E, F, G, H) \
     ((__m512i){(A), (B), (C), (D), (E), (F), (G), (H)})
+#define _mm512_set_epi8(E63, E62, E61, E60, E59, E58, E57, E56, E55, E54, E53, E52, E51, E50, \
+        E49, E48, E47, E46, E45, E44, E43, E42, E41, E40, E39, E38, E37, E36, E35, E34, E33, E32, \
+        E31, E30, E29, E28, E27, E26, E25, E24, E23, E22, E21, E20, E19, E18, E17, E16, E15, E14, \
+        E13, E12, E11, E10, E9, E8, E7, E6, E5, E4, E3, E2, E1, E0) \
+    ((__m512i)(__v64qi){(E0), (E1), (E2), (E3), (E4), (E5), (E6), (E7), (E8), (E9), (E10), (E11), \
+        (E12), (E13), (E14), (E15), (E16), (E17), (E18), (E19), (E20), (E21), (E22), (E23), \
+        (E24), (E25), (E26), (E27), (E28), (E29), (E30), (E31), (E32), (E33), (E34), (E35), \
+        (E36), (E37), (E38), (E39), (E40), (E41), (E42), (E43), (E44), (E45), (E46), (E47), \
+        (E48), (E49), (E50), (E51), (E52), (E53), (E54), (E55), (E56), (E57), (E58), (E59), \
+        (E60), (E61), (E62), (E63)})
 #define _mm512_set_epi32(P, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A) \
     ((__m512i)(__v16si){(A), (B), (C), (D), (E), (F), (G), (H), (I), (J), (K), (L), (M), (N), \
         (O), (P)})
@@ -2216,6 +2226,140 @@ __BADC_512_MASKED(xor_epi32, epi32, __mmask16)
 __BADC_512_MASKED(min_epu8, epi8, __mmask64)
 __BADC_512_MASKED(max_epu8, epi8, __mmask64)
 #undef __BADC_512_MASKED
+
+/* The predicates of the integer compares into a mask. */
+typedef enum {
+    _MM_CMPINT_EQ,
+    _MM_CMPINT_LT,
+    _MM_CMPINT_LE,
+    _MM_CMPINT_UNUSED,
+    _MM_CMPINT_NE,
+    _MM_CMPINT_NLT,
+#define _MM_CMPINT_GE _MM_CMPINT_NLT
+    _MM_CMPINT_NLE
+#define _MM_CMPINT_GT _MM_CMPINT_NLE
+} _MM_CMPINT_ENUM;
+
+#ifdef _MSC_VER
+/* MSVC's all-lanes masks. */
+#define _MM_K0_REG8 (0xff)
+#define _MM_K0_REG16 (0xffff)
+#define _MM_K0_REG32 (0xffffffff)
+#define _MM_K0_REG64 (0xffffffffffffffff)
+#endif
+
+/* The compares into a mask and the blends at 256 and 128 bits (AVX512VL with
+** AVX512BW for the byte and word lanes), as their 512-bit forms. */
+#define __BADC_VL_CMP(pre, vt, t, mt, c, bits)                                    \
+    static inline mt pre##_cmpeq_##t##_mask(vt __A, vt __B) {                     \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 0);                  \
+    }                                                                             \
+    static inline mt pre##_cmplt_##t##_mask(vt __A, vt __B) {                     \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 1);                  \
+    }                                                                             \
+    static inline mt pre##_cmple_##t##_mask(vt __A, vt __B) {                     \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 2);                  \
+    }                                                                             \
+    static inline mt pre##_cmpneq_##t##_mask(vt __A, vt __B) {                    \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 4);                  \
+    }                                                                             \
+    static inline mt pre##_cmpge_##t##_mask(vt __A, vt __B) {                     \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 5);                  \
+    }                                                                             \
+    static inline mt pre##_cmpgt_##t##_mask(vt __A, vt __B) {                     \
+        return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 6);                  \
+    }
+#define __BADC_VL_BLEND(pre, vt, t, mt, row)                                      \
+    static inline vt pre##_mask_mov_##t(vt __S, mt __K, vt __A) {                 \
+        return (vt)__builtin_ia32_##row(__S, __K, __A);                           \
+    }                                                                             \
+    static inline vt pre##_maskz_mov_##t(mt __K, vt __A) {                        \
+        return pre##_mask_mov_##t((vt){0}, __K, __A);                             \
+    }                                                                             \
+    static inline vt pre##_mask_blend_##t(mt __K, vt __A, vt __B) {               \
+        return pre##_mask_mov_##t(__A, __K, __B);                                 \
+    }
+#define _mm256_cmp_epi8_mask(A, B, P) ((__mmask32)__builtin_ia32_cmpb256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epu8_mask(A, B, P) ((__mmask32)__builtin_ia32_ucmpb256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epi16_mask(A, B, P) ((__mmask16)__builtin_ia32_cmpw256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epu16_mask(A, B, P) ((__mmask16)__builtin_ia32_ucmpw256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epi32_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpd256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epu32_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpd256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epi64_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpq256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm256_cmp_epu64_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpq256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
+#define _mm_cmp_epi8_mask(A, B, P) ((__mmask16)__builtin_ia32_cmpb128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epu8_mask(A, B, P) ((__mmask16)__builtin_ia32_ucmpb128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epi16_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpw128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epu16_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpw128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epi32_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpd128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epu32_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpd128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epi64_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpq128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+#define _mm_cmp_epu64_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpq128_mask((__m128i)(A), (__m128i)(B), (int)(P)))
+__BADC_VL_CMP(_mm256, __m256i, epi8, __mmask32, cmpb, 256)
+__BADC_VL_CMP(_mm256, __m256i, epu8, __mmask32, ucmpb, 256)
+__BADC_VL_CMP(_mm256, __m256i, epi16, __mmask16, cmpw, 256)
+__BADC_VL_CMP(_mm256, __m256i, epu16, __mmask16, ucmpw, 256)
+__BADC_VL_CMP(_mm256, __m256i, epi32, __mmask8, cmpd, 256)
+__BADC_VL_CMP(_mm256, __m256i, epu32, __mmask8, ucmpd, 256)
+__BADC_VL_CMP(_mm256, __m256i, epi64, __mmask8, cmpq, 256)
+__BADC_VL_CMP(_mm256, __m256i, epu64, __mmask8, ucmpq, 256)
+__BADC_VL_CMP(_mm, __m128i, epi8, __mmask16, cmpb, 128)
+__BADC_VL_CMP(_mm, __m128i, epu8, __mmask16, ucmpb, 128)
+__BADC_VL_CMP(_mm, __m128i, epi16, __mmask8, cmpw, 128)
+__BADC_VL_CMP(_mm, __m128i, epu16, __mmask8, ucmpw, 128)
+__BADC_VL_CMP(_mm, __m128i, epi32, __mmask8, cmpd, 128)
+__BADC_VL_CMP(_mm, __m128i, epu32, __mmask8, ucmpd, 128)
+__BADC_VL_CMP(_mm, __m128i, epi64, __mmask8, cmpq, 128)
+__BADC_VL_CMP(_mm, __m128i, epu64, __mmask8, ucmpq, 128)
+__BADC_VL_BLEND(_mm256, __m256i, epi8, __mmask32, blendmb_256)
+__BADC_VL_BLEND(_mm256, __m256i, epi16, __mmask16, blendmw_256)
+__BADC_VL_BLEND(_mm256, __m256i, epi32, __mmask8, blendmd_256)
+__BADC_VL_BLEND(_mm256, __m256i, epi64, __mmask8, blendmq_256)
+__BADC_VL_BLEND(_mm, __m128i, epi8, __mmask16, blendmb_128)
+__BADC_VL_BLEND(_mm, __m128i, epi16, __mmask8, blendmw_128)
+__BADC_VL_BLEND(_mm, __m128i, epi32, __mmask8, blendmd_128)
+__BADC_VL_BLEND(_mm, __m128i, epi64, __mmask8, blendmq_128)
+#undef __BADC_VL_CMP
+#undef __BADC_VL_BLEND
+
+/* Masked forms of operations: the lanes the mask selects from the operation,
+** the others from the source or zero. */
+static inline __m128i _mm_mask_shuffle_epi8(__m128i __S, __mmask16 __K, __m128i __A, __m128i __B) {
+    return _mm_mask_mov_epi8(__S, __K, _mm_shuffle_epi8(__A, __B));
+}
+static inline __m128i _mm_maskz_shuffle_epi8(__mmask16 __K, __m128i __A, __m128i __B) {
+    return _mm_maskz_mov_epi8(__K, _mm_shuffle_epi8(__A, __B));
+}
+static inline __m256i _mm256_mask_shuffle_epi8(__m256i __S, __mmask32 __K, __m256i __A, __m256i __B) {
+    return _mm256_mask_mov_epi8(__S, __K, _mm256_shuffle_epi8(__A, __B));
+}
+static inline __m256i _mm256_maskz_shuffle_epi8(__mmask32 __K, __m256i __A, __m256i __B) {
+    return _mm256_maskz_mov_epi8(__K, _mm256_shuffle_epi8(__A, __B));
+}
+static inline __m512i _mm512_maskz_maddubs_epi16(__mmask32 __K, __m512i __A, __m512i __B) {
+    return _mm512_maskz_mov_epi16(__K, _mm512_maddubs_epi16(__A, __B));
+}
+static inline __m512i _mm512_maskz_set1_epi16(__mmask32 __K, short __A) {
+    return _mm512_maskz_mov_epi16(__K, _mm512_set1_epi16(__A));
+}
+#define _mm512_maskz_extracti32x4_epi32(K, A, N)                                  \
+    _mm_maskz_mov_epi32((__mmask8)(K), _mm512_extracti32x4_epi32((A), (N)))
+#define _mm512_maskz_extracti64x4_epi64(K, A, N)                                  \
+    _mm256_maskz_mov_epi64((__mmask8)(K), _mm512_extracti64x4_epi64((A), (N)))
+
+/* AVX512VNNI with AVX512VL on ymm. */
+static inline __m256i _mm256_dpbusd_epi32(__m256i __S, __m256i __A, __m256i __B) {
+    return (__m256i)__builtin_ia32_vpdpbusd256((__v8si)__S, (__v8si)__A, (__v8si)__B);
+}
+static inline __m256i _mm256_dpbusds_epi32(__m256i __S, __m256i __A, __m256i __B) {
+    return (__m256i)__builtin_ia32_vpdpbusds256((__v8si)__S, (__v8si)__A, (__v8si)__B);
+}
+static inline __m256i _mm256_dpwssd_epi32(__m256i __S, __m256i __A, __m256i __B) {
+    return (__m256i)__builtin_ia32_vpdpwssd256((__v8si)__S, (__v8si)__A, (__v8si)__B);
+}
+static inline __m256i _mm256_dpwssds_epi32(__m256i __S, __m256i __A, __m256i __B) {
+    return (__m256i)__builtin_ia32_vpdpwssds256((__v8si)__S, (__v8si)__A, (__v8si)__B);
+}
 
 /* The masked transfers (AVX512BW / AVX512F, AVX512VL at 256 and 128 bits):
 ** only the lanes a mask selects are read or written. */

@@ -2246,6 +2246,76 @@ void widen(__m256i *p, const __m128i *x) { *p = _mm256_zextsi128_si256(*x); }\n"
     }
 }
 
+/// The AVX512VL forms at 256 and 128 bits -- the compares into a mask by
+/// each predicate, the blends, a masked shuffle -- the ymm VNNI dot
+/// product, the zero-masked 512-bit extracts and `_mm512_set_epi8` compute
+/// as the per-lane C they stand for, in the interpreter at -O0 and -O, and
+/// the unit lowers.
+#[test]
+fn avx512vl_forms_compute_as_their_definitions() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str = "#include <immintrin.h>\n\
+static signed char a[32], b[32];\n\
+int main(void) {\n\
+    for (int i = 0; i < 32; i++) a[i] = (signed char)(i * 37 - 90), b[i] = (signed char)(70 - i * 5);\n\
+    __m128i x = _mm_loadu_si128((const __m128i *)a), y = _mm_loadu_si128((const __m128i *)b);\n\
+    __mmask16 le = _mm_cmp_epi8_mask(x, y, _MM_CMPINT_LE);\n\
+    for (int i = 0; i < 16; i++) if (((le >> i) & 1) != (a[i] <= b[i])) return 1;\n\
+    __mmask16 gtu = _mm_cmpgt_epu8_mask(x, y);\n\
+    for (int i = 0; i < 16; i++) if (((gtu >> i) & 1) != ((unsigned char)a[i] > (unsigned char)b[i])) return 2;\n\
+    __m256i X = _mm256_loadu_si256((const __m256i *)a), Y = _mm256_loadu_si256((const __m256i *)b);\n\
+    __mmask8 ne = _mm256_cmpneq_epi32_mask(X, Y);\n\
+    int *ia = (int *)a, *ib = (int *)b;\n\
+    for (int i = 0; i < 8; i++) if (((ne >> i) & 1) != (ia[i] != ib[i])) return 3;\n\
+    __m256i bl = _mm256_mask_blend_epi32(0xA5, X, Y);\n\
+    for (int i = 0; i < 8; i++) if (((int *)&bl)[i] != ((0xA5 >> i) & 1 ? ib[i] : ia[i])) return 4;\n\
+    __m128i sh = _mm_mask_shuffle_epi8(y, 0x0F0F, x, _mm_set1_epi8(3));\n\
+    for (int i = 0; i < 16; i++) if (((signed char *)&sh)[i] != ((0x0F0F >> i) & 1 ? a[3] : b[i])) return 5;\n\
+    __m256i dp = _mm256_dpbusd_epi32(_mm256_set1_epi32(7), X, Y);\n\
+    for (int i = 0; i < 8; i++) {\n\
+        int e = 7;\n\
+        for (int k = 0; k < 4; k++) e += (unsigned char)a[4 * i + k] * b[4 * i + k];\n\
+        if (((int *)&dp)[i] != e) return 6;\n\
+    }\n\
+    __m512i z = _mm512_set_epi8(63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45,\n\
+        44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19,\n\
+        18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);\n\
+    for (int i = 0; i < 64; i++) if (((char *)&z)[i] != i) return 7;\n\
+    __m256i hi = _mm512_maskz_extracti64x4_epi64(0x5, z, 1);\n\
+    long long *lz = (long long *)&z, *lh = (long long *)&hi;\n\
+    for (int i = 0; i < 4; i++) if (lh[i] != ((0x5 >> i) & 1 ? lz[4 + i] : 0)) return 8;\n\
+    __m128i q = _mm512_maskz_extracti32x4_epi32(0x6, z, 2);\n\
+    int *iz = (int *)&z, *iq = (int *)&q;\n\
+    for (int i = 0; i < 4; i++) if (iq[i] != ((0x6 >> i) & 1 ? iz[8 + i] : 0)) return 9;\n\
+    return 0;\n\
+}\n\
+";
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+    #[cfg(feature = "full")]
+    {
+        let opts = CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            Target::LinuxX64,
+            crate::NativeOptions::new().with_optimize(),
+        )
+        .expect("emit_native for linux-x64");
+    }
+}
+
 /// The <immintrin.h> AVX-512 intrinsics compute as the per-element C they
 /// stand for: an Adler-32 of 64-byte blocks by vpsadbw and vpdpbusd with a
 /// masked tail load against the bytewise sum, a compare into a mask and the

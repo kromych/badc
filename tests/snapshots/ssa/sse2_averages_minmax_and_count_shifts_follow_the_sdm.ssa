@@ -1612,7 +1612,7 @@ fn ent_pc=396 n_params=2 variadic=false locals=8
 ; --- SSA dump (ok=true) ent_pc=399 ---
 ; name=check_count_shifts
 fn ent_pc=399 n_params=2 variadic=false locals=5
-  spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x3

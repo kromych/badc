@@ -9503,7 +9503,7 @@ Disassembly of section .text:
 <check_tests>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xd8, %rsp
+               	subq	$0xc8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -10644,7 +10644,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testq	%r14, %r14
                	cmoveq	%rcx, %rax
-               	leaq	-0x100(%rbp), %rsp
+               	leaq	-0xf0(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
                	popq	%r13

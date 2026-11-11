@@ -144,7 +144,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x28, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -212,13 +212,13 @@ Disassembly of section .text:
                	leaq	0xa0(%rdi), %r14
                	leaq	0xb0(%rdi), %r15
                	leaq	0xc0(%rdi), %r10
-               	movq	%r10, 0x58(%rsp)
-               	leaq	0xd0(%rdi), %r10
-               	movq	%r10, 0x50(%rsp)
-               	leaq	0xe0(%rdi), %r10
                	movq	%r10, 0x48(%rsp)
-               	leaq	0xf0(%rdi), %r10
+               	leaq	0xd0(%rdi), %r10
                	movq	%r10, 0x40(%rsp)
+               	leaq	0xe0(%rdi), %r10
+               	movq	%r10, 0x38(%rsp)
+               	leaq	0xf0(%rdi), %r10
+               	movq	%r10, 0x30(%rsp)
                	subq	$0xd0, %rsp
                	movq	%rax, %r10
                	movq	(%r10), %r11
@@ -265,22 +265,22 @@ Disassembly of section .text:
                	movq	%r11, 0x80(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x88(%rsp)
-               	movq	0x128(%rsp), %r10
+               	movq	0x118(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x90(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x98(%rsp)
-               	movq	0x120(%rsp), %r10
+               	movq	0x110(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0xa0(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0xa8(%rsp)
-               	movq	0x118(%rsp), %r10
+               	movq	0x108(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0xb0(%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0xb8(%rsp)
-               	movq	0x110(%rsp), %r10
+               	movq	0x100(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0xc0(%rsp)
                	movq	0x8(%r10), %r11

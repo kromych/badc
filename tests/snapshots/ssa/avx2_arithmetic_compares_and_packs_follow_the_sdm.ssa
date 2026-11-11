@@ -2093,7 +2093,7 @@ fn ent_pc=1366 n_params=2 variadic=false locals=12
 ; --- SSA dump (ok=true) ent_pc=1367 ---
 ; name=model_horizontal
 fn ent_pc=1367 n_params=6 variadic=false locals=0
-  spill_count=4 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> [spill 0]
@@ -3413,7 +3413,7 @@ fn ent_pc=1370 n_params=2 variadic=false locals=8
 ; --- SSA dump (ok=true) ent_pc=1371 ---
 ; name=check_unpacks
 fn ent_pc=1371 n_params=2 variadic=false locals=8
-  spill_count=4 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> [spill 0]
@@ -3750,7 +3750,7 @@ fn ent_pc=1371 n_params=2 variadic=false locals=8
 ; --- SSA dump (ok=true) ent_pc=1372 ---
 ; name=main
 fn ent_pc=1372 n_params=0 variadic=false locals=16
-  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x15

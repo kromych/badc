@@ -18315,7 +18315,7 @@ fn ent_pc=1367 n_params=0 variadic=false locals=20
 ; --- SSA dump (ok=true) ent_pc=1368 ---
 ; name=check_tests
 fn ent_pc=1368 n_params=0 variadic=false locals=10
-  spill_count=15 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=14 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-8)                                    -> x6

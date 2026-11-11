@@ -3375,7 +3375,7 @@ fn ent_pc=499 n_params=5 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=506 ---
 ; name=model
 fn ent_pc=506 n_params=6 variadic=false locals=128
-  spill_count=3 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=2 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(1, kind=I64)                            -> x6

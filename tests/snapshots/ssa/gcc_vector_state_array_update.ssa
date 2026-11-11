@@ -1095,7 +1095,7 @@ fn ent_pc=6 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=update_scalar
 fn ent_pc=7 n_params=2 variadic=false locals=0
-  spill_count=11 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=10 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7

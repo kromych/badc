@@ -2211,7 +2211,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // decision and the Win64 xmm listing below, and phi-predecessor
     // moves write the phi's own place, which is reached through the
     // phi's row (a live phi is never dead-pure; a dead one holds no
-    // place).
+    // place). The spill region likewise ends after the last slot a live
+    // value holds.
+    let mut slots_end = 0u32;
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -2225,9 +2227,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Place::FpReg(r) => {
                 fp_used.insert(r);
             }
-            _ => {}
+            Place::Spill(s) => {
+                let units = node_cons[node_of[v] as usize].map_or(1, |c| c.wide.units());
+                slots_end = slots_end.max(s + units);
+            }
+            Place::None => {}
         }
     }
+    let spill_count = spill_count.min(slots_end);
     // Only callee-saved registers need prologue / epilogue
     // save and restore. Caller-saved registers are preserved
     // by the caller across the function's call sites (via the
@@ -5941,8 +5948,9 @@ int main(void) { return 0; }
     /// immediates exhaust the seven-entry x86_64 caller bank; the dead
     /// shift among them colors last (zero weight) and lands on a
     /// callee-saved register that nothing ever writes.
-    #[test]
-    fn dead_pure_color_stays_out_of_used_sets() {
+    /// A constant chain with an unread shift of its first link; returns the
+    /// function and the shift.
+    fn dead_shift_chain() -> (FunctionSsa, ValueId) {
         use crate::c5::ir::Block;
         let mut insts: Vec<Inst> = (0..10).map(Inst::Imm).collect();
         let dead = insts.len() as ValueId;
@@ -5971,6 +5979,36 @@ int main(void) { return 0; }
             }],
             ..Default::default()
         };
+        (f, dead)
+    }
+
+    #[test]
+    fn a_slot_only_a_dead_value_holds_is_outside_the_spill_region() {
+        let (f, dead) = dead_shift_chain();
+        let alloc = with_pool_size_override(2, 2, || allocate(&f, Target::LinuxX64));
+        let Place::Spill(s) = alloc.places[dead as usize] else {
+            panic!(
+                "the unread shift must spill, got {:?}",
+                alloc.places[dead as usize]
+            );
+        };
+        let live_end = (f.insts.iter().enumerate())
+            .filter(|&(v, inst)| {
+                !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
+            })
+            .filter_map(|(v, _)| match alloc.places[v] {
+                Place::Spill(s) => Some(s + 1),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        assert!(s >= live_end, "the dead value must take the top slot");
+        assert_eq!(alloc.spill_count, live_end);
+    }
+
+    #[test]
+    fn dead_pure_color_stays_out_of_used_sets() {
+        let (f, dead) = dead_shift_chain();
         // Pin uncapped banks so the pressure-matrix env cannot spill
         // the dead value instead of coloring it.
         let alloc =

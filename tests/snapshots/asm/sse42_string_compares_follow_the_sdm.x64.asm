@@ -1541,14 +1541,14 @@ Disassembly of section .text:
 <model>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x488, %rsp            # imm = 0x488
+               	subq	$0x478, %rsp            # imm = 0x478
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, -0x460(%rbp)
-               	movq	%rdx, 0x48(%rsp)
+               	movq	%rdx, 0x38(%rsp)
                	movslq	%r9d, %r13
                	movq	%r8, %r15
                	movq	%rcx, %r12
@@ -1566,7 +1566,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpl	%ebx, %eax
                	jge	<addr>
-               	cmpl	0x48(%rsp), %edi
+               	cmpl	0x38(%rsp), %edi
                	setl	%r9b
                	movzbq	%r9b, %r9
                	cmpl	%r15d, %eax
@@ -1602,13 +1602,13 @@ Disassembly of section .text:
                	shlq	%rdx
                	movslq	%edx, %rdx
                	movzbq	(%r12,%rdx), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x30(%rsp)
                	incq	%rdx
                	movslq	%edx, %rdx
                	movzbq	(%r12,%rdx), %rdx
                	shlq	$0x8, %rdx
                	movq	%rdx, %r10
-               	movq	0x40(%rsp), %rdx
+               	movq	0x30(%rsp), %rdx
                	orq	%r10, %rdx
                	movswq	%dx, %rdx
                	cmpl	$0x1, %r8d
@@ -1616,12 +1616,12 @@ Disassembly of section .text:
                	cmpl	%ecx, %edx
                	setle	%r10b
                	movzbq	%r10b, %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x30(%rsp)
                	cmpl	%ecx, %edx
                	setge	%cl
                	movzbq	%cl, %rcx
                	testb	$0x1, %dil
-               	movq	0x40(%rsp), %r10
+               	movq	0x30(%rsp), %r10
                	cmovneq	%r10, %rcx
                	testq	%r9, %r9
                	je	<addr>
@@ -1677,13 +1677,13 @@ Disassembly of section .text:
                	shlq	%rdx
                	movslq	%edx, %rdx
                	movzbq	(%r12,%rdx), %r10
-               	movq	%r10, 0x40(%rsp)
+               	movq	%r10, 0x30(%rsp)
                	incq	%rdx
                	movslq	%edx, %rdx
                	movzbq	(%r12,%rdx), %rdx
                	shlq	$0x8, %rdx
                	movq	%rdx, %r10
-               	movq	0x40(%rsp), %rdx
+               	movq	0x30(%rsp), %rdx
                	orq	%r10, %rdx
                	jmp	<addr>
                	movzbq	(%r12,%rax), %rdx
@@ -1877,7 +1877,7 @@ Disassembly of section .text:
                	setl	%al
                	movzbq	%al, %rax
                	movl	%eax, -0xc(%rbp)
-               	movq	0x48(%rsp), %rax
+               	movq	0x38(%rsp), %rax
                	cmpl	%ebx, %eax
                	setl	%al
                	movzbq	%al, %rax

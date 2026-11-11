@@ -182,16 +182,16 @@ Disassembly of section .text:
 <model_horizontal>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r15
-               	movq	%rcx, 0x40(%rsp)
+               	movq	%rcx, 0x30(%rsp)
                	movq	%rdx, %rbx
-               	movq	%rsi, 0x48(%rsp)
+               	movq	%rsi, 0x38(%rsp)
                	movl	$0x8, %eax
                	cltd
                	idivl	%ebx
@@ -202,7 +202,7 @@ Disassembly of section .text:
                	cmpl	%eax, %r13d
                	jge	<addr>
                	cmpl	%r14d, %r13d
-               	movq	0x48(%rsp), %r11
+               	movq	0x38(%rsp), %r11
                	movq	%r11, %r12
                	cmovlq	%r15, %r12
                	movl	%r13d, %eax
@@ -268,7 +268,7 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	subq	%rcx, %rax
                	addq	%rdx, %rcx
-               	movq	0x40(%rsp), %r10
+               	movq	0x30(%rsp), %r10
                	testl	%r10d, %r10d
                	movq	%rcx, %rdx
                	cmovneq	%rax, %rdx

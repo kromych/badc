@@ -22,14 +22,15 @@
  * vfms vrecpe vrecps vrsqrte vrsqrts, the compares, and the conversions to
  * and from the integers of one width (truncating) and between single and
  * double. Also vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
- * vmull_p64, vmull_high_p64, vld2q_u16 and vld4q_u8.
+ * vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
+ * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the saturating narrowing shifts, vqshlu_n,
  * vshll_n, vabdl, vabal, vpadal, compares against zero, the other structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
  * absolute-difference, rounding and maxnum forms, the fixed-point and
- * rounding-mode conversions, the dot products and the SHA intrinsics.
+ * rounding-mode conversions and the dot products.
  *
  * The element typedefs match <stdint.h>, repeated so the header serves
  * freestanding units; poly128_t is carried as a 16-byte vector.
@@ -1053,6 +1054,112 @@ static inline poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
             "pmull2 %0.1q, %1.2d, %2.2d" : "=w"(__r) : "w"(__a), "w"(__b));
     return __r;
 }
+
+/* SHA-1 and SHA-256 (FEAT_SHA1, FEAT_SHA256): the hash updates take the
+ * running state as a q register, SHA-1's e as an s register; the schedule
+ * updates accumulate into their first operand. */
+#define __BADC_NEON_SHA1H(name, insn)                                       \
+    static inline uint32x4_t name(uint32x4_t __abcd, uint32_t __e, uint32x4_t __wk) { \
+        __asm__(insn " %q0, %s1, %2.4s" : "+w"(__abcd) : "w"(__e), "w"(__wk)); \
+        return __abcd;                                                      \
+    }
+__BADC_NEON_SHA1H(vsha1cq_u32, "sha1c")
+__BADC_NEON_SHA1H(vsha1pq_u32, "sha1p")
+__BADC_NEON_SHA1H(vsha1mq_u32, "sha1m")
+static inline uint32_t vsha1h_u32(uint32_t __e) {
+    uint32_t __r;
+    __asm__("sha1h %s0, %s1" : "=w"(__r) : "w"(__e));
+    return __r;
+}
+__BADC_NEON_FN3(vsha1su0q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sha1su0", 4s, 4s, 4s))
+static inline uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
+    __asm__("sha1su1 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
+    return __a;
+}
+#define __BADC_NEON_SHAQ(name, T, insn, A)                                  \
+    __BADC_NEON_FN3(name, T, T, T, insn " %q0, %q1, %2." #A)
+__BADC_NEON_SHAQ(vsha256hq_u32, uint32x4_t, "sha256h", 4s)
+__BADC_NEON_SHAQ(vsha256h2q_u32, uint32x4_t, "sha256h2", 4s)
+static inline uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
+    __asm__("sha256su0 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
+    return __a;
+}
+__BADC_NEON_FN3(vsha256su1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sha256su1", 4s, 4s, 4s))
+
+/* SHA-512 and SHA3 (FEAT_SHA512, FEAT_SHA3): the hash and schedule
+ * updates, the three-way xor `eor3`, `bcax` (a ^ (b & ~c)), `rax1`
+ * (a ^ rol(b, 1)) and `xar` (ror(a ^ b, imm)). */
+__BADC_NEON_SHAQ(vsha512hq_u64, uint64x2_t, "sha512h", 2d)
+__BADC_NEON_SHAQ(vsha512h2q_u64, uint64x2_t, "sha512h2", 2d)
+static inline uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
+    __asm__("sha512su0 %0.2d, %1.2d" : "+w"(__a) : "w"(__b));
+    return __a;
+}
+__BADC_NEON_FN3(vsha512su1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
+                __BADC_NEON_I3("sha512su1", 2d, 2d, 2d))
+#define __BADC_NEON_XOR3(name, T, insn)                                     \
+    static inline T name(T __a, T __b, T __c) {                             \
+        T __r;                                                              \
+        __asm__(insn " %0.16b, %1.16b, %2.16b, %3.16b"                      \
+                : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));                \
+        return __r;                                                         \
+    }
+__BADC_NEON_XOR3(veor3q_u8, uint8x16_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_u8, uint8x16_t, "bcax")
+__BADC_NEON_XOR3(veor3q_u16, uint16x8_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_u16, uint16x8_t, "bcax")
+__BADC_NEON_XOR3(veor3q_u32, uint32x4_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_u32, uint32x4_t, "bcax")
+__BADC_NEON_XOR3(veor3q_u64, uint64x2_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_u64, uint64x2_t, "bcax")
+__BADC_NEON_XOR3(veor3q_s8, int8x16_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_s8, int8x16_t, "bcax")
+__BADC_NEON_XOR3(veor3q_s16, int16x8_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_s16, int16x8_t, "bcax")
+__BADC_NEON_XOR3(veor3q_s32, int32x4_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_s32, int32x4_t, "bcax")
+__BADC_NEON_XOR3(veor3q_s64, int64x2_t, "eor3")
+__BADC_NEON_XOR3(vbcaxq_s64, int64x2_t, "bcax")
+__BADC_NEON_FN2(vrax1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
+                __BADC_NEON_I3("rax1", 2d, 2d, 2d))
+#define vxarq_u64(__a, __b, __n) __extension__({                            \
+    uint64x2_t __xa = (__a), __xb = (__b), __xr;                            \
+    _Static_assert((__n) >= 0 && (__n) < 64, "rotate count out of range"); \
+    __asm__("xar %0.2d, %1.2d, %2.2d, #%3"                                  \
+            : "=w"(__xr) : "w"(__xa), "w"(__xb), "i"(__n));                 \
+    __xr;                                                                   \
+})
+
+/* SM3 and SM4 (FEAT_SM3, FEAT_SM4). */
+static inline uint32x4_t vsm3ss1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    uint32x4_t __r;
+    __asm__("sm3ss1 %0.4s, %1.4s, %2.4s, %3.4s"
+            : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));
+    return __r;
+}
+#define __BADC_NEON_SM3TT(insn, __a, __b, __c, __n) __extension__({         \
+    uint32x4_t __ta = (__a), __tb = (__b), __tc = (__c);                    \
+    __BADC_NEON_LANE(__n, 4);                                               \
+    __asm__(insn " %0.4s, %1.4s, %2.s[%3]"                                  \
+            : "+w"(__ta) : "w"(__tb), "w"(__tc), "i"(__n));                 \
+    __ta;                                                                   \
+})
+#define vsm3tt1aq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt1a", __a, __b, __c, __n)
+#define vsm3tt1bq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt1b", __a, __b, __c, __n)
+#define vsm3tt2aq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt2a", __a, __b, __c, __n)
+#define vsm3tt2bq_u32(__a, __b, __c, __n) __BADC_NEON_SM3TT("sm3tt2b", __a, __b, __c, __n)
+__BADC_NEON_FN3(vsm3partw1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm3partw1", 4s, 4s, 4s))
+__BADC_NEON_FN3(vsm3partw2q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm3partw2", 4s, 4s, 4s))
+static inline uint32x4_t vsm4eq_u32(uint32x4_t __a, uint32x4_t __b) {
+    __asm__("sm4e %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
+    return __a;
+}
+__BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
+                __BADC_NEON_I3("sm4ekey", 4s, 4s, 4s))
 
 /* Floating vectors. The float64x1_t arithmetic is the scalar d-register
  * instruction; its compares and integer conversions are C on the one lane. */

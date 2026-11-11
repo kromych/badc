@@ -139,6 +139,7 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
 /// MSVC's. Each is served on the architecture whose instructions it
 /// wraps, as gcc installs it.
 pub(super) const INTRINSIC_HEADERS: &[&str] = &[
+    "arm_acle.h",
     "arm_neon.h",
     "arm64_neon.h",
     "intrin.h",
@@ -221,6 +222,7 @@ macro_rules! header {
 /// Every header the registry knows about, with the targets it is served
 /// on.
 pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
+    header!("arm_acle.h", AARCH64, compiler),
     header!("arm_neon.h", AARCH64, compiler),
     header!(
         "arm64_neon.h",

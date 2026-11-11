@@ -1,6 +1,7 @@
 //! The intrinsics lowered at the call site, whatever declares them: the MSVC
 //! ones on the PE targets, as MSVC and clang for a windows-msvc triple do,
-//! and gcc's and clang's x86 system-instruction builtins on every x86-64
+//! gcc's and clang's x86 system-instruction builtins on every x86-64
+//! target, and the ACLE's system and CRC32 intrinsics on every AArch64
 //! target. Each is a name's signature, which the parser converts to, and the
 //! operation it performs.
 
@@ -451,14 +452,6 @@ const FIXED: &[Row] = &[
     ("__movsw", X64, Op::RepMovs { width: 2 }, None, &[p(UShort), pc(UShort), V(ULLong)]),
     ("__movsd", X64, Op::RepMovs { width: 4 }, None, &[p(ULong), pc(ULong), V(ULLong)]),
     ("__movsq", X64, Op::RepMovs { width: 8 }, None, &[p(ULLong), pc(ULLong), V(ULLong)]),
-    ("__yield", Arm64, Op::Pause, None, &[]),
-    ("__wfe", Arm64, Op::Insn("wfe"), None, &[]),
-    ("__wfi", Arm64, Op::Insn("wfi"), None, &[]),
-    ("__sev", Arm64, Op::Insn("sev"), None, &[]),
-    ("__sevl", Arm64, Op::Insn("sevl"), None, &[]),
-    ("__dmb", Arm64, Op::InsnImm("dmb"), None, &[K(15)]),
-    ("__dsb", Arm64, Op::InsnImm("dsb"), None, &[K(15)]),
-    ("__isb", Arm64, Op::InsnImm("isb"), None, &[K(15)]),
     ("__break", Arm64, Op::InsnImm("brk"), None, &[K(0xffff)]),
     ("_CountLeadingZeros", Arm64, bits(LZ, 4), Some(UInt), &[V(ULong)]),
     ("_CountLeadingZeros64", Arm64, bits(LZ, 8), Some(UInt), &[V(ULLong)]),
@@ -489,14 +482,30 @@ const FIXED: &[Row] = &[
     ("__getReg", Arm64, Op::GetReg, Some(ULLong), &[K(31)]),
     ("_ReadStatusReg", Arm64, Op::ReadStatusReg, Some(LLong), &[K(0x7fff)]),
     ("_WriteStatusReg", Arm64, Op::WriteStatusReg, None, &[K(0x7fff), V(LLong)]),
-    ("__crc32b", Arm64, crc(1, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32h", Arm64, crc(2, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32w", Arm64, crc(4, false), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32d", Arm64, crc(8, false), Some(UInt), &[V(UInt), V(ULLong)]),
-    ("__crc32cb", Arm64, crc(1, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32ch", Arm64, crc(2, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32cw", Arm64, crc(4, true), Some(UInt), &[V(UInt), V(UInt)]),
-    ("__crc32cd", Arm64, crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
+];
+
+/// The Arm C Language Extensions' barrier, hint and CRC32 intrinsics, on
+/// every AArch64 target: `<arm_acle.h>` declares them, and on the PE
+/// targets `<intrin.h>` with MSVC's prototypes.
+#[rustfmt::skip]
+const ACLE_A64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
+    ("__yield", Op::Pause, None, &[]),
+    ("__wfe", Op::Insn("wfe"), None, &[]),
+    ("__wfi", Op::Insn("wfi"), None, &[]),
+    ("__sev", Op::Insn("sev"), None, &[]),
+    ("__sevl", Op::Insn("sevl"), None, &[]),
+    ("__dmb", Op::InsnImm("dmb"), None, &[K(15)]),
+    ("__dsb", Op::InsnImm("dsb"), None, &[K(15)]),
+    ("__isb", Op::InsnImm("isb"), None, &[K(15)]),
+    ("__nop", Op::Insn("nop"), None, &[]),
+    ("__crc32b", crc(1, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32h", crc(2, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32w", crc(4, false), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32d", crc(8, false), Some(UInt), &[V(UInt), V(ULLong)]),
+    ("__crc32cb", crc(1, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32ch", crc(2, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32cw", crc(4, true), Some(UInt), &[V(UInt), V(UInt)]),
+    ("__crc32cd", crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
 ];
 
 /// gcc's and clang's builtins of these names, with gcc's prototypes.
@@ -517,6 +526,15 @@ const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
 pub(crate) fn lookup(name: &str, target: Target) -> Option<Intrinsic> {
     if target.is_x86_64()
         && let Some(&(_, op, ret, params)) = GNU_X64.iter().find(|r| r.0 == name)
+    {
+        return Some(Intrinsic {
+            op,
+            ret,
+            params: params.to_vec(),
+        });
+    }
+    if target.is_aarch64()
+        && let Some(&(_, op, ret, params)) = ACLE_A64.iter().find(|r| r.0 == name)
     {
         return Some(Intrinsic {
             op,

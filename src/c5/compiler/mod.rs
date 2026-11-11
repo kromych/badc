@@ -709,6 +709,9 @@ pub struct CompileOptions {
     /// The x86 extensions `-m<ext>` and `-march=` select: their feature
     /// macros, and under AVX the 32-byte bare `aligned`.
     pub x86_features: crate::c5::X86Features,
+    /// The AArch64 extensions `-march=` and `-mcpu=` select, `None` for the
+    /// target's default: their feature macros.
+    pub aarch64_features: Option<crate::c5::Aarch64Features>,
     /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
@@ -883,6 +886,11 @@ impl CompileOptions {
 
     pub fn with_x86_features(mut self, features: crate::c5::X86Features) -> Self {
         self.x86_features = features;
+        self
+    }
+
+    pub fn with_aarch64_features(mut self, features: Option<crate::c5::Aarch64Features>) -> Self {
+        self.aarch64_features = features;
         self
     }
     /// Initialize the automatic objects the program leaves
@@ -3015,6 +3023,17 @@ impl Compiler {
         }
         if target.is_x86_64() {
             pp.set_x86_features(opts.x86_features);
+        }
+        if target.is_aarch64() {
+            let features = opts.aarch64_features.unwrap_or_else(|| {
+                crate::c5::Aarch64Features::default_for(target == Target::MacOSAarch64)
+            });
+            let features = if opts.no_fp_regs {
+                features.without_fp()
+            } else {
+                features
+            };
+            pp.set_aarch64_features(features, opts.short_wchar);
         }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {

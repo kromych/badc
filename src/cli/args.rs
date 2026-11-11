@@ -103,6 +103,9 @@ pub(crate) struct FrontEnd {
     pub(crate) gnu89_inline: Option<bool>,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
+    /// The AArch64 extensions `-march=` / `-mcpu=` select, `None` for the
+    /// target's default.
+    pub(crate) aarch64_features: Option<badc::Aarch64Features>,
     /// `--dump-prototypes`: record each unit's function declarations.
     pub(crate) prototypes: bool,
     pub(crate) char_signed: Option<bool>,
@@ -689,9 +692,9 @@ struct Parser {
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
     mcpu: Option<String>,
-    /// The x86 `-m<ext>`, `-mno-<ext>`, `-march=` and `-mtune=` options
+    /// `-march=`, `-mtune=` and the x86 `-m<ext>` / `-mno-<ext>` options
     /// in command-line order, resolved once the target is known.
-    x86_isa: Vec<String>,
+    isa_args: Vec<String>,
     dep: DepFlags,
     /// `-mcmodel=tiny`, which lowers as `small` and is checked against
     /// the target below.
@@ -859,32 +862,53 @@ fn native_x86_features() -> Option<badc::X86Features> {
     None
 }
 
-/// The part names `-mcpu=` takes. Each selects the single scheduling
-/// model badc has; `native` names the host's part.
-#[rustfmt::skip]
-const AARCH64_CPUS: &[&str] = &[
-    "a64fx", "ampere1", "ampere1a", "ampere1b", "apple-a10", "apple-a11", "apple-a12",
-    "apple-a13", "apple-a14", "apple-a15", "apple-a16", "apple-a17", "apple-a18", "apple-a19",
-    "apple-a20", "apple-a7", "apple-a8", "apple-a9", "apple-m1", "apple-m2", "apple-m3",
-    "apple-m4", "apple-m5", "apple-m6", "apple-s10", "apple-s11", "apple-s4", "apple-s5",
-    "apple-s6", "apple-s7", "apple-s8", "apple-s9", "ares", "c1-nano", "c1-premium", "c1-pro",
-    "c1-ultra", "carmel", "cobalt-100", "cortex-a320", "cortex-a34", "cortex-a35",
-    "cortex-a510", "cortex-a520", "cortex-a520ae", "cortex-a53", "cortex-a55", "cortex-a57",
-    "cortex-a57.cortex-a53", "cortex-a65", "cortex-a65ae", "cortex-a710", "cortex-a715",
-    "cortex-a72", "cortex-a72.cortex-a53", "cortex-a720", "cortex-a720ae", "cortex-a725",
-    "cortex-a73", "cortex-a73.cortex-a35", "cortex-a73.cortex-a53", "cortex-a75",
-    "cortex-a75.cortex-a55", "cortex-a76", "cortex-a76.cortex-a55", "cortex-a76ae",
-    "cortex-a77", "cortex-a78", "cortex-a78ae", "cortex-a78c", "cortex-r82", "cortex-r82ae",
-    "cortex-x1", "cortex-x1c", "cortex-x2", "cortex-x3", "cortex-x4", "cortex-x925", "cyclone",
-    "demeter", "emag", "exynos-m1", "exynos-m3", "exynos-m4", "exynos-m5", "falkor",
-    "fujitsu-monaka", "gb10", "generic", "generic-armv8-a", "generic-armv9-a", "grace", "kryo",
-    "native", "neoverse-512tvb", "neoverse-e1", "neoverse-n1", "neoverse-n2", "neoverse-n3",
-    "neoverse-v1", "neoverse-v2", "neoverse-v3", "neoverse-v3ae", "octeontx", "octeontx2",
-    "octeontx2f95", "octeontx2f95mm", "octeontx2f95n", "octeontx2t93", "octeontx2t96",
-    "octeontx2t98", "octeontx81", "octeontx83", "olympus", "oryon-1", "phecda", "qdf24xx",
-    "saphira", "thunderx", "thunderx2t99", "thunderx2t99p1", "thunderx3t110", "thunderxt81",
-    "thunderxt83", "thunderxt88", "thunderxt88p1", "tsv110", "vulcan", "xgene1", "zeus",
-];
+#[cfg(target_arch = "aarch64")]
+fn native_aarch64_features() -> Option<badc::Aarch64Features> {
+    use std::arch::is_aarch64_feature_detected as has;
+    Some(badc::Aarch64Features::for_host(|ext| match ext {
+        "fp" => has!("fp"),
+        "simd" => has!("asimd"),
+        "crc" => has!("crc"),
+        "lse" => has!("lse"),
+        "rdma" => has!("rdm"),
+        "rcpc" => has!("rcpc"),
+        "rcpc2" => has!("rcpc2"),
+        "jscvt" => has!("jsconv"),
+        "fcma" => has!("fcma"),
+        "pauth" => has!("paca") && has!("pacg"),
+        "dotprod" => has!("dotprod"),
+        "fp16" => has!("fp16"),
+        "fp16fml" => has!("fhm"),
+        "aes" => has!("aes"),
+        "sha2" => has!("sha2"),
+        "sha3" => has!("sha3"),
+        "sm4" => has!("sm4"),
+        "frintts" => has!("frintts"),
+        "i8mm" => has!("i8mm"),
+        "bf16" => has!("bf16"),
+        "rng" => has!("rand"),
+        "flagm" => has!("flagm"),
+        "ssbs" => has!("ssbs"),
+        "sb" => has!("sb"),
+        "memtag" => has!("mte"),
+        "sve" => has!("sve"),
+        "sve2" => has!("sve2"),
+        "sve2-aes" => has!("sve2-aes"),
+        "sve2-bitperm" => has!("sve2-bitperm"),
+        "sve2-sha3" => has!("sve2-sha3"),
+        "sve2-sm4" => has!("sve2-sm4"),
+        "f32mm" => has!("f32mm"),
+        "f64mm" => has!("f64mm"),
+        "tme" => has!("tme"),
+        "bti" => has!("bti"),
+        _ => false,
+    }))
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+fn native_aarch64_features() -> Option<badc::Aarch64Features> {
+    None
+}
 
 /// The language a gcc `-x` name selects, `None` for `none`: the
 /// languages badc translates.
@@ -1725,9 +1749,9 @@ impl Parser {
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
             // The x86 baseline, which every x86-64 unit already targets.
-            "-mmmx" | "-msse" | "-msse2" => self.x86_isa.push(arg.to_string()),
+            "-mmmx" | "-msse" | "-msse2" => self.isa_args.push(arg.to_string()),
             s if s.starts_with("-march=") || s.starts_with("-mtune=") => {
-                self.x86_isa.push(arg.to_string())
+                self.isa_args.push(arg.to_string())
             }
             s if s
                 .strip_prefix("-mno-")
@@ -1736,7 +1760,7 @@ impl Parser {
                     !matches!(badc::X86Features::classify(e), badc::X86ExtOption::Unknown)
                 }) =>
             {
-                self.x86_isa.push(arg.to_string())
+                self.isa_args.push(arg.to_string())
             }
             // Position-independent relocatable output: no absolute
             // relocation reaches the object, so a consumer that relocates
@@ -2489,7 +2513,7 @@ impl Parser {
         }
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
-        self.apply_mcpu(target)?;
+        self.apply_aarch64_isa(target)?;
         self.apply_x86_isa(target)?;
         self.define_pic_macros(target);
         self.check_code_model(mode, target)?;
@@ -2818,66 +2842,88 @@ impl Parser {
         Ok(())
     }
 
-    /// `-mcpu=<name>[+<ext>...]`: an AArch64 CPU and its extensions,
-    /// which predefine the feature macros. gcc's model, measured:
-    /// `+crypto` is `+aes+sha2`, `no<ext>` subtracts, and
-    /// `__ARM_FEATURE_CRYPTO` holds only while both do. The AES and
-    /// SHA-2 encodings are always in badc's tables; any other modifier
-    /// is refused rather than accepted inertly, and so is a name
-    /// outside [`AARCH64_CPUS`].
-    fn apply_mcpu(&mut self, target: Target) -> Result<(), ParseError> {
-        let Some(spec) = &self.mcpu else {
+    /// The AArch64 architecture options: `-march=<arch>[+<mod>...]` or,
+    /// without one, `-mcpu=<cpu>[+<mod>...]` gives the extensions, the last
+    /// of each counting; a modifier `<ext>` enables and `no<ext>` disables,
+    /// in order, with the dependencies between extensions. `native` names
+    /// the host's.
+    /// `-mtune=` takes a CPU and changes nothing. An extension whose
+    /// intrinsics badc does not implement is refused when a modifier
+    /// enables it.
+    fn apply_aarch64_isa(&mut self, target: Target) -> Result<(), ParseError> {
+        if !target.is_aarch64() {
+            if self.mcpu.is_some() {
+                return Err(ParseError::diag(
+                    "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
+                ));
+            }
             return Ok(());
-        };
-        if !matches!(
-            target,
-            Target::LinuxAarch64 | Target::MacOSAarch64 | Target::WindowsAarch64
-        ) {
-            return Err(ParseError::diag(
-                "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
-            ));
         }
-        let mut parts = spec.split('+');
-        let name = parts.next().unwrap_or("");
-        if name.is_empty() {
-            return Err(ParseError::diag(format!(
-                "badc: error: `-mcpu={spec}` names no CPU"
-            )));
-        }
-        if !AARCH64_CPUS.contains(&name) {
-            return Err(ParseError::diag(format!(
-                "badc: error: unknown CPU `{name}` (-mcpu=)"
-            )));
-        }
-        let (mut aes, mut sha2) = (false, false);
-        for ext in parts {
-            match ext {
-                "crypto" => (aes, sha2) = (true, true),
-                "nocrypto" => (aes, sha2) = (false, false),
-                "aes" => aes = true,
-                "noaes" => aes = false,
-                "sha2" => sha2 = true,
-                "nosha2" => sha2 = false,
-                other => {
+        let mut march = None;
+        for arg in &self.isa_args {
+            if let Some(spec) = arg.strip_prefix("-march=") {
+                march = Some(spec.to_string());
+            } else if let Some(cpu) = arg.strip_prefix("-mtune=") {
+                if !(badc::Aarch64Features::is_cpu(cpu) || cpu == "native") {
                     return Err(ParseError::diag(format!(
-                        "badc: error: `-mcpu=` extension `{other}` is not \
-                         implemented; badc implements `crypto`, `aes`, \
-                         `sha2` and their `no` forms"
+                        "badc: error: unknown CPU `{cpu}` (-mtune=)"
                     )));
                 }
+            } else {
+                return Err(ParseError::diag(format!(
+                    "badc: error: `{arg}` names an x86 extension; the AArch64 targets take \
+                     `-march=` and `-mcpu=`"
+                )));
             }
         }
-        for (name, on) in [
-            ("__ARM_FEATURE_AES", aes),
-            ("__ARM_FEATURE_SHA2", sha2),
-            ("__ARM_FEATURE_CRYPTO", aes && sha2),
-        ] {
-            if on && !self.front.defines.iter().any(|(n, _)| n == name) {
-                self.front
-                    .defines
-                    .push((name.to_string(), String::from("1")));
-            }
+        let (option, spec) = match (march, &self.mcpu) {
+            (Some(spec), _) => ("-march", spec),
+            (None, Some(spec)) => ("-mcpu", spec.clone()),
+            (None, None) => return Ok(()),
+        };
+        // The CPU `-march=` overrides is still checked.
+        if let Some(cpu) = self
+            .mcpu
+            .as_deref()
+            .map(|s| s.split('+').next().unwrap_or(""))
+            && !(badc::Aarch64Features::is_cpu(cpu) || cpu == "native")
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: unknown CPU `{cpu}` (-mcpu=)"
+            )));
         }
+        let mut parts = spec.split('+');
+        let base = parts.next().unwrap_or("");
+        let mut features = match base {
+            "native" => native_aarch64_features().ok_or_else(|| {
+                ParseError::diag(format!(
+                    "badc: error: `{option}=native` names the host's CPU, and the host is \
+                     not AArch64"
+                ))
+            })?,
+            _ if option == "-march" => badc::Aarch64Features::for_arch(base).ok_or_else(|| {
+                ParseError::diag(format!(
+                    "badc: error: unknown architecture `{base}` (-march=)"
+                ))
+            })?,
+            _ => badc::Aarch64Features::for_cpu(base).ok_or_else(|| {
+                ParseError::diag(format!("badc: error: unknown CPU `{base}` (-mcpu=)"))
+            })?,
+        };
+        for modifier in parts {
+            features.apply(modifier).map_err(|e| {
+                ParseError::diag(match e {
+                    badc::Aarch64ExtError::Unknown => {
+                        format!("badc: error: unknown extension `{modifier}` ({option}={spec})")
+                    }
+                    badc::Aarch64ExtError::Unimplemented(f) => format!(
+                        "badc: error: `+{modifier}` ({option}={spec}) enables `{f}`, whose \
+                         intrinsics badc does not implement"
+                    ),
+                })
+            })?;
+        }
+        self.front.aarch64_features = Some(features);
         Ok(())
     }
 
@@ -2889,17 +2935,11 @@ impl Parser {
     /// so is `-mno-<ext>` of an extension of it the code generator emits,
     /// unless `-mno-sse` keeps the code off the vector registers it uses.
     fn apply_x86_isa(&mut self, target: Target) -> Result<(), ParseError> {
-        let Some(first) = self.x86_isa.first() else {
+        if self.isa_args.is_empty() || !target.is_x86_64() {
             return Ok(());
-        };
-        if !target.is_x86_64() {
-            return Err(ParseError::diag(format!(
-                "badc: error: `{first}` names an x86 extension or CPU; the AArch64 \
-                 targets take `-mcpu=`"
-            )));
         }
         let mut features = badc::X86Features::NONE;
-        for arg in self.x86_isa.iter().rev() {
+        for arg in self.isa_args.iter().rev() {
             if let Some(cpu) = arg.strip_prefix("-march=") {
                 features = march(cpu)?;
                 if !features.covers_baseline() {
@@ -2911,7 +2951,7 @@ impl Parser {
                 break;
             }
         }
-        for arg in &self.x86_isa {
+        for arg in &self.isa_args {
             if let Some(cpu) = arg.strip_prefix("-mtune=") {
                 if !(badc::X86Features::is_cpu(cpu)
                     || matches!(cpu, "generic" | "intel" | "native"))
@@ -3061,6 +3101,7 @@ impl FrontEnd {
             .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
+            .with_aarch64_features(self.aarch64_features)
             .with_prototypes(self.prototypes)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
@@ -4249,8 +4290,8 @@ mod tests {
         );
         assert_eq!(
             reject(&[A64, "-mavx2", "-c", "a.c"]).0,
-            "badc: error: `-mavx2` names an x86 extension or CPU; the AArch64 targets take \
-             `-mcpu=`"
+            "badc: error: `-mavx2` names an x86 extension; the AArch64 targets take \
+             `-march=` and `-mcpu=`"
         );
     }
 
@@ -4280,28 +4321,49 @@ mod tests {
                 1
             )
         );
-        // `+crypto` predefines both feature macros.
-        let cli = parse(&[A64, "-mcpu=generic+crypto", "-c", "a.c"]);
-        for name in [
-            "__ARM_FEATURE_AES",
-            "__ARM_FEATURE_SHA2",
-            "__ARM_FEATURE_CRYPTO",
-        ] {
-            assert!(cli.front.defines.iter().any(|(n, _)| n == name), "{name}");
-        }
+        // `+crypto` defines what `+aes+sha2` does.
+        let macros = |args: &[&str]| {
+            parse(args)
+                .front
+                .aarch64_features
+                .unwrap()
+                .macros(false, false)
+        };
+        assert_eq!(
+            macros(&[A64, "-mcpu=generic+crypto", "-c", "a.c"]),
+            macros(&[A64, "-march=armv8-a+aes+sha2", "-c", "a.c"])
+        );
         assert_eq!(
             reject(&[A64, "-mcpu=generic+nope", "-c", "a.c"]).0,
-            "badc: error: `-mcpu=` extension `nope` is not implemented; badc implements \
-             `crypto`, `aes`, `sha2` and their `no` forms"
+            "badc: error: unknown extension `nope` (-mcpu=generic+nope)"
+        );
+        assert_eq!(
+            reject(&[A64, "-march=armv8.2-a+sve", "-c", "a.c"]).0,
+            "badc: error: `+sve` (-march=armv8.2-a+sve) enables `sve`, whose intrinsics badc \
+             does not implement"
         );
         // The name half is checked as the extension half is.
         assert_eq!(
             reject(&[A64, "-mcpu=frobnicate", "-c", "a.c"]).0,
             "badc: error: unknown CPU `frobnicate` (-mcpu=)"
         );
-        for spec in ["-mcpu=native", "-mcpu=cortex-a53+crypto", "-mcpu=apple-m1"] {
+        assert_eq!(
+            reject(&[A64, "-march=armv7-a", "-c", "a.c"]).0,
+            "badc: error: unknown architecture `armv7-a` (-march=)"
+        );
+        for spec in [
+            "-mcpu=cortex-a53+crypto",
+            "-mcpu=apple-m1",
+            "-mtune=neoverse-n1",
+        ] {
             parse(&[A64, spec, "-c", "a.c"]);
         }
+        // `-march=` gives the set whatever the order; `-mcpu=` is checked.
+        let n1 = parse(&[A64, "-mcpu=neoverse-n1", "-march=armv8-a", "-c", "a.c"]);
+        assert_eq!(
+            n1.front.aarch64_features,
+            badc::Aarch64Features::for_arch("armv8-a")
+        );
         assert_eq!(
             reject(&[X64, "-mcmodel=tiny", "-c", "a.c"]).0,
             "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target (--target=linux-aarch64)"

@@ -105,9 +105,20 @@ Feature macros:
   `__BIGGEST_ALIGNMENT__` is 64 and the 64-byte GNU vectors are values in
   the zmm registers. `-mno-sse` and `-mgeneral-regs-only` leave the set
   unchanged.
-- AArch64 predefines no feature macro, `__ARM_NEON` included. `-mcpu=`'s
-  `+aes`, `+sha2`, and `+crypto` modifiers define `__ARM_FEATURE_AES`,
-  `__ARM_FEATURE_SHA2`, and `__ARM_FEATURE_CRYPTO`.
+- AArch64 predefines the Arm C Language Extensions macros of an extension
+  set: by default the Apple M1's on macOS and ARMv8-A's elsewhere, or what
+  `-march=<arch>` or else `-mcpu=<cpu>` selects (`native` reads the host's),
+  with `+<ext>` / `+no<ext>` modifiers; an extension brings those it
+  requires. A macro is predefined only where badc carries what it promises:
+  `__ARM_FP`, `__ARM_FEATURE_FMA`, the CRC32, LSE atomics, RCPC, JSCVT,
+  pointer authentication, BTI, RNG, AES, SHA-2, SHA3, SHA-512, SM3, and SM4
+  ones, and the platform's (`__ARM_ARCH`, `__ARM_SIZEOF_WCHAR_T`, ...).
+  `__ARM_NEON` and the macros of the extensions whose intrinsics the
+  headers lack -- SVE, SME, FP16, BF16, the dot products, and others -- are
+  withheld, and a modifier enabling one of those extensions is refused.
+  `-mgeneral-regs-only` drops the floating-point and SIMD extensions.
+  `<arm_acle.h>` carries the barrier, hint, data-processing, CRC32, JSCVT,
+  FRINTTS, RNG, and special-register intrinsics.
 
 ## Objects, archives, and libraries
 

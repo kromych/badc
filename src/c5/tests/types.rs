@@ -6917,3 +6917,60 @@ fn bare_aligned_follows_the_biggest_alignment() {
     assert_eq!(run(Some("sse4.2")), 16);
     assert_eq!(run(Some("avx")), 32);
 }
+
+/// The ACLE macros by target and extension set: ARMv8-A's off macOS and
+/// the Apple M1's on it, a 2-byte `wchar_t` and no AAPCS64 macro on
+/// Windows, `__ARM_NEON` withheld, and `-mgeneral-regs-only` dropping the
+/// floating-point ones.
+#[test]
+fn aarch64_targets_predefine_the_acle_macros() {
+    use crate::{Aarch64Features, CompileOptions, Compiler, Target};
+    let compiles = |target: Target, opts: CompileOptions, checks: &str| {
+        let src = format!("{checks}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_options(src, target, opts)
+            .compile()
+            .map_err(|e| format!("{target:?}: {e:?}"))
+            .unwrap();
+    };
+    let common = "_Static_assert(__ARM_ARCH == 8 && __ARM_ARCH_PROFILE == 'A', \"\");\n\
+                  _Static_assert(__ARM_64BIT_STATE && __ARM_FP == 14, \"\");\n\
+                  #ifdef __ARM_NEON\n#error NEON\n#endif\n";
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default(),
+        &format!(
+            "{common}_Static_assert(__ARM_SIZEOF_WCHAR_T == 4 && __ARM_PCS_AAPCS64, \"\");\n\
+             #ifdef __ARM_FEATURE_CRC32\n#error CRC32\n#endif"
+        ),
+    );
+    compiles(
+        Target::MacOSAarch64,
+        CompileOptions::default(),
+        &format!("{common}_Static_assert(__ARM_FEATURE_CRC32 && __ARM_FEATURE_SHA3, \"\");"),
+    );
+    compiles(
+        Target::WindowsAarch64,
+        CompileOptions::default(),
+        &format!(
+            "{common}_Static_assert(__ARM_SIZEOF_WCHAR_T == 2, \"\");\n\
+             #ifdef __ARM_PCS_AAPCS64\n#error PCS\n#endif"
+        ),
+    );
+    let mut v81 = Aarch64Features::for_arch("armv8.1-a").unwrap();
+    v81.apply("crypto").unwrap();
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_aarch64_features(Some(v81)),
+        "_Static_assert(__ARM_FEATURE_ATOMICS && __ARM_FEATURE_CRYPTO, \"\");",
+    );
+    compiles(
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_fp_regs(true),
+        "#if defined __ARM_FP || defined __ARM_FEATURE_FMA\n#error FP\n#endif",
+    );
+    compiles(
+        Target::LinuxX64,
+        CompileOptions::default(),
+        "#ifdef __ARM_ARCH\n#error ARM\n#endif",
+    );
+}

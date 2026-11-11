@@ -578,16 +578,20 @@ Compile knobs:
   --param ssp-buffer-size=N
                            Least character-array size, in bytes, that
                            -fstack-protector protects a function for.
-  -mcpu=NAME[+ext...]      AArch64 CPU selection. NAME is a part name
-                           (`generic`, `cortex-a53`, `neoverse-n1`,
-                           `apple-m1`, ...); each picks the scheduling
-                           model badc does not differentiate, and an
-                           unknown one is refused.
-                           `+crypto` / `+aes` / `+sha2` (and their `no`
-                           forms) set the __ARM_FEATURE_* macros, with
-                           the crypto encodings always
-                           available to inline asm. Another extension is
-                           refused by name.
+  -mcpu=NAME[+mod...]      AArch64 CPU selection: a part name
+                           (`cortex-a53`, `neoverse-n1`, `apple-m1`,
+                           ...) or `native`, whose extensions predefine
+                           the __ARM_FEATURE_* macros; `+EXT` enables an
+                           extension and those it requires, `+noEXT`
+                           disables it and those requiring it. An
+                           extension whose intrinsics badc lacks (SVE,
+                           SME, BF16, ...) is refused when a modifier
+                           enables it. The instructions stay badc's
+                           baseline.
+  -march=ARCH[+mod...]     AArch64: an architecture (`armv8-a` to
+                           `armv9.6-a`, `armv8-r`) or `native`, with
+                           -mcpu='s modifiers; it overrides -mcpu='s
+                           extensions.
   -march=CPU               x86 CPU selection: gcc's CPU names and
                            x86-64-v3/v4 predefine the feature macros of
                            the extensions below that the CPU has;

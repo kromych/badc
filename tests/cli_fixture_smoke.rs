@@ -4221,10 +4221,11 @@ fn ffixed_argument_registers_still_carry_the_call() {
     }
 }
 
-/// `-mcpu=` sets the AArch64 feature macros the way gcc does and
-/// refuses what badc does not implement: `+crypto` makes the AES
-/// intrinsics compile for linux-aarch64, an unknown extension and an
-/// x86-64 target are refused by name.
+/// `-mcpu=` and `-march=` set the AArch64 feature macros and refuse what
+/// badc does not implement: `+crypto` makes the AES
+/// intrinsics compile for linux-aarch64 and `-march=armv8-a+crc` the
+/// CRC32 ones of <arm_acle.h>; an unknown extension, one whose intrinsics
+/// badc lacks, and an x86-64 target are refused by name.
 #[test]
 fn mcpu_extensions_gate_the_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4256,10 +4257,34 @@ fn mcpu_extensions_gate_the_feature_macros() {
         "{}",
         String::from_utf8_lossy(&ok.stderr)
     );
+    let crc = root.join("crc.c");
+    std::fs::write(
+        &crc,
+        "#ifndef __ARM_FEATURE_CRC32\n#error crc32 missing\n#endif\n\
+         #include <arm_acle.h>\n\
+         uint32_t c(uint32_t a, uint64_t d) { return __crc32cd(a, d); }\n",
+    )
+    .expect("write source");
+    let ok = Command::new(badc)
+        .args(["-q", "-c", "--target=linux-aarch64", "-march=armv8-a+crc"])
+        .arg(&crc)
+        .arg("-o")
+        .arg(root.join("crc.o"))
+        .output()
+        .expect("run badc");
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
     for (args, want) in [
         (
             &["-c", "--target=linux-aarch64", "-mcpu=generic+bogus"][..],
             "extension `bogus`",
+        ),
+        (
+            &["-c", "--target=linux-aarch64", "-march=armv8.2-a+sve"][..],
+            "enables `sve`, whose intrinsics",
         ),
         (
             &["-c", "--target=linux-x64", "-mcpu=generic"][..],

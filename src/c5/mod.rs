@@ -1,3 +1,4 @@
+mod aarch64_isa;
 mod asm;
 mod ast;
 mod attr;
@@ -51,6 +52,7 @@ pub use object::{
     emit_native_with_options_owned,
 };
 pub use {
+    aarch64_isa::{Aarch64ExtError, Aarch64Features},
     codegen::{
         BinaryFormat, BuildId, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm,
         FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, MachOImageOptions,

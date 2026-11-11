@@ -17,6 +17,7 @@
 #   aarch64-w64-mingw32 where it differs from x86_64-w64-mingw32's
 #
 # name	macos-aarch64	linux-aarch64	linux-x64	windows-x64	windows-arm64
+arm_acle.h	y	y	-	-	y
 arm_neon.h	y	y	-	-	y
 arm64_neon.h	-	-	-	-	-
 x86intrin.h	f	-	y	y	f

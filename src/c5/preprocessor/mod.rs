@@ -1398,6 +1398,19 @@ impl Preprocessor {
         }
     }
 
+    /// The Arm C Language Extensions macros of the AArch64 extensions the
+    /// unit targets and of the target, `short_wchar` for `-fshort-wchar`.
+    pub fn set_aarch64_features(
+        &mut self,
+        features: crate::c5::Aarch64Features,
+        short_wchar: bool,
+    ) {
+        let pe = self.target.is_windows();
+        for (name, value) in features.macros(short_wchar || pe, pe) {
+            self.macros.insert(name.into(), value.into());
+        }
+    }
+
     /// The x86 extensions' feature macros, and `__BIGGEST_ALIGNMENT__`
     /// 32 under AVX, as gcc predefines them for `-m<ext>` and `-march=`.
     pub fn set_x86_features(&mut self, features: crate::c5::X86Features) {

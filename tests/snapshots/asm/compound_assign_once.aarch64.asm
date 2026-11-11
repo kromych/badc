@@ -25,63 +25,58 @@ Disassembly of section .text:
                	orr	x0, x0, x17
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
-               	sbfx	x0, x0, #0, #7
-               	mov	w0, w0
-               	ubfx	x0, x0, #1, #7
-               	ldr	w2, [x1, #0x8]
-               	and	x2, x2, #0xffffffffffffff80
-               	orr	x0, x2, x0
+               	sbfx	x2, x0, #0, #7
+               	mov	w2, w2
+               	ubfx	x2, x2, #1, #7
+               	and	x0, x0, #0xffffffffffffff80
+               	orr	x0, x0, x2
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
-               	sbfx	x0, x0, #0, #7
+               	sbfx	x2, x0, #0, #7
                	mov	x17, #-0x2              // =-2
-               	cmp	w0, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w0, [x1, #0x8]
                	and	x0, x0, #0xffffffffffffff80
                	mov	x17, #0x7d              // =125
                	orr	x0, x0, x17
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
-               	sbfx	x0, x0, #0, #7
-               	mov	w0, w0
+               	sbfx	x2, x0, #0, #7
+               	mov	w2, w2
                	mov	x17, #0xcccd            // =52429
                	movk	x17, #0xcccc, lsl #16
-               	mul	x2, x0, x17
-               	lsr	x2, x2, #34
+               	mul	x3, x2, x17
+               	lsr	x3, x3, #34
                	mov	x17, #0x5               // =5
-               	mul	x2, x2, x17
-               	sub	x0, x0, x2
-               	ldr	w2, [x1, #0x8]
-               	and	x2, x2, #0xffffffffffffff80
-               	orr	x0, x2, x0
+               	mul	x3, x3, x17
+               	sub	x2, x2, x3
+               	and	x0, x0, #0xffffffffffffff80
+               	orr	x0, x0, x2
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
-               	sbfx	x0, x0, #0, #7
-               	cmp	w0, #0x3
+               	sbfx	x2, x0, #0, #7
+               	cmp	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w0, [x1, #0x8]
                	and	x0, x0, #0xffffffffffffff80
                	orr	x0, x0, #0x3
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
-               	sbfx	x0, x0, #0, #7
-               	scvtf	d1, x0
+               	sbfx	x2, x0, #0, #7
+               	scvtf	d1, x2
                	fmov	d0, #1.50000000
                	fmul	d1, d1, d0
-               	fcvtzs	x0, d1
-               	and	x0, x0, #0x7f
-               	ldr	w2, [x1, #0x8]
-               	and	x2, x2, #0xffffffffffffff80
-               	orr	x0, x2, x0
+               	fcvtzs	x2, d1
+               	and	x2, x2, #0x7f
+               	and	x0, x0, #0xffffffffffffff80
+               	orr	x0, x0, x2
                	str	w0, [x1, #0x8]
                	ldr	w0, [x1, #0x8]
                	sbfx	x0, x0, #0, #7
@@ -96,17 +91,16 @@ Disassembly of section .text:
                	and	x2, x2, #0xffffffffffffffef
                	strb	w2, [x1, #0xe]
                	ldrb	w2, [x1, #0xe]
-               	ubfx	x2, x2, #4, #1
-               	scvtf	d1, x2
+               	ubfx	x3, x2, #4, #1
+               	scvtf	d1, x3
                	fmov	d2, #0.25000000
                	fadd	d1, d1, d2
                	fmov	d17, x0
                	fcmp	d1, d17
-               	cset	x2, ne
-               	and	x2, x2, #0x1
-               	ldrb	w3, [x1, #0xe]
-               	and	x3, x3, #0xffffffffffffffef
-               	orr	x2, x3, x2, lsl #4
+               	cset	x3, ne
+               	and	x3, x3, #0x1
+               	and	x2, x2, #0xffffffffffffffef
+               	orr	x2, x2, x3, lsl #4
                	strb	w2, [x1, #0xe]
                	ldrb	w2, [x1, #0xe]
                	ubfx	x2, x2, #4, #1
@@ -121,15 +115,14 @@ Disassembly of section .text:
                	orr	x2, x2, #0xf00
                	str	w2, [x1, #0x8]
                	ldr	w2, [x1, #0x8]
-               	ubfx	x2, x2, #7, #5
-               	scvtf	d2, x2
+               	ubfx	x3, x2, #7, #5
+               	scvtf	d2, x3
                	fmov	d1, #0.50000000
                	fsub	d2, d2, d1
-               	fcvtzs	x2, d2
-               	and	x2, x2, #0x1f
-               	ldr	w3, [x1, #0x8]
-               	and	x3, x3, #0xfffffffffffff07f
-               	orr	x2, x3, x2, lsl #7
+               	fcvtzs	x3, d2
+               	and	x3, x3, #0x1f
+               	and	x2, x2, #0xfffffffffffff07f
+               	orr	x2, x2, x3, lsl #7
                	str	w2, [x1, #0x8]
                	ldr	w1, [x1, #0x8]
                	ubfx	x1, x1, #7, #5
@@ -508,9 +501,9 @@ Disassembly of section .text:
                	and	x1, x1, #0xfff0000000000fff
                	orr	x1, x1, x3, lsl #12
                	str	x1, [x0, #0x38]
-               	sbfx	x1, x2, #0, #40
+               	sbfx	x2, x2, #0, #40
                	mov	x17, #-0x8000000000     // =-549755813888
-               	cmp	x1, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	cbz	x0, <addr>
@@ -573,13 +566,12 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0, #0x50]
                	ldr	w1, [x0, #0x50]
-               	sbfx	x1, x1, #0, #7
+               	sbfx	x2, x1, #0, #7
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	and	x1, x1, #0x7f
-               	ldr	w2, [x0, #0x50]
-               	and	x2, x2, #0xffffffffffffff80
-               	orr	x1, x2, x1
+               	mul	x2, x2, x17
+               	and	x2, x2, #0x7f
+               	and	x1, x1, #0xffffffffffffff80
+               	orr	x1, x1, x2
                	str	w1, [x0, #0x50]
                	ldr	w1, [x0, #0x50]
                	sbfx	x1, x1, #0, #7
@@ -603,7 +595,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	ldr	x1, [x0, #0x38]
                	sbfx	x2, x1, #12, #40
                	add	x2, x2, #0x1
                	and	x3, x2, #0xffffffffff
@@ -621,14 +612,13 @@ Disassembly of section .text:
                	orr	x1, x1, #0x3f
                	str	w1, [x0, #0x38]
                	ldr	w1, [x0, #0x38]
-               	sbfx	x1, x1, #0, #7
-               	add	x1, x1, #0x1
-               	and	x2, x1, #0x7f
-               	ldr	w3, [x0, #0x38]
-               	and	x3, x3, #0xffffffffffffff80
-               	orr	x2, x3, x2
-               	str	w2, [x0, #0x38]
-               	sbfx	x1, x1, #0, #7
+               	sbfx	x2, x1, #0, #7
+               	add	x2, x2, #0x1
+               	and	x3, x2, #0x7f
+               	and	x1, x1, #0xffffffffffffff80
+               	orr	x1, x1, x3
+               	str	w1, [x0, #0x38]
+               	sbfx	x1, x2, #0, #7
                	mov	x17, #-0x40             // =-64
                	cmp	w1, w17
                	b.ne	<addr>
@@ -686,7 +676,6 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	add	x2, x2, #0x5
                	str	w2, [x0]
-               	ldrsw	x2, [x0]
                	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x2, #0x2                // =2
@@ -696,13 +685,12 @@ Disassembly of section .text:
                	orr	x2, x2, #0x180
                	str	w2, [x0, #0x8]
                	ldr	w2, [x0, #0x8]
-               	ubfx	x2, x2, #7, #5
+               	ubfx	x3, x2, #7, #5
                	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
-               	and	x2, x2, #0x1f
-               	ldr	w3, [x0, #0x8]
-               	and	x3, x3, #0xfffffffffffff07f
-               	orr	x2, x3, x2, lsl #7
+               	mul	x3, x3, x17
+               	and	x3, x3, #0x1f
+               	and	x2, x2, #0xfffffffffffff07f
+               	orr	x2, x2, x3, lsl #7
                	str	w2, [x0, #0x8]
                	ldr	w0, [x0, #0x8]
                	ubfx	x0, x0, #7, #5

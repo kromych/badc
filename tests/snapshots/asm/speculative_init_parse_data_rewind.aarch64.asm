@@ -27,10 +27,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	ldr	x2, [x0, #0x8]
-               	ldr	w2, [x2]
-               	cmp	w2, #0xa
+               	ldr	w3, [x2]
+               	cmp	w3, #0xa
                	b.ne	<addr>
-               	ldr	x2, [x0, #0x8]
                	ldr	w2, [x2, #0x4]
                	cmp	w2, #0x14
                	b.ne	<addr>
@@ -40,10 +39,9 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	ldr	x0, [x1, #0x8]
-               	ldr	w0, [x0]
-               	cmp	w0, #0x1e
+               	ldr	w1, [x0]
+               	cmp	w1, #0x1e
                	b.ne	<addr>
-               	ldr	x0, [x1, #0x8]
                	ldr	w0, [x0, #0x4]
                	cbz	w0, <addr>
                	mov	x0, #0x5                // =5

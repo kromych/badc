@@ -435,7 +435,6 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x0, #0x11               // =17
                	b	<addr>
-               	ldursw	x0, [x29, #-0x48]
                	sub	x1, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0

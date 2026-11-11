@@ -295,18 +295,16 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sxtw	x2, w2
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
+               	sub	x3, x29, #0x10
                	stur	x1, [x29, #-0x8]
                	cbnz	w2, <addr>
-               	ldur	x0, [x29, #-0x10]
-               	ldur	x1, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x10]
-               	add	x1, x1, x2
-               	stur	x1, [x29, #-0x10]
+               	add	x0, x0, x2
+               	stur	x0, [x29, #-0x10]
                	sub	x2, x2, #0x1
+               	mov	x0, x3
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

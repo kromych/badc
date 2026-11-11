@@ -24,18 +24,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	cmp	w1, #0x3
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x60]
-               	cmp	w2, #0x8
+               	adrp	x2, <page>
+               	ldrsw	x1, [x2, #0x60]
+               	cmp	w1, #0x8
                	b.ge	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldrsw	x2, [x1, #0x60]
-               	add	x4, x2, #0x1
-               	str	w4, [x1, #0x60]
+               	add	x4, x1, #0x1
+               	str	w4, [x2, #0x60]
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	str	w0, [x3, x2, lsl #2]
+               	str	w0, [x3, x1, lsl #2]
                	ret
 
 <main>:

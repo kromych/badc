@@ -171,16 +171,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x3, [x0, #0x48]
-               	ldr	x4, [x1, #0x50]
-               	cmp	x3, x4
-               	b.eq	<addr>
                	ldr	x1, [x1, #0x50]
-               	ldr	x3, [x2, #0x58]
-               	cmp	x1, x3
+               	cmp	x3, x1
+               	b.eq	<addr>
+               	ldr	x2, [x2, #0x58]
+               	cmp	x1, x2
                	b.eq	<addr>
                	ldr	x0, [x0, #0x48]
-               	ldr	x1, [x2, #0x58]
-               	cmp	x0, x1
+               	cmp	x0, x2
                	b.ne	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10

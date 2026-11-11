@@ -671,29 +671,27 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x80]
                	sub	x2, x29, #0x80
                	stur	x3, [x29, #-0x78]
-               	ldur	x1, [x29, #-0x88]
-               	cmp	x1, #0x0
+               	ldur	x1, [x29, #-0x90]
+               	ldur	x3, [x29, #-0x88]
+               	cmp	x3, #0x0
                	b.ge	<addr>
-               	ldur	x0, [x29, #-0x90]
-               	ldur	x1, [x29, #-0x88]
-               	cmp	x0, #0x0
-               	cset	x3, hi
-               	neg	x4, x0
-               	neg	x0, x1
-               	sub	x1, x0, x3
-               	sub	x0, x29, #0x40
-               	stur	x4, [x29, #-0x40]
-               	stur	x1, [x29, #-0x38]
-               	ldur	x1, [x29, #-0x78]
                	cmp	x1, #0x0
-               	b.ge	<addr>
-               	ldur	x1, [x29, #-0x80]
-               	ldur	x2, [x29, #-0x78]
-               	cmp	x1, #0x0
-               	cset	x3, hi
+               	cset	x0, hi
                	neg	x1, x1
-               	neg	x2, x2
-               	sub	x3, x2, x3
+               	neg	x3, x3
+               	sub	x3, x3, x0
+               	sub	x0, x29, #0x40
+               	stur	x1, [x29, #-0x40]
+               	stur	x3, [x29, #-0x38]
+               	ldur	x1, [x29, #-0x80]
+               	ldur	x3, [x29, #-0x78]
+               	cmp	x3, #0x0
+               	b.ge	<addr>
+               	cmp	x1, #0x0
+               	cset	x2, hi
+               	neg	x1, x1
+               	neg	x3, x3
+               	sub	x3, x3, x2
                	sub	x2, x29, #0x30
                	stur	x1, [x29, #-0x30]
                	stur	x3, [x29, #-0x28]

@@ -174,18 +174,18 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v31  LocalAddr(-2)                                    -> x0
     v32  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x0
     v33  LoadLocal { off=-2, disp=8, kind=I64 }           -> x0
-    v34  BinopI { op=lt, lhs=v33, rhs_imm=0 }             -> x0
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x1
-    v36  Imm(0)                                           -> x1
-    v37  Imm(0)                                           -> x1
-    v38  Imm(0)                                           -> x1
-    v39  Imm(0)                                           -> x1
+    v34  BinopI { op=lt, lhs=v33, rhs_imm=0 }             -> x1
+    v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x2
+    v36  Imm(0)                                           -> x2
+    v37  Imm(0)                                           -> x2
+    v38  Imm(0)                                           -> x2
+    v39  Imm(0)                                           -> x2
     terminator Bnz { cond=v34, target=b14, fall=b13 }   (exit_acc=v34)
   block 13  start_pc=0
-    v40  LocalAddr(-2)                                    -> x0
-    v41  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x0
-    v42  LoadLocal { off=-2, disp=8, kind=I64 }           -> x0
-    v43  BinopI { op=ge, lhs=v42, rhs_imm=1000000000 }    -> x0
+    v40  LocalAddr(-2)                                    -> x1
+    v41  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
+    v42  LoadLocal { off=-2, disp=8, kind=I64 }           -> x1
+    v43  BinopI { op=ge, lhs=v33, rhs_imm=1000000000 }    -> x0
     v44  Imm(0)                                           -> x1
     v45  Imm(0)                                           -> x1
     v46  Imm(0)                                           -> x1

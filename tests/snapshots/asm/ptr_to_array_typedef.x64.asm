@@ -38,12 +38,10 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	-0x8(%rbp), %rax
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x4, %eax

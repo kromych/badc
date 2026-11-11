@@ -232,27 +232,27 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	movl	%eax, (%rdi)
                	movl	(%rdi), %eax
-               	sarq	$0x10, %rax
-               	xorq	%rsi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movl	(%rdi), %ecx
+               	movq	%rax, %rcx
+               	sarq	$0x10, %rcx
+               	xorq	%rsi, %rcx
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
                	movabsq	$-0xffff0001, %r11      # imm = 0xFFFFFFFF0000FFFF
-               	andq	%r11, %rcx
-               	shlq	$0x10, %rax
+               	andq	%r11, %rax
+               	shlq	$0x10, %rcx
                	orq	%rcx, %rax
                	movl	%eax, (%rdi)
                	movl	(%rdi), %eax
-               	andq	$0x7, %rax
-               	movl	(%rdi), %ecx
-               	sarq	$0x3, %rcx
-               	andq	$0x1f, %rcx
-               	addq	%rcx, %rax
-               	movl	(%rdi), %ecx
-               	sarq	$0x8, %rcx
-               	andq	$0xff, %rcx
-               	addq	%rcx, %rax
-               	movl	(%rdi), %ecx
-               	sarq	$0x10, %rcx
+               	movq	%rax, %rcx
+               	andq	$0x7, %rcx
+               	movq	%rax, %rdx
+               	sarq	$0x3, %rdx
+               	andq	$0x1f, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rax, %rdx
+               	sarq	$0x8, %rdx
+               	andq	$0xff, %rdx
+               	addq	%rdx, %rcx
+               	sarq	$0x10, %rax
                	addq	%rcx, %rax
                	retq
 
@@ -537,20 +537,20 @@ Disassembly of section .text:
                	movl	-0x28(%rbp), %esi
                	callq	<addr>
                	movl	-0x30(%rbp), %ecx
-               	andq	$0x7, %rcx
-               	cmpl	$0x5, %ecx
+               	movq	%rcx, %rdx
+               	andq	$0x7, %rdx
+               	cmpl	$0x5, %edx
                	jne	<addr>
-               	movl	-0x30(%rbp), %ecx
                	sarq	$0x3, %rcx
                	andq	$0x1f, %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>
                	movl	-0x30(%rbp), %ecx
-               	sarq	$0x8, %rcx
-               	andq	$0xff, %rcx
-               	cmpl	$0xc8, %ecx
+               	movq	%rcx, %rdx
+               	sarq	$0x8, %rdx
+               	andq	$0xff, %rdx
+               	cmpl	$0xc8, %edx
                	jne	<addr>
-               	movl	-0x30(%rbp), %ecx
                	sarq	$0x10, %rcx
                	cmpl	$0x9daa, %ecx           # imm = 0x9DAA
                	je	<addr>

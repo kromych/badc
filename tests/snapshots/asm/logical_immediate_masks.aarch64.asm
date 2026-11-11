@@ -206,19 +206,15 @@ Disassembly of section .text:
                	ldr	w2, [x0]
                	eor	x1, x1, x2, asr #16
                	and	x1, x1, #0xffff
-               	ldr	w2, [x0]
                	and	x2, x2, #0xffffffff0000ffff
                	orr	x1, x2, x1, lsl #16
                	str	w1, [x0]
-               	ldr	w1, [x0]
-               	and	x1, x1, #0x7
-               	ldr	w2, [x0]
-               	ubfx	x2, x2, #3, #5
-               	add	x1, x1, x2
-               	ldr	w2, [x0]
-               	ubfx	x2, x2, #8, #8
-               	add	x1, x1, x2
                	ldr	w0, [x0]
+               	and	x1, x0, #0x7
+               	ubfx	x2, x0, #3, #5
+               	add	x1, x1, x2
+               	ubfx	x2, x0, #8, #8
+               	add	x1, x1, x2
                	add	x0, x1, x0, asr #16
                	ret
 
@@ -527,18 +523,16 @@ Disassembly of section .text:
                	ldur	w1, [x29, #-0x28]
                	bl	<addr>
                	ldur	w1, [x29, #-0x30]
-               	and	x1, x1, #0x7
-               	cmp	w1, #0x5
+               	and	x2, x1, #0x7
+               	cmp	w2, #0x5
                	b.ne	<addr>
-               	ldur	w1, [x29, #-0x30]
                	ubfx	x1, x1, #3, #5
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldur	w1, [x29, #-0x30]
-               	ubfx	x1, x1, #8, #8
-               	cmp	w1, #0xc8
+               	ubfx	x2, x1, #8, #8
+               	cmp	w2, #0xc8
                	b.ne	<addr>
-               	ldur	w1, [x29, #-0x30]
                	asr	x1, x1, #16
                	mov	x17, #0x9daa            // =40362
                	cmp	w1, w17

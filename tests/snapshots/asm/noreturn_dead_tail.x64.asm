@@ -27,10 +27,5 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x5, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
                	xorl	%eax, %eax
                	retq

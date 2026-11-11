@@ -54,10 +54,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	cmpq	$0x1, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x1, %rcx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
                	je	<addr>
@@ -65,10 +64,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	cmpq	$0x3, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x3, %rcx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x4, %rax
                	je	<addr>
@@ -83,10 +81,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	cmpq	$0x6, %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x6, %rcx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	0x18(%rax), %rax
                	cmpq	$0x9, %rax
                	je	<addr>

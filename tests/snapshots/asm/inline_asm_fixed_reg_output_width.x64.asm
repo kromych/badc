@@ -116,12 +116,12 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	movq	-0x8(%rbp), %rcx
-               	shrq	$0x30, %rcx
-               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
                	shrq	$0x30, %rdx
-               	cmpl	%edx, %ecx
+               	movq	%rax, %rsi
+               	shrq	$0x30, %rsi
+               	cmpl	%esi, %edx
                	jne	<addr>
-               	movq	-0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	jae	<addr>
                	movl	$0x2, %eax

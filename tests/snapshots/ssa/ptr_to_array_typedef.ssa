@@ -262,18 +262,18 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     terminator Return(v250)   (exit_acc=v250)
   block 2  start_pc=0
     v254 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v255 Imm(24)                                          -> x1
-    v256 BinopI { op=add, lhs=v254, rhs_imm=24 }          -> x1
-    v257 Load { addr=v254, disp=24, kind=I64 }            -> x0
+    v255 Imm(24)                                          -> x0
+    v256 BinopI { op=add, lhs=v243, rhs_imm=24 }          -> x0
+    v257 Load { addr=v243, disp=24, kind=I64 pc_rel }     -> x0
     v258 BinopI { op=ne, lhs=v257, rhs_imm=2 }            -> x0
     v259 Imm(0)                                           -> x1
     terminator Bnz { cond=v258, target=b4, fall=b3 }   (exit_acc=v258)
   block 3  start_pc=0
     v260 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v261 Imm(0)                                           -> x1
-    v262 Imm(24)                                          -> x1
-    v263 BinopI { op=add, lhs=v260, rhs_imm=24 }          -> x1
-    v264 Load { addr=v260, disp=24, kind=I64 }            -> x0
+    v261 Imm(0)                                           -> x0
+    v262 Imm(24)                                          -> x0
+    v263 BinopI { op=add, lhs=v243, rhs_imm=24 }          -> x0
+    v264 Load { addr=v243, disp=24, kind=I64 pc_rel }     -> x0
     v265 BinopI { op=ne, lhs=v264, rhs_imm=2 }            -> x0
     v266 Imm(0)                                           -> x1
     v267 Imm(0)                                           -> x1

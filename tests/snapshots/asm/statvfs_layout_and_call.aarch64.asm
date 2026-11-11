@@ -39,13 +39,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xf0]
                	ldp	x20, x21, [sp], #0x100
                	ret
-               	ldur	x0, [x29, #-0xc8]
-               	ldur	x1, [x29, #-0xd0]
-               	cmp	x0, x1
+               	ldur	x1, [x29, #-0xc8]
+               	ldur	x0, [x29, #-0xd0]
+               	cmp	x1, x0
                	b.hi	<addr>
-               	ldur	x0, [x29, #-0xc0]
-               	ldur	x1, [x29, #-0xd0]
-               	cmp	x0, x1
+               	ldur	x1, [x29, #-0xc0]
+               	cmp	x1, x0
                	b.hi	<addr>
                	ldur	x0, [x29, #-0xb0]
                	ldur	x1, [x29, #-0xb8]

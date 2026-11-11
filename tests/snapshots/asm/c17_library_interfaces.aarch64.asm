@@ -105,7 +105,6 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x8]
                	cmp	x1, #0x0
                	b.lt	<addr>
-               	ldur	x1, [x29, #-0x8]
                	mov	x17, #0xca00            // =51712
                	movk	x17, #0x3b9a, lsl #16
                	cmp	x1, x17

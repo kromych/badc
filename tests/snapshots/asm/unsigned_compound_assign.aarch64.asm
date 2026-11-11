@@ -105,12 +105,11 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
-               	ldrsw	x2, [x1, #0xc]
-               	cmp	w2, #0x1e
+               	ldrsw	x1, [x1, #0xc]
+               	cmp	w1, #0x1e
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x1, #0xc]
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]

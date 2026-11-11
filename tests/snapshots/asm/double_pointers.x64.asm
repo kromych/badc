@@ -59,14 +59,13 @@ Disassembly of section .text:
                	movq	%rax, (%rbx)
                	movl	$0x7b, (%rax)
                	movq	(%rbx), %rax
-               	movl	(%rax), %eax
-               	cmpl	$0x7b, %eax
+               	movl	(%rax), %ecx
+               	cmpl	$0x7b, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
                	leave
                	retq
-               	movq	(%rbx), %rax
                	movl	(%rax), %eax
                	cmpl	$0x7b, %eax
                	je	<addr>

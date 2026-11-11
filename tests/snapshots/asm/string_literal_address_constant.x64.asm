@@ -166,12 +166,12 @@ Disassembly of section .text:
                	cmpl	$0x79, %ecx
                	jne	<addr>
                	movq	<rip>, %rcx # <addr>
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x7a, %ecx
+               	movsbq	(%rcx), %rdx
+               	cmpl	$0x7a, %edx
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	movl	(%rcx), %ecx
-               	cmpl	$0x79, %ecx
+               	movq	<rip>, %rdx # <addr>
+               	movl	(%rdx), %edx
+               	cmpl	$0x79, %edx
                	je	<addr>
                	xorl	%ecx, %ecx
                	testq	%rax, %rax
@@ -216,7 +216,5 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	jmp	<addr>
                	movq	<rip>, %rax # <addr>
                	jmp	<addr>

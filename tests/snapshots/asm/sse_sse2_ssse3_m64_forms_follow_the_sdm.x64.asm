@@ -221,8 +221,9 @@ Disassembly of section .text:
                	jne	<addr>
                	movsd	-0xd0(%rbp), %xmm0
                	movsd	-0xc8(%rbp), %xmm1
-               	pavgb	%xmm1, %xmm0
-               	movsd	%xmm0, -0xb8(%rbp)
+               	movapd	%xmm0, %xmm2
+               	pavgb	%xmm1, %xmm2
+               	movsd	%xmm2, -0xb8(%rbp)
                	movq	-0xb8(%rbp), %rsi
                	cmpq	%rdx, %rsi
                	jne	<addr>
@@ -260,8 +261,6 @@ Disassembly of section .text:
                	shrq	%rcx
                	shlq	$0x30, %rcx
                	orq	%rcx, %rax
-               	movsd	-0xd0(%rbp), %xmm0
-               	movsd	-0xc8(%rbp), %xmm1
                	pavgw	%xmm1, %xmm0
                	movsd	%xmm0, -0xb0(%rbp)
                	movq	-0xb0(%rbp), %rcx
@@ -322,13 +321,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movsd	-0xd0(%rbp), %xmm0
                	movsd	-0xc8(%rbp), %xmm1
-               	pmaxsw	%xmm1, %xmm0
-               	movsd	%xmm0, -0x98(%rbp)
+               	movapd	%xmm0, %xmm2
+               	pmaxsw	%xmm1, %xmm2
+               	movsd	%xmm2, -0x98(%rbp)
                	movq	-0x98(%rbp), %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	movsd	-0xd0(%rbp), %xmm0
-               	movsd	-0xc8(%rbp), %xmm1
                	pminsw	%xmm1, %xmm0
                	movsd	%xmm0, -0x90(%rbp)
                	movq	-0x90(%rbp), %rax
@@ -376,13 +374,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movsd	-0xd0(%rbp), %xmm0
                	movsd	-0xc8(%rbp), %xmm1
-               	pmaxub	%xmm1, %xmm0
-               	movsd	%xmm0, -0x78(%rbp)
+               	movapd	%xmm0, %xmm2
+               	pmaxub	%xmm1, %xmm2
+               	movsd	%xmm2, -0x78(%rbp)
                	movq	-0x78(%rbp), %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	movsd	-0xd0(%rbp), %xmm0
-               	movsd	-0xc8(%rbp), %xmm1
                	pminub	%xmm1, %xmm0
                	movsd	%xmm0, -0x70(%rbp)
                	movq	-0x70(%rbp), %rax

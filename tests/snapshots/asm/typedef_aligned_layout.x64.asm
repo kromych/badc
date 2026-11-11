@@ -174,13 +174,6 @@ Disassembly of section .text:
                	movl	$0x4c, %eax
                	popq	%rbp
                	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x3, %rax
-               	cmpl	$0x6, %eax
-               	je	<addr>
-               	movl	$0x4e, %eax
-               	popq	%rbp
-               	retq
                	movl	$0x9, %edi
                	callq	<addr>
                	testl	%eax, %eax

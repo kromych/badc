@@ -111,11 +111,10 @@ Disassembly of section .text:
                	movl	$0x28, -0x10(%rbp)
                	movq	%rcx, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
-               	movl	0xc(%rcx), %edx
-               	cmpl	$0x1e, %edx
+               	movl	0xc(%rcx), %esi
+               	cmpl	$0x1e, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movl	0xc(%rcx), %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

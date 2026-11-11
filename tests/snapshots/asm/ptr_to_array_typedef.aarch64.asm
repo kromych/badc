@@ -28,11 +28,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x8]
-               	ldr	x0, [x0, #0x18]
-               	cmp	x0, #0x2
+               	ldr	x1, [x0, #0x18]
+               	cmp	x1, #0x2
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x8]
                	ldr	x0, [x0, #0x18]
                	cmp	x0, #0x2
                	b.eq	<addr>

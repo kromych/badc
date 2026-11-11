@@ -71,10 +71,7 @@ Disassembly of section .text:
                	ldr	x0, [x2]
                	cmp	x0, #0x16
                	b.ne	<addr>
-               	ldr	x0, [x3]
-               	cmp	x0, #0x21
-               	b.eq	<addr>
-               	mov	x0, #0x1e               // =30
-               	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0x1e               // =30
                	ret

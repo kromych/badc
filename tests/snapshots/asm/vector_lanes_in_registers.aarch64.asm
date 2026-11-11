@@ -182,9 +182,8 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x1c]
                	add	x1, x1, x1
                	sxtw	x1, w1
-               	ldrsw	x2, [x0, #0x8]
                	ldrsw	x0, [x0, #0x8]
-               	add	x0, x2, x0
+               	add	x0, x0, x0
                	sxtw	x0, w0
                	sub	x0, x1, x0
                	ret

@@ -62,7 +62,6 @@ Disassembly of section .text:
                	movsbq	(%rcx,%rdx), %rsi
                	cmpl	$0xa, %esi
                	je	<addr>
-               	movsbq	(%rcx,%rdx), %rsi
                	cmpl	$0xd, %esi
                	je	<addr>
                	movsbq	(%rcx,%rdx), %rcx

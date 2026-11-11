@@ -51,7 +51,6 @@ Disassembly of section .text:
                	ret
                	ldur	x3, [x29, #-0x38]
                	cbz	x3, <addr>
-               	ldur	x3, [x29, #-0x38]
                	cbz	x3, <addr>
                	ldur	x3, [x29, #-0x38]
                	cbnz	x3, <addr>

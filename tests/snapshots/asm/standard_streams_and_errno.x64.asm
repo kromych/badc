@@ -53,21 +53,19 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdx
+               	movq	(%rax), %rax
                	movq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rsi
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rax
                	je	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	movq	(%rdx), %rdx
-               	movq	(%rax), %rax
-               	cmpq	%rax, %rdx
+               	movq	<rip>, %rcx # <addr>
+               	movq	(%rcx), %rcx
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	movq	(%rcx), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

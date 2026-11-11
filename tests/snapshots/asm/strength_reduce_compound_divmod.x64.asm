@@ -2244,7 +2244,6 @@ Disassembly of section .text:
                	movl	%eax, (%rsi,%rcx,4)
                	cmpl	%edi, %eax
                	jne	<addr>
-               	movl	(%rsi,%rcx,4), %eax
                	cmpl	%edi, %eax
                	jne	<addr>
                	movslq	-0x10(%rbp), %r8
@@ -2381,17 +2380,18 @@ Disassembly of section .text:
                	orq	%rdi, %rax
                	movq	%rax, -0x30(%rbp)
                	movl	-0x90(%rbp), %edx
-               	shlq	$0x35, %rdx
-               	sarq	$0x35, %rdx
-               	movl	-0x30(%rbp), %edi
+               	movq	%rdx, %rdi
                	shlq	$0x35, %rdi
-               	sarq	$0x35, %rdi
-               	cmpl	%edi, %edx
+               	movq	%rdi, %r8
+               	sarq	$0x35, %r8
+               	movl	-0x30(%rbp), %edi
+               	movq	%rdi, %r9
+               	shlq	$0x35, %r9
+               	sarq	$0x35, %r9
+               	cmpl	%r9d, %r8d
                	jne	<addr>
-               	movl	-0x90(%rbp), %edx
                	sarq	$0xb, %rdx
                	andq	$0x1fff, %rdx           # imm = 0x1FFF
-               	movl	-0x30(%rbp), %edi
                	sarq	$0xb, %rdi
                	andq	$0x1fff, %rdi           # imm = 0x1FFF
                	cmpl	%edi, %edx
@@ -2528,17 +2528,18 @@ Disassembly of section .text:
                	orq	%rdx, %rax
                	movq	%rax, -0x30(%rbp)
                	movl	-0x90(%rbp), %edx
-               	shlq	$0x35, %rdx
-               	sarq	$0x35, %rdx
-               	movl	-0x30(%rbp), %edi
+               	movq	%rdx, %rdi
                	shlq	$0x35, %rdi
-               	sarq	$0x35, %rdi
-               	cmpl	%edi, %edx
+               	movq	%rdi, %r8
+               	sarq	$0x35, %r8
+               	movl	-0x30(%rbp), %edi
+               	movq	%rdi, %r9
+               	shlq	$0x35, %r9
+               	sarq	$0x35, %r9
+               	cmpl	%r9d, %r8d
                	jne	<addr>
-               	movl	-0x90(%rbp), %edx
                	sarq	$0xb, %rdx
                	andq	$0x1fff, %rdx           # imm = 0x1FFF
-               	movl	-0x30(%rbp), %edi
                	sarq	$0xb, %rdi
                	andq	$0x1fff, %rdi           # imm = 0x1FFF
                	cmpl	%edi, %edx

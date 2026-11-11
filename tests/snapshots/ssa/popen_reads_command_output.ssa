@@ -37,17 +37,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v35  BinopI { op=sub, lhs=v19, rhs_imm=1 }            -> x2
     v36  Binop { op=add, lhs=v33, rhs=v35 }               -> x6
     v37  LoadIndexed { base=v33, index=v35, scale=1, kind=I8 } -> x6
-    v38  BinopI { op=eq, lhs=v37, rhs_imm=10 }            -> x6
-    v39  Imm(1)                                           -> x7
-    v40  Imm(0)                                           -> x7
+    v38  BinopI { op=eq, lhs=v37, rhs_imm=10 }            -> x7
+    v39  Imm(1)                                           -> x8
+    v40  Imm(0)                                           -> x8
     terminator Bnz { cond=v38, target=b8, fall=b6 }   (exit_acc=v38)
   block 6  start_pc=0
-    v41  LocalAddr(-8)                                    -> x6
-    v42  Imm(0)                                           -> x6
-    v43  BinopI { op=sub, lhs=v19, rhs_imm=1 }            -> x6
-    v44  Binop { op=add, lhs=v33, rhs=v35 }               -> x6
-    v45  LoadIndexed { base=v33, index=v35, scale=1, kind=I8 } -> x6
-    v46  BinopI { op=eq, lhs=v45, rhs_imm=13 }            -> x6
+    v41  LocalAddr(-8)                                    -> x7
+    v42  Imm(0)                                           -> x7
+    v43  BinopI { op=sub, lhs=v19, rhs_imm=1 }            -> x7
+    v44  Binop { op=add, lhs=v33, rhs=v35 }               -> x7
+    v45  LoadIndexed { base=v33, index=v35, scale=1, kind=I8 } -> x7
+    v46  BinopI { op=eq, lhs=v37, rhs_imm=13 }            -> x6
     v47  BinopI { op=ne, lhs=v46, rhs_imm=0 }             -> x7
     v48  Imm(0)                                           -> x7
     v49  Imm(0)                                           -> x7

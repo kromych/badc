@@ -47,23 +47,22 @@ Disassembly of section .text:
                	movl	(%rax,%rbx,4), %edi
                	callq	<addr>
                	cmpl	$0x51, %r12d
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx,%rbx,4), %esi
-               	cmpl	$0x51, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpl	%esi, %edx
+               	leaq	<rip>, %rcx # <addr>
+               	movl	(%rcx,%rbx,4), %edx
+               	cmpl	$0x51, %edx
+               	sete	%dil
+               	movzbq	%dil, %rdi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	cmpl	$-0x1, %r12d
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movl	(%rcx,%rbx,4), %esi
-               	cmpl	$-0x1, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpl	%esi, %edx
+               	cmpl	$-0x1, %edx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	%edx, %esi
                	jne	<addr>
                	cmpl	$-0x1, %eax
                	sete	%dl

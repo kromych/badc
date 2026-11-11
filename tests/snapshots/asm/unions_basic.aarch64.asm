@@ -35,7 +35,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	d0, [x29, #-0x8]
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
                	fcmpe	d0, d1

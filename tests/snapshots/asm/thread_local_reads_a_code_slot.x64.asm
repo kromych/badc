@@ -34,11 +34,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
-               	movq	(%rax), %rcx
-               	leaq	-<rip>, %rdx # <addr>
-               	cmpq	%rdx, %rcx
-               	jne	<addr>
                	movq	(%rax), %rax
+               	leaq	-<rip>, %rcx # <addr>
+               	cmpq	%rcx, %rax
+               	jne	<addr>
                	callq	*%rax
                	cmpq	$0x2, %rax
                	je	<addr>

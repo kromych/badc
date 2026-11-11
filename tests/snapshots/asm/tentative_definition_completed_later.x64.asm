@@ -129,10 +129,6 @@ Disassembly of section .text:
                	movzbq	<rip>, %rcx # <addr>
                	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movsbq	<rip>, %rcx # <addr>
-               	cmpl	$0xc, %ecx
-               	je	<addr>
-               	retq
                	movl	$0xd, %eax
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rcx # <addr>
@@ -143,6 +139,7 @@ Disassembly of section .text:
                	je	<addr>
                	retq
                	xorl	%eax, %eax
+               	retq
                	retq
                	movl	$0x5, %eax
                	retq

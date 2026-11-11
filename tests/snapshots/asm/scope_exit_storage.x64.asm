@@ -72,9 +72,9 @@ Disassembly of section .text:
 <release>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	cmpq	$0x0, (%rdi)
-               	je	<addr>
                	movq	(%rdi), %rdi
+               	testq	%rdi, %rdi
+               	je	<addr>
                	movl	0x200(%rdi), %esi
                	callq	<addr>
                	testl	%eax, %eax

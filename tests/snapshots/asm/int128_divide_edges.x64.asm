@@ -616,11 +616,10 @@ Disassembly of section .text:
                	movq	%rdx, -0x80(%rbp)
                	leaq	-0x80(%rbp), %rdx
                	movq	%rcx, -0x78(%rbp)
-               	movq	-0x88(%rbp), %rax
-               	testq	%rax, %rax
-               	jge	<addr>
                	movq	-0x90(%rbp), %rax
                	movq	-0x88(%rbp), %rcx
+               	testq	%rcx, %rcx
+               	jge	<addr>
                	testq	%rax, %rax
                	seta	%sil
                	movzbq	%sil, %rsi
@@ -630,11 +629,10 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movq	%rax, -0x40(%rbp)
                	movq	%rcx, -0x38(%rbp)
-               	movq	-0x78(%rbp), %rax
-               	testq	%rax, %rax
-               	jge	<addr>
                	movq	-0x80(%rbp), %rax
                	movq	-0x78(%rbp), %rcx
+               	testq	%rcx, %rcx
+               	jge	<addr>
                	testq	%rax, %rax
                	seta	%dl
                	movzbq	%dl, %rdx

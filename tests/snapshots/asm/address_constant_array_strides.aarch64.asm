@@ -64,11 +64,10 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x2, <page>
-               	ldr	x3, [x2, #0x48]
-               	ldrb	w3, [x3]
+               	ldr	x2, [x2, <lo12>]
+               	ldrb	w3, [x2]
                	cmp	w3, #0x65
                	b.ne	<addr>
-               	ldr	x2, [x2, #0x48]
                	ldrb	w2, [x2, #0x3]
                	cmp	w2, #0x68
                	b.eq	<addr>

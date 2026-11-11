@@ -55,7 +55,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	comisd	%xmm0, %xmm15
                	ja	<addr>
-               	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x400f70a3d70a3d71, %rax # imm = 0x400F70A3D70A3D71
                	movq	%rax, %xmm15
                	comisd	%xmm15, %xmm0

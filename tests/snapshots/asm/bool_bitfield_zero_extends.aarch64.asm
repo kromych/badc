@@ -33,39 +33,36 @@ Disassembly of section .text:
                	orr	x0, x0, #0x400
                	stur	w0, [x29, #-0x8]
                	and	x0, x0, #0xfffffffffffff7ff
-               	orr	x0, x0, #0x800
-               	stur	w0, [x29, #-0x8]
-               	ldurb	w1, [x29, #-0x7]
-               	and	x1, x1, #0x1
-               	cmp	w1, #0x1
+               	orr	x1, x0, #0x800
+               	stur	w1, [x29, #-0x8]
+               	ldurb	w0, [x29, #-0x7]
+               	and	x2, x0, #0x1
+               	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0x7]
-               	ubfx	x1, x1, #1, #1
-               	cbz	w1, <addr>
+               	ubfx	x2, x0, #1, #1
+               	cbz	w2, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x40               // =64
-               	ldurb	w2, [x29, #-0x7]
-               	and	x2, x2, #0x1
-               	sub	x1, x1, x2, lsl #3
-               	cmp	w1, #0x38
+               	mov	x2, #0x40               // =64
+               	and	x0, x0, #0x1
+               	sub	x0, x2, x0, lsl #3
+               	cmp	w0, #0x38
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0x7]
-               	tbz	w1, #0x0, <addr>
-               	ldurb	w1, [x29, #-0x7]
-               	ubfx	x1, x1, #1, #1
-               	cbnz	w1, <addr>
-               	mov	w0, w0
+               	ldurb	w0, [x29, #-0x7]
+               	tbz	w0, #0x0, <addr>
+               	ubfx	x0, x0, #1, #1
+               	cbnz	w0, <addr>
+               	mov	w0, w1
                	ubfx	x1, x0, #11, #1
                	cmp	w1, #0x1
                	b.eq	<addr>

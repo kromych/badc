@@ -85,23 +85,21 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w3, [x29, #-0x8]
-               	mvn	x3, x3
-               	lsl	x3, x3, #1
+               	mvn	x4, x3
+               	lsl	x4, x4, #1
                	mov	x17, #0xfffffffe        // =4294967294
-               	cmp	w3, w17
+               	cmp	w4, w17
                	b.ne	<addr>
-               	ldurb	w3, [x29, #-0x8]
-               	mvn	x3, x3
-               	mov	w3, w3
-               	lsr	x3, x3, #1
+               	mvn	x4, x3
+               	mov	w4, w4
+               	lsr	x4, x4, #1
                	mov	x17, #0x7fffffff        // =2147483647
-               	cmp	w3, w17
+               	cmp	w4, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w3, [x29, #-0x8]
                	mvn	x3, x3
                	ldr	w4, [x1, #0x18]
                	cmp	w3, w4

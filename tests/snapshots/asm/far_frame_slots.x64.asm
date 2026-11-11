@@ -635,11 +635,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	-0x1000(%rbp), %rcx
-               	addq	%rbx, %rcx
-               	cmpq	%rcx, %rax
+               	leaq	(%rbx,%rcx), %rsi
+               	cmpq	%rsi, %rax
                	jne	<addr>
-               	movq	-0x1000(%rbp), %rax
-               	addq	%rbx, %rax
+               	leaq	(%rbx,%rcx), %rax
                	leaq	(%rax,%rax,2), %rax
                	cmpq	%rax, %rdx
                	je	<addr>

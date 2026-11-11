@@ -41,13 +41,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v15  ImmData(72)                                      -> x0
     v16  Load { addr=v15, disp=0, kind=I64 pc_rel }       -> x0
     v17  ImmData(32)                                      -> x1
-    v18  Binop { op=ne, lhs=v16, rhs=v17 }                -> x0
-    v19  Imm(0)                                           -> x1
+    v18  Binop { op=ne, lhs=v16, rhs=v17 }                -> x1
+    v19  Imm(0)                                           -> x2
     terminator Bnz { cond=v18, target=b6, fall=b5 }   (exit_acc=v18)
   block 5  start_pc=0
-    v20  ImmData(72)                                      -> x0
-    v21  Load { addr=v15, disp=0, kind=I64 pc_rel }       -> x0
-    v22  Load { addr=v21, disp=0, kind=I32 }              -> x0
+    v20  ImmData(72)                                      -> x1
+    v21  Load { addr=v15, disp=0, kind=I64 pc_rel }       -> x1
+    v22  Load { addr=v16, disp=0, kind=I32 }              -> x0
     v23  BinopI { op=ne, lhs=v22, rhs_imm=99 }            -> x0
     v24  Imm(0)                                           -> x1
     v25  Imm(0)                                           -> x1

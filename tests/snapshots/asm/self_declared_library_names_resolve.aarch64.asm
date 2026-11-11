@@ -19,9 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
-               	cbz	x1, <addr>
                	ldr	x0, [x0]
+               	cbz	x0, <addr>
                	ldr	x0, [x0]
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1

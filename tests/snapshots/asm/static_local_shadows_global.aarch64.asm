@@ -29,7 +29,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldrsw	x2, [x0, #0x20]
+               	mov	x2, x3
                	add	x3, x2, #0x1
                	str	w3, [x0, #0x20]
                	mov	x17, #0x11d8            // =4568

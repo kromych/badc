@@ -443,24 +443,23 @@ Disassembly of section .text:
                	shrq	$0x1b, %rcx
                	xorq	%rcx, %rax
                	movq	%rax, <rip> # <addr>
-               	movabsq	$-0x61c8864680b583eb, %r11 # imm = 0x9E3779B97F4A7C15
-               	imulq	%r11, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x3c, %rcx
-               	cmpl	$0x5, %ecx
+               	movabsq	$-0x61c8864680b583eb, %rcx # imm = 0x9E3779B97F4A7C15
+               	imulq	%rax, %rcx
+               	movq	%rcx, %rdx
+               	shrq	$0x3c, %rdx
+               	cmpl	$0x5, %edx
                	jae	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %rsi
-               	shrq	$0x20, %rsi
+               	leaq	<rip>, %rsi # <addr>
+               	shrq	$0x20, %rcx
                	movl	$0xb, %eax
                	movl	$0xa, %edx
                	testq	%rdi, %rdi
                	movq	%rdx, %r8
                	cmovneq	%rax, %r8
-               	movl	%esi, %eax
+               	movl	%ecx, %eax
                	xorl	%edx, %edx
                	divl	%r8d
-               	movq	(%rcx,%rdx,8), %rax
+               	movq	(%rsi,%rdx,8), %rax
                	movq	%rax, -0x10(%rbp)
                	movabsq	$0x7ff0000000000000, %rcx # imm = 0x7FF0000000000000
                	andq	%rax, %rcx
@@ -484,7 +483,6 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm0
                	leave
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax

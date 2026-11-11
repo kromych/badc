@@ -582,14 +582,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
     v472 LocalAddr(-33)                                   -> x0
     v473 BinopI { op=add, lhs=v472, rhs_imm=16 }          -> x0
     v474 LoadLocal { off=-33, disp=16, kind=I64 }         -> x0
-    v475 BinopI { op=le, lhs=v474, rhs_imm=0 }            -> x0
-    v476 Imm(0)                                           -> x1
+    v475 BinopI { op=le, lhs=v474, rhs_imm=0 }            -> x1
+    v476 Imm(0)                                           -> x2
     terminator Bnz { cond=v475, target=b41, fall=b40 }   (exit_acc=v475)
   block 40  start_pc=0
-    v477 LocalAddr(-33)                                   -> x0
-    v478 BinopI { op=add, lhs=v472, rhs_imm=16 }          -> x0
-    v479 LoadLocal { off=-33, disp=16, kind=I64 }         -> x0
-    v480 BinopI { op=gt, lhs=v479, rhs_imm=3600 }         -> x0
+    v477 LocalAddr(-33)                                   -> x1
+    v478 BinopI { op=add, lhs=v472, rhs_imm=16 }          -> x1
+    v479 LoadLocal { off=-33, disp=16, kind=I64 }         -> x1
+    v480 BinopI { op=gt, lhs=v474, rhs_imm=3600 }         -> x0
     v481 Imm(0)                                           -> x1
     v482 Imm(0)                                           -> x1
     v483 Imm(0)                                           -> x1

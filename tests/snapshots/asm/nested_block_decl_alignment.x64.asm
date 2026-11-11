@@ -41,12 +41,11 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	leaq	<rip>, %rdx # <addr>
                	movb	$0x5, <rip> # <addr>
-               	testb	$0x7f, %dl
-               	jne	<addr>
-               	movsbq	<rip>, %rdx # <addr>
-               	cmpl	$0x5, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	andq	$0x7f, %rdx
+               	movl	$0x1, %esi
+               	testl	%edx, %edx
+               	movq	%rax, %rdx
+               	cmoveq	%rsi, %rdx
                	addq	%rdx, %rcx
                	leaq	(%rsp), %rdx
                	movb	$0x7, (%rsp)
@@ -70,7 +69,5 @@ Disassembly of section .text:
                	cmoveq	%rcx, %rax
                	leave
                	retq
-               	movq	%rax, %rdx
-               	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

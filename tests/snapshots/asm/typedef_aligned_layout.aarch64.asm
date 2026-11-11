@@ -181,16 +181,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	and	x1, x0, #0xf
-               	cbz	w1, <addr>
+               	and	x0, x0, #0xf
+               	cbz	w0, <addr>
                	mov	x0, #0x4c               // =76
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldrsw	x0, [x0]
-               	add	x0, x0, #0x3
-               	cmp	w0, #0x6
-               	b.eq	<addr>
-               	mov	x0, #0x4e               // =78
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x9                // =9

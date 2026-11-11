@@ -85,20 +85,20 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	-0x8(%rbp), %rcx
-               	xorq	$-0x1, %rcx
-               	shlq	%rcx
-               	cmpl	$-0x2, %ecx
+               	movq	%rcx, %rdx
+               	xorq	$-0x1, %rdx
+               	shlq	%rdx
+               	cmpl	$-0x2, %edx
                	jne	<addr>
-               	movzbq	-0x8(%rbp), %rcx
-               	xorq	$-0x1, %rcx
-               	movl	%ecx, %ecx
-               	shrq	%rcx
-               	cmpl	$0x7fffffff, %ecx       # imm = 0x7FFFFFFF
+               	movq	%rcx, %rdx
+               	xorq	$-0x1, %rdx
+               	movl	%edx, %edx
+               	shrq	%rdx
+               	cmpl	$0x7fffffff, %edx       # imm = 0x7FFFFFFF
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movzbq	-0x8(%rbp), %rcx
                	xorq	$-0x1, %rcx
                	movl	<rip>, %edx # <addr>
                	cmpl	%edx, %ecx

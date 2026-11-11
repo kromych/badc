@@ -34,16 +34,15 @@ Disassembly of section .text:
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rdi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	movq	%rax, %rbx
                	leaq	<rip>, %rdi

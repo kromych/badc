@@ -14,33 +14,32 @@ Disassembly of section .text:
                	brk	#0x1
 
 <thread_main>:
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x10
-               	ldr	x0, [x1]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x0, lsl #12   // =0x0
+               	add	x0, x0, #0x10
+               	ldr	x1, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	x0, x2
+               	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0xbad1             // =47825
                	ret
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x18
-               	ldr	x2, [x0]
+               	mrs	x1, TPIDR_EL0
+               	add	x1, x1, #0x0, lsl #12   // =0x0
+               	add	x1, x1, #0x18
+               	ldr	x2, [x1]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	add	x3, x3, #0x8
                	cmp	x2, x3
                	b.ne	<addr>
-               	ldr	x2, [x0]
                	ldrsw	x2, [x2]
                	cmp	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0xbad2             // =47826
                	ret
-               	str	xzr, [x1]
                	str	xzr, [x0]
+               	str	xzr, [x1]
                	mov	x0, #0x63               // =99
                	ret
 
@@ -106,12 +105,11 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
-               	ldr	x1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x1, x2
-               	b.ne	<addr>
                	ldr	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
+               	b.ne	<addr>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7
                	b.eq	<addr>
@@ -122,13 +120,12 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
-               	ldr	x1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x2, x2, #0x8
-               	cmp	x1, x2
-               	b.ne	<addr>
                	ldr	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x1, x1, #0x8
+               	cmp	x0, x1
+               	b.ne	<addr>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x3
                	b.eq	<addr>

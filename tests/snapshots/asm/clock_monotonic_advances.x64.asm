@@ -59,7 +59,6 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %rax
                	testq	%rax, %rax
                	jl	<addr>
-               	movq	-0x20(%rbp), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jl	<addr>
                	movl	$0x4, %eax
@@ -90,8 +89,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movq	-0x18(%rbp), %rax
-               	movq	-0x28(%rbp), %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movq	-0x10(%rbp), %rax

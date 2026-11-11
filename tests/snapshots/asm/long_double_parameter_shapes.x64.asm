@@ -75,9 +75,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	comisd	%xmm0, %xmm15
                	jbe	<addr>
-               	fldt	-0x20(%rbp)
-               	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
@@ -89,10 +86,6 @@ Disassembly of section .text:
                	fldt	(%rcx)
                	leave
                	retq
-               	fldt	-0x20(%rbp)
-               	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
-               	jmp	<addr>
 
 <ninth>:
                	pushq	%rbp

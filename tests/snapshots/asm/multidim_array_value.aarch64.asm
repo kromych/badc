@@ -78,7 +78,6 @@ Disassembly of section .text:
                	ldrsw	x4, [x0, #0x14]
                	cmp	w4, #0x6
                	b.ne	<addr>
-               	ldrsw	x4, [x0, #0x14]
                	cmp	w4, #0x6
                	b.ne	<addr>
                	ldrsw	x4, [x0, #0x10]

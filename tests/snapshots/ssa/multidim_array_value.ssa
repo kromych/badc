@@ -232,18 +232,18 @@ fn ent_pc=9 n_params=2 variadic=false locals=3
     v194 Imm(8)                                           -> x0
     v195 BinopI { op=add, lhs=v190, rhs_imm=20 }          -> x0
     v196 Load { addr=v190, disp=20, kind=I32 pc_rel }     -> x0
-    v197 BinopI { op=ne, lhs=v196, rhs_imm=6 }            -> x0
-    v198 Imm(1)                                           -> x2
-    v199 Imm(0)                                           -> x2
+    v197 BinopI { op=ne, lhs=v196, rhs_imm=6 }            -> x2
+    v198 Imm(1)                                           -> x6
+    v199 Imm(0)                                           -> x6
     terminator Bnz { cond=v197, target=b14, fall=b12 }   (exit_acc=v197)
   block 12  start_pc=0
-    v200 ImmData(32)                                      -> x0
-    v201 Imm(12)                                          -> x0
-    v202 BinopI { op=add, lhs=v190, rhs_imm=12 }          -> x0
-    v203 Imm(8)                                           -> x0
-    v204 BinopI { op=add, lhs=v190, rhs_imm=20 }          -> x0
-    v205 Load { addr=v190, disp=20, kind=I32 pc_rel }     -> x0
-    v206 BinopI { op=ne, lhs=v205, rhs_imm=6 }            -> x0
+    v200 ImmData(32)                                      -> x2
+    v201 Imm(12)                                          -> x2
+    v202 BinopI { op=add, lhs=v190, rhs_imm=12 }          -> x2
+    v203 Imm(8)                                           -> x2
+    v204 BinopI { op=add, lhs=v190, rhs_imm=20 }          -> x2
+    v205 Load { addr=v190, disp=20, kind=I32 pc_rel }     -> x2
+    v206 BinopI { op=ne, lhs=v196, rhs_imm=6 }            -> x0
     v207 BinopI { op=ne, lhs=v206, rhs_imm=0 }            -> x2
     v208 Imm(0)                                           -> x2
     v209 Imm(0)                                           -> x2

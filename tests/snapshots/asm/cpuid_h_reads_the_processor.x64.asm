@@ -164,7 +164,6 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %eax
                	cmpl	%r8d, %eax
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
                	testl	$0x4000000, %eax        # imm = 0x4000000
                	jne	<addr>
                	movl	$0x6, %eax

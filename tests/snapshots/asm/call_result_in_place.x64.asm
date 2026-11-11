@@ -572,16 +572,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, (%rbx)
                	movq	%rdx, 0x8(%rbx)
+               	xorl	%ecx, %ecx
+               	cmpq	$0x6, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
                	cmpq	$0x3, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	xorl	%eax, %eax
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movq	0x8(%rbx), %rax
-               	cmpq	$0x6, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	movq	%rcx, %rax
+               	cmoveq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq

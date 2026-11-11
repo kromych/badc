@@ -9,10 +9,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 }    -> -
     v5   Extend { value=v3, kind=I32 }                    -> x0
-    v6   Extend { value=v3, kind=I32 }                    -> x0
+    v6   Load { addr=v1, disp=0, kind=I32 }               -> x1
     v7   TlsAddr(24)                                      -> x1
     v8   Load { addr=v7, disp=0, kind=I32 }               -> x1
-    v9   Binop { op=add, lhs=v6, rhs=v8 }                 -> x0
+    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x0
     v10  Extend { value=v9, kind=I32, nsw }               -> x1
     v11  Extend { value=v9, kind=I32 }                    -> x1
     terminator Return(v9)   (exit_acc=v9)

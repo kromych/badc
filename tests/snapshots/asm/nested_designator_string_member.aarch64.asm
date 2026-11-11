@@ -24,7 +24,6 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	ldrb	w3, [x1]
                	cbz	x3, <addr>
-               	ldrb	w3, [x1]
                	ldrb	w4, [x2]
                	cmp	w3, w4
                	b.ne	<addr>
@@ -83,7 +82,6 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	ldrb	w3, [x1]
                	cbz	x3, <addr>
-               	ldrb	w3, [x1]
                	ldrb	w4, [x2]
                	cmp	w3, w4
                	b.ne	<addr>

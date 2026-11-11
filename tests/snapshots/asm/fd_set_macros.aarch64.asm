@@ -49,7 +49,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	tbnz	w0, #0x7, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80
@@ -109,7 +108,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	tbnz	w0, #0x0, <addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x80

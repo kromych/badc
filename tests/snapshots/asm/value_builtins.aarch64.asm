@@ -23,17 +23,15 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x60]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x60]
-               	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x3
+               	ldursw	x2, [x29, #-0x8]
+               	cmp	w2, #0x3
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x60]
                	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x0, #0x60]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x60]
                	mov	x0, x1

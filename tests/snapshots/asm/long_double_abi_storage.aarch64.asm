@@ -281,16 +281,15 @@ Disassembly of section .text:
                	ldr	x16, [x3]
                	str	x16, [x2]
                	ldur	x2, [x29, #-0x8]
-               	and	x2, x2, #0x7ff0000000000000
+               	and	x3, x2, #0x7ff0000000000000
                	mov	x17, #0x7ff0000000000000 // =9218868437227405312
-               	cmp	x2, x17
+               	cmp	x3, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x20, x21, [sp, #0x40]
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x2, [x29, #-0x8]
                	and	x2, x2, #0xfffffffffffff
                	cbnz	x2, <addr>
                	mov	x0, #0x4                // =4

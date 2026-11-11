@@ -47,9 +47,6 @@ Disassembly of section .text:
                	movq	$0x19, <rip> # <addr>
                	cmpq	$0x0, <rip> # <addr>
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x19, %rcx
-               	jne	<addr>
                	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x7, %eax

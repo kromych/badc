@@ -111,7 +111,6 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	testq	%rax, %rax
                	jl	<addr>
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jl	<addr>
                	movl	$0x28, %eax

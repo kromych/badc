@@ -6872,26 +6872,24 @@ Disassembly of section .text:
                	sub	x2, x29, #0x50
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
-               	ldur	x4, [x29, #-0x70]
+               	ldur	x3, [x29, #-0x70]
                	ldur	x0, [x29, #-0x68]
                	ldur	x5, [x29, #-0x60]
-               	ldur	x3, [x29, #-0x58]
-               	cmp	x0, x3
+               	ldur	x4, [x29, #-0x58]
+               	cmp	x0, x4
                	cset	x6, lt
-               	cmp	x0, x3
-               	cset	x0, eq
-               	cmp	x4, x5
-               	cset	x3, lo
-               	and	x0, x0, x3
-               	orr	x0, x6, x0
-               	cbz	x0, <addr>
+               	cmp	x0, x4
+               	cset	x4, eq
+               	cmp	x3, x5
+               	cset	x5, lo
+               	and	x4, x4, x5
+               	orr	x4, x6, x4
+               	cbz	x4, <addr>
                	ldr	x0, [x1]
                	ldr	x1, [x1, #0x8]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x3, [x29, #-0x70]
-               	ldur	x0, [x29, #-0x68]
                	ldur	x4, [x29, #-0x50]
                	ldur	x1, [x29, #-0x48]
                	cmp	x1, x0
@@ -7354,9 +7352,8 @@ Disassembly of section .text:
                	ldrsw	x0, [x22, #0xc]
                	cmp	w0, #0x12
                	b.gt	<addr>
-               	add	x0, x20, x20, lsr #63
-               	asr	x21, x0, #1
-               	ldrsw	x0, [x22, #0xc]
+               	add	x1, x20, x20, lsr #63
+               	asr	x21, x1, #1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	add	x0, x27, x27, lsr #63
@@ -7452,7 +7449,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x22, #0xc]
                	cmp	w0, #0x1c
                	b.lt	<addr>
-               	ldrsw	x0, [x22, #0xc]
                	lsl	x1, x20, #1
                	cmp	w0, #0x1d
                	csel	x21, x1, x20, eq

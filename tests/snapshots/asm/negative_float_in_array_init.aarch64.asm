@@ -35,11 +35,10 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	fadd	d0, d0, d1
-               	ldr	d1, [x0, #0x10]
-               	fadd	d0, d0, d1
+               	ldr	d1, [x0]
+               	ldr	d2, [x0, #0x8]
+               	fadd	d1, d1, d2
+               	fadd	d0, d1, d0
                	adrp	x16, <addr>
                	ldr	d1, [x16, #0x20]
                	fcmpe	d0, d1

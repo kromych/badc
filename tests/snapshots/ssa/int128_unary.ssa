@@ -190,23 +190,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v174 BinopI { op=or, lhs=v173, rhs_imm=0 }            -> x1
     terminator Bz { cond=v173, target=b49, fall=b9 }   (exit_acc=v173)
   block 9  start_pc=0
-    v177 Imm(1)                                           -> x0
-    v178 Imm(0)                                           -> x0
-    v179 LocalAddr(-55)                                   -> x0
-    v180 Imm(0)                                           -> x0
-    v181 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x0
-    v182 Imm(0)                                           -> x0
-    v183 Imm(0)                                           -> x0
-    v184 Imm(0)                                           -> x0
-    v185 Imm(0)                                           -> x0
+    v177 Imm(1)                                           -> x1
+    v178 Imm(0)                                           -> x1
+    v179 LocalAddr(-55)                                   -> x1
+    v180 Imm(0)                                           -> x1
+    v181 BinopI { op=add, lhs=v179, rhs_imm=8 }           -> x1
+    v182 Imm(0)                                           -> x1
+    v183 Imm(0)                                           -> x1
+    v184 Imm(0)                                           -> x1
+    v185 Imm(0)                                           -> x1
     v186 LocalAddr(-56)                                   -> x1
-    v187 Imm(0)                                           -> x0
-    v188 BinopI { op=add, lhs=v186, rhs_imm=8 }           -> x0
-    v189 LoadLocal { off=-56, disp=8, kind=I64 }          -> x0
-    v190 BinopI { op=or, lhs=v189, rhs_imm=0 }            -> x2
+    v187 Imm(0)                                           -> x2
+    v188 BinopI { op=add, lhs=v186, rhs_imm=8 }           -> x2
+    v189 LoadLocal { off=-56, disp=8, kind=I64 }          -> x2
+    v190 BinopI { op=or, lhs=v173, rhs_imm=0 }            -> x2
     v191 Imm(0)                                           -> x2
     v192 Imm(0)                                           -> x2
-    terminator Bz { cond=v189, target=b12, fall=b10 }   (exit_acc=v189)
+    terminator Bz { cond=v173, target=b12, fall=b10 }   (exit_acc=v173)
   block 10  start_pc=0
     v208 Imm(1)                                           -> x0
     v209 Imm(0)                                           -> x0

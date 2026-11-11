@@ -28,20 +28,20 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v3   Binop { op=flt, lhs=v1, rhs=v2 }                 -> x0
     terminator Bz { cond=v3, target=b3, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v4   LoadLocal { off=-6, kind=F80 }                   -> d0
-    v5   Fneg(v4)                                         -> d0
+    v4   LoadLocal { off=-6, kind=F80 }                   -> d1
+    v5   Fneg(v1)                                         -> d0
     v6   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0
-    v9   Phi { incoming=[b1:v5, b3:v7], kind=F64 }        -> d0
+    v9   Phi { incoming=[b1:v5, b3:v1], kind=F64 }        -> d0
     v10  Imm(0)                                           -> x0
     v11  LocalAddr(-7)                                    -> x0
     v12  StoreLocal { off=-7, value=v9, kind=F80 }        -> -
     terminator Return(v11)   (exit_acc=v11)
   block 3  start_pc=0
-    v7   LoadLocal { off=-6, kind=F80 }                   -> d0
+    v7   LoadLocal { off=-6, kind=F80 }                   -> d1
     v8   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v7)
+    terminator Jmp(b2)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=ninth
 fn ent_pc=3 n_params=9 variadic=false locals=0

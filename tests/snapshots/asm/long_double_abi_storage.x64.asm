@@ -75,15 +75,14 @@ Disassembly of section .text:
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
                	movq	-0x8(%rbp), %rax
+               	movabsq	$0x7ff0000000000000, %rcx # imm = 0x7FF0000000000000
+               	andq	%rax, %rcx
                	movabsq	$0x7ff0000000000000, %r11 # imm = 0x7FF0000000000000
-               	andq	%r11, %rax
-               	movabsq	$0x7ff0000000000000, %r11 # imm = 0x7FF0000000000000
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movq	-0x8(%rbp), %rax
                	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
                	andq	%r11, %rax
                	testq	%rax, %rax

@@ -42,11 +42,11 @@ Disassembly of section .text:
                	leaq	0x29(%rcx), %rax
                	movq	%rax, <rip> # <addr>
                	xorq	%rax, %rcx
-               	xorq	$0x29, %rax
-               	andq	%rcx, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rdx
+               	xorq	$0x29, %rdx
+               	andq	%rdx, %rcx
+               	testq	%rcx, %rcx
                	jl	<addr>
-               	movq	<rip>, %rax # <addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	andq	%rdx, %rax
                	testq	%rax, %rax
                	jl	<addr>
-               	cmpq	$0x0, -0x8(%rbp)
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

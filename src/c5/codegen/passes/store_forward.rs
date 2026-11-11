@@ -14,10 +14,10 @@
 //!   v = Load { addr=p, kind=I64 }        # -> uses of v become uses of s
 //! ```
 //!
-//! The pass is intra-block: the forwarding table resets at every block
-//! boundary, so a forward only fires when the store and the load sit in
-//! one straight-line run. Cross-block forwarding needs dominance and
-//! per-path availability and is left out.
+//! The tables run over an extended basic block: a block that one
+//! predecessor alone reaches starts from that block's tables at its end,
+//! and any other block starts empty. A merge would need per-path
+//! availability and is left out.
 //!
 //! Aliasing is tracked conservatively. Two locations are known distinct
 //! only when they share the same address value and their byte ranges do
@@ -53,7 +53,7 @@
 //! `Mcpy`, or atomic can write it; its entries survive those
 //! instructions and die at an overlapping `StoreLocal`, at a
 //! call (a reload after the call is cheaper than keeping the value live
-//! across it), or at the block boundary. An address-exposed slot
+//! across it), or where control merges. An address-exposed slot
 //! (`LocalAddr` taken, e.g. by an asm output) still forwards, under a
 //! stricter discipline: any instruction that can write memory through a
 //! pointer also kills its entries. A volatile access neither forwards
@@ -131,7 +131,7 @@ fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
     }
 }
 
-/// A known-available memory value within the current block.
+/// A known-available memory value within the current extended block.
 #[derive(Clone, Copy)]
 struct Entry {
     addr: ValueId,
@@ -149,7 +149,7 @@ struct Entry {
     load_kind: Option<LoadKind>,
 }
 
-/// A known-available frame-slot value within the current block: the
+/// A known-available frame-slot value within the current extended block: the
 /// `width` bytes at `disp` past slot `off`'s base, which may reach the next cell.
 #[derive(Clone, Copy)]
 struct SlotEntry {
@@ -294,10 +294,16 @@ fn run_one(func: &mut FunctionSsa) {
     let exposed = exposed_slots(func, &slots);
     let span = emitted_span(func);
 
-    for block in &func.blocks {
-        let mut table: Vec<Entry> = Vec::new();
-        let mut indexed: Vec<IndexedEntry> = Vec::new();
-        let mut slot_table: Vec<SlotEntry> = Vec::new();
+    // A block one predecessor alone reaches starts from what that block
+    // ended with: the predecessor dominates it, and no other path enters.
+    let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+    type Tables = (Vec<Entry>, Vec<IndexedEntry>, Vec<SlotEntry>);
+    let mut exits: Vec<Option<Tables>> = alloc::vec![None; func.blocks.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let (mut table, mut indexed, mut slot_table) = match preds[b].as_slice() {
+            [p] if *p as usize != b => exits[*p as usize].clone().unwrap_or_default(),
+            _ => Default::default(),
+        };
         for idx in block.inst_range.clone() {
             let i = idx as usize;
             if i >= func.insts.len() {
@@ -330,20 +336,16 @@ fn run_one(func: &mut FunctionSsa) {
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
-                    // Record this load so a later identical one forwards.
-                    // The value a future load should reuse is the stored
-                    // value when this load redirected to it, otherwise
-                    // this load's own id.
-                    if !table
-                        .iter()
-                        .any(|e| e.addr == addr && e.disp == disp && e.width == w)
-                    {
-                        let value = redirect[i].unwrap_or(i as ValueId);
+                    // Record this load so a later identical one forwards:
+                    // one that did not forward stands in for an entry too
+                    // far to serve; one that did leaves the entry it reused.
+                    if redirect[i].is_none() {
+                        table.retain(|e| !(e.addr == addr && e.disp == disp && e.width == w));
                         table.push(Entry {
                             addr,
                             disp,
                             width: w,
-                            value,
+                            value: i as ValueId,
                             src_idx: idx,
                             load_kind: Some(kind),
                         });
@@ -529,14 +531,15 @@ fn run_one(func: &mut FunctionSsa) {
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
                     }
-                    if !indexed.iter().any(same) {
+                    if redirect[i].is_none() {
+                        indexed.retain(|e| !same(e));
                         indexed.push(IndexedEntry {
                             base,
                             index,
                             index_ext: ext,
                             scale,
                             width: w,
-                            value: redirect[i].unwrap_or(i as ValueId),
+                            value: i as ValueId,
                             src_idx: idx,
                             load_kind: Some(kind),
                         });
@@ -603,6 +606,7 @@ fn run_one(func: &mut FunctionSsa) {
                 }
             }
         }
+        exits[b] = Some((table, indexed, slot_table));
     }
     for (idx, inst) in rewrites {
         func.insts[idx] = inst;
@@ -2153,6 +2157,89 @@ mod tests {
         );
         run_one(&mut f);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
+    }
+
+    use crate::c5::ir::{BinOp, NO_VALUE, ValueId};
+
+    fn load_of(addr: ValueId) -> Inst {
+        Inst::Load {
+            addr,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    /// `insts` over two blocks split at `split`, the first jumping to the
+    /// second, which returns `ret`.
+    fn two_blocks(insts: Vec<Inst>, split: u32, ret: ValueId) -> FunctionSsa {
+        let n = insts.len() as u32;
+        let mut f = fresh(insts, Terminator::Return(ret), ret);
+        let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
+            start_pc: 0,
+            inst_range: r,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        f.blocks = alloc::vec![
+            block(0..split, Terminator::Jmp(1)),
+            block(split..n, Terminator::Return(ret)),
+        ];
+        f
+    }
+
+    /// A block its one predecessor alone reaches reuses a load that block
+    /// made.
+    #[test]
+    fn a_load_forwards_into_a_block_one_predecessor_reaches() {
+        let param = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let add = Inst::Binop {
+            op: BinOp::Add,
+            lhs: 1,
+            rhs: 2,
+        };
+        let mut f = two_blocks(alloc::vec![param, load_of(0), load_of(0), add], 2, 3);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[3], Inst::Binop { lhs: 1, rhs: 1, .. }),
+            "{:?}",
+            f.insts[3]
+        );
+    }
+
+    /// An entry too far to serve gives way to the next load of its
+    /// location, which the load after it then reuses.
+    #[test]
+    fn a_load_stands_in_for_an_entry_too_far_to_serve() {
+        let param = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let mut insts = alloc::vec![param, load_of(0)];
+        insts.extend(core::iter::repeat_n(
+            Inst::Imm(0),
+            super::MAX_FORWARD_DISTANCE as usize + 1,
+        ));
+        let near = insts.len() as ValueId;
+        insts.extend([load_of(0), load_of(0)]);
+        insts.push(Inst::Binop {
+            op: BinOp::Sub,
+            lhs: near,
+            rhs: near + 1,
+        });
+        let ret = near + 2;
+        let mut f = two_blocks(insts, 2, ret);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[ret as usize], Inst::Binop { lhs, rhs, .. } if lhs == near && rhs == near),
+            "{:?}",
+            f.insts[ret as usize]
+        );
     }
 
     #[test]

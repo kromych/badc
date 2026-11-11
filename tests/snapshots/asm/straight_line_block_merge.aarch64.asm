@@ -193,23 +193,21 @@ Disassembly of section .text:
 <scan>:
                	mov	x5, x0
                	mov	x0, #0x0                // =0
-               	mov	x6, #-0x1               // =-1
+               	mov	x7, #-0x1               // =-1
                	mov	x4, x0
                	cmp	w0, w1
                	b.ge	<addr>
-               	ldrsw	x7, [x5, x0, lsl #2]
-               	cmp	w7, w2
+               	ldrsw	x6, [x5, x0, lsl #2]
+               	cmp	w6, w2
                	b.lt	<addr>
-               	ldrsw	x7, [x5, x0, lsl #2]
-               	cmp	w7, w3
+               	cmp	w6, w3
                	b.gt	<addr>
                	add	x4, x4, #0x1
                	b	<addr>
-               	ldrsw	x7, [x5, x0, lsl #2]
-               	cmp	w7, w6
+               	ldrsw	x6, [x5, x0, lsl #2]
+               	cmp	w6, w7
                	b.eq	<addr>
-               	ldrsw	x7, [x5, x0, lsl #2]
-               	cmp	w7, #0x63
+               	cmp	w6, #0x63
                	b.eq	<addr>
                	add	x4, x4, #0x64
                	add	x0, x0, #0x1

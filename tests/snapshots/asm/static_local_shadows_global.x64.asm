@@ -38,7 +38,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	<rip>, %eax # <addr>
+               	movq	%rcx, %rax
                	leaq	0x1(%rax), %rcx
                	movl	%ecx, <rip> # <addr>
                	cmpl	$0x11d8, %eax           # imm = 0x11D8

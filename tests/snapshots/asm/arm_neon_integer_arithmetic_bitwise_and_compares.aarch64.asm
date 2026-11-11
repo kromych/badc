@@ -4857,12 +4857,11 @@ Disassembly of section .text:
                	ldr	x17, [sp, #0xf8]
                	add	x20, x0, x17, lsl #5
                	ldrsw	x0, [x20, #0xc]
-               	cmp	w0, #0x12
                	mov	x26, #0x1               // =1
-               	b.eq	<addr>
-               	ldrsw	x0, [x20, #0xc]
                	cmp	w0, #0x13
-               	cset	x0, eq
+               	cset	x1, eq
+               	cmp	w0, #0x12
+               	csel	x0, x26, x1, eq
                	cbnz	x0, <addr>
                	ldrsw	x0, [x20, #0xc]
                	cmp	w0, #0x14
@@ -5060,10 +5059,7 @@ Disassembly of section .text:
                	str	x16, [sp, #0x100]
                	ldr	x16, [sp, #0x100]
                	cmp	w16, #0x6
-               	b.ge	<addr>
-               	b	<addr>
-               	mov	x0, x26
-               	b	<addr>
+               	b.lt	<addr>
                	ldr	x16, [sp, #0xf8]
                	add	x16, x16, #0x1
                	str	x16, [sp, #0xf8]

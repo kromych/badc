@@ -40,9 +40,6 @@ Disassembly of section .text:
                	str	x1, [x4, #0x10]
                	ldr	x1, [x4]
                	cbnz	x1, <addr>
-               	ldr	x1, [x4, #0x10]
-               	cmp	x1, #0x19
-               	b.ne	<addr>
                	ldr	x1, [x4, #0x18]
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7

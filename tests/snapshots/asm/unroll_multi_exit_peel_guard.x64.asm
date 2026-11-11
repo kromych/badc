@@ -79,40 +79,43 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <scan>:
-               	xorl	%eax, %eax
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
+               	xorl	%ecx, %ecx
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
                	jge	<addr>
+               	movq	%rcx, %rax
                	xorq	$-0x1, %rax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rdi, %rcx
                	jge	<addr>
                	retq
                	movq	<rip>, %rcx # <addr>
                	testq	%rcx, %rcx
-               	jl	<addr>
-               	movq	<rip>, %rcx # <addr>
+               	jge	<addr>
+               	movq	%rax, %rcx
+               	jmp	<addr>
                	imulq	$0xa, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rdi, %rcx
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rdi, %rax
+               	jge	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
                	jl	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
+               	imulq	$0x64, %rax, %rax
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rdi, %rax
+               	jge	<addr>
+               	movq	%rcx, %rax
+               	jmp	<addr>
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
                	jl	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	imulq	$0x64, %rcx, %rcx
-               	addq	%rcx, %rax
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rdi, %rcx
-               	jl	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	jl	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
+               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rdi, %rcx

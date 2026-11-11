@@ -372,17 +372,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v287 Imm(12)                                          -> x1
     v288 Imm(0)                                           -> x1
     v289 BinopI { op=and, lhs=v258, rhs_imm=4294967295 }  -> x1
-    v290 Binop { op=ne, lhs=v285, rhs=v258 }              -> x0
-    v291 BinopI { op=ne, lhs=v290, rhs_imm=0 }            -> x1
-    v292 Imm(0)                                           -> x1
-    v293 Imm(0)                                           -> x1
-    v294 Imm(0)                                           -> x1
-    v295 Imm(0)                                           -> x1
+    v290 Binop { op=ne, lhs=v285, rhs=v258 }              -> x1
+    v291 BinopI { op=ne, lhs=v290, rhs_imm=0 }            -> x2
+    v292 Imm(0)                                           -> x2
+    v293 Imm(0)                                           -> x2
+    v294 Imm(0)                                           -> x2
+    v295 Imm(0)                                           -> x2
     terminator Bnz { cond=v290, target=b28, fall=b27 }   (exit_acc=v290)
   block 27  start_pc=0
-    v296 LoadLocal { off=-1, kind=U32 }                   -> x0
+    v296 LoadLocal { off=-1, kind=U32 }                   -> x1
     v297 Imm(67108864)                                    -> x1
-    v298 BinopI { op=and, lhs=v296, rhs_imm=67108864 }    -> x0
+    v298 BinopI { op=and, lhs=v285, rhs_imm=67108864 }    -> x0
     v299 BinopI { op=eq, lhs=v298, rhs_imm=0 }            -> x1
     v300 Imm(0)                                           -> x1
     v301 Imm(0)                                           -> x1

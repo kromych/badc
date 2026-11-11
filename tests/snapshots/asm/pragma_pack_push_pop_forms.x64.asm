@@ -33,7 +33,6 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jae	<addr>
-               	movq	<rip>, %rax # <addr>
                	incq	%rax
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rax # <addr>

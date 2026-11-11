@@ -105,12 +105,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	sub	x2, x29, #0x20
                	add	x1, x2, x1
-               	ldr	x2, [x1, #0x8]
-               	cmp	x2, x21
+               	ldr	x1, [x1, #0x8]
+               	cmp	x1, x21
                	b.ne	<addr>
                	orr	x20, x20, #0x1
                	b	<addr>
-               	ldr	x1, [x1, #0x8]
                	cmp	x1, x22
                	b.ne	<addr>
                	orr	x20, x20, #0x2

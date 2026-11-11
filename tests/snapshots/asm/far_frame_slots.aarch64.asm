@@ -1054,11 +1054,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x2, [sp, #0x70]
-               	add	x2, x20, x2
-               	cmp	x0, x2
+               	add	x3, x20, x2
+               	cmp	x0, x3
                	b.ne	<addr>
-               	ldr	x0, [sp, #0x70]
-               	add	x0, x20, x0
+               	add	x0, x20, x2
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
                	cmp	x1, x0

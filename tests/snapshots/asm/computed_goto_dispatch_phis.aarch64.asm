@@ -560,10 +560,8 @@ Disassembly of section .text:
                	ldrb	w6, [x6]
                	ldr	x6, [x7, x6, lsl #3]
                	br	x6
-               	add	x8, x2, #0x1
-               	ldrb	w2, [x2]
-               	ldr	x6, [x7, x2, lsl #3]
-               	mov	x2, x8
+               	add	x2, x2, #0x1
+               	ldr	x6, [x7, x6, lsl #3]
                	br	x6
                	b	<addr>
                	mov	x17, #0x2710            // =10000

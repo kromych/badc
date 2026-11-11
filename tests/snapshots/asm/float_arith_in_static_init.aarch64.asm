@@ -41,7 +41,6 @@ Disassembly of section .text:
                	ldr	d1, [x16, #0x20]
                	fcmpe	d0, d1
                	b.mi	<addr>
-               	ldr	d0, [x0]
                	adrp	x16, <addr>
                	ldr	d1, [x16, #0x28]
                	fcmpe	d0, d1

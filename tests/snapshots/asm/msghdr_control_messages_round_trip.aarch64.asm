@@ -459,7 +459,6 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0xc]
                	cmp	w0, w1
                	b.eq	<addr>
-               	ldursw	x0, [x29, #-0x18]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1

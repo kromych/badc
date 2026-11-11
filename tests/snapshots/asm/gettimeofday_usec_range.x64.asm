@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rax
                	testq	%rax, %rax
                	jl	<addr>
-               	movq	-0x8(%rbp), %rax
                	cmpq	$0xf4240, %rax          # imm = 0xF4240
                	jge	<addr>
                	movq	-0x10(%rbp), %rax

@@ -45,7 +45,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x400ccccccccccccd, %rcx # imm = 0x400CCCCCCCCCCCCD
                	movq	%rcx, %xmm15
                	comisd	%xmm15, %xmm0

@@ -96,11 +96,9 @@ Disassembly of section .text:
                	retq
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, <rip> # <addr>
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	je	<addr>

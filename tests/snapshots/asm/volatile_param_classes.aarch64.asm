@@ -66,12 +66,6 @@ Disassembly of section .text:
                	fmov	d1, #7.50000000
                	fcmp	d0, d1
                	b.ne	<addr>
-               	ldur	x1, [x29, #-0x8]
-               	cmp	x1, #0x3
-               	b.eq	<addr>
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	fmov	s0, #5.00000000
                	bl	<addr>
                	fmov	d1, #2.50000000
@@ -82,6 +76,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

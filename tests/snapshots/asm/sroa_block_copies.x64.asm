@@ -525,10 +525,10 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	movl	-0x258(%rbp), %eax
-               	andq	$0x7, %rax
-               	cmpl	$0x5, %eax
+               	movq	%rax, %rcx
+               	andq	$0x7, %rcx
+               	cmpl	$0x5, %ecx
                	jne	<addr>
-               	movl	-0x258(%rbp), %eax
                	sarq	$0x3, %rax
                	andq	$0x1f, %rax
                	cmpl	$0x11, %eax

@@ -313,22 +313,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 39  start_pc=0
     v293 ImmData(416)                                     -> x1
     v294 Load { addr=v293, disp=0, kind=I64 pc_rel }      -> x1
-    v295 Load { addr=v294, disp=0, kind=I8 }              -> x1
-    v296 BinopI { op=ne, lhs=v295, rhs_imm=122 }          -> x1
-    v297 Imm(0)                                           -> x2
+    v295 Load { addr=v294, disp=0, kind=I8 }              -> x2
+    v296 BinopI { op=ne, lhs=v295, rhs_imm=122 }          -> x2
+    v297 Imm(0)                                           -> x6
     terminator Bnz { cond=v296, target=b41, fall=b40 }   (exit_acc=v296)
   block 40  start_pc=0
-    v298 ImmData(424)                                     -> x1
-    v299 Load { addr=v298, disp=0, kind=I64 pc_rel }      -> x1
-    v300 Load { addr=v299, disp=0, kind=I32 }             -> x1
-    v301 BinopI { op=ne, lhs=v300, rhs_imm=121 }          -> x1
-    v302 Imm(0)                                           -> x2
+    v298 ImmData(424)                                     -> x2
+    v299 Load { addr=v298, disp=0, kind=I64 pc_rel }      -> x2
+    v300 Load { addr=v299, disp=0, kind=I32 }             -> x2
+    v301 BinopI { op=ne, lhs=v300, rhs_imm=121 }          -> x2
+    v302 Imm(0)                                           -> x6
     terminator Bz { cond=v301, target=b53, fall=b41 }   (exit_acc=v301)
   block 41  start_pc=0
     v303 Imm(0)                                           -> x1
     terminator Jmp(b42)   (exit_acc=v303)
   block 42  start_pc=0
-    v309 Phi { incoming=[b41:v303, b53:v305], kind=I64 }  -> x1
+    v309 Phi { incoming=[b41:v303, b53:v294], kind=I64 }  -> x1
     v310 Imm(0)                                           -> x2
     v311 Imm(0)                                           -> x2
     v312 BinopI { op=eq, lhs=v285, rhs_imm=0 }            -> x2
@@ -414,10 +414,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v268 Imm(0)                                           -> x0
     terminator Return(v268)   (exit_acc=v268)
   block 53  start_pc=0
-    v304 ImmData(416)                                     -> x1
-    v305 Load { addr=v293, disp=0, kind=I64 pc_rel }      -> x1
+    v304 ImmData(416)                                     -> x2
+    v305 Load { addr=v293, disp=0, kind=I64 pc_rel }      -> x2
     v306 Imm(0)                                           -> x2
-    terminator Jmp(b42)   (exit_acc=v305)
+    terminator Jmp(b42)   (exit_acc=v294)
   block 54  start_pc=0
     v282 ImmData(408)                                     -> x0
     v283 Load { addr=v207, disp=0, kind=I64 pc_rel }      -> x0

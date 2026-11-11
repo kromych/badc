@@ -56,12 +56,11 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	cmp	w1, #0x1
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x8]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x1, x2
-               	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
+               	b.ne	<addr>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x2a
                	b.eq	<addr>

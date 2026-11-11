@@ -119,9 +119,8 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rdx
                	cmpq	%rdx, %rcx
                	jge	<addr>
-               	movq	-0x8(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movq	-0x18(%rbp), %rcx
+               	movq	-0x8(%rbp), %rdx
+               	addq	%rdx, %rax
                	incq	%rcx
                	movq	%rcx, -0x18(%rbp)
                	movq	-0x18(%rbp), %rcx

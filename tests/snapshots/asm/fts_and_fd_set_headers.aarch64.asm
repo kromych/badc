@@ -50,7 +50,6 @@ Disassembly of section .text:
                	ret
                	ldr	x1, [x0, #0x30]
                	cbz	x1, <addr>
-               	ldr	x1, [x0, #0x30]
                	ldrb	w1, [x1]
                	cmp	w1, #0x2e
                	b.eq	<addr>

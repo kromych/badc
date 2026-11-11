@@ -82,11 +82,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x3, %rcx
-               	je	<addr>
-               	leave
-               	retq
                	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movq	%rax, %xmm0
                	callq	<addr>
@@ -99,5 +94,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
+               	leave
+               	retq
                	leave
                	retq

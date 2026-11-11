@@ -22,25 +22,23 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x18
-               	ldrsw	x2, [x1]
+               	mrs	x2, TPIDR_EL0
+               	add	x2, x2, #0x0, lsl #12   // =0x0
+               	add	x2, x2, #0x18
+               	ldrsw	x2, [x2]
                	mov	x17, #-0x3              // =-3
                	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mrs	x2, TPIDR_EL0
-               	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x20
-               	ldrsw	x2, [x2]
-               	cbz	w2, <addr>
+               	mrs	x3, TPIDR_EL0
+               	add	x3, x3, #0x0, lsl #12   // =0x0
+               	add	x3, x3, #0x20
+               	ldrsw	x3, [x3]
+               	cbz	w3, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldrsw	x2, [x0]
-               	ldrsw	x1, [x1]
-               	add	x1, x2, x1
+               	add	x1, x1, x2
                	str	w1, [x0]
                	mov	x0, x1
                	cmp	w0, #0x4

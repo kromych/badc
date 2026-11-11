@@ -30,7 +30,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	str	wzr, [x0]
                	ret
-               	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	ret

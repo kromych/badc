@@ -101,7 +101,6 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	str	w2, [x3, #0x58]
                	cbz	x2, <addr>
-               	ldrsw	x2, [x3, #0x58]
                	add	x2, x2, #0x1
                	cmp	w2, #0x2
                	b.eq	<addr>

@@ -68,9 +68,9 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	cmpq	$0x0, 0x30(%rax)
-               	je	<addr>
                	movq	0x30(%rax), %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	movsbq	(%rcx), %rcx
                	cmpl	$0x2e, %ecx
                	je	<addr>

@@ -55,7 +55,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0]
                	cmp	x1, x2
                	b.ge	<addr>
                	ldr	x0, [x0, #0x8]

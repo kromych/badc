@@ -78,16 +78,15 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x1]
                	sub	x0, x29, #0x10
                	ldr	w1, [x0]
-               	rev	w1, w1
+               	rev	w2, w1
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
-               	cmp	w1, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w1, [x0]
                	mov	x17, #0x2211            // =8721
                	movk	x17, #0x4433, lsl #16
                	cmp	w1, w17

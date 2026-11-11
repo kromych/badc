@@ -46,7 +46,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	<rip>, %xmm0 # <addr>
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
@@ -58,7 +57,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	<rip>, %xmm0 # <addr>
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
@@ -70,7 +68,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	<rip>, %xmm0 # <addr>
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
@@ -82,7 +79,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movss	<rip>, %xmm0 # <addr>
                	cvtss2sd	%xmm0, %xmm0
                	movb	$0x1, %al
                	callq	<addr>

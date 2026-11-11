@@ -61,13 +61,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	x1, [x0]
-               	ldr	w1, [x0]
-               	sbfx	x1, x1, #0, #29
+               	ldr	w0, [x0]
+               	sbfx	x0, x0, #0, #29
                	mov	x17, #-0x5              // =-5
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.ne	<addr>
-               	ldr	x0, [x0]
-               	sbfx	x0, x0, #29, #30
+               	sbfx	x0, x1, #29, #30
                	cmp	w0, #0x4d
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

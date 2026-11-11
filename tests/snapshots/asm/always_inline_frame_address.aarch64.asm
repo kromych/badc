@@ -53,42 +53,39 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	adrp	x1, <page>
-               	ldr	x0, [x1, #0x40]
-               	cbz	x0, <addr>
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x50]
-               	cbnz	x2, <addr>
+               	ldr	x1, [x0, #0x40]
+               	cbz	x1, <addr>
+               	adrp	x2, <page>
+               	ldr	x3, [x2, #0x50]
+               	cbnz	x3, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x1, #0x40]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
-               	cmp	x2, x3
+               	adrp	x4, <page>
+               	ldr	x4, [x4, <lo12>]
+               	cmp	x1, x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0, #0x50]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
-               	cmp	x2, x3
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
+               	cmp	x3, x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0, #0x50]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
-               	cmp	x2, x3
+               	ldr	x1, [x2, #0x50]
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
+               	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x1, #0x40]
-               	ldr	x0, [x0, #0x50]
-               	cmp	x1, x0
+               	ldr	x0, [x0, #0x40]
+               	cmp	x0, x1
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

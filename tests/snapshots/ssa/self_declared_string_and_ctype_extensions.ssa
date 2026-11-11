@@ -43,9 +43,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v29  ImmData(35)                                      -> x1
     terminator Jmp(b7)   (exit_acc=v29)
   block 5  start_pc=0
-    v219 Load { addr=v205, disp=0, kind=I8 }              -> x2
+    v219 Load { addr=v205, disp=0, kind=I8 }              -> x6
     v220 Load { addr=v206, disp=0, kind=I8 }              -> x6
-    v221 Binop { op=eq, lhs=v219, rhs=v220 }              -> x2
+    v221 Binop { op=eq, lhs=v207, rhs=v220 }              -> x2
     v222 Imm(0)                                           -> x6
     terminator Bz { cond=v221, target=b8, fall=b6 }   (exit_acc=v221)
   block 6  start_pc=0
@@ -100,9 +100,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v52  ImmData(53)                                      -> x1
     terminator Jmp(b15)   (exit_acc=v52)
   block 13  start_pc=0
-    v237 Load { addr=v223, disp=0, kind=I8 }              -> x2
+    v237 Load { addr=v223, disp=0, kind=I8 }              -> x6
     v238 Load { addr=v224, disp=0, kind=I8 }              -> x6
-    v239 Binop { op=eq, lhs=v237, rhs=v238 }              -> x2
+    v239 Binop { op=eq, lhs=v225, rhs=v238 }              -> x2
     v240 Imm(0)                                           -> x6
     terminator Bz { cond=v239, target=b16, fall=b14 }   (exit_acc=v239)
   block 14  start_pc=0
@@ -144,9 +144,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v64  ImmData(64)                                      -> x1
     terminator Jmp(b22)   (exit_acc=v64)
   block 20  start_pc=0
-    v255 Load { addr=v241, disp=0, kind=I8 }              -> x2
+    v255 Load { addr=v241, disp=0, kind=I8 }              -> x6
     v256 Load { addr=v242, disp=0, kind=I8 }              -> x6
-    v257 Binop { op=eq, lhs=v255, rhs=v256 }              -> x2
+    v257 Binop { op=eq, lhs=v243, rhs=v256 }              -> x2
     v258 Imm(0)                                           -> x6
     terminator Bz { cond=v257, target=b23, fall=b21 }   (exit_acc=v257)
   block 21  start_pc=0
@@ -182,9 +182,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v72  ImmData(75)                                      -> x1
     terminator Jmp(b28)   (exit_acc=v72)
   block 26  start_pc=0
-    v271 Load { addr=v259, disp=0, kind=I8 }              -> x2
+    v271 Load { addr=v259, disp=0, kind=I8 }              -> x6
     v272 Load { addr=v260, disp=0, kind=I8 }              -> x6
-    v273 Binop { op=eq, lhs=v271, rhs=v272 }              -> x2
+    v273 Binop { op=eq, lhs=v261, rhs=v272 }              -> x2
     v274 Imm(0)                                           -> x6
     terminator Bz { cond=v273, target=b29, fall=b27 }   (exit_acc=v273)
   block 27  start_pc=0
@@ -212,9 +212,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v76  ImmData(80)                                      -> x1
     terminator Jmp(b33)   (exit_acc=v76)
   block 31  start_pc=0
-    v289 Load { addr=v275, disp=0, kind=I8 }              -> x2
+    v289 Load { addr=v275, disp=0, kind=I8 }              -> x6
     v290 Load { addr=v276, disp=0, kind=I8 }              -> x6
-    v291 Binop { op=eq, lhs=v289, rhs=v290 }              -> x2
+    v291 Binop { op=eq, lhs=v277, rhs=v290 }              -> x2
     v292 Imm(0)                                           -> x6
     terminator Bz { cond=v291, target=b34, fall=b32 }   (exit_acc=v291)
   block 32  start_pc=0
@@ -250,9 +250,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v84  ImmData(85)                                      -> x1
     terminator Jmp(b39)   (exit_acc=v84)
   block 37  start_pc=0
-    v306 Load { addr=v293, disp=0, kind=I8 }              -> x2
+    v306 Load { addr=v293, disp=0, kind=I8 }              -> x6
     v307 Load { addr=v294, disp=0, kind=I8 }              -> x6
-    v308 Binop { op=eq, lhs=v306, rhs=v307 }              -> x2
+    v308 Binop { op=eq, lhs=v295, rhs=v307 }              -> x2
     v309 Imm(0)                                           -> x6
     terminator Bz { cond=v308, target=b40, fall=b38 }   (exit_acc=v308)
   block 38  start_pc=0

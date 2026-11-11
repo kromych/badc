@@ -205,8 +205,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v143 LocalAddr(-6)                                    -> x1
     v144 Imm(0)                                           -> x1
     v145 LoadLocal { off=-6, kind=I64 }                   -> x1
-    v146 Load { addr=v141, disp=0, kind=I32 }             -> x0
-    v147 BinopI { op=ne, lhs=v146, rhs_imm=5 }            -> x0
+    v146 Load { addr=v141, disp=0, kind=I32 }             -> x1
+    v147 BinopI { op=ne, lhs=v146, rhs_imm=5 }            -> x1
     terminator Bz { cond=v147, target=b13, fall=b12 }   (exit_acc=v147)
   block 12  start_pc=0
     v148 Imm(21)                                          -> x0
@@ -215,10 +215,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v151 LifetimeEnd(0)                                   -> -
     terminator Return(v148)   (exit_acc=v148)
   block 13  start_pc=0
-    v152 Imm(0)                                           -> x0
-    v153 LoadLocal { off=-6, kind=I64 }                   -> x0
-    v154 Load { addr=v153, disp=0, kind=I32 }             -> x0
-    v155 BinopI { op=ne, lhs=v154, rhs_imm=5 }            -> x0
+    v152 Imm(0)                                           -> x1
+    v153 LoadLocal { off=-6, kind=I64 }                   -> x1
+    v154 Load { addr=v141, disp=0, kind=I32 }             -> x1
+    v155 BinopI { op=ne, lhs=v154, rhs_imm=5 }            -> x1
     terminator Bz { cond=v155, target=b15, fall=b14 }   (exit_acc=v155)
   block 14  start_pc=0
     v156 Imm(22)                                          -> x0
@@ -227,15 +227,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=7
     v159 LifetimeEnd(0)                                   -> -
     terminator Return(v156)   (exit_acc=v156)
   block 15  start_pc=0
-    v160 LocalAddr(-1)                                    -> x0
-    v161 Imm(0)                                           -> x0
-    v162 LoadLocal { off=-6, kind=I64 }                   -> x0
+    v160 LocalAddr(-1)                                    -> x1
+    v161 Imm(0)                                           -> x1
+    v162 LoadLocal { off=-6, kind=I64 }                   -> x1
     v163 LocalAddr(-1)                                    -> x1
     v164 Imm(0)                                           -> x1
     v165 LocalAddr(-1)                                    -> x1
     v166 Imm(0)                                           -> x1
     v167 LoadLocal { off=-1, kind=I64 }                   -> x1
-    v168 Load { addr=v162, disp=0, kind=I32 }             -> x0
+    v168 Load { addr=v141, disp=0, kind=I32 }             -> x0
     v169 BinopI { op=ne, lhs=v168, rhs_imm=5 }            -> x0
     terminator Bz { cond=v169, target=b17, fall=b16 }   (exit_acc=v169)
   block 16  start_pc=0

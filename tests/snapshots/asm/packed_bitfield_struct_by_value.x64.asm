@@ -59,12 +59,11 @@ Disassembly of section .text:
                	orq	%r11, %rax
                	movq	%rax, <rip> # <addr>
                	movq	%rax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	shlq	$0x23, %rax
-               	sarq	$0x23, %rax
-               	cmpl	$-0x5, %eax
+               	movl	<rip>, %ecx # <addr>
+               	shlq	$0x23, %rcx
+               	sarq	$0x23, %rcx
+               	cmpl	$-0x5, %ecx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	sarq	$0x1d, %rax
                	shlq	$0x22, %rax
                	sarq	$0x22, %rax

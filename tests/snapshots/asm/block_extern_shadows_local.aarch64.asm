@@ -18,15 +18,10 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x18]
                	mov	x2, #0x7                // =7
                	str	w2, [x0, #0x18]
-               	add	x1, x1, #0x5
-               	cmp	w1, #0x69
+               	add	x0, x1, #0x5
+               	cmp	w0, #0x69
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ret
-               	ldrsw	x0, [x0, #0x18]
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]

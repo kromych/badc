@@ -309,10 +309,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movq	%rax, -0x8(%rbp)
                	movabsq	$-0x123456789abcdef, %r11 # imm = 0xFEDCBA9876543211
-               	movq	%rsi, %rax
+               	movq	%rsi, %rcx
                	cmpq	%r11, %rsi
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
                	movabsq	$0x123456789abcdee, %r11 # imm = 0x123456789ABCDEE
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -329,7 +328,7 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	testq	%rsi, %rsi
                	jne	<addr>
-               	cmpq	$0x0, -0x8(%rbp)
+               	testq	%rax, %rax
                	je	<addr>
                	orq	$0x20, %r12
                	leaq	0x1(%rdi), %rax

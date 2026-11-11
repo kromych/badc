@@ -99,12 +99,10 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x1, [x0, #0x18]
-               	ldr	x1, [x0, #0x18]
                	adrp	x3, <page>
                	ldr	x3, [x3, <lo12>]
                	cmp	x1, x3
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x18]
                	ldr	x2, [x2, #0x8]
                	cmp	x1, x2
                	b.eq	<addr>

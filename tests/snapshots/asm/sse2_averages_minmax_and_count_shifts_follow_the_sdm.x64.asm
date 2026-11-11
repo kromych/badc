@@ -1559,18 +1559,15 @@ Disassembly of section .text:
                	jge	<addr>
                	movzbq	(%rsi,%rax), %rcx
                	movb	%cl, (%rdx,%rax)
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	-0x20(%rbp), %r8
                	movzbq	(%rsi,%rax), %rcx
-               	movzbq	(%rdi,%rax), %r8
-               	cmpl	%r8d, %ecx
-               	jle	<addr>
-               	movzbq	(%rsi,%rax), %rcx
+               	movzbq	(%rdi,%rax), %rdx
+               	cmpl	%edx, %ecx
+               	cmovleq	%rdx, %rcx
                	jmp	<addr>
                	movzbq	(%rdi,%rax), %rcx
                	jmp	<addr>
-               	movzbq	(%rdi,%rax), %rcx
-               	jmp	<addr>
-               	movb	%cl, (%rdx,%rax)
+               	movb	%cl, (%r8,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>

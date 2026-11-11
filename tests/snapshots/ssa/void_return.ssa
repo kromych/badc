@@ -36,7 +36,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Load { addr=v1, disp=0, kind=I32 }               -> x0
-    v5   BinopI { op=lt, lhs=v4, rhs_imm=0 }              -> x0
+    v5   BinopI { op=lt, lhs=v4, rhs_imm=0 }              -> x1
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(0)                                           -> x0
@@ -44,9 +44,9 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v8   Store { addr=v1, disp=0, value=v7, kind=I32 }    -> -
     terminator Return
   block 2  start_pc=0
-    v9   Imm(0)                                           -> x0
-    v10  Load { addr=v1, disp=0, kind=I32 }               -> x0
-    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x0
+    v9   Imm(0)                                           -> x1
+    v10  Load { addr=v1, disp=0, kind=I32 }               -> x1
+    v11  BinopI { op=add, lhs=v4, rhs_imm=1 }             -> x0
     v12  Store { addr=v1, disp=0, value=v11, kind=I32 }   -> -
     v13  Extend { value=v11, kind=I32 }                   -> x0
     terminator Return

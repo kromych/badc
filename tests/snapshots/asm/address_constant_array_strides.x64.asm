@@ -67,10 +67,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	retq
                	movq	<rip>, %rdx # <addr>
-               	movsbq	(%rdx), %rdx
-               	cmpl	$0x65, %edx
+               	movsbq	(%rdx), %rsi
+               	cmpl	$0x65, %esi
                	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
                	movsbq	0x3(%rdx), %rdx
                	cmpl	$0x68, %edx
                	je	<addr>

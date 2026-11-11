@@ -255,7 +255,6 @@ Disassembly of section .text:
                	movl	0x18(%rbx), %eax
                	testl	%eax, %eax
                	jl	<addr>
-               	movl	0x18(%rbx), %eax
                	cmpl	%eax, %ecx
                	je	<addr>
                	jmp	<addr>

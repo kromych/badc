@@ -103,7 +103,6 @@ Disassembly of section .text:
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x0, (%rax)
                	jne	<addr>
-               	movq	-0x10(%rbp), %rax
                	cmpq	$0x0, 0x8(%rax)
                	jne	<addr>
                	movq	-0x10(%rbp), %rax

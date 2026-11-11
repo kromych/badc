@@ -353,17 +353,16 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	cmpl	%ecx, %eax
                	je	<addr>
-               	movl	<rip>, %eax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	%ecx, %eax
+               	movl	<rip>, %edx # <addr>
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	movl	$0x88, %eax
                	popq	%rbx
                	leave
                	retq
-               	movl	<rip>, %edi # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0xc(%rax), %rsi
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0xc(%rcx), %rsi
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

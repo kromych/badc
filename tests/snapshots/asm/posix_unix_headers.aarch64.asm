@@ -44,7 +44,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x80]
                	and	x0, x0, #0xfffffffffffffff7
                	sturb	w0, [x29, #-0x80]
                	ldurb	w0, [x29, #-0x80]

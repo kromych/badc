@@ -36,11 +36,10 @@ Disassembly of section .text:
                	je	<addr>
                	cmpl	$0x3, %esi
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
+               	movslq	<rip>, %rax # <addr>
                	cmpl	$0x8, %eax
                	jge	<addr>
                	leaq	<rip>, %rcx # <addr>
-               	movslq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rdx
                	movl	%edx, <rip> # <addr>
                	movq	(%rdi), %rdx

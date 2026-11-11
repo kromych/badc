@@ -490,11 +490,11 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpl	$0x0, -0x48(%rbp)
+               	movl	-0x48(%rbp), %edi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	$0x11, %eax
                	jmp	<addr>
-               	movl	-0x48(%rbp), %edi
                	leaq	-0x50(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>

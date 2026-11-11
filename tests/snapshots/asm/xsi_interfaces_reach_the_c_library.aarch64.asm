@@ -27,7 +27,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x20]
                	cmp	w1, #0x0
                	b.le	<addr>
-               	ldrsw	x1, [x20]
                	add	x22, x0, x1
                	ldrsw	x1, [x20, #0x4]
                	cbz	x1, <addr>

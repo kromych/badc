@@ -37,10 +37,9 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	movl	(%rbx), %eax
+               	movslq	(%rbx), %rax
                	testl	%eax, %eax
                	jle	<addr>
-               	movslq	(%rbx), %rax
                	leaq	(%rdi,%rax), %r13
                	cmpl	$0x0, 0x4(%rbx)
                	je	<addr>

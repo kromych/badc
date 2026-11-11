@@ -212,6 +212,10 @@ Disassembly of section .text:
                	retq
 
 <scan>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	xorl	%eax, %eax
                	movq	%rax, %r8
                	cmpl	%esi, %eax
@@ -219,7 +223,6 @@ Disassembly of section .text:
                	movl	(%rdi,%rax,4), %r9d
                	cmpl	%edx, %r9d
                	jl	<addr>
-               	movl	(%rdi,%rax,4), %r9d
                	cmpl	%ecx, %r9d
                	jg	<addr>
                	incq	%r8
@@ -227,7 +230,6 @@ Disassembly of section .text:
                	movl	(%rdi,%rax,4), %r9d
                	cmpl	$-0x1, %r9d
                	je	<addr>
-               	movl	(%rdi,%rax,4), %r9d
                	cmpl	$0x63, %r9d
                	je	<addr>
                	addq	$0x64, %r8
@@ -235,6 +237,8 @@ Disassembly of section .text:
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%r8, %rax
+               	popq	%rbx
+               	leave
                	retq
 
 <ladder>:

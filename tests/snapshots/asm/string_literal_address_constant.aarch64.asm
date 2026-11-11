@@ -192,8 +192,8 @@ Disassembly of section .text:
                	cmp	w1, #0x79
                	b.ne	<addr>
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0xf0]
-               	ldrb	w2, [x2]
+               	ldr	x1, [x1, <lo12>]
+               	ldrb	w2, [x1]
                	cmp	w2, #0x7a
                	b.ne	<addr>
                	adrp	x2, <page>
@@ -250,7 +250,5 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x1, #0xf0]
-               	b	<addr>
                	ldr	x0, [x1, #0xe8]
                	b	<addr>

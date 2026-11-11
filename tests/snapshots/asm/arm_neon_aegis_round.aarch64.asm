@@ -154,14 +154,14 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x2a]
                	mov	x0, #0x9b               // =155
                	sturb	w0, [x29, #-0x29]
-               	sub	x3, x29, #0x18
+               	sub	x2, x29, #0x18
                	sub	x16, x29, #0x48
                	ldr	q0, [x16]
-               	sub	x4, x29, #0x38
+               	sub	x3, x29, #0x38
                	sub	x16, x29, #0x38
                	ldr	q1, [x16]
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
+               	adrp	x4, <addr>
+               	add	x4, x4, <lo12>
                	adrp	x16, <addr>
                	add	x16, x16, <lo12>
                	ldr	q2, [x16]
@@ -175,12 +175,11 @@ Disassembly of section .text:
                	sub	x16, x29, #0x18
                	str	q0, [x16]
                	mov	x0, #0x0                // =0
-               	ldrb	w5, [x3, x0]
-               	ldrb	w1, [x2, x0]
+               	ldrb	w5, [x2, x0]
+               	ldrb	w1, [x4, x0]
                	cmp	w1, #0x10
                	b.ge	<addr>
-               	ldrb	w1, [x2, x0]
-               	ldrb	w1, [x4, x1]
+               	ldrb	w1, [x3, x1]
                	cmp	w5, w1
                	b.eq	<addr>
                	b	<addr>

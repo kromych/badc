@@ -143,11 +143,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x30]
-               	ldrb	w1, [x1]
+               	ldr	x0, [x0, <lo12>]
+               	ldrb	w1, [x0]
                	cmp	w1, #0x68
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x30]
                	ldrb	w0, [x0, #0x4]
                	cmp	w0, #0x6f
                	b.eq	<addr>

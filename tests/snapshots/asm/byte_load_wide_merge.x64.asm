@@ -75,13 +75,13 @@ Disassembly of section .text:
                	movb	$-0x1, -0x2(%rbp)
                	movb	$0x10, -0x1(%rbp)
                	movl	(%rax), %ecx
-               	bswapl	%ecx
-               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
+               	movl	%ecx, %edx
+               	bswapl	%edx
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	(%rax), %ecx
                	cmpl	$0x44332211, %ecx       # imm = 0x44332211
                	je	<addr>
                	movl	$0x2, %eax

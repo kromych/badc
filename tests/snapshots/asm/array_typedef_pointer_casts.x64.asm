@@ -35,11 +35,10 @@ Disassembly of section .text:
                	cmpq	%rax, %rdx
                	jne	<addr>
                	movq	<rip>, %rdx # <addr>
-               	movq	0x8(%rdx), %rdx
-               	cmpq	%rax, %rdx
+               	movq	0x8(%rdx), %rsi
+               	cmpq	%rax, %rsi
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	(%rdx), %rax
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax

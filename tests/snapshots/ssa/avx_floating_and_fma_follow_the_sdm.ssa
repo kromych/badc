@@ -1219,16 +1219,16 @@ fn ent_pc=1359 n_params=1 variadic=false locals=2
     v17  Binop { op=xor, lhs=v12, rhs=v16 }               -> x0
     v18  Store { addr=v3, disp=0, value=v17, kind=I64 pc_rel } -> -
     v19  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x1
-    v20  BinopI { op=mul, lhs=v17, rhs_imm=-7046029254386353131 } -> x0
-    v21  Imm(0)                                           -> x1
-    v22  Imm(0)                                           -> x1
-    v23  BinopI { op=shru, lhs=v20, rhs_imm=60 }          -> x1
-    v24  BinopI { op=ult, lhs=v23, rhs_imm=5 }            -> x1
+    v20  BinopI { op=mul, lhs=v17, rhs_imm=-7046029254386353131 } -> x1
+    v21  Imm(0)                                           -> x2
+    v22  Imm(0)                                           -> x2
+    v23  BinopI { op=shru, lhs=v20, rhs_imm=60 }          -> x2
+    v24  BinopI { op=ult, lhs=v23, rhs_imm=5 }            -> x2
     terminator Bz { cond=v24, target=b8, fall=b1 }   (exit_acc=v24)
   block 1  start_pc=0
-    v25  ImmData(56)                                      -> x1
-    v26  Imm(0)                                           -> x2
-    v27  BinopI { op=shru, lhs=v20, rhs_imm=32 }          -> x6
+    v25  ImmData(56)                                      -> x6
+    v26  Imm(0)                                           -> x0
+    v27  BinopI { op=shru, lhs=v20, rhs_imm=32 }          -> x1
     v28  Imm(0)                                           -> x0
     v29  Imm(11)                                          -> x0
     v30  Imm(10)                                          -> x2
@@ -1281,11 +1281,11 @@ fn ent_pc=1359 n_params=1 variadic=false locals=2
     v85  LifetimeEnd(-2)                                  -> -
     terminator Return(v83)   (exit_acc=v83)
   block 8  start_pc=0
-    v32  ImmData(224)                                     -> x0
-    v33  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x0
+    v32  ImmData(224)                                     -> x1
+    v33  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x1
     v34  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x1
-    v35  BinopI { op=shru, lhs=v33, rhs_imm=12 }          -> x1
-    v36  Binop { op=xor, lhs=v33, rhs=v35 }               -> x0
+    v35  BinopI { op=shru, lhs=v17, rhs_imm=12 }          -> x1
+    v36  Binop { op=xor, lhs=v17, rhs=v35 }               -> x0
     v37  Store { addr=v3, disp=0, value=v36, kind=I64 pc_rel } -> -
     v38  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x1
     v39  Load { addr=v3, disp=0, kind=I64 pc_rel }        -> x1

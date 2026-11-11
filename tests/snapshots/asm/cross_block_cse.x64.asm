@@ -93,26 +93,25 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-0x30(%rbp), %rdx
+               	leaq	-0x30(%rbp), %rdi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
+               	movups	%xmm14, (%rdi)
                	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
+               	movups	%xmm14, 0x10(%rdi)
                	movups	0x20(%rax), %xmm14
-               	movups	%xmm14, 0x20(%rdx)
+               	movups	%xmm14, 0x20(%rdi)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
-               	leaq	(%rax,%rax,2), %rsi
-               	incq	%rsi
-               	movq	(%rdx,%rax,8), %rdi
-               	testq	%rdi, %rdi
-               	jle	<addr>
-               	movq	(%rdx,%rax,8), %rdi
-               	imulq	%rsi, %rdi
-               	addq	%rdi, %rcx
-               	jmp	<addr>
-               	subq	%rsi, %rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	incq	%rdx
+               	movq	(%rdi,%rax,8), %rsi
+               	movq	%rsi, %r8
+               	imulq	%rdx, %r8
+               	addq	%rcx, %r8
+               	subq	%rdx, %rcx
+               	testq	%rsi, %rsi
+               	cmovgq	%r8, %rcx
                	incq	%rax
                	cmpl	$0x6, %eax
                	jl	<addr>

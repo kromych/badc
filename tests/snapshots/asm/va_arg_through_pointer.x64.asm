@@ -120,10 +120,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rax
-               	cmpl	$0x68, %eax
+               	movsbq	(%rax), %rcx
+               	cmpl	$0x68, %ecx
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movsbq	0x4(%rax), %rax
                	cmpl	$0x6f, %eax
                	je	<addr>

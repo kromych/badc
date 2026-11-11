@@ -89,9 +89,8 @@ Disassembly of section .text:
                	cmp	x0, #0x2
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
-               	ldr	x0, [x0]
-               	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x10]
+               	ldr	x1, [x0]
+               	cbnz	x1, <addr>
                	ldr	x0, [x0, #0x8]
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x10]

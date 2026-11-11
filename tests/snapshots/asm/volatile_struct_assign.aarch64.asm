@@ -27,10 +27,8 @@ Disassembly of section .text:
                	str	w2, [x0]
                	ldr	w1, [x1, #0x4]
                	str	w1, [x0, #0x4]
-               	mov	x1, x2
-               	cmp	w1, #0x3
+               	cmp	w2, #0x3
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x4]
                	cmp	w1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -41,13 +39,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x2, #0x6                // =6
                	str	w2, [x0, #0x4]
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x6
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	str	w1, [x0]

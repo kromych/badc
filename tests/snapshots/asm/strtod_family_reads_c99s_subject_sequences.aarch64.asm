@@ -358,7 +358,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x20, #0x18]
                	cmp	w0, #0x0
                	b.lt	<addr>
-               	ldrsw	x0, [x20, #0x18]
                	cmp	w1, w0
                	b.eq	<addr>
                	b	<addr>

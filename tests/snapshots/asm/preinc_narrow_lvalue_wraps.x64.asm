@@ -34,9 +34,10 @@ Disassembly of section .text:
                	movzbq	-0x8(%rbp), %rax
                	incq	%rax
                	movb	%al, -0x8(%rbp)
-               	cmpb	$0x0, -0x8(%rbp)
+               	movzbq	-0x8(%rbp), %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	cmpb	$0x0, -0x8(%rbp)
+               	testl	%eax, %eax
                	jne	<addr>
                	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi

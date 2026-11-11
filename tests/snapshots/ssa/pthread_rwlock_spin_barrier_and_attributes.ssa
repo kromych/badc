@@ -717,9 +717,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v267 BinopI { op=ne, lhs=v266, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v266, target=b36, fall=b35 }   (exit_acc=v267)
   block 35  start_pc=0
-    v268 LoadLocal { off=-9, kind=I32 }                   -> x0
-    v269 BinopI { op=ne, lhs=v268, rhs_imm=0 }            -> x1
-    v270 Imm(0)                                           -> x1
+    v268 LoadLocal { off=-9, kind=I32 }                   -> x7
+    v269 BinopI { op=ne, lhs=v268, rhs_imm=0 }            -> x0
+    v270 Imm(0)                                           -> x0
     terminator Bz { cond=v268, target=b37, fall=b36 }   (low word)   (exit_acc=v269)
   block 36  start_pc=0
     v271 Imm(17)                                          -> x0
@@ -730,9 +730,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v276 LifetimeEnd(-7)                                  -> -
     terminator Jmp(b7)   (exit_acc=v271)
   block 37  start_pc=0
-    v277 LoadLocal { off=-9, kind=I32 }                   -> x7
+    v277 LoadLocal { off=-9, kind=I32 }                   -> x0
     v278 LocalAddr(-10)                                   -> x6
-    v279 CallExt { binding_idx=256, args=[v277, v278], fp_arg_mask=0x0 } -> x0
+    v279 CallExt { binding_idx=256, args=[v268, v278], fp_arg_mask=0x0 } -> x0
     v280 BinopI { op=ne, lhs=v279, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v279, target=b39, fall=b38 }   (exit_acc=v280)
   block 38  start_pc=0

@@ -2241,7 +2241,6 @@ Disassembly of section .text:
                	str	w4, [x1, x0, lsl #2]
                	cmp	w4, w2
                	b.ne	<addr>
-               	ldrsw	x4, [x1, x0, lsl #2]
                	cmp	w4, w2
                	b.ne	<addr>
                	ldursw	x4, [x29, #-0x10]
@@ -2355,14 +2354,12 @@ Disassembly of section .text:
                	orr	x5, x5, x7, lsl #24
                	stur	x5, [x29, #-0x30]
                	ldur	w7, [x29, #-0x90]
-               	sbfx	x7, x7, #0, #11
+               	sbfx	x9, x7, #0, #11
                	ldur	w8, [x29, #-0x30]
-               	sbfx	x8, x8, #0, #11
-               	cmp	w7, w8
+               	sbfx	x10, x8, #0, #11
+               	cmp	w9, w10
                	b.ne	<addr>
-               	ldur	w7, [x29, #-0x90]
                	ubfx	x7, x7, #11, #13
-               	ldur	w8, [x29, #-0x30]
                	ubfx	x8, x8, #11, #13
                	cmp	w7, w8
                	b.ne	<addr>
@@ -2456,14 +2453,12 @@ Disassembly of section .text:
                	orr	x5, x5, x7, lsl #24
                	stur	x5, [x29, #-0x30]
                	ldur	w7, [x29, #-0x90]
-               	sbfx	x7, x7, #0, #11
+               	sbfx	x9, x7, #0, #11
                	ldur	w8, [x29, #-0x30]
-               	sbfx	x8, x8, #0, #11
-               	cmp	w7, w8
+               	sbfx	x10, x8, #0, #11
+               	cmp	w9, w10
                	b.ne	<addr>
-               	ldur	w7, [x29, #-0x90]
                	ubfx	x7, x7, #11, #13
-               	ldur	w8, [x29, #-0x30]
                	ubfx	x8, x8, #11, #13
                	cmp	w7, w8
                	b.ne	<addr>

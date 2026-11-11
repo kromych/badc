@@ -51,11 +51,10 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x8]
                	sub	x5, x29, #0x8
                	str	x5, [x4, #0x40]
-               	ldur	x5, [x29, #-0x8]
-               	cmp	x5, #0x64
+               	ldur	x4, [x29, #-0x8]
+               	cmp	x4, #0x64
                	b.ge	<addr>
-               	ldr	x4, [x4, #0x40]
-               	str	x3, [x4]
+               	str	x3, [x5]
                	ldur	x3, [x29, #-0x8]
                	cmp	x3, #0x64
                	b.ge	<addr>

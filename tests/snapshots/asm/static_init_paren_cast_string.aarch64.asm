@@ -17,24 +17,22 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
-               	ldrb	w1, [x1]
-               	cmp	w1, #0x5
+               	ldrb	w2, [x1]
+               	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	x1, [x0]
                	ldrb	w1, [x1, #0x5]
                	cmp	w1, #0x1a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldr	x1, [x0, #0x8]
-               	ldrb	w1, [x1]
-               	cmp	w1, #0x9
+               	ldrb	w2, [x1]
+               	cmp	w2, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	x1, [x0, #0x8]
                	ldrb	w1, [x1, #0x9]
                	cmp	w1, #0x4
                	b.eq	<addr>

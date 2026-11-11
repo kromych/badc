@@ -91,7 +91,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x4, %rax
                	jne	<addr>
-               	cmpq	$0x0, -0x50(%rbp)
+               	movq	-0x50(%rbp), %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	movq	-0x48(%rbp), %rax
                	cmpq	$0x5, %rax
@@ -101,7 +102,6 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0x50(%rbp), %rdi
                	leaq	<rip>, %rsi
                	movl	$0x4, %edx
                	xorl	%eax, %eax

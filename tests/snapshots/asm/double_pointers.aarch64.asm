@@ -47,14 +47,13 @@ Disassembly of section .text:
                	mov	x1, #0x7b               // =123
                	str	w1, [x0]
                	ldr	x0, [x20]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x7b
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x7b
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	ldr	x0, [x20]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7b
                	b.eq	<addr>

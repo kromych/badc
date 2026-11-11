@@ -24,20 +24,15 @@ Disassembly of section .text:
                	str	w2, [x1, #0x5c]
                	mov	x2, #0x7                // =7
                	str	w2, [x0]
-               	ldrsw	x2, [x0, #0x24]
-               	cmp	w2, #0x15
+               	ldrsw	x0, [x0, #0x24]
+               	cmp	w0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldrsw	x1, [x1, #0x5c]
-               	cmp	w1, #0x63
+               	ldrsw	x0, [x1, #0x5c]
+               	cmp	w0, #0x63
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ret
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0
                	ret

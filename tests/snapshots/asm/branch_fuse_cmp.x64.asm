@@ -114,7 +114,6 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	testq	%rax, %rax
                	je	<addr>
-               	movl	<rip>, %eax # <addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	je	<addr>

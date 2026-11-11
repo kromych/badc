@@ -40,15 +40,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v23  ImmData(8)                                       -> x0
     v24  Imm(0)                                           -> x0
-    v25  Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d0
+    v25  Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d1
     v26  Imm(8)                                           -> x0
     v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
-    v28  Load { addr=v1, disp=8, kind=F64 pc_rel }        -> d1
-    v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d0
+    v28  Load { addr=v1, disp=8, kind=F64 pc_rel }        -> d2
+    v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d1
     v30  Imm(16)                                          -> x0
     v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
-    v32  Load { addr=v1, disp=16, kind=F64 pc_rel }       -> d1
-    v33  Binop { op=fadd, lhs=v29, rhs=v32 }              -> d0
+    v32  Load { addr=v1, disp=16, kind=F64 pc_rel }       -> d2
+    v33  Binop { op=fadd, lhs=v29, rhs=v18 }              -> d0
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(4764320886503243776)                         -> x0

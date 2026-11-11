@@ -944,9 +944,9 @@ fn ent_pc=8 n_params=1 variadic=false locals=517
     v120 Imm(0)                                           -> x1
     v121 LocalAddr(-512)                                  -> x1
     v122 LoadLocal { off=-512, kind=I64 }                 -> x1
-    v123 Binop { op=add, lhs=v1, rhs=v122 }               -> x1
+    v123 Binop { op=add, lhs=v1, rhs=v122 }               -> x6
     v124 Binop { op=ne, lhs=v41, rhs=v123 }               -> x0
-    v125 Imm(0)                                           -> x1
+    v125 Imm(0)                                           -> x6
     terminator Bnz { cond=v124, target=b8, fall=b7 }   (exit_acc=v124)
   block 7  start_pc=0
     v126 Imm(0)                                           -> x0
@@ -956,7 +956,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=517
     v130 Imm(0)                                           -> x0
     v131 LocalAddr(-512)                                  -> x0
     v132 LoadLocal { off=-512, kind=I64 }                 -> x0
-    v133 Binop { op=add, lhs=v1, rhs=v132 }               -> x0
+    v133 Binop { op=add, lhs=v1, rhs=v122 }               -> x0
     v134 BinopI { op=mul, lhs=v133, rhs_imm=3 }           -> x0
     v135 Binop { op=ne, lhs=v42, rhs=v134 }               -> x0
     v136 Imm(0)                                           -> x1

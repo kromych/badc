@@ -101,15 +101,13 @@ Disassembly of section .text:
                	strb	w24, [x2, #0x2]
                	ldrh	w24, [x2]
                	ldrb	w25, [x2, #0x2]
+               	orr	x26, x24, x25, lsl #16
+               	sbfx	x26, x26, #0, #22
+               	add	x26, x26, #0x7
+               	and	x26, x26, #0x3fffff
                	orr	x24, x24, x25, lsl #16
-               	sbfx	x24, x24, #0, #22
-               	add	x24, x24, #0x7
-               	and	x24, x24, #0x3fffff
-               	ldrh	w25, [x2]
-               	ldrb	w26, [x2, #0x2]
-               	orr	x25, x25, x26, lsl #16
-               	and	x25, x25, #0xffffffffffc00000
-               	orr	x24, x25, x24
+               	and	x24, x24, #0xffffffffffc00000
+               	orr	x24, x24, x26
                	strh	w24, [x2]
                	lsr	x24, x24, #16
                	strb	w24, [x2, #0x2]
@@ -243,15 +241,13 @@ Disassembly of section .text:
                	strh	w10, [x8, #0x4]
                	ldr	w10, [x8]
                	ldrh	w11, [x8, #0x4]
+               	orr	x12, x10, x11, lsl #32
+               	sbfx	x12, x12, #0, #44
+               	sub	x12, x12, #0x1
+               	and	x12, x12, #0xfffffffffff
                	orr	x10, x10, x11, lsl #32
-               	sbfx	x10, x10, #0, #44
-               	sub	x10, x10, #0x1
-               	and	x10, x10, #0xfffffffffff
-               	ldr	w11, [x8]
-               	ldrh	w12, [x8, #0x4]
-               	orr	x11, x11, x12, lsl #32
-               	and	x11, x11, #0xfffff00000000000
-               	orr	x10, x11, x10
+               	and	x10, x10, #0xfffff00000000000
+               	orr	x10, x10, x12
                	str	w10, [x8]
                	lsr	x10, x10, #32
                	strh	w10, [x8, #0x4]
@@ -312,20 +308,17 @@ Disassembly of section .text:
                	strb	w3, [x1, #0x6]
                	ldr	w3, [x1]
                	ldrh	w21, [x1, #0x4]
-               	orr	x3, x3, x21, lsl #32
-               	ldrb	w21, [x1, #0x6]
-               	orr	x3, x3, x21, lsl #48
-               	sbfx	x3, x3, #0, #52
-               	mov	x17, #0x5               // =5
-               	eor	x3, x3, x17
-               	and	x3, x3, #0xfffffffffffff
-               	ldr	w21, [x1]
-               	ldrh	w22, [x1, #0x4]
-               	orr	x21, x21, x22, lsl #32
+               	orr	x23, x3, x21, lsl #32
                	ldrb	w22, [x1, #0x6]
-               	orr	x21, x21, x22, lsl #48
-               	and	x21, x21, #0xfff0000000000000
-               	orr	x3, x21, x3
+               	orr	x23, x23, x22, lsl #48
+               	sbfx	x23, x23, #0, #52
+               	mov	x17, #0x5               // =5
+               	eor	x23, x23, x17
+               	and	x23, x23, #0xfffffffffffff
+               	orr	x3, x3, x21, lsl #32
+               	orr	x3, x3, x22, lsl #48
+               	and	x3, x3, #0xfff0000000000000
+               	orr	x3, x3, x23
                	str	w3, [x1]
                	lsr	x21, x3, #32
                	strh	w21, [x1, #0x4]

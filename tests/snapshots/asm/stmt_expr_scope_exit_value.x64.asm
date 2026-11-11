@@ -99,12 +99,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	<rip>, %ecx # <addr>
-               	cmpl	$-0x1, %ecx
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
-               	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
@@ -148,10 +142,9 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	movl	-0x8(%rbp), %eax
                	movl	%eax, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x1, %eax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0xa, %eax

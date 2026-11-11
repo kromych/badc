@@ -50,11 +50,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
-               	addsd	%xmm1, %xmm0
-               	movsd	<rip>, %xmm1 # <addr>
-               	addsd	%xmm1, %xmm0
+               	movsd	<rip>, %xmm2 # <addr>
+               	addsd	%xmm2, %xmm1
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movabsq	$-0x3de1bb656c020000, %rax # imm = 0xC21E449A93FE0000
                	movq	%rax, %xmm15
                	comisd	%xmm15, %xmm0

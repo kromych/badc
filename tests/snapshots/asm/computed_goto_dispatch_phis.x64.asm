@@ -735,7 +735,8 @@ Disassembly of section .text:
                	movq	%rcx, %rdi
                	jmpq	*%r9
                	incq	%rdi
-               	cmpb	$0x0, (%rax)
+               	movzbq	(%rax), %r9
+               	testl	%r9d, %r9d
                	jne	<addr>
                	incq	%rax
                	addq	$0x64, %rdx
@@ -755,10 +756,8 @@ Disassembly of section .text:
                	movq	(%rsi,%r9,8), %r9
                	jmpq	*%r9
                	leaq	<rip>, %rsi # <addr>
-               	leaq	0x1(%rax), %r12
-               	movzbq	(%rax), %rax
-               	movq	(%rsi,%rax,8), %r9
-               	movq	%r12, %rax
+               	incq	%rax
+               	movq	(%rsi,%r9,8), %r9
                	jmpq	*%r9
                	jmp	<addr>
                	imulq	$0x2710, %rcx, %rax     # imm = 0x2710

@@ -35,7 +35,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x1, #0x18]
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x7                // =7
@@ -47,7 +46,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x1, #0x4]
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x8                // =8
@@ -59,7 +57,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x1, #0x8]
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x9                // =9
@@ -71,7 +68,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x1, #0xc]
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0xa                // =10

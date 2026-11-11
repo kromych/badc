@@ -570,9 +570,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v823 LoadLocal { off=-7, kind=U32 }                   -> x0
     terminator Bz { cond=v823, target=b9, fall=b8 }   (exit_acc=v823)
   block 8  start_pc=0
-    v824 BinopI { op=and, lhs=v575, rhs_imm=4294967295 }  -> x0
-    v825 LoadLocal { off=-7, kind=U32 }                   -> x0
-    v826 Binop { op=or, lhs=v575, rhs=v825 }              -> x0
+    v824 BinopI { op=and, lhs=v575, rhs_imm=4294967295 }  -> x1
+    v825 LoadLocal { off=-7, kind=U32 }                   -> x1
+    v826 Binop { op=or, lhs=v575, rhs=v823 }              -> x0
     v827 StoreLocal { off=-1, value=v826, kind=I32 }      -> -
     v828 LocalAddr(-1)                                    -> x0
     v829 InlineAsm { template="ldmxcsr %0", ops=1, args=[v828] } -> -
@@ -676,9 +676,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v783 LoadLocal { off=-7, kind=U32 }                   -> x0
     terminator Bz { cond=v783, target=b17, fall=b16 }   (exit_acc=v783)
   block 16  start_pc=0
-    v784 BinopI { op=and, lhs=v557, rhs_imm=4294967295 }  -> x0
-    v785 LoadLocal { off=-7, kind=U32 }                   -> x0
-    v786 Binop { op=or, lhs=v557, rhs=v785 }              -> x0
+    v784 BinopI { op=and, lhs=v557, rhs_imm=4294967295 }  -> x1
+    v785 LoadLocal { off=-7, kind=U32 }                   -> x1
+    v786 Binop { op=or, lhs=v557, rhs=v783 }              -> x0
     v787 StoreLocal { off=-1, value=v786, kind=I32 }      -> -
     v788 LocalAddr(-1)                                    -> x0
     v789 InlineAsm { template="ldmxcsr %0", ops=1, args=[v788] } -> -
@@ -746,9 +746,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v741 LoadLocal { off=-7, kind=U32 }                   -> x0
     terminator Bz { cond=v741, target=b23, fall=b22 }   (exit_acc=v741)
   block 22  start_pc=0
-    v742 BinopI { op=and, lhs=v618, rhs_imm=4294967295 }  -> x0
-    v743 LoadLocal { off=-7, kind=U32 }                   -> x0
-    v744 Binop { op=or, lhs=v618, rhs=v743 }              -> x0
+    v742 BinopI { op=and, lhs=v618, rhs_imm=4294967295 }  -> x1
+    v743 LoadLocal { off=-7, kind=U32 }                   -> x1
+    v744 Binop { op=or, lhs=v618, rhs=v741 }              -> x0
     v745 StoreLocal { off=-1, value=v744, kind=I32 }      -> -
     v746 LocalAddr(-1)                                    -> x0
     v747 InlineAsm { template="ldmxcsr %0", ops=1, args=[v746] } -> -
@@ -819,9 +819,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v699 LoadLocal { off=-7, kind=U32 }                   -> x0
     terminator Bz { cond=v699, target=b30, fall=b29 }   (exit_acc=v699)
   block 29  start_pc=0
-    v700 BinopI { op=and, lhs=v599, rhs_imm=4294967295 }  -> x0
-    v701 LoadLocal { off=-7, kind=U32 }                   -> x0
-    v702 Binop { op=or, lhs=v599, rhs=v701 }              -> x0
+    v700 BinopI { op=and, lhs=v599, rhs_imm=4294967295 }  -> x1
+    v701 LoadLocal { off=-7, kind=U32 }                   -> x1
+    v702 Binop { op=or, lhs=v599, rhs=v699 }              -> x0
     v703 StoreLocal { off=-1, value=v702, kind=I32 }      -> -
     v704 LocalAddr(-1)                                    -> x0
     v705 InlineAsm { template="ldmxcsr %0", ops=1, args=[v704] } -> -
@@ -891,9 +891,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v657 LoadLocal { off=-7, kind=U32 }                   -> x0
     terminator Bz { cond=v657, target=b37, fall=b36 }   (exit_acc=v657)
   block 36  start_pc=0
-    v658 BinopI { op=and, lhs=v539, rhs_imm=4294967295 }  -> x0
-    v659 LoadLocal { off=-7, kind=U32 }                   -> x0
-    v660 Binop { op=or, lhs=v539, rhs=v659 }              -> x0
+    v658 BinopI { op=and, lhs=v539, rhs_imm=4294967295 }  -> x1
+    v659 LoadLocal { off=-7, kind=U32 }                   -> x1
+    v660 Binop { op=or, lhs=v539, rhs=v657 }              -> x0
     v661 StoreLocal { off=-1, value=v660, kind=I32 }      -> -
     v662 LocalAddr(-1)                                    -> x0
     v663 InlineAsm { template="ldmxcsr %0", ops=1, args=[v662] } -> -
@@ -1113,9 +1113,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v363 LoadLocal { off=-9, kind=U32 }                   -> x0
     terminator Bz { cond=v363, target=b57, fall=b56 }   (exit_acc=v363)
   block 56  start_pc=0
-    v364 BinopI { op=and, lhs=v113, rhs_imm=4294967295 }  -> x0
-    v365 LoadLocal { off=-9, kind=U32 }                   -> x0
-    v366 Binop { op=or, lhs=v113, rhs=v365 }              -> x0
+    v364 BinopI { op=and, lhs=v113, rhs_imm=4294967295 }  -> x1
+    v365 LoadLocal { off=-9, kind=U32 }                   -> x1
+    v366 Binop { op=or, lhs=v113, rhs=v363 }              -> x0
     v367 StoreLocal { off=-11, value=v366, kind=I32 }     -> -
     v368 LocalAddr(-11)                                   -> x0
     v369 InlineAsm { template="ldmxcsr %0", ops=1, args=[v368] } -> -
@@ -1249,9 +1249,9 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v492 LoadLocal { off=-9, kind=U32 }                   -> x0
     terminator Bz { cond=v492, target=b62, fall=b61 }   (exit_acc=v492)
   block 61  start_pc=0
-    v493 BinopI { op=and, lhs=v454, rhs_imm=4294967295 }  -> x0
-    v494 LoadLocal { off=-9, kind=U32 }                   -> x0
-    v495 Binop { op=or, lhs=v454, rhs=v494 }              -> x0
+    v493 BinopI { op=and, lhs=v454, rhs_imm=4294967295 }  -> x1
+    v494 LoadLocal { off=-9, kind=U32 }                   -> x1
+    v495 Binop { op=or, lhs=v454, rhs=v492 }              -> x0
     v496 StoreLocal { off=-11, value=v495, kind=I32 }     -> -
     v497 LocalAddr(-11)                                   -> x0
     v498 InlineAsm { template="ldmxcsr %0", ops=1, args=[v497] } -> -

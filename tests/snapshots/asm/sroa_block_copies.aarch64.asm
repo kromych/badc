@@ -525,10 +525,9 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	ldr	w0, [sp, #0x38]
-               	and	x0, x0, #0x7
-               	cmp	w0, #0x5
+               	and	x1, x0, #0x7
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	ldr	w0, [sp, #0x38]
                	ubfx	x0, x0, #3, #5
                	cmp	w0, #0x11
                	b.ne	<addr>

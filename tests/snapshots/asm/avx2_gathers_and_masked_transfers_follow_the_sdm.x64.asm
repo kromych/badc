@@ -10718,7 +10718,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	vmovd	%ebx, %xmm0
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rdx # <addr>
+               	movq	%rax, %rdx
                	shrq	$0xc, %rdx
                	xorq	%rdx, %rax
                	movq	%rax, <rip> # <addr>
@@ -10821,7 +10821,7 @@ Disassembly of section .text:
                	movups	-0x1e0(%rbp), %xmm15
                	vmovdqa	%xmm15, %xmm0
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
                	movq	%rax, <rip> # <addr>
@@ -10855,7 +10855,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	vmovd	%r15d, %xmm1
                	movq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
+               	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
                	movq	%rax, <rip> # <addr>

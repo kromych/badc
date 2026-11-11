@@ -515,11 +515,10 @@ Disassembly of section .text:
                	addq	$0x10, %rax
                	movl	(%rax), %r10d
                	movl	%r10d, (%rcx)
-               	movl	-0x18(%rbp), %eax
-               	movl	-0xc(%rbp), %ecx
-               	cmpl	%ecx, %eax
-               	je	<addr>
                	movl	-0x18(%rbp), %edi
+               	movl	-0xc(%rbp), %eax
+               	cmpl	%eax, %edi
+               	je	<addr>
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
                	xorl	%eax, %eax

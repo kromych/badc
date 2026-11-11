@@ -255,7 +255,6 @@ Disassembly of section .text:
                	movq	-0xf8(%rbp), %rax
                	testq	%rax, %rax
                	jle	<addr>
-               	movq	-0xf8(%rbp), %rax
                	cmpq	$0xe10, %rax            # imm = 0xE10
                	jle	<addr>
                	movl	$0x12, %eax

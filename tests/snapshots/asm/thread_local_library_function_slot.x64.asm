@@ -28,21 +28,18 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rsi # <addr>
                	movq	%fs:0x0, %rcx
                	addq	$-0x8, %rcx
-               	movq	(%rcx), %rax
-               	movq	<rip>, %rsi # <addr>
-               	cmpq	%rsi, %rax
+               	movq	(%rcx), %rdx
+               	movq	<rip>, %rdi # <addr>
+               	xorl	%eax, %eax
+               	cmpq	%rsi, %rdx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	xorl	%eax, %eax
-               	testq	%rsi, %rsi
-               	je	<addr>
-               	movq	(%rcx), %rsi
-               	cmpq	%rdx, %rsi
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	cmpq	%rdi, %rdx
+               	movq	%rax, %rdx
+               	cmoveq	%rsi, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -65,8 +62,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	popq	%rbp
                	retq
-               	movq	%rax, %rdx
-               	jmp	<addr>
 
 <__c5_sys_strlen>:
                	pushq	%rbp

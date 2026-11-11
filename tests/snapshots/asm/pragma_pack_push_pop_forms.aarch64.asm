@@ -24,7 +24,6 @@ Disassembly of section .text:
                	ldr	x1, [x0, #0x8]
                	cmp	x1, #0x38
                	b.hs	<addr>
-               	ldr	x1, [x0, #0x8]
                	add	x1, x1, #0x1
                	str	x1, [x0, #0x8]
                	ldr	x1, [x0, #0x8]

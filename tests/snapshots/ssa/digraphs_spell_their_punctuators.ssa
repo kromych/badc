@@ -49,9 +49,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v41  ImmData(28)                                      -> x1
     terminator Jmp(b4)   (exit_acc=v41)
   block 2  start_pc=0
-    v106 Load { addr=v95, disp=0, kind=I8 }               -> x2
+    v106 Load { addr=v95, disp=0, kind=I8 }               -> x6
     v107 Load { addr=v96, disp=0, kind=I8 }               -> x6
-    v108 Binop { op=eq, lhs=v106, rhs=v107 }              -> x2
+    v108 Binop { op=eq, lhs=v97, rhs=v107 }               -> x2
     v109 Imm(0)                                           -> x6
     terminator Bz { cond=v108, target=b5, fall=b3 }   (exit_acc=v108)
   block 3  start_pc=0
@@ -76,9 +76,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v46  ImmData(51)                                      -> x1
     terminator Jmp(b9)   (exit_acc=v46)
   block 7  start_pc=0
-    v123 Load { addr=v110, disp=0, kind=I8 }              -> x2
+    v123 Load { addr=v110, disp=0, kind=I8 }              -> x6
     v124 Load { addr=v111, disp=0, kind=I8 }              -> x6
-    v125 Binop { op=eq, lhs=v123, rhs=v124 }              -> x2
+    v125 Binop { op=eq, lhs=v112, rhs=v124 }              -> x2
     v126 Imm(0)                                           -> x6
     terminator Bz { cond=v125, target=b10, fall=b8 }   (exit_acc=v125)
   block 8  start_pc=0
@@ -110,9 +110,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v51  ImmData(59)                                      -> x1
     terminator Jmp(b15)   (exit_acc=v51)
   block 13  start_pc=0
-    v139 Load { addr=v127, disp=0, kind=I8 }              -> x2
+    v139 Load { addr=v127, disp=0, kind=I8 }              -> x6
     v140 Load { addr=v128, disp=0, kind=I8 }              -> x6
-    v141 Binop { op=eq, lhs=v139, rhs=v140 }              -> x2
+    v141 Binop { op=eq, lhs=v129, rhs=v140 }              -> x2
     v142 Imm(0)                                           -> x6
     terminator Bz { cond=v141, target=b16, fall=b14 }   (exit_acc=v141)
   block 14  start_pc=0

@@ -38,7 +38,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x8(%rbp)
                	cmpq	$0x3, %rax
                	jne	<addr>
-               	cmpq	$0x0, -0x8(%rbp)
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -53,8 +53,7 @@ Disassembly of section .text:
                	movq	%rcx, -0x8(%rbp)
                	testq	%rax, %rax
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	cmpq	$0xd, %rax
+               	cmpq	$0xd, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave

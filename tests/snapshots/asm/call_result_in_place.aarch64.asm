@@ -534,12 +534,11 @@ Disassembly of section .text:
                	bl	<addr>
                	str	x0, [x20]
                	str	x1, [x20, #0x8]
+               	mov	x2, #0x0                // =0
+               	cmp	x1, #0x6
+               	cset	x1, eq
                	cmp	x0, #0x3
-               	mov	x0, #0x0                // =0
-               	b.ne	<addr>
-               	ldr	x0, [x20, #0x8]
-               	cmp	x0, #0x6
-               	cset	x0, eq
+               	csel	x0, x1, x2, eq
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

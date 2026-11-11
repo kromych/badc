@@ -60,7 +60,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movzbq	-0x80(%rbp), %rax
                	testb	$-0x80, %al
                	jne	<addr>
                	movl	$0x3, %eax
@@ -117,7 +116,6 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	leave
                	retq
-               	movzbq	-0x80(%rbp), %rax
                	testb	$0x1, %al
                	jne	<addr>
                	movl	$0x16, %eax

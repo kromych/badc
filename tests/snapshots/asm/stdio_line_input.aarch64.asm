@@ -69,14 +69,13 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x50]
                	cbz	x0, <addr>
-               	ldur	x0, [x29, #-0x48]
-               	cmp	x0, #0x5
+               	ldur	x1, [x29, #-0x48]
+               	cmp	x1, #0x5
                	b.hs	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	ldur	x0, [x29, #-0x50]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x4                // =4

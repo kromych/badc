@@ -85,18 +85,17 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movzbq	<rip>, %rax # <addr>
                	movzbq	<rip>, %rcx # <addr>
-               	subq	%rcx, %rax
-               	cmpl	$0xc, %eax
+               	movzbq	<rip>, %rax # <addr>
+               	subq	%rax, %rcx
+               	cmpl	$0xc, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movzbq	<rip>, %rax # <addr>
                	movzbq	<rip>, %rcx # <addr>
-               	subq	%rcx, %rax
-               	cmpl	$0x4, %eax
+               	subq	%rax, %rcx
+               	cmpl	$0x4, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp

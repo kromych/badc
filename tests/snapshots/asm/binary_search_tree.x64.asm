@@ -73,7 +73,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movq	(%rdi), %rax
                	cmpq	%rax, %rsi
                	jge	<addr>
                	movq	0x8(%rdi), %rdi

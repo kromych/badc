@@ -363,12 +363,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x80
                	ret
                	adrp	x0, <page>
-               	ldr	w2, [x0, #0x78]
+               	ldr	w0, [x0, #0x78]
                	adrp	x1, <page>
-               	ldr	w3, [x1, #0x80]
-               	cmp	w2, w3
-               	b.eq	<addr>
                	ldr	w1, [x1, #0x80]
+               	cmp	w0, w1
+               	b.eq	<addr>
                	adrp	x2, <page>
                	ldr	w2, [x2, #0x88]
                	cmp	w1, w2
@@ -378,7 +377,6 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x80
                	ret
-               	ldr	w0, [x0, #0x78]
                	adrp	x22, <page>
                	add	x22, x22, <lo12>
                	add	x1, x22, #0xc

@@ -16,19 +16,19 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v10  Store { addr=v7, disp=0, value=v9, kind=I32 pc_rel } -> -
     v11  ImmData(16)                                      -> x1
     v12  Extend { value=v9, kind=I32 }                    -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=3 }             -> x0
+    v13  BinopI { op=ne, lhs=v12, rhs_imm=3 }             -> x1
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
     v14  Imm(7)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
   block 2  start_pc=0
-    v15  ImmCode(ent_pc=1)                                -> x0
-    v16  ImmCode(ent_pc=0)                                -> x0
-    v17  Imm(4)                                           -> x0
-    v18  Imm(4)                                           -> x0
-    v19  ImmData(16)                                      -> x0
-    v20  Load { addr=v7, disp=0, kind=I32 pc_rel }        -> x0
-    v21  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x0
+    v15  ImmCode(ent_pc=1)                                -> x1
+    v16  ImmCode(ent_pc=0)                                -> x1
+    v17  Imm(4)                                           -> x1
+    v18  Imm(4)                                           -> x1
+    v19  ImmData(16)                                      -> x1
+    v20  Load { addr=v7, disp=0, kind=I32 pc_rel }        -> x1
+    v21  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x0
     v22  Store { addr=v7, disp=0, value=v21, kind=I32 pc_rel } -> -
     v23  ImmData(16)                                      -> x1
     v24  Extend { value=v21, kind=I32 }                   -> x0

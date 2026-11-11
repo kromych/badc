@@ -56,13 +56,12 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	movq	-0xc8(%rbp), %rax
-               	movq	-0xd0(%rbp), %rcx
-               	cmpq	%rcx, %rax
+               	movq	-0xc8(%rbp), %rcx
+               	movq	-0xd0(%rbp), %rax
+               	cmpq	%rax, %rcx
                	ja	<addr>
-               	movq	-0xc0(%rbp), %rax
-               	movq	-0xd0(%rbp), %rcx
-               	cmpq	%rcx, %rax
+               	movq	-0xc0(%rbp), %rcx
+               	cmpq	%rax, %rcx
                	ja	<addr>
                	movq	-0xb0(%rbp), %rax
                	movq	-0xb8(%rbp), %rcx

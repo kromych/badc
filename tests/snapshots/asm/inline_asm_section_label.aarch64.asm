@@ -43,14 +43,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	ldr	x1, [x0, #0x8]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x1, x2
+               	ldr	x0, [x0, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	ldr	x0, [x0, #0x8]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7
                	b.eq	<addr>

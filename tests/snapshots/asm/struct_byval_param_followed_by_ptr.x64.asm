@@ -48,11 +48,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	-0x8(%rbp), %eax
-               	cmpl	$0x1, %eax
+               	movl	-0x8(%rbp), %esi
+               	cmpl	$0x1, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movl	-0x8(%rbp), %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

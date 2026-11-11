@@ -72,13 +72,10 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
-               	fldt	-0x20(%rbp)
-               	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm0
                	fldt	-0x10(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movsd	-0x8(%rsp), %xmm0
+               	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
                	xorl	%eax, %eax

@@ -20,14 +20,14 @@ fn ent_pc=25 n_params=4 variadic=false locals=0
     v14  Extend { value=v12, kind=I32 }                   -> x0
     v15  Imm(0)                                           -> x0
     v16  Load { addr=v7, disp=0, kind=I32 }               -> x0
-    v17  BinopI { op=le, lhs=v16, rhs_imm=0 }             -> x0
-    v18  Imm(0)                                           -> x1
+    v17  BinopI { op=le, lhs=v16, rhs_imm=0 }             -> x1
+    v18  Imm(0)                                           -> x2
     terminator Bnz { cond=v17, target=b4, fall=b1 }   (exit_acc=v17)
   block 1  start_pc=0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x0
-    v21  Load { addr=v7, disp=0, kind=I32 }               -> x0
-    v22  Binop { op=add, lhs=v1, rhs=v21 }                -> x13
+    v19  Imm(0)                                           -> x1
+    v20  Imm(0)                                           -> x1
+    v21  Load { addr=v7, disp=0, kind=I32 }               -> x1
+    v22  Binop { op=add, lhs=v1, rhs=v16 }                -> x13
     v23  BinopI { op=add, lhs=v7, rhs_imm=4 }             -> x0
     v24  Load { addr=v7, disp=4, kind=I32 }               -> x0
     terminator Bz { cond=v24, target=b9, fall=b2 }   (exit_acc=v24)

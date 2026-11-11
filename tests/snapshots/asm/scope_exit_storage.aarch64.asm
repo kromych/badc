@@ -60,9 +60,8 @@ Disassembly of section .text:
 <release>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	ldr	x1, [x0]
-               	cbz	x1, <addr>
                	ldr	x0, [x0]
+               	cbz	x0, <addr>
                	ldr	w1, [x0, #0x200]
                	bl	<addr>
                	cbz	w0, <addr>

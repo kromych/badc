@@ -42,7 +42,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x0, (%rdi)
                	retq
-               	movl	(%rdi), %eax
                	incq	%rax
                	movl	%eax, (%rdi)
                	retq

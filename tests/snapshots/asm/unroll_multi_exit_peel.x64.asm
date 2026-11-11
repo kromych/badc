@@ -35,7 +35,6 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	decq	%rax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rdx # <addr>
                	imulq	%rdx, %rax
                	movq	<rip>, %rdx # <addr>
@@ -48,7 +47,6 @@ Disassembly of section .text:
                	movq	<rip>, %rdx # <addr>
                	testq	%rdx, %rdx
                	jl	<addr>
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
                	imulq	%rsi, %rdx
                	addq	%rdx, %rax
@@ -59,7 +57,6 @@ Disassembly of section .text:
                	movq	<rip>, %rdx # <addr>
                	testq	%rdx, %rdx
                	jl	<addr>
-               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rsi # <addr>
                	imulq	%rsi, %rdx
                	addq	%rdx, %rax

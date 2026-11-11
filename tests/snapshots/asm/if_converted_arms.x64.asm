@@ -128,6 +128,13 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	retq
 
+<inc_unless>:
+               	movslq	%esi, %rsi
+               	leaq	0x1(%rdi), %rax
+               	testq	%rsi, %rsi
+               	cmovneq	%rdi, %rax
+               	retq
+
 <scale>:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
@@ -279,6 +286,24 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x9, %eax
+               	leave
+               	retq
+               	movl	$0x5, %edi
+               	xorl	%esi, %esi
+               	callq	<addr>
+               	cmpq	$0x6, %rax
+               	jne	<addr>
+               	movl	$0x5, %edi
+               	movl	$0x1, %esi
+               	callq	<addr>
+               	cmpq	$0x5, %rax
+               	jne	<addr>
+               	movq	$-0x1, %rdi
+               	xorl	%esi, %esi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0xf, %eax
                	leave
                	retq
                	movl	$0x1, %edi

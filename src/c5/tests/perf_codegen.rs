@@ -4158,7 +4158,7 @@ fn x64_negation_does_not_fuse_a_comparison_into_the_branch() {
 }
 
 /// A short branch that only chooses values becomes a select: the
-/// conditional increment is a `csel` / `cmov` inside the loop, whose back
+/// conditional increment is a `cinc` / `cmov` inside the loop, whose back
 /// edge is its only conditional branch; a diamond's arms run ahead of the
 /// compare; two values chosen by one compare or one bit test read its
 /// flags; and x86-64 reads a floating `!=` with `cmovne` and `cmovp`. No
@@ -4179,18 +4179,20 @@ long swap_if(long a, long b, int c) {\n\
     return a * 10 + b;\n}\n\
 long pick_ne(double x, double y, long a, long b) { long r = b; if (x != y) r = a; return r; }\n";
     let csel = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0000;
+    // `cinc`: `csinc` reading one register twice.
+    let cinc = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0400 && (w >> 16) & 31 == (w >> 5) & 31;
     let cmov = |i: &X64Insn| (0x0F40..=0x0F4F).contains(&i.op);
     let setcc = |i: &X64Insn| (0x0F90..=0x0F9F).contains(&i.op);
     // `cmp Rn, #0` and `test r, r`.
     let a64_zero_test = |w: u32| w & 0x7FFF_FC1F == 0x7100_001F;
     let x64_zero_test = |i: &X64Insn| i.op == 0x85 && i.reg_form() && i.regs().0 == i.regs().1;
     let mut m = Misses::default();
-    for (name, csels, cmovs) in [
-        ("count_below", 1, 1),
-        ("diamond", 1, 1),
-        ("minmax", 2, 2),
-        ("swap_if", 2, 2),
-        ("pick_ne", 1, 2),
+    for (name, csels, cincs, cmovs) in [
+        ("count_below", 0, 1, 1),
+        ("diamond", 1, 0, 1),
+        ("minmax", 2, 0, 2),
+        ("swap_if", 2, 0, 2),
+        ("pick_ne", 1, 0, 2),
     ] {
         let ws = a64(SRC, name);
         let conds: Vec<(usize, i64)> = (ws.iter().enumerate())
@@ -4205,6 +4207,7 @@ long pick_ne(double x, double y, long a, long b) { long r = b; if (x != y) r = a
             .map_or(0..ws.len(), |&(i, t)| t as usize..i);
         m.expect(
             ws[body.clone()].iter().filter(|&&w| csel(w)).count() == csels
+                && ws[body.clone()].iter().filter(|&&w| cinc(w)).count() == cincs
                 && !conds.iter().any(|(i, _)| body.contains(i))
                 && !ws.iter().any(|&w| a64_is_cset(w) || a64_zero_test(w)),
             || format!("aarch64 {name}: {ws:08x?}"),

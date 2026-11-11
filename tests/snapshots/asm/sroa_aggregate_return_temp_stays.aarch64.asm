@@ -27,9 +27,8 @@ Disassembly of section .text:
                	ldur	w3, [x29, #-0x4]
                	add	x1, x1, x2
                	add	x2, x0, x3
-               	add	x3, x1, #0x1
                	cmp	w2, w0
-               	csel	x0, x3, x1, lo
+               	cinc	x0, x1, lo
                	mov	w0, w0
                	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10
@@ -50,9 +49,8 @@ Disassembly of section .text:
                	ldur	w3, [x29, #-0x4]
                	add	x1, x1, x2
                	add	x2, x0, x3
-               	add	x3, x1, #0x1
                	cmp	w2, w0
-               	csel	x0, x3, x1, lo
+               	cinc	x0, x1, lo
                	mov	w0, w0
                	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10

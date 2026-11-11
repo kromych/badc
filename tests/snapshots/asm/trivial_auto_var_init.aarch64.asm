@@ -49,9 +49,8 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x4, x3, x2
                	ldrb	w4, [x4]
-               	add	x5, x0, #0x1
                	cmp	w4, #0x0
-               	csel	x0, x5, x0, ne
+               	cinc	x0, x0, ne
                	add	x2, x2, #0x1
                	cmp	x2, x1
                	b.lo	<addr>

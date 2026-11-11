@@ -36,12 +36,10 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	add	x4, x1, #0x1
                	cmp	x2, x3
-               	csel	x1, x4, x1, eq
-               	add	x4, x1, #0x1
+               	cinc	x1, x1, eq
                	cmp	x2, x3
-               	csel	x1, x4, x1, eq
+               	cinc	x1, x1, eq
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>

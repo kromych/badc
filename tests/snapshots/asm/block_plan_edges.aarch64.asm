@@ -380,9 +380,8 @@ Disassembly of section .text:
                	mov	x1, x0
                	ldrb	w3, [x2, x0]
                	and	x3, x3, #0x1
-               	add	x4, x1, #0x1
                	cmp	w3, #0x0
-               	csel	x1, x1, x4, eq
+               	cinc	x1, x1, ne
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>

@@ -3723,5 +3723,8 @@ mod tests {
         assert_eq!(enc_csel(Reg(30), Reg(0), Reg(29), Cond::Lt), 0x9A9D_B01E);
         assert_eq!(enc_fcsel(1, 2, 3, Cond::Ne, false), 0x1E63_1C41);
         assert_eq!(enc_fcsel(4, 5, 6, Cond::Gt, true), 0x1E26_CCA4);
+        assert_eq!(enc_csinc(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1441);
+        // `cinc x5, x6, lt`.
+        assert_eq!(enc_csinc(Reg(5), Reg(6), Reg(6), Cond::Ge), 0x9A86_A4C5);
     }
 }

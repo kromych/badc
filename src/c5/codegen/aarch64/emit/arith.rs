@@ -137,12 +137,13 @@ pub(super) fn emit_neg(
 }
 
 /// `Inst::Select`: `csel` / `fcsel` on a fused comparison's flags or on
-/// `cmp cond, #0`, read before the arms take the scratch registers.
+/// `cmp cond, #0`, read before the arms take the scratch registers; `cinc`
+/// for an arm the other plus one (`Allocation::select_inc`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_select(
     code: &mut Vec<u8>,
     dst: Place,
-    (cond, a, b, kind): (u32, u32, u32, LoadKind),
+    (v, cond, a, b, kind): (u32, u32, u32, u32, LoadKind),
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -190,6 +191,23 @@ pub(super) fn emit_select(
             enc_fcsel(dd, regs[0], regs[1], cc, kind == LoadKind::F32),
         );
         store_spilled_fp(code, frame, dst, dd);
+        return Ok(());
+    }
+    if alloc.select_inc.get(v as usize).copied().unwrap_or(false) {
+        use super::encode::enc_csinc;
+        // `cinc`: the arm that is not the increment, plus one when the
+        // increment is chosen.
+        let inc_is_a = matches!(func.insts[a as usize],
+            Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == b);
+        let (x, keep) = if inc_is_a { (b, cc.flip()) } else { (a, cc) };
+        let Some(rx) = materialize_int(code, place_of(alloc, x), scratch.primary, frame) else {
+            return fail("Select: arm not int reg / spill");
+        };
+        let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+            return fail("Select: dst not int reg / spill");
+        };
+        emit(code, enc_csinc(rd, rx, rx, keep));
+        store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
     let Some(ra) = materialize_int(code, place_of(alloc, a), scratch.primary, frame) else {

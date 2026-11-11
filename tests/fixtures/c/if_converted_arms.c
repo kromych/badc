@@ -2,10 +2,10 @@
  * arm's 32-bit comparison of a zero-extended load keeps its width, an arm
  * reading values the branch's block defines after the condition sees
  * them, two values chosen by one comparison, both arms of a diamond, a
- * conditional increment in a loop, floating constants chosen by a
- * comparison, and integers chosen by floating comparisons, a NaN operand
- * among them. Every check is against values computed here; each failure
- * returns a distinct code. */
+ * conditional increment in a loop and out of one, floating constants
+ * chosen by a comparison, and integers chosen by floating comparisons, a
+ * NaN operand among them. Every check is against values computed here;
+ * each failure returns a distinct code. */
 
 #define NOINLINE __attribute__((noinline))
 
@@ -57,6 +57,12 @@ NOINLINE long count_below(const int *p, int n, int k) {
     return c;
 }
 
+NOINLINE long inc_unless(long x, int c) {
+    long r = x + 1;
+    if (c) r = x;
+    return r;
+}
+
 NOINLINE double scale(int c, double y) {
     double r = c ? 1.5 : 0.001;
     return r * y;
@@ -90,6 +96,7 @@ int main(void) {
     int v[8] = {5, -1, 9, 3, 3, 12, -7, 0};
     if (count_below(v, 8, 3) != 3) return 8;
     if (count_below(v, 8, 4) != 5) return 9;
+    if (inc_unless(5, 0) != 6 || inc_unless(5, 1) != 5 || inc_unless(-1, 0) != 0) return 15;
     if (scale(1, 2.0) != 3.0 || scale(0, 1000.0) != 1.0) return 10;
     if (umax(0x80000000u, 5) != 0x80000000u || umax(5, 0xFFFFFFFFu) != 0xFFFFFFFFu) return 11;
     volatile double zero = 0.0;

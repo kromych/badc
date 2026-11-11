@@ -20,9 +20,8 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.ge	<addr>
                	ldrb	w4, [x3, x0]
-               	add	x5, x2, #0x1
                	cmp	w4, #0x0
-               	csel	x2, x5, x2, eq
+               	cinc	x2, x2, eq
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>

@@ -474,7 +474,7 @@ pub(super) fn emit_inst(
         Inst::Select { cond, a, b, kind } => super::arith::emit_select(
             code,
             dst,
-            (*cond, *a, *b, *kind),
+            (v, *cond, *a, *b, *kind),
             func,
             alloc,
             frame,

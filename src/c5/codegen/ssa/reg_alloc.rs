@@ -148,6 +148,10 @@ pub(crate) struct Allocation {
     /// Per value: a mask in `branch_fused` that selects read, which sets
     /// the flags with aarch64 `tst` where a branch's mask is its `tbz`.
     pub mask_tests: Vec<bool>,
+    /// Per value: an aarch64 select one of whose arms is the other plus
+    /// one, which its `csinc` forms; that increment, read by nothing else,
+    /// is never materialized.
+    pub select_inc: Vec<bool>,
     /// True for a store that writes its value, an `Imm`, from its own
     /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
     /// a store, so its use count is zero and it is never materialized;
@@ -1409,6 +1413,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             mask_tests: Vec::new(),
+            select_inc: Vec::new(),
             imm_store: Vec::new(),
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
@@ -1852,6 +1857,33 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             use_counts[c as usize] = 0;
         }
     }
+    // Likewise the increment an aarch64 select alone reads, of its other arm.
+    let mut select_inc: Vec<bool> = vec![false; func.insts.len()];
+    for (s, inst) in func.insts.iter().enumerate() {
+        let Inst::Select {
+            a,
+            b,
+            kind: LoadKind::I64,
+            ..
+        } = *inst
+        else {
+            continue;
+        };
+        if !target.is_aarch64() || use_counts[s] == 0 {
+            continue;
+        }
+        for (inc, x) in [(a, b), (b, a)] {
+            if use_counts[inc as usize] == 1
+                && matches!(func.insts[inc as usize],
+                    Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == x)
+            {
+                use_counts[inc as usize] = 0;
+                use_counts[x as usize] -= 1;
+                select_inc[s] = true;
+                break;
+            }
+        }
+    }
     // Recognize comparison-feeding-branch sites. The terminator's cond
     // must be a Binop / BinopI comparison defined in the same block
     // with the terminator as its single consumer, and every following
@@ -2165,6 +2197,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_k,
         branch_fused,
         mask_tests,
+        select_inc,
         imm_store,
         stack_imm,
         stack_load,

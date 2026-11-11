@@ -91,13 +91,18 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.ge	<addr>
                	ldrsw	x5, [x4, x0, lsl #2]
-               	add	x6, x3, #0x1
                	cmp	w5, w2
-               	csel	x3, x6, x3, lt
+               	cinc	x3, x3, lt
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>
                	mov	x0, x3
+               	ret
+
+<inc_unless>:
+               	sxtw	x1, w1
+               	cmp	x1, #0x0
+               	cinc	x0, x0, eq
                	ret
 
 <scale>:
@@ -265,6 +270,25 @@ Disassembly of section .text:
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
+               	ldr	d8, [sp, #0x20]
+               	add	sp, sp, #0x60
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x5                // =5
+               	mov	x1, #0x0                // =0
+               	bl	<addr>
+               	cmp	x0, #0x6
+               	b.ne	<addr>
+               	mov	x0, #0x5                // =5
+               	mov	x1, #0x1                // =1
+               	bl	<addr>
+               	cmp	x0, #0x5
+               	b.ne	<addr>
+               	mov	x0, #-0x1               // =-1
+               	mov	x1, #0x0                // =0
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	mov	x0, #0xf                // =15
                	ldr	d8, [sp, #0x20]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10

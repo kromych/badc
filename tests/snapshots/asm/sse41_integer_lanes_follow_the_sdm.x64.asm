@@ -1276,7 +1276,7 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm1
                	movapd	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
@@ -1284,7 +1284,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	cmpl	%r8d, %ecx
                	jne	<addr>
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	xorq	$-0x1, %rcx
                	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
@@ -1292,7 +1292,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %rcx
                	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
@@ -1302,13 +1302,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movapd	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	xorl	%r9d, %r9d
                	testq	%rcx, %rcx
                	je	<addr>
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	xorq	$-0x1, %rcx
                	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
@@ -1316,7 +1316,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %rcx
                	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
@@ -1335,7 +1335,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movapd	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
@@ -1345,13 +1345,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movapd	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
-               	vpextrq	$0x0, %xmm2, %rcx
+               	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
                	xorl	%r9d, %r9d
                	testq	%rcx, %rcx
                	je	<addr>
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	xorq	$-0x1, %rcx
                	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
@@ -1360,7 +1360,7 @@ Disassembly of section .text:
                	movapd	%xmm2, %xmm0
                	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
                	pand	%xmm1, %xmm0
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	vpextrq	$0x1, %xmm0, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
@@ -1483,7 +1483,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %rcx
                	vpinsrq	$0x1, %rcx, %xmm1, %xmm1
                	pand	%xmm1, %xmm0
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	vpextrq	$0x1, %xmm0, %rdx
                	orq	%rdx, %rcx
                	testq	%rcx, %rcx
@@ -1517,7 +1517,7 @@ Disassembly of section .text:
                	xorq	$-0x1, %rax
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	pand	%xmm1, %xmm0
-               	vpextrq	$0x0, %xmm0, %rax
+               	vmovq	%xmm0, %rax
                	vpextrq	$0x1, %xmm0, %rcx
                	orq	%rcx, %rax
                	testq	%rax, %rax

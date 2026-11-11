@@ -1019,7 +1019,7 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x20(%rbp), %rax
                	movups	0x1(%rax), %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpl	$0x4030201, %eax        # imm = 0x4030201
                	je	<addr>

@@ -143,7 +143,6 @@ pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
         rewrite(func, &cells, DOUBLE);
         slots.extend(cells);
     }
-    split_wide_inserts(func);
     slots
 }
 
@@ -151,8 +150,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
 /// 128-bit part: the part read out (a `V128` `VecExtract`), the lane
 /// inserted into it and the part inserted back. constfold then reads each
 /// part through the writes before it, so lane writes into one part chain
-/// on that part alone and the vector takes the part once.
-fn split_wide_inserts(func: &mut FunctionSsa) {
+/// on that part alone and the vector takes the part once. A lane read
+/// above the low part reads the part, which reads of its other lanes share.
+pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
+    split_wide_reads(func);
     let sites: Vec<ValueId> = func
         .blocks
         .iter()
@@ -233,6 +234,51 @@ fn split_wide_inserts(func: &mut FunctionSsa) {
         b.terminator.for_each_operand_mut(to);
         if b.exit_acc != NO_VALUE {
             to(&mut b.exit_acc);
+        }
+    }
+}
+
+/// The reads half of [`split_wide_lanes`].
+fn split_wide_reads(func: &mut FunctionSsa) {
+    let sites: Vec<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|b| b.inst_range.clone())
+        .filter(|&v| {
+            matches!(func.insts[v as usize], Inst::VecExtract { bytes, kind, off, .. }
+                if bytes > 16 && kind != LoadKind::V128 && off >= 16)
+        })
+        .collect();
+    if sites.is_empty() {
+        return;
+    }
+    let ins: Vec<Insertion> = sites
+        .iter()
+        .filter_map(|&v| match func.insts[v as usize] {
+            Inst::VecExtract {
+                vec, off, bytes, ..
+            } => Some(Insertion {
+                at: At::Before(v),
+                inst: Inst::VecExtract {
+                    vec,
+                    off: off & !15,
+                    kind: LoadKind::V128,
+                    bytes,
+                },
+                is_f32: false,
+            }),
+            _ => None,
+        })
+        .collect();
+    let rw = insert(func, &ins);
+    for (k, &v) in sites.iter().enumerate() {
+        if let Inst::VecExtract {
+            vec, off, bytes, ..
+        } = &mut func.insts[rw.remap[v as usize] as usize]
+        {
+            *vec = rw.ids[k];
+            *off &= 15;
+            *bytes = 16;
         }
     }
 }

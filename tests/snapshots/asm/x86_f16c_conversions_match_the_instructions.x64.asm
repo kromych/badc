@@ -560,45 +560,34 @@ Disassembly of section .text:
                	movl	$0x40000000, %r9d       # imm = 0x40000000
                	movl	$0x3f800000, %ebx       # imm = 0x3F800000
                	xorl	%r12d, %r12d
+               	xorl	%r13d, %r13d
                	movq	%rbx, %xmm15
                	vmovd	%xmm15, %r11d
                	vmovd	%r11d, %xmm0
                	movq	%r9, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpinsrd	$0x1, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x0, %xmm15, %ymm0, %ymm0
+               	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
                	movq	%r8, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpinsrd	$0x2, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x0, %xmm15, %ymm0, %ymm0
+               	vpinsrd	$0x2, %r11d, %xmm0, %xmm0
                	movq	%rdi, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpinsrd	$0x3, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x0, %xmm15, %ymm0, %ymm0
+               	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
+               	vmovdqa	%xmm0, %xmm0
+               	xorl	%edi, %edi
                	movq	%rsi, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrd	$0x0, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	vmovd	%r11d, %xmm1
                	movq	%rdx, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrd	$0x1, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	vpinsrd	$0x1, %r11d, %xmm1, %xmm1
                	movq	%rcx, %xmm15
                	vmovd	%xmm15, %r11d
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrd	$0x2, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	vpinsrd	$0x2, %r11d, %xmm1, %xmm1
                	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
-               	vmovaps	%ymm0, %ymm14
-               	vextracti128	$0x1, %ymm14, %xmm15
-               	vpinsrd	$0x3, %r11d, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm14, %ymm14
+               	vpinsrd	$0x3, %r11d, %xmm1, %xmm1
+               	vinserti128	$0x1, %xmm1, %ymm0, %ymm14
                	vmovups	%ymm14, -0x80(%rbp)
                	leaq	(%rsp), %rax
                	vmovups	-0x80(%rbp), %ymm14

@@ -112,7 +112,7 @@ Disassembly of section .text:
                	paddd	%xmm1, %xmm0
                	pshufd	$0xb1, %xmm0, %xmm1     # xmm1 = xmm0[1,0,3,2]
                	paddd	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vzeroupper
                	leave

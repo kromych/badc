@@ -146,7 +146,7 @@ Disassembly of section .text:
                	vpblendd	$0x8, %xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0,1,2],xmm2[3]
                	vpextrd	$0x3, %xmm0, %eax
                	movslq	%eax, %rax
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	leaq	-0x1(%rax), %rsi
@@ -340,7 +340,7 @@ Disassembly of section .text:
                	movups	-0x30(%rbp), %xmm2
                	vpmulld	%xmm2, %xmm1, %xmm0
                	vpshufd	$0x1b, %xmm0, %xmm0     # xmm0 = xmm0[3,2,1,0]
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpl	$0x2a, %eax
                	je	<addr>

@@ -12231,9 +12231,9 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdx)
                	movups	0x3(%rax), %xmm0
                	movups	0x1(%rcx), %xmm1
-               	vpextrq	$0x0, %xmm0, %rdx
+               	vmovq	%xmm0, %rdx
                	vpextrq	$0x1, %xmm0, %rsi
-               	vpextrq	$0x0, %xmm1, %r8
+               	vmovq	%xmm1, %r8
                	vpextrq	$0x1, %xmm1, %r9
                	leaq	(%rsp), %rdi
                	movq	%rdx, (%rsp)
@@ -12639,16 +12639,14 @@ Disassembly of section .text:
                	vmovups	(%rsp), %ymm0
                	vmovups	0x20(%rsp), %ymm1
                	vpand	%ymm1, %ymm0, %ymm0
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vmovq	%xmm0, %rax
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm1
+               	vmovq	%xmm1, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
                	testq	%rax, %rax
                	sete	%al
@@ -12659,34 +12657,30 @@ Disassembly of section .text:
                	movq	(%rsp), %rax
                	xorq	$-0x1, %rax
                	xorl	%esi, %esi
+               	xorl	%edi, %edi
                	vmovq	%rax, %xmm0
                	movq	0x8(%rsp), %rax
                	xorq	$-0x1, %rax
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpinsrq	$0x1, %rax, %xmm15, %xmm15
-               	vinserti128	$0x0, %xmm15, %ymm0, %ymm0
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vmovdqa	%xmm0, %xmm0
                	movq	0x10(%rsp), %rax
                	xorq	$-0x1, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrq	$0x0, %rax, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	xorl	%esi, %esi
+               	vmovq	%rax, %xmm1
                	movq	0x18(%rsp), %rax
                	xorq	$-0x1, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrq	$0x1, %rax, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
+               	vinserti128	$0x1, %xmm1, %ymm0, %ymm0
                	vmovups	0x20(%rsp), %ymm1
                	vpand	%ymm1, %ymm0, %ymm0
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vmovq	%xmm0, %rax
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm1
+               	vmovq	%xmm1, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
                	testq	%rax, %rax
                	sete	%al
@@ -12700,55 +12694,47 @@ Disassembly of section .text:
                	vmovups	(%rsp), %ymm0
                	vmovups	0x20(%rsp), %ymm2
                	vpand	%ymm2, %ymm0, %ymm1
-               	vextracti128	$0x0, %ymm1, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
-               	vextracti128	$0x0, %ymm1, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vmovq	%xmm1, %rax
+               	vpextrq	$0x1, %xmm1, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm1, %xmm15
-               	vpextrq	$0x0, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm1, %xmm3
+               	vmovq	%xmm3, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm1, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm1, %xmm1
+               	vpextrq	$0x1, %xmm1, %rsi
                	orq	%rsi, %rax
                	xorl	%esi, %esi
                	testq	%rax, %rax
                	je	<addr>
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
+               	vmovq	%xmm0, %rax
                	xorq	$-0x1, %rax
                	xorl	%esi, %esi
+               	xorl	%edi, %edi
                	vmovq	%rax, %xmm1
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rax
+               	vpextrq	$0x1, %xmm0, %rax
                	xorq	$-0x1, %rax
-               	vextracti128	$0x0, %ymm1, %xmm15
-               	vpinsrq	$0x1, %rax, %xmm15, %xmm15
-               	vinserti128	$0x0, %xmm15, %ymm1, %ymm1
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
+               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
+               	vmovdqa	%xmm1, %xmm1
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vmovq	%xmm3, %rax
                	xorq	$-0x1, %rax
-               	vextracti128	$0x1, %ymm1, %xmm15
-               	vpinsrq	$0x0, %rax, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm1, %ymm1
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rax
+               	xorl	%esi, %esi
+               	vmovq	%rax, %xmm3
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpextrq	$0x1, %xmm0, %rax
                	xorq	$-0x1, %rax
-               	vmovaps	%ymm1, %ymm0
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpinsrq	$0x1, %rax, %xmm15, %xmm15
-               	vinserti128	$0x1, %xmm15, %ymm0, %ymm0
+               	movapd	%xmm3, %xmm0
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
                	vpand	%ymm2, %ymm0, %ymm0
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rax
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vmovq	%xmm0, %rax
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x0, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm1
+               	vmovq	%xmm1, %rsi
                	orq	%rsi, %rax
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrq	$0x1, %xmm15, %rsi
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpextrq	$0x1, %xmm0, %rsi
                	orq	%rsi, %rax
                	testq	%rax, %rax
                	sete	%al
@@ -14113,7 +14099,7 @@ Disassembly of section .text:
                	vmovups	0x20(%rsp), %ymm0
                	movups	%xmm1, 0x80(%rsp)
                	leaq	0x80(%rsp), %rax
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	andq	$0x3, %rcx
                	movslq	(%rax,%rcx,4), %rax
@@ -14242,7 +14228,7 @@ Disassembly of section .text:
                	vmovups	0x20(%rsp), %ymm0
                	movups	%xmm1, 0x80(%rsp)
                	leaq	0x80(%rsp), %rax
-               	vpextrq	$0x0, %xmm0, %rcx
+               	vmovq	%xmm0, %rcx
                	sarq	%rcx
                	andq	$0x1, %rcx
                	movq	(%rax,%rcx,8), %rax

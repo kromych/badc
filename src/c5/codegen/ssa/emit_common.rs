@@ -2844,6 +2844,17 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // Lane accesses of ymm / zmm values become part accesses once the
+        // inliner has measured the bodies, which the split lengthens.
+        pipeline.run(
+            "ssa::vector_slots::split_wide_lanes",
+            &mut ssa_funcs,
+            |funcs| {
+                for f in funcs.iter_mut() {
+                    super::vector_slots::split_wide_lanes(f);
+                }
+            },
+        );
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function
         // holding a candidate object; the promoted field slots feed the

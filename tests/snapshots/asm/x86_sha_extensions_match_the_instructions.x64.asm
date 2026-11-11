@@ -42,12 +42,12 @@ Disassembly of section .text:
                	vpextrd	$0x1, %xmm1, %eax
                	movl	%eax, -0x8(%rbp)
                	xorl	%esi, %esi
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	%eax, -0x4(%rbp)
                	vpextrd	$0x3, %xmm0, %r9d
                	vpextrd	$0x2, %xmm0, %eax
                	vpextrd	$0x1, %xmm0, %edx
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movq	%rsi, %r12
                	movq	%rdi, %r8
                	andq	$0x3, %r8

@@ -227,12 +227,11 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	vmovups	(%rsp), %ymm0
                	vpaddd	%ymm0, %ymm0, %ymm1
-               	vextracti128	$0x1, %ymm1, %xmm15
-               	vpextrd	$0x3, %xmm15, %eax
+               	vextracti128	$0x1, %ymm1, %xmm1
+               	vpextrd	$0x3, %xmm1, %eax
                	movslq	%eax, %rax
                	vpaddd	%ymm0, %ymm0, %ymm0
-               	vextracti128	$0x0, %ymm0, %xmm15
-               	vpextrd	$0x2, %xmm15, %ecx
+               	vpextrd	$0x2, %xmm0, %ecx
                	movslq	%ecx, %rcx
                	subq	%rcx, %rax
                	vzeroupper
@@ -278,8 +277,8 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	vmovups	(%rsp), %ymm0
                	vaddpd	%ymm0, %ymm0, %ymm0
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpermilpd	$0x0, %xmm15, %xmm0 # xmm0 = xmm15[0,0]
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpermilpd	$0x0, %xmm0, %xmm0 # xmm0 = xmm0[0,0]
                	vzeroupper
                	leave
                	retq
@@ -299,8 +298,8 @@ Disassembly of section .text:
                	movq	%r10, 0x18(%rsp)
                	vmovups	(%rsp), %ymm0
                	vpaddw	%ymm0, %ymm0, %ymm0
-               	vextracti128	$0x1, %ymm0, %xmm15
-               	vpextrw	$0x5, %xmm15, %eax
+               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpextrw	$0x5, %xmm0, %eax
                	movswq	%ax, %rax
                	vzeroupper
                	leave
@@ -597,7 +596,7 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpq	$-0x7, %rax
                	jne	<addr>

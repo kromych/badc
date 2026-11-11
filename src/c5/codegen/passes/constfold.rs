@@ -89,8 +89,9 @@ const LANE_DEPTH: u32 = 64;
 /// the value an insert of the same lane and width wrote, read back as the
 /// extract's kind reads it from memory (a sign or zero extension of its low
 /// bytes, or the value itself), looking past inserts of disjoint lanes; a
-/// lane inside a 128-bit part written whole, that lane of the part; and a
-/// lane of a zero vector, zero. A lane insert over an insert of the same
+/// lane inside a 128-bit part written whole, that lane of the part; a lane
+/// of a zero vector, zero, and of an undefined one, undefined. A lane
+/// insert over an insert of the same
 /// lane takes that insert's vector. Returns whether anything was rewritten.
 fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
     let mut changed = false;
@@ -166,6 +167,13 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     changed = true;
                     break;
                 }
+                // A lane of an undefined vector is undefined.
+                Inst::Undef => {
+                    func.insts[i] = Inst::Undef;
+                    changed = true;
+                    break;
+                }
+                Inst::Copy { value, .. } => vec = value,
                 _ => break,
             }
         }

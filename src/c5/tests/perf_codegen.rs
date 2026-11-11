@@ -3181,9 +3181,10 @@ long sx(v8s v) { return v[3]; }\n";
 
 /// Lane writes into a ymm value chain on its 128-bit halves, as with gcc
 /// 16: `{a, b, c, d}` of four `long long` is `vmovq` and `vpinsrq` per half
-/// and one `vinserti128`, and writes into both halves of a loaded vector
-/// take each half out once and put it back once. Each lane write took its
-/// half out and put it back.
+/// and one `vinserti128`, writes into both halves of a loaded vector take
+/// each half out once and put it back once, and a read of the low half
+/// reads the register. Each lane access took its half out (and a write
+/// put it back).
 #[test]
 fn ymm_lane_writes_chain_per_half() {
     const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
@@ -3192,9 +3193,21 @@ void mk(v4l *r, long long a, long long b, long long c, long long d) {\n\
     v4l v = {a, b, c, d};\n\
     *r = v + v;\n\
 }\n\
-void put(v8i *p, int x, int y) { v8i v = *p; v[1] = x; v[6] = y; v[7] = x; *p = v + v; }\n";
+void put(v8i *p, int x, int y) { v8i v = *p; v[1] = x; v[6] = y; v[7] = x; *p = v + v; }\n\
+int none(const v4l *a, const v4l *b) {\n\
+    v4l r = ~*a & *b;\n\
+    return (r[0] | r[1] | r[2] | r[3]) == 0;\n\
+}\n";
     let count = |f: &[X64Insn], op: u16| f.iter().filter(|i| i.op == op).count();
     let mut m = Misses::default();
+    // `~` builds the vector lane by lane over an undefined one: one
+    // `vinserti128`; the reads take the high half out once each and read
+    // the low one in place.
+    let none = x64(SRC, "none");
+    m.expect(
+        count(&none, 0x3A38) == 1 && count(&none, 0x3A39) == 2,
+        || format!("x86-64 none: {none:x?}"),
+    );
     // `vextracti128` is 0F3A 39, `vinserti128` 0F3A 38.
     let mk = x64(SRC, "mk");
     m.expect(count(&mk, 0x3A39) == 0 && count(&mk, 0x3A38) == 1, || {
@@ -3205,6 +3218,21 @@ void put(v8i *p, int x, int y) { v8i v = *p; v[1] = x; v[6] = y; v[7] = x; *p = 
         format!("x86-64 put: {put:x?}")
     });
     m.finish();
+}
+
+/// A helper computing `~a & b` over a ymm vector lane by lane and testing
+/// the lanes is spliced at both of its call sites: the bodies the inliner
+/// measures hold one instruction per lane write, the 128-bit part split
+/// coming after it.
+#[test]
+fn lane_wise_vector_helpers_inline_before_the_part_split() {
+    const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
+static inline int tc(v4l a, v4l b) { v4l r = ~a & b; return (r[0] | r[1] | r[2] | r[3]) == 0; }\n\
+static inline int tz(v4l a, v4l b) { v4l r = a & b; return (r[0] | r[1] | r[2] | r[3]) == 0; }\n\
+static inline int tnzc(v4l a, v4l b) { return !tz(a, b) && !tc(a, b); }\n\
+int f(const v4l *p) { return tc(p[0], p[1]) + tnzc(p[1], p[2]); }\n";
+    let f = x64(SRC, "f");
+    assert!(f.iter().all(|i| i.op != 0xE8), "x86-64 f: {f:x?}");
 }
 
 /// A branching helper taking a GNU vector by value and reading its lanes

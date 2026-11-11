@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	cvtps2dq	%xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	movl	$0x7fff, %eax           # imm = 0x7FFF
                	cmpl	%eax, %ecx
@@ -1438,13 +1438,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	movslq	%edx, %rdx
                	vmovd	%edx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1453,7 +1453,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm1, %xmm1
                	leaq	-0x38(%rbp), %rdx
                	movq	$0x0, (%rdx)
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x38(%rbp)
                	vpextrd	$0x1, %xmm1, %eax
@@ -1467,13 +1467,13 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	vpextrd	$0x0, %xmm0, %esi
+               	vmovd	%xmm0, %esi
                	movslq	%esi, %rsi
                	vmovd	%esi, %xmm1
                	vpextrd	$0x1, %xmm0, %esi
                	movslq	%esi, %rsi
                	vpinsrd	$0x1, %esi, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %esi
+               	vmovd	%xmm0, %esi
                	movslq	%esi, %rsi
                	vpinsrd	$0x2, %esi, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %esi
@@ -1482,7 +1482,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %esi, %xmm0, %xmm0
                	cvtps2dq	%xmm0, %xmm0
                	movq	$0x0, (%rdx)
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	movslq	%edx, %rdx
                	movl	%edx, -0x38(%rbp)
                	vpextrd	$0x1, %xmm0, %edx
@@ -1514,13 +1514,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1530,7 +1530,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm0, %xmm0
                	leaq	-0x38(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x38(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1562,13 +1562,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1578,7 +1578,7 @@ Disassembly of section .text:
                	cvttps2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1610,13 +1610,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1626,7 +1626,7 @@ Disassembly of section .text:
                	cvttps2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1667,13 +1667,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1683,7 +1683,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm0, %xmm0
                	leaq	-0x38(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x38(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1724,13 +1724,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1740,7 +1740,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm0, %xmm0
                	leaq	-0x38(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x38(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1813,13 +1813,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1829,7 +1829,7 @@ Disassembly of section .text:
                	cvtps2dq	%xmm0, %xmm0
                	leaq	-0x38(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x38(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1861,13 +1861,13 @@ Disassembly of section .text:
                	movss	-0xc(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpextrd	$0x1, %xmm0, %eax
@@ -1877,7 +1877,7 @@ Disassembly of section .text:
                	cvttps2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -1951,7 +1951,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	cvtps2dq	%xmm0, %xmm0
                	movq	%rax, -0x20(%rbp)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	$0x7f, %ecx
                	cmpl	$0x7f, %eax
@@ -2403,7 +2403,7 @@ Disassembly of section .text:
                	cvtpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -2436,7 +2436,7 @@ Disassembly of section .text:
                	cvtpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rcx
                	movq	$0x0, (%rcx)
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	movl	%ecx, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %ecx
@@ -2469,7 +2469,7 @@ Disassembly of section .text:
                	cvtpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -2511,7 +2511,7 @@ Disassembly of section .text:
                	cvtpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -2552,7 +2552,7 @@ Disassembly of section .text:
                	cvttpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	movl	%eax, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %eax
@@ -2585,7 +2585,7 @@ Disassembly of section .text:
                	cvttpd2dq	%xmm0, %xmm0
                	leaq	-0x20(%rbp), %rcx
                	movq	$0x0, (%rcx)
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	movl	%ecx, -0x20(%rbp)
                	vpextrd	$0x1, %xmm0, %ecx

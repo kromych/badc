@@ -522,21 +522,22 @@ fn ent_pc=16 n_params=1 variadic=false locals=0
     v8   Imm(28)                                          -> x0
     v9   Imm(28)                                          -> x0
     v10  Imm(0)                                           -> x0
-    v11  VecExtract { vec=v5, off=28, kind=I32, bytes=32 } -> x0
-    v12  LocalAddr(-13)                                   -> x1
+    v11  VecExtract { vec=v5, off=16, kind=V128, bytes=32 } -> d1
+    v12  VecExtract { vec=v11, off=12, kind=I32, bytes=16 } -> x0
     v13  LocalAddr(-13)                                   -> x1
-    v14  LoadLocal { off=-13, kind=V256 }                 -> d1
+    v14  LocalAddr(-13)                                   -> x1
     v15  LoadLocal { off=-13, kind=V256 }                 -> d1
-    v16  VecBinop { op=Add, lane=I32, bytes=32, lhs=v3, rhs=v3 } -> d0
-    v17  Imm(0)                                           -> x1
+    v16  LoadLocal { off=-13, kind=V256 }                 -> d1
+    v17  VecBinop { op=Add, lane=I32, bytes=32, lhs=v3, rhs=v3 } -> d0
     v18  Imm(0)                                           -> x1
-    v19  Imm(8)                                           -> x1
+    v19  Imm(0)                                           -> x1
     v20  Imm(8)                                           -> x1
-    v21  Imm(0)                                           -> x1
-    v22  VecExtract { vec=v16, off=8, kind=I32, bytes=32 } -> x1
-    v23  Binop { op=sub, lhs=v11, rhs=v22 }               -> x0
-    v24  LifetimeEnd(-13)                                 -> -
-    terminator Return(v23)   (exit_acc=v23)
+    v21  Imm(8)                                           -> x1
+    v22  Imm(0)                                           -> x1
+    v23  VecExtract { vec=v17, off=8, kind=I32, bytes=32 } -> x1
+    v24  Binop { op=sub, lhs=v12, rhs=v23 }               -> x0
+    v25  LifetimeEnd(-13)                                 -> -
+    terminator Return(v24)   (exit_acc=v24)
 ; --- SSA dump (ok=true) ent_pc=17 ---
 ; name=put_d4
 fn ent_pc=17 n_params=3 variadic=false locals=0
@@ -578,9 +579,10 @@ fn ent_pc=18 n_params=1 variadic=false locals=0
     v8   Imm(16)                                          -> x0
     v9   Imm(16)                                          -> x0
     v10  Imm(0)                                           -> x0
-    v11  VecExtract { vec=v5, off=16, kind=F64, bytes=32 } -> d0
-    v12  LifetimeEnd(-9)                                  -> -
-    terminator Return(v11)   (exit_acc=v11)
+    v11  VecExtract { vec=v5, off=16, kind=V128, bytes=32 } -> d0
+    v12  VecExtract { vec=v11, off=0, kind=F64, bytes=16 } -> d0
+    v13  LifetimeEnd(-9)                                  -> -
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=19 ---
 ; name=get_s16
 fn ent_pc=19 n_params=1 variadic=false locals=0
@@ -597,9 +599,10 @@ fn ent_pc=19 n_params=1 variadic=false locals=0
     v8   Imm(26)                                          -> x0
     v9   Imm(26)                                          -> x0
     v10  Imm(0)                                           -> x0
-    v11  VecExtract { vec=v5, off=26, kind=I16, bytes=32 } -> x0
-    v12  LifetimeEnd(-9)                                  -> -
-    terminator Return(v11)   (exit_acc=v11)
+    v11  VecExtract { vec=v5, off=16, kind=V128, bytes=32 } -> d0
+    v12  VecExtract { vec=v11, off=10, kind=I16, bytes=16 } -> x0
+    v13  LifetimeEnd(-9)                                  -> -
+    terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=20 ---
 ; name=put_i16
 fn ent_pc=20 n_params=3 variadic=false locals=0

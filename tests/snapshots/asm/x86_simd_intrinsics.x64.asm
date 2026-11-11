@@ -343,7 +343,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %esi, %xmm1, %xmm1
                	movapd	%xmm0, %xmm2
                	paddd	%xmm1, %xmm2
-               	vpextrd	$0x0, %xmm2, %edx
+               	vmovd	%xmm2, %edx
                	cmpl	$0x65, %edx
                	jne	<addr>
                	vpextrd	$0x1, %xmm2, %edx
@@ -361,7 +361,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm2
                	pxor	%xmm1, %xmm2
-               	vpextrd	$0x0, %xmm2, %edx
+               	vmovd	%xmm2, %edx
                	cmpq	$0x65, %rdx
                	jne	<addr>
                	vpextrd	$0x3, %xmm2, %edx
@@ -402,7 +402,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	movapd	%xmm1, %xmm2
                	paddd	%xmm0, %xmm2
-               	vpextrd	$0x0, %xmm2, %eax
+               	vmovd	%xmm2, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	vpextrd	$0x1, %xmm2, %eax
@@ -414,7 +414,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm1, %xmm2
                	paddq	%xmm0, %xmm2
-               	vpextrd	$0x0, %xmm2, %eax
+               	vmovd	%xmm2, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	vpextrd	$0x1, %xmm2, %eax
@@ -428,7 +428,7 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm15
                	psubq	%xmm0, %xmm15
                	movapd	%xmm15, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -478,7 +478,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm1
                	psrld	$0x20, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	vpextrd	$0x3, %xmm1, %eax
@@ -490,7 +490,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm1
                	psllq	$0x8, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	$0xeeff0000, %r11d      # imm = 0xEEFF0000
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -504,7 +504,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm1
                	psrlq	$0x8, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	$0xccddeeff, %r11d      # imm = 0xCCDDEEFF
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -516,7 +516,7 @@ Disassembly of section .text:
                	leave
                	retq
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	testq	%rax, %rax
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %eax
@@ -642,7 +642,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %edx, %xmm0, %xmm0
                	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
                	pshufd	$0x93, %xmm0, %xmm0     # xmm0 = xmm0[3,0,1,2]
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	cmpl	$0x3, %ecx
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %ecx
@@ -755,7 +755,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %ecx, %xmm2, %xmm2
                	movapd	%xmm0, %xmm1
                	punpcklqdq	%xmm2, %xmm1    # xmm1 = xmm1[0],xmm2[0]
-               	vpextrd	$0x0, %xmm1, %ecx
+               	vmovd	%xmm1, %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
                	vpextrd	$0x1, %xmm1, %ecx
@@ -773,7 +773,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm1
                	pcmpeqq	%xmm0, %xmm1
-               	vpextrd	$0x0, %xmm1, %ecx
+               	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
                	jne	<addr>
@@ -786,7 +786,7 @@ Disassembly of section .text:
                	leave
                	retq
                	pcmpeqq	%xmm2, %xmm0
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
                	vpextrd	$0x3, %xmm0, %ecx
@@ -826,7 +826,7 @@ Disassembly of section .text:
                	vpextrd	$0x1, %xmm0, %ecx
                	cmpq	$0xa0b0c0d, %rcx        # imm = 0xA0B0C0D
                	jne	<addr>
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	cmpq	$0x11112222, %rcx       # imm = 0x11112222
                	je	<addr>
                	movl	$0x1a, %eax
@@ -842,7 +842,7 @@ Disassembly of section .text:
                	vpinsrq	$0x1, %rdx, %xmm2, %xmm2
                	movapd	%xmm0, %xmm1
                	pclmulqdq	$0x0, %xmm0, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	cmpl	$0x5, %eax
                	jne	<addr>
                	vpextrd	$0x1, %xmm1, %eax
@@ -853,7 +853,7 @@ Disassembly of section .text:
                	leave
                	retq
                	pclmulqdq	$0x10, %xmm2, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1c, %eax
@@ -877,7 +877,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %edx, %xmm1, %xmm1
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
                	shufpd	$0x1, %xmm1, %xmm0      # xmm0 = xmm0[1],xmm1[0]
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	cmpl	$0x3, %edx
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %edx
@@ -1082,7 +1082,7 @@ Disassembly of section .text:
                	vpinsrw	$0x5, %eax, %xmm0, %xmm0
                	vpinsrw	$0x6, %eax, %xmm0, %xmm0
                	vpinsrw	$0x7, %eax, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpq	$0x12341234, %rax       # imm = 0x12341234
                	jne	<addr>
                	vpextrd	$0x3, %xmm0, %eax
@@ -1110,7 +1110,7 @@ Disassembly of section .text:
                	vpinsrb	$0xd, %eax, %xmm0, %xmm0
                	vpinsrb	$0xe, %eax, %xmm0, %xmm0
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
                	jne	<addr>
                	vpextrd	$0x3, %xmm0, %eax
@@ -1123,7 +1123,7 @@ Disassembly of section .text:
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	vmovq	%rax, %xmm0
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0x89abcdef, %r11d      # imm = 0x89ABCDEF
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -1175,7 +1175,7 @@ Disassembly of section .text:
                	vpinsrb	$0xe, %eax, %xmm0, %xmm0
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
                	paddb	%xmm0, %xmm1
-               	vpextrd	$0x0, %xmm1, %esi
+               	vmovd	%xmm1, %esi
                	testq	%rsi, %rsi
                	jne	<addr>
                	vpextrd	$0x3, %xmm1, %esi
@@ -1188,7 +1188,7 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	psubb	%xmm0, %xmm15
                	movapd	%xmm15, %xmm0
-               	vpextrd	$0x0, %xmm0, %esi
+               	vmovd	%xmm0, %esi
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rsi
                	je	<addr>
@@ -1216,7 +1216,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm1, %xmm1
                	vpinsrw	$0x7, %eax, %xmm1, %xmm1
                	paddw	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2c, %eax
@@ -1235,7 +1235,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	psubw	%xmm0, %xmm15
                	movapd	%xmm15, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
@@ -1254,7 +1254,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	psubd	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
                	cmpq	%r11, %rax
                	je	<addr>
@@ -1284,7 +1284,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %ecx, %xmm1, %xmm1
                	vpinsrw	$0x7, %ecx, %xmm1, %xmm1
                	pmullw	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpq	$0x369c369c, %rax       # imm = 0x369C369C
                	je	<addr>
                	movl	$0x2f, %eax
@@ -1312,7 +1312,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm1, %xmm1
                	vpinsrw	$0x7, %eax, %xmm1, %xmm1
                	pmulhw	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx
                	je	<addr>
@@ -1340,7 +1340,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm1, %xmm1
                	vpinsrw	$0x7, %eax, %xmm1, %xmm1
                	pmulhw	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpq	$0x10001, %rax          # imm = 0x10001
                	je	<addr>
                	movl	$0x31, %eax
@@ -1375,7 +1375,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm1, %xmm1
                	vpinsrw	$0x7, %eax, %xmm1, %xmm1
                	pmaddwd	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xfffffffa, %r11d      # imm = 0xFFFFFFFA
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -1629,7 +1629,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %r8d, %xmm2, %xmm2
                	movapd	%xmm1, %xmm0
                	punpckldq	%xmm2, %xmm0    # xmm0 = xmm0[0],xmm2[0],xmm0[1],xmm2[1]
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %eax
@@ -1647,7 +1647,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm1, %xmm0
                	punpckhdq	%xmm2, %xmm0    # xmm0 = xmm0[2],xmm2[2],xmm0[3],xmm2[3]
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpl	$0x3, %eax
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %eax
@@ -1665,7 +1665,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm1, %xmm0
                	punpckhqdq	%xmm2, %xmm0    # xmm0 = xmm0[1],xmm2[1]
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	cmpl	$0x3, %eax
                	jne	<addr>
                	vpextrd	$0x1, %xmm0, %eax
@@ -1693,7 +1693,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm0, %xmm0
                	vpinsrw	$0x7, %eax, %xmm0, %xmm0
                	psraw	$0x2, %xmm0
-               	vpextrd	$0x0, %xmm0, %esi
+               	vmovd	%xmm0, %esi
                	movl	$0xfffcfffc, %r11d      # imm = 0xFFFCFFFC
                	cmpq	%r11, %rsi
                	je	<addr>
@@ -1711,7 +1711,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %eax, %xmm0, %xmm0
                	vpinsrw	$0x7, %eax, %xmm0, %xmm0
                	psraw	$0x20, %xmm0
-               	vpextrd	$0x0, %xmm0, %esi
+               	vmovd	%xmm0, %esi
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rsi
                	je	<addr>
@@ -1724,7 +1724,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	psrad	$0x2, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xfffffffc, %r11d      # imm = 0xFFFFFFFC
                	cmpq	%r11, %rax
                	je	<addr>
@@ -1739,7 +1739,7 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	movq	%rdx, %xmm14
                	psrad	%xmm14, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movl	$0xfffffff8, %r11d      # imm = 0xFFFFFFF8
                	cmpq	%r11, %rax
                	je	<addr>
@@ -1914,7 +1914,7 @@ Disassembly of section .text:
                	vpinsrb	$0xe, %eax, %xmm2, %xmm2
                	vpinsrb	$0xf, %eax, %xmm2, %xmm2
                	pandn	%xmm2, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	cmpq	$0x30303030, %rax       # imm = 0x30303030
                	je	<addr>
                	movl	$0x46, %eax
@@ -1923,7 +1923,7 @@ Disassembly of section .text:
                	retq
                	movapd	%xmm0, %xmm1
                	pcmpeqb	%xmm0, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	jne	<addr>
@@ -1956,7 +1956,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %ecx, %xmm2, %xmm2
                	vpinsrw	$0x7, %ecx, %xmm2, %xmm2
                	pcmpeqw	%xmm2, %xmm1
-               	vpextrd	$0x0, %xmm1, %ecx
+               	vmovd	%xmm1, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x48, %eax
@@ -1972,7 +1972,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm2, %xmm2
                	vpinsrd	$0x3, %eax, %xmm2, %xmm2
                	pcmpeqd	%xmm2, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
@@ -2002,7 +2002,7 @@ Disassembly of section .text:
                	vpinsrw	$0x6, %ecx, %xmm2, %xmm2
                	vpinsrw	$0x7, %ecx, %xmm2, %xmm2
                	pcmpgtw	%xmm2, %xmm1
-               	vpextrd	$0x0, %xmm1, %esi
+               	vmovd	%xmm1, %esi
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rsi
                	je	<addr>
@@ -2021,7 +2021,7 @@ Disassembly of section .text:
                	movapd	%xmm2, %xmm15
                	pcmpgtd	%xmm1, %xmm15
                	movapd	%xmm15, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
@@ -2049,7 +2049,7 @@ Disassembly of section .text:
                	movq	-0x38(%rbp), %rcx
                	vmovq	%rcx, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vpextrd	$0x0, %xmm1, %eax
+               	vmovd	%xmm1, %eax
                	cmpq	$0x4030201, %rax        # imm = 0x4030201
                	jne	<addr>
                	vpextrd	$0x1, %xmm1, %eax

@@ -2499,7 +2499,12 @@ pub(super) fn emit_vec_extract(
         mirror_v128_dst(code, dst, dd, frame);
         return Ok(());
     }
-    let (x, loff) = lane_part(code, bytes, src.0, off, sb)?;
+    // A read of the low part reads the register's xmm view.
+    let (x, loff) = if off < 16 {
+        (src.0, off)
+    } else {
+        lane_part(code, bytes, src.0, off, sb)?
+    };
     let imm = |k: u8| Concrete::Imm(i64::from(k));
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
@@ -2531,7 +2536,13 @@ pub(super) fn emit_vec_extract(
         LoadKind::I16 | LoadKind::U16 => ("vpextrw", loff / 2, AsmRegSize::Long),
         _ => ("vpextrb", loff, AsmRegSize::Long),
     };
-    encode_wide(code, mnem, &[imm(k), wide_reg(16, x), gpr(size)])?;
+    // The low quadword or doubleword is a move, the doubleword zero-extended.
+    if loff == 0 && matches!(size, AsmRegSize::Quad) || loff == 0 && mnem == "vpextrd" {
+        let mov = if mnem == "vpextrq" { "vmovq" } else { "vmovd" };
+        encode_wide(code, mov, &[wide_reg(16, x), gpr(size)])?;
+    } else {
+        encode_wide(code, mnem, &[imm(k), wide_reg(16, x), gpr(size)])?;
+    }
     if matches!(kind, LoadKind::I32 | LoadKind::I16 | LoadKind::I8) {
         emit_sign_extend(code, rd, rd, kind);
     }

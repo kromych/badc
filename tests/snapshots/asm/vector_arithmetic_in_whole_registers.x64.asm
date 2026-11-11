@@ -46,9 +46,9 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm2
                	paddd	%xmm1, %xmm2
                	psubd	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm2, %eax
+               	vmovd	%xmm2, %eax
                	movslq	%eax, %rax
-               	vpextrd	$0x0, %xmm0, %ecx
+               	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	imulq	%rcx, %rax
                	xorl	%ecx, %ecx
@@ -340,7 +340,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	movslq	%edx, %rdx
                	movl	-0x100(%rbp), %eax
                	movl	-0xf0(%rbp), %ecx
@@ -394,7 +394,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
-               	vpextrd	$0x0, %xmm0, %edx
+               	vmovd	%xmm0, %edx
                	movl	-0xe0(%rbp), %eax
                	movl	-0xd0(%rbp), %ecx
                	movq	%rax, %rsi
@@ -448,7 +448,7 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
-               	vpextrq	$0x0, %xmm0, %rdx
+               	vmovq	%xmm0, %rdx
                	movq	-0xc0(%rbp), %rax
                	movq	-0xb0(%rbp), %rcx
                	leaq	(%rax,%rcx), %rsi

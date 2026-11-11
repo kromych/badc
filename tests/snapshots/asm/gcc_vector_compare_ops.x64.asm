@@ -4193,7 +4193,7 @@ Disassembly of section .text:
                	movups	-0x40(%rbp), %xmm2
                	pand	%xmm2, %xmm1
                	por	%xmm1, %xmm0
-               	vpextrd	$0x0, %xmm0, %eax
+               	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpq	$0x1, %rax
                	jne	<addr>

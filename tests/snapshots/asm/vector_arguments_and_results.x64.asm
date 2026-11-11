@@ -35,24 +35,10 @@ Disassembly of section .text:
                	retq
 
 <neg>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	%xmm0, -0x8(%rbp)
-               	movswq	-0x8(%rbp), %rax
-               	negq	%rax
-               	movw	%ax, -0x10(%rbp)
-               	movswq	-0x6(%rbp), %rax
-               	negq	%rax
-               	movw	%ax, -0xe(%rbp)
-               	movswq	-0x4(%rbp), %rax
-               	negq	%rax
-               	movw	%ax, -0xc(%rbp)
-               	movswq	-0x2(%rbp), %rax
-               	negq	%rax
-               	movw	%ax, -0xa(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
-               	leave
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
+               	psubw	%xmm0, %xmm15
+               	movapd	%xmm15, %xmm0
                	retq
 
 <swap>:

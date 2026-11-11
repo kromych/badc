@@ -9642,25 +9642,17 @@ Disassembly of section .text:
                	cmpl	%edx, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	vmovq	%xmm0, %rax
-               	xorq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	xorl	%esi, %esi
                	xorl	%edi, %edi
                	vmovq	%rax, %xmm2
-               	vpextrq	$0x1, %xmm0, %rax
-               	xorq	$-0x1, %rax
                	vpinsrq	$0x1, %rax, %xmm2, %xmm2
                	vmovdqa	%xmm2, %xmm2
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	xorq	$-0x1, %rax
                	xorl	%esi, %esi
                	vmovq	%rax, %xmm3
-               	vextracti128	$0x1, %ymm0, %xmm4
-               	vpextrq	$0x1, %xmm4, %rax
-               	xorq	$-0x1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
                	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	vpxor	%ymm2, %ymm0, %ymm2
                	vpand	%ymm1, %ymm2, %ymm2
                	vmovq	%xmm2, %rax
                	vpextrq	$0x1, %xmm2, %rsi
@@ -9693,26 +9685,17 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
-               	vmovq	%xmm0, %rax
-               	xorq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	xorl	%esi, %esi
                	xorl	%edi, %edi
                	vmovq	%rax, %xmm2
-               	vpextrq	$0x1, %xmm0, %rax
-               	xorq	$-0x1, %rax
                	vpinsrq	$0x1, %rax, %xmm2, %xmm2
                	vmovdqa	%xmm2, %xmm2
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	xorq	$-0x1, %rax
                	xorl	%esi, %esi
                	vmovq	%rax, %xmm3
-               	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	xorq	$-0x1, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vinserti128	$0x1, %xmm0, %ymm2, %ymm0
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vinserti128	$0x1, %xmm3, %ymm2, %ymm2
+               	vpxor	%ymm2, %ymm0, %ymm0
                	vpand	%ymm1, %ymm0, %ymm0
                	vmovq	%xmm0, %rax
                	vpextrq	$0x1, %xmm0, %rsi

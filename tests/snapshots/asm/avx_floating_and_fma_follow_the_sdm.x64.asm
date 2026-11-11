@@ -5808,30 +5808,23 @@ Disassembly of section .text:
                	movq	%rax, <rip> # <addr>
                	vmovups	0x40(%rsp), %ymm0
                	vmovups	0x60(%rsp), %ymm1
-               	vmovq	%xmm0, %rax
-               	xorq	$-0x1, %rax
+               	movq	$-0x1, %rax
                	xorl	%ecx, %ecx
                	vmovq	%rax, %xmm2
-               	vpextrq	$0x1, %xmm0, %rax
-               	xorq	$-0x1, %rax
-               	movapd	%xmm2, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	pand	%xmm0, %xmm1
-               	vmovups	0x40(%rsp), %ymm0
-               	vextracti128	$0x1, %ymm0, %xmm0
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	pxor	%xmm2, %xmm0
+               	pand	%xmm1, %xmm0
+               	vmovups	0x40(%rsp), %ymm1
+               	vextracti128	$0x1, %ymm1, %xmm1
                	vmovups	0x60(%rsp), %ymm2
                	vextracti128	$0x1, %ymm2, %xmm2
-               	vmovq	%xmm0, %rax
-               	xorq	$-0x1, %rax
                	xorl	%ecx, %ecx
                	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm0, %rax
-               	xorq	$-0x1, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	pand	%xmm2, %xmm0
-               	vmovdqa	%xmm1, %xmm1
-               	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	pxor	%xmm3, %xmm1
+               	pand	%xmm2, %xmm1
+               	vmovdqa	%xmm0, %xmm0
+               	vinserti128	$0x1, %xmm1, %ymm0, %ymm0
                	leaq	0x80(%rsp), %rsi
                	vmovups	%ymm0, 0x80(%rsp)
                	movl	$0x20, %edx

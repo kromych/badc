@@ -302,6 +302,40 @@ impl<'a> Walker<'a> {
                 let src = self.walk_copy_operand(b, child)?;
                 return Ok(self.emit_simd_row(b, row, None, alloc::vec![src]));
             }
+            // Without one instruction for it, `-v` is `0 - v` and `~v` is
+            // `v ^ ~0` on the whole vector.
+            let (lane_op, fill) = match op {
+                UnOp::Neg => (BinOp::Sub, 0),
+                _ => (BinOp::Xor, -1),
+            };
+            if let Some(lane) = self.whole_vector_lane(lane_op, lane_op, elem_ty, size, true) {
+                let src = self.walk_copy_operand(b, child)?;
+                let (lk, sk) = match size {
+                    64 => (LoadKind::V512, StoreKind::V512),
+                    32 => (LoadKind::V256, StoreKind::V256),
+                    16 => (LoadKind::V128, StoreKind::V128),
+                    _ => (LoadKind::F64, StoreKind::F64),
+                };
+                let align = self.vector_temp_align(ty);
+                let fill_slot = b.alloc_synthetic_struct(size, align);
+                let fill_addr = b.local_addr(fill_slot);
+                if fill == 0 {
+                    b.mzero(fill_addr, size, align as u32);
+                } else {
+                    for off in (0..size).step_by(8) {
+                        let at = lane_addr(b, fill_addr, off);
+                        let word = b.imm(fill);
+                        b.store(at, word, StoreKind::I64);
+                    }
+                }
+                let (k, v) = (b.load(fill_addr, lk), b.load(src, lk));
+                let (lhs, rhs) = if fill == 0 { (k, v) } else { (v, k) };
+                let r = b.vec_binop((lane_op, lane, size as u8), lhs, rhs);
+                let dst_slot = b.alloc_synthetic_struct(size, align);
+                let dst = b.local_addr(dst_slot);
+                b.store(dst, r, sk);
+                return Ok(dst);
+            }
         }
         let size = self.struct_size(ty);
         let elem_size = size / lanes;

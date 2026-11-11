@@ -3605,31 +3605,18 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm1
+               	movups	(%rax), %xmm0
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm2
-               	movapd	%xmm2, %xmm0
-               	pcmpgtd	%xmm1, %xmm0
-               	pand	%xmm0, %xmm1
-               	vmovd	%xmm0, %eax
-               	movslq	%eax, %rax
-               	xorq	$-0x1, %rax
-               	xorl	%ecx, %ecx
-               	vmovd	%eax, %xmm3
-               	vpextrd	$0x1, %xmm0, %eax
-               	movslq	%eax, %rax
-               	xorq	$-0x1, %rax
-               	vpinsrd	$0x1, %eax, %xmm3, %xmm3
-               	vpextrd	$0x2, %xmm0, %eax
-               	movslq	%eax, %rax
-               	xorq	$-0x1, %rax
-               	vpinsrd	$0x2, %eax, %xmm3, %xmm3
-               	vpextrd	$0x3, %xmm0, %eax
-               	movslq	%eax, %rax
-               	xorq	$-0x1, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	movups	(%rax), %xmm1
+               	movapd	%xmm1, %xmm2
+               	pcmpgtd	%xmm0, %xmm2
                	pand	%xmm2, %xmm0
+               	movq	$-0x1, %rax
+               	xorl	%ecx, %ecx
+               	vmovq	%rax, %xmm3
+               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	pxor	%xmm3, %xmm2
+               	pand	%xmm2, %xmm1
                	por	%xmm1, %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax

@@ -84,6 +84,8 @@ pub(crate) enum Ret {
     V16hi,
     V8si,
     V4di,
+    V8sf,
+    V4df,
     /// The 64-byte vectors of the AVX-512 forms.
     V64qi,
     V32hi,
@@ -112,6 +114,8 @@ impl Ret {
             Ret::V16hi => Some(Ty::Short),
             Ret::V8si => Some(Ty::Int),
             Ret::V4di => Some(Ty::LongLong),
+            Ret::V8sf => Some(Ty::Float),
+            Ret::V4df => Some(Ty::Double),
             Ret::V64qi => Some(Ty::Char),
             Ret::V32hi => Some(Ty::Short),
             Ret::V16si => Some(Ty::Int),
@@ -704,6 +708,9 @@ pub(crate) const OPS: &[SimdOp] = &[
     op256("__builtin_ia32_permdi256", "vpermq", Form::VI, Ret::V4di, Sem::Perm4x64, 0),
     op256("__builtin_ia32_permvarsi256", "vpermd", Form::Vv, Ret::V8si, Sem::PermVar32, 0),
     op256("__builtin_ia32_permti256", "vperm2i128", Form::VvI, Ret::V4di, Sem::Perm2x128, 0),
+    // The VEX compares on each half, with their 32 predicates.
+    op256("__builtin_ia32_cmpps256", "vcmpps", Form::VvI, Ret::V8sf, Sem::FloatCmp(4, false), 0),
+    op256("__builtin_ia32_cmppd256", "vcmppd", Form::VvI, Ret::V4df, Sem::FloatCmp(8, false), 0),
     // The 128-bit halves; a cast's upper half is zero.
     op256("__builtin_ia32_extract128i256", "vextracti128", Form::Narrow, Ret::V2di, Sem::Move, 16),
     op256("__builtin_ia32_insert128i256", "vinserti128", Form::Widen, Ret::V4di, Sem::Move, 16),
@@ -1680,11 +1687,15 @@ pub(crate) fn eval_float(
                 }
             }
         }
+        // The 32 predicates of the VEX form, 0 to 7 those of the SSE one:
+        // the relation in bits 3:0, bit 4 flipping whether a quiet NaN
+        // signals invalid.
         Sem::FloatCmp(w, scalar) => {
             for i in 0..if scalar { 1 } else { 16 / w as usize } {
-                let p = imm & 7;
-                let c = env.compare(flane(a, w, i), flane(b, w, i), matches!(p, 1 | 2 | 5 | 6));
-                let holds = match p {
+                let p = imm & 31;
+                let signals = matches!(p & 3, 1 | 2) ^ (p & 16 != 0);
+                let c = env.compare(flane(a, w, i), flane(b, w, i), signals);
+                let holds = match p & 15 {
                     0 => c == Some(Equal),
                     1 => c == Some(Less),
                     2 => matches!(c, Some(Less | Equal)),
@@ -1692,7 +1703,15 @@ pub(crate) fn eval_float(
                     4 => c != Some(Equal),
                     5 => c != Some(Less),
                     6 => !matches!(c, Some(Less | Equal)),
-                    _ => c.is_some(),
+                    7 => c.is_some(),
+                    8 => matches!(c, Some(Equal) | None),
+                    9 => matches!(c, Some(Less) | None),
+                    10 => c != Some(Greater),
+                    11 => false,
+                    12 => matches!(c, Some(Less | Greater)),
+                    13 => matches!(c, Some(Greater | Equal)),
+                    14 => c == Some(Greater),
+                    _ => true,
                 };
                 set_lane(&mut o, w, i, if holds { mask(w) } else { 0 });
             }

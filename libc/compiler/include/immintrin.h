@@ -1016,19 +1016,11 @@ static inline int __badc_cmp_holds(double __a, double __b, int __p) {
     }
 }
 
-static inline __m256 _mm256_cmp_ps(__m256 __A, __m256 __B, const int __P) {
-    __v8si __r;
-    for (int __i = 0; __i < 8; __i++)
-        __r[__i] = -__badc_cmp_holds(__A[__i], __B[__i], __P);
-    return (__m256)__r;
-}
+#define _mm256_cmp_ps(A, B, P)                                                          \
+    ((__m256)__builtin_ia32_cmpps256((__v8sf)(__m256)(A), (__v8sf)(__m256)(B), (int)(P)))
 
-static inline __m256d _mm256_cmp_pd(__m256d __A, __m256d __B, const int __P) {
-    __v4di __r;
-    for (int __i = 0; __i < 4; __i++)
-        __r[__i] = -(long long)__badc_cmp_holds(__A[__i], __B[__i], __P);
-    return (__m256d)__r;
-}
+#define _mm256_cmp_pd(A, B, P)                                                          \
+    ((__m256d)__builtin_ia32_cmppd256((__v4df)(__m256d)(A), (__v4df)(__m256d)(B), (int)(P)))
 
 static inline __m128 _mm_cmp_ps(__m128 __A, __m128 __B, const int __P) {
     __v4si __r;

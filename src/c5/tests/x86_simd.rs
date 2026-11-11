@@ -2184,6 +2184,28 @@ void add(v16si *r, const v16si *a, const v16si *b) { *r = *a + *b; }\n";
     assert!(!evex_paddd(&text(None)), "a zmm vpaddd without AVX-512F");
 }
 
+/// AVX's 256-bit floating-point operations, the compares by each of their
+/// 32 predicates among them, give in the interpreter the results and the
+/// exception flags recorded from the instructions (the fixture's hashes),
+/// at -O0 and -O.
+#[test]
+fn avx_floating_operations_compute_as_the_instructions() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    const SRC: &str =
+        include_str!("../../../tests/fixtures/c/avx_floating_and_fma_follow_the_sdm.c");
+    for optimize in [false, true] {
+        let opts = CompileOptions::default().with_optimize(optimize);
+        let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        assert_eq!(
+            Vm::new(program).run().expect("run"),
+            0,
+            "optimize={optimize}"
+        );
+    }
+}
+
 /// The 128-bit halves of the AVX vectors -- extract, insert, the casts
 /// between the widths and the float forms on them -- compute as the bytes
 /// they move, in the interpreter at -O0 and -O, and are one instruction

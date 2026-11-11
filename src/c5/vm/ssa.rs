@@ -4143,7 +4143,18 @@ fn run_x86_simd_wide(
     let out = match row.form {
         Form::Vv | Form::VvI => {
             let (a, b) = (read(mem, operand(1)?)?, read(mem, operand(2)?)?);
-            eval(&a, &b, &zero, 0)
+            // A floating-point row runs on each 16-byte part in the
+            // interpreter's floating-point environment.
+            let mut out = [0u8; 64];
+            let mut float = true;
+            for k in (0..n).step_by(16) {
+                let part = |v: &[u8; 64]| -> [u8; 16] { v[k..k + 16].try_into().unwrap() };
+                match x86_simd::eval_float(&mut mem.fp, row.sem, &part(&a), &part(&b), imm8) {
+                    Some(o) => out[k..k + 16].copy_from_slice(&o),
+                    None => float = false,
+                }
+            }
+            if float { out } else { eval(&a, &b, &zero, 0) }
         }
         Form::Vvv | Form::VvvI => {
             let (a, b, c) = (

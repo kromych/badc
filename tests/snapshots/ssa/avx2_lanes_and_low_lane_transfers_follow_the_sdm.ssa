@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1232 ---
+; --- SSA dump (ok=true) ent_pc=1230 ---
 ; name=check_lanes
-fn ent_pc=1232 n_params=2 variadic=false locals=4
+fn ent_pc=1230 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -686,9 +686,9 @@ fn ent_pc=1232 n_params=2 variadic=false locals=4
     v330 LifetimeEnd(0)                                   -> -
     v331 LifetimeEnd(0)                                   -> -
     terminator Return(v326)   (exit_acc=v326)
-; --- SSA dump (ok=true) ent_pc=1233 ---
+; --- SSA dump (ok=true) ent_pc=1231 ---
 ; name=check_moves
-fn ent_pc=1233 n_params=1 variadic=false locals=4
+fn ent_pc=1231 n_params=1 variadic=false locals=4
   spill_count=12 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1606,9 +1606,9 @@ fn ent_pc=1233 n_params=1 variadic=false locals=4
     v588 LifetimeEnd(0)                                   -> -
     v589 LifetimeEnd(0)                                   -> -
     terminator Return(v583)   (exit_acc=v583)
-; --- SSA dump (ok=true) ent_pc=1235 ---
+; --- SSA dump (ok=true) ent_pc=1233 ---
 ; name=find16
-fn ent_pc=1235 n_params=3 variadic=false locals=0
+fn ent_pc=1233 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1868,9 +1868,9 @@ fn ent_pc=1235 n_params=3 variadic=false locals=0
     v209 LifetimeEnd(0)                                   -> -
     v210 LifetimeEnd(0)                                   -> -
     terminator Return(v208)   (exit_acc=v208)
-; --- SSA dump (ok=true) ent_pc=1236 ---
+; --- SSA dump (ok=true) ent_pc=1234 ---
 ; name=main
-fn ent_pc=1236 n_params=0 variadic=false locals=26
+fn ent_pc=1234 n_params=0 variadic=false locals=26
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -1999,7 +1999,7 @@ fn ent_pc=1236 n_params=0 variadic=false locals=26
   block 15  start_pc=0
     v23  LocalAddr(-18)                                   -> x7
     v24  LocalAddr(-14)                                   -> x6
-    v25  Call { target_pc=1232, args=[v23, v24], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v25  Call { target_pc=1230, args=[v23, v24], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v26  Extend { value=v25, kind=I32 }                   -> x1
     v27  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x1
     v28  BinopI { op=eq, lhs=v27, rhs_imm=0 }             -> x1
@@ -2007,7 +2007,7 @@ fn ent_pc=1236 n_params=0 variadic=false locals=26
   block 16  start_pc=0
     v29  Imm(0)                                           -> x0
     v30  LocalAddr(-18)                                   -> x7
-    v31  Call { target_pc=1233, args=[v30], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v31  Call { target_pc=1231, args=[v30], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v32  Extend { value=v31, kind=I32 }                   -> x1
     v33  BinopI { op=eq, lhs=v31, rhs_imm=0 }             -> x1
     v34  BinopI { op=eq, lhs=v33, rhs_imm=0 }             -> x1
@@ -2400,7 +2400,7 @@ fn ent_pc=1236 n_params=0 variadic=false locals=26
     v194 LocalAddr(-10)                                   -> x7
     v195 Imm(277)                                         -> x6
     v196 Imm(40)                                          -> x2
-    v197 Call { target_pc=1235, args=[v194, v195, v196], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v197 Call { target_pc=1233, args=[v194, v195, v196], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v198 LocalAddr(-10)                                   -> x7
     v199 Imm(42)                                          -> x1
     v200 BinopI { op=add, lhs=v198, rhs_imm=42 }          -> x1
@@ -2418,7 +2418,7 @@ fn ent_pc=1236 n_params=0 variadic=false locals=26
     v204 LocalAddr(-10)                                   -> x0
     v205 Imm(295)                                         -> x6
     v206 Imm(40)                                          -> x2
-    v207 Call { target_pc=1235, args=[v198, v205, v206], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v207 Call { target_pc=1233, args=[v198, v205, v206], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v208 LocalAddr(-10)                                   -> x7
     v209 Imm(78)                                          -> x1
     v210 BinopI { op=add, lhs=v208, rhs_imm=78 }          -> x1
@@ -2436,7 +2436,7 @@ fn ent_pc=1236 n_params=0 variadic=false locals=26
     v218 LocalAddr(-10)                                   -> x0
     v219 Imm(33)                                          -> x6
     v220 Imm(40)                                          -> x2
-    v221 Call { target_pc=1235, args=[v208, v219, v220], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v221 Call { target_pc=1233, args=[v208, v219, v220], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v222 BinopI { op=eq, lhs=v221, rhs_imm=0 }            -> x1
     v223 BinopI { op=eq, lhs=v222, rhs_imm=0 }            -> x1
     terminator Bz { cond=v221, target=b43, fall=b42 }   (exit_acc=v223)

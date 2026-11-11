@@ -45,7 +45,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v15  LifetimeEnd(0)                                   -> -
     v16  Imm(0)                                           -> x0
     v17  AggParts { desc=0, parts=[v11], fp_mask=0x1 }    -> -
-    terminator Return(v17)   (exit_acc=v12)
+    terminator Return(v17)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=vecf_add
 fn ent_pc=2 n_params=2 variadic=false locals=0

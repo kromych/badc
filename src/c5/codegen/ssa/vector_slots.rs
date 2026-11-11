@@ -1181,6 +1181,21 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
         if !slots.contains(&off) {
             continue;
         }
+        // A vector part of the call boundary meets the object it passes
+        // through: a parameter or result part stored there, or a read of
+        // it that a return carries out.
+        let part = match &func.insts[value as usize] {
+            Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => *kind == LoadKind::F64,
+            Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| {
+                o.value && o.is_output && o.width == 8 && o.constraint == AsmConstraint::Fp
+            }),
+            _ => by[value as usize]
+                .iter()
+                .any(|&u| matches!(func.insts[u as usize], Inst::AggParts { .. })),
+        };
+        if part {
+            touched.push(off);
+        }
         match carrier.get(&value) {
             Some(&s) => join(&mut parent, s, off),
             None => {

@@ -163,17 +163,14 @@ Disassembly of section .text:
                	ldr	d0, [x7]
                	bl	<addr>
                	stur	d0, [x29, #-0x8]
-               	ldurh	w0, [x29, #-0x8]
-               	ldurh	w1, [x29, #-0x6]
-               	ldurh	w2, [x29, #-0x2]
-               	sxth	x0, w0
+               	ldursh	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.ne	<addr>
-               	sxth	x0, w1
+               	ldursh	x0, [x29, #-0x6]
                	cmp	w0, #0x2
                	b.ne	<addr>
-               	sxth	x0, w2
+               	ldursh	x0, [x29, #-0x2]
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

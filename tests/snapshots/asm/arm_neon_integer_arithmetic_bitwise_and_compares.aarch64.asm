@@ -14,17 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <w_vadd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_s8>:
@@ -35,17 +28,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_s16>:
@@ -56,17 +42,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_s32>:
@@ -77,17 +56,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_u8>:
@@ -98,17 +70,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_u16>:
@@ -119,17 +84,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_u32>:
@@ -140,17 +98,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_s64>:
@@ -161,17 +112,10 @@ Disassembly of section .text:
                	ret
 
 <w_vadd_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	add	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vaddq_u64>:
@@ -182,17 +126,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_s8>:
@@ -203,17 +140,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_s16>:
@@ -224,17 +154,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_s32>:
@@ -245,17 +168,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_u8>:
@@ -266,17 +182,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_u16>:
@@ -287,17 +196,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_u32>:
@@ -308,17 +210,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_s64>:
@@ -329,17 +224,10 @@ Disassembly of section .text:
                	ret
 
 <w_vsub_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sub	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vsubq_u64>:
@@ -350,17 +238,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_s8>:
@@ -371,17 +252,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_s16>:
@@ -392,17 +266,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_s32>:
@@ -413,17 +280,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_u8>:
@@ -434,17 +294,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_u16>:
@@ -455,17 +308,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmul_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mul	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmulq_u32>:
@@ -478,16 +324,10 @@ Disassembly of section .text:
 <w_vmla_s8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -495,10 +335,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -524,16 +362,10 @@ Disassembly of section .text:
 <w_vmla_s16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -541,10 +373,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -570,16 +400,10 @@ Disassembly of section .text:
 <w_vmla_s32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -587,10 +411,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -616,16 +438,10 @@ Disassembly of section .text:
 <w_vmla_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -633,10 +449,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -662,16 +476,10 @@ Disassembly of section .text:
 <w_vmla_u16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -679,10 +487,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -708,16 +514,10 @@ Disassembly of section .text:
 <w_vmla_u32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -725,10 +525,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mla	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -754,16 +552,10 @@ Disassembly of section .text:
 <w_vmls_s8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -771,10 +563,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -800,16 +590,10 @@ Disassembly of section .text:
 <w_vmls_s16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -817,10 +601,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -846,16 +628,10 @@ Disassembly of section .text:
 <w_vmls_s32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -863,10 +639,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -892,16 +666,10 @@ Disassembly of section .text:
 <w_vmls_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -909,10 +677,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -938,16 +704,10 @@ Disassembly of section .text:
 <w_vmls_u16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -955,10 +715,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -984,16 +742,10 @@ Disassembly of section .text:
 <w_vmls_u32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -1001,10 +753,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	mls	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -1028,17 +778,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_s8>:
@@ -1049,17 +792,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_s16>:
@@ -1070,17 +806,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_s32>:
@@ -1091,17 +820,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_u8>:
@@ -1112,17 +834,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_u16>:
@@ -1133,17 +848,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_u32>:
@@ -1154,17 +862,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqadd	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_s64>:
@@ -1175,17 +876,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqadd_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqadd	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqaddq_u64>:
@@ -1196,17 +890,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqsub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_s8>:
@@ -1217,17 +904,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqsub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_s16>:
@@ -1238,17 +918,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqsub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_s32>:
@@ -1259,17 +932,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqsub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_u8>:
@@ -1280,17 +946,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqsub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_u16>:
@@ -1301,17 +960,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqsub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_u32>:
@@ -1322,17 +974,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sqsub	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_s64>:
@@ -1343,17 +988,10 @@ Disassembly of section .text:
                	ret
 
 <w_vqsub_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uqsub	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqsubq_u64>:
@@ -1364,16 +1002,9 @@ Disassembly of section .text:
                	ret
 
 <w_vneg_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	neg	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vnegq_s8>:
@@ -1383,16 +1014,9 @@ Disassembly of section .text:
                	ret
 
 <w_vneg_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	neg	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vnegq_s16>:
@@ -1402,16 +1026,9 @@ Disassembly of section .text:
                	ret
 
 <w_vneg_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	neg	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vnegq_s32>:
@@ -1421,16 +1038,9 @@ Disassembly of section .text:
                	ret
 
 <w_vneg_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	neg	d0, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vnegq_s64>:
@@ -1440,16 +1050,9 @@ Disassembly of section .text:
                	ret
 
 <w_vabs_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	abs	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabsq_s8>:
@@ -1459,16 +1062,9 @@ Disassembly of section .text:
                	ret
 
 <w_vabs_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	abs	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabsq_s16>:
@@ -1478,16 +1074,9 @@ Disassembly of section .text:
                	ret
 
 <w_vabs_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	abs	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabsq_s32>:
@@ -1497,16 +1086,9 @@ Disassembly of section .text:
                	ret
 
 <w_vabs_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	abs	d0, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabsq_s64>:
@@ -1516,16 +1098,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqneg_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqneg	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqnegq_s8>:
@@ -1535,16 +1110,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqneg_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqneg	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqnegq_s16>:
@@ -1554,16 +1122,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqneg_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqneg	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqnegq_s32>:
@@ -1573,16 +1134,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqneg_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqneg	d0, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqnegq_s64>:
@@ -1592,16 +1146,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqabs_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqabs	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqabsq_s8>:
@@ -1611,16 +1158,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqabs_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqabs	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqabsq_s16>:
@@ -1630,16 +1170,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqabs_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqabs	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqabsq_s32>:
@@ -1649,16 +1182,9 @@ Disassembly of section .text:
                	ret
 
 <w_vqabs_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	sqabs	d0, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vqabsq_s64>:
@@ -1668,17 +1194,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_s8>:
@@ -1689,17 +1208,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_s16>:
@@ -1710,17 +1222,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_s32>:
@@ -1731,17 +1236,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_u8>:
@@ -1752,17 +1250,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_u16>:
@@ -1773,17 +1264,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhadd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhaddq_u32>:
@@ -1794,17 +1278,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	srhadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_s8>:
@@ -1815,17 +1292,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	srhadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_s16>:
@@ -1836,17 +1306,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	srhadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_s32>:
@@ -1857,17 +1320,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	urhadd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_u8>:
@@ -1878,17 +1334,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	urhadd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_u16>:
@@ -1899,17 +1348,10 @@ Disassembly of section .text:
                	ret
 
 <w_vrhadd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	urhadd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vrhaddq_u32>:
@@ -1920,17 +1362,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shsub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_s8>:
@@ -1941,17 +1376,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shsub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_s16>:
@@ -1962,17 +1390,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	shsub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_s32>:
@@ -1983,17 +1404,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhsub	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_u8>:
@@ -2004,17 +1418,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhsub	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_u16>:
@@ -2025,17 +1432,10 @@ Disassembly of section .text:
                	ret
 
 <w_vhsub_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uhsub	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vhsubq_u32>:
@@ -2046,17 +1446,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sabd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_s8>:
@@ -2067,17 +1460,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sabd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_s16>:
@@ -2088,17 +1474,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sabd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_s32>:
@@ -2109,17 +1488,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uabd	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_u8>:
@@ -2130,17 +1502,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uabd	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_u16>:
@@ -2151,17 +1516,10 @@ Disassembly of section .text:
                	ret
 
 <w_vabd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uabd	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vabdq_u32>:
@@ -2174,16 +1532,10 @@ Disassembly of section .text:
 <w_vaba_s8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2191,10 +1543,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	saba	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2220,16 +1570,10 @@ Disassembly of section .text:
 <w_vaba_s16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2237,10 +1581,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	saba	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2266,16 +1608,10 @@ Disassembly of section .text:
 <w_vaba_s32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2283,10 +1619,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	saba	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2312,16 +1646,10 @@ Disassembly of section .text:
 <w_vaba_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2329,10 +1657,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	uaba	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2358,16 +1684,10 @@ Disassembly of section .text:
 <w_vaba_u16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2375,10 +1695,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	uaba	v0.4h, v1.4h, v2.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2404,16 +1722,10 @@ Disassembly of section .text:
 <w_vaba_u32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -2421,10 +1733,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	uaba	v0.2s, v1.2s, v2.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -2448,17 +1758,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smax	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_s8>:
@@ -2469,17 +1772,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smax	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_s16>:
@@ -2490,17 +1786,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smax	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_s32>:
@@ -2511,17 +1800,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umax	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_u8>:
@@ -2532,17 +1814,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umax	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_u16>:
@@ -2553,17 +1828,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmax_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umax	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmaxq_u32>:
@@ -2574,17 +1842,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smin	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_s8>:
@@ -2595,17 +1856,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smin	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_s16>:
@@ -2616,17 +1870,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smin	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_s32>:
@@ -2637,17 +1884,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umin	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_u8>:
@@ -2658,17 +1898,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umin	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_u16>:
@@ -2679,17 +1912,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmin_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umin	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vminq_u32>:
@@ -2700,17 +1926,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_s8>:
@@ -2721,17 +1940,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_s16>:
@@ -2742,17 +1954,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_s32>:
@@ -2763,17 +1968,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_u8>:
@@ -2784,17 +1982,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_u16>:
@@ -2805,17 +1996,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpadd_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	addp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpaddq_u32>:
@@ -2840,17 +2024,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smaxp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_s8>:
@@ -2861,17 +2038,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smaxp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_s16>:
@@ -2882,17 +2052,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smaxp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_s32>:
@@ -2903,17 +2066,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umaxp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_u8>:
@@ -2924,17 +2080,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umaxp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_u16>:
@@ -2945,17 +2094,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmax_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umaxp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpmaxq_u32>:
@@ -2966,17 +2108,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sminp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_s8>:
@@ -2987,17 +2122,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sminp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_s16>:
@@ -3008,17 +2136,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	sminp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_s32>:
@@ -3029,17 +2150,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uminp	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_u8>:
@@ -3050,17 +2164,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uminp	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_u16>:
@@ -3071,17 +2178,10 @@ Disassembly of section .text:
                	ret
 
 <w_vpmin_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	uminp	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vpminq_u32>:
@@ -3092,17 +2192,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_s8>:
@@ -3113,17 +2206,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_s16>:
@@ -3134,17 +2220,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_s32>:
@@ -3155,17 +2234,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_u8>:
@@ -3176,17 +2248,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_u16>:
@@ -3197,17 +2262,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_u32>:
@@ -3218,17 +2276,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_s64>:
@@ -3239,17 +2290,10 @@ Disassembly of section .text:
                	ret
 
 <w_vand_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	and	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vandq_u64>:
@@ -3260,17 +2304,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_s8>:
@@ -3281,17 +2318,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_s16>:
@@ -3302,17 +2332,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_s32>:
@@ -3323,17 +2346,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_u8>:
@@ -3344,17 +2360,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_u16>:
@@ -3365,17 +2374,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_u32>:
@@ -3386,17 +2388,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_s64>:
@@ -3407,17 +2402,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorr_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orr	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vorrq_u64>:
@@ -3428,17 +2416,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_s8>:
@@ -3449,17 +2430,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_s16>:
@@ -3470,17 +2444,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_s32>:
@@ -3491,17 +2458,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_u8>:
@@ -3512,17 +2472,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_u16>:
@@ -3533,17 +2486,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_u32>:
@@ -3554,17 +2500,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_s64>:
@@ -3575,17 +2514,10 @@ Disassembly of section .text:
                	ret
 
 <w_veor_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	eor	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_veorq_u64>:
@@ -3596,17 +2528,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_s8>:
@@ -3617,17 +2542,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_s16>:
@@ -3638,17 +2556,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_s32>:
@@ -3659,17 +2570,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_u8>:
@@ -3680,17 +2584,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_u16>:
@@ -3701,17 +2598,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_u32>:
@@ -3722,17 +2612,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_s64>:
@@ -3743,17 +2626,10 @@ Disassembly of section .text:
                	ret
 
 <w_vbic_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	bic	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vbicq_u64>:
@@ -3764,17 +2640,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_s8>:
@@ -3785,17 +2654,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_s16>:
@@ -3806,17 +2668,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_s32>:
@@ -3827,17 +2682,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_u8>:
@@ -3848,17 +2696,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_u16>:
@@ -3869,17 +2710,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_u32>:
@@ -3890,17 +2724,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_s64>:
@@ -3911,17 +2738,10 @@ Disassembly of section .text:
                	ret
 
 <w_vorn_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	orn	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vornq_u64>:
@@ -3932,16 +2752,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_s8>:
@@ -3951,16 +2764,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_s16>:
@@ -3970,16 +2776,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_s32>:
@@ -3989,16 +2788,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_u8>:
@@ -4008,16 +2800,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_u16>:
@@ -4027,16 +2812,9 @@ Disassembly of section .text:
                	ret
 
 <w_vmvn_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mvn	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vmvnq_u32>:
@@ -4048,16 +2826,10 @@ Disassembly of section .text:
 <w_vbsl_s8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4065,10 +2837,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4094,16 +2864,10 @@ Disassembly of section .text:
 <w_vbsl_s16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4111,10 +2875,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4140,16 +2902,10 @@ Disassembly of section .text:
 <w_vbsl_s32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4157,10 +2913,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4186,16 +2940,10 @@ Disassembly of section .text:
 <w_vbsl_u8>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4203,10 +2951,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4232,16 +2978,10 @@ Disassembly of section .text:
 <w_vbsl_u16>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4249,10 +2989,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4278,16 +3016,10 @@ Disassembly of section .text:
 <w_vbsl_u32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4295,10 +3027,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4324,16 +3054,10 @@ Disassembly of section .text:
 <w_vbsl_s64>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4341,10 +3065,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4370,16 +3092,10 @@ Disassembly of section .text:
 <w_vbsl_u64>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	sub	x4, x29, #0x10
-               	ldr	x16, [x1]
-               	str	x16, [x4]
+               	sub	sp, sp, #0x20
+               	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x4]
-               	str	x16, [x1]
-               	ldur	d0, [x29, #-0x8]
                	str	d0, [sp]
                	str	d1, [sp, #0x8]
                	str	d2, [sp, #0x10]
@@ -4387,10 +3103,8 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x8]
                	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x30
+               	str	d0, [x0]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -4414,16 +3128,9 @@ Disassembly of section .text:
                	ret
 
 <w_vcnt_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	cnt	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcntq_u8>:
@@ -4433,29 +3140,15 @@ Disassembly of section .text:
                	ret
 
 <w_vcnt_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	cnt	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclz_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_s8>:
@@ -4465,16 +3158,9 @@ Disassembly of section .text:
                	ret
 
 <w_vclz_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_s16>:
@@ -4484,16 +3170,9 @@ Disassembly of section .text:
                	ret
 
 <w_vclz_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_s32>:
@@ -4503,16 +3182,9 @@ Disassembly of section .text:
                	ret
 
 <w_vclz_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_u8>:
@@ -4522,16 +3194,9 @@ Disassembly of section .text:
                	ret
 
 <w_vclz_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_u16>:
@@ -4541,16 +3206,9 @@ Disassembly of section .text:
                	ret
 
 <w_vclz_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	clz	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclzq_u32>:
@@ -4560,16 +3218,9 @@ Disassembly of section .text:
                	ret
 
 <w_vcls_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	cls	v0.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclsq_s8>:
@@ -4579,16 +3230,9 @@ Disassembly of section .text:
                	ret
 
 <w_vcls_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	cls	v0.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclsq_s16>:
@@ -4598,16 +3242,9 @@ Disassembly of section .text:
                	ret
 
 <w_vcls_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	cls	v0.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vclsq_s32>:
@@ -4617,17 +3254,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_s8>:
@@ -4638,17 +3268,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_s16>:
@@ -4659,17 +3282,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_s32>:
@@ -4680,17 +3296,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_u8>:
@@ -4701,17 +3310,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_u16>:
@@ -4722,17 +3324,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_u32>:
@@ -4743,17 +3338,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_s64>:
@@ -4764,17 +3352,10 @@ Disassembly of section .text:
                	ret
 
 <w_vceq_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmeq	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vceqq_u64>:
@@ -4785,17 +3366,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_s8>:
@@ -4806,17 +3380,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_s16>:
@@ -4827,17 +3394,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_s32>:
@@ -4848,17 +3408,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_u8>:
@@ -4869,17 +3422,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_u16>:
@@ -4890,17 +3436,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_u32>:
@@ -4911,17 +3450,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_s64>:
@@ -4932,17 +3464,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcge_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgeq_u64>:
@@ -4953,17 +3478,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_s8>:
@@ -4974,17 +3492,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_s16>:
@@ -4995,17 +3506,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_s32>:
@@ -5016,17 +3520,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_u8>:
@@ -5037,17 +3534,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_u16>:
@@ -5058,17 +3548,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_u32>:
@@ -5079,17 +3562,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_s64>:
@@ -5100,17 +3576,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcgt_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcgtq_u64>:
@@ -5121,17 +3590,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.8b, v1.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_s8>:
@@ -5142,17 +3604,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.4h, v1.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_s16>:
@@ -5163,17 +3618,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	v0.2s, v1.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_s32>:
@@ -5184,17 +3632,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.8b, v1.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_u8>:
@@ -5205,17 +3646,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.4h, v1.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_u16>:
@@ -5226,17 +3660,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	v0.2s, v1.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_u32>:
@@ -5247,17 +3674,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmge	d0, d1, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_s64>:
@@ -5268,17 +3688,10 @@ Disassembly of section .text:
                	ret
 
 <w_vcle_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhs	d0, d1, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcleq_u64>:
@@ -5289,17 +3702,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.8b, v1.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_s8>:
@@ -5310,17 +3716,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.4h, v1.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_s16>:
@@ -5331,17 +3730,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	v0.2s, v1.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_s32>:
@@ -5352,17 +3744,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.8b, v1.8b, v0.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_u8>:
@@ -5373,17 +3758,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.4h, v1.4h, v0.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_u16>:
@@ -5394,17 +3772,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	v0.2s, v1.2s, v0.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_u32>:
@@ -5415,17 +3786,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmgt	d0, d1, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_s64>:
@@ -5436,17 +3800,10 @@ Disassembly of section .text:
                	ret
 
 <w_vclt_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmhi	d0, d1, d0
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vcltq_u64>:
@@ -5457,17 +3814,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_s8>:
@@ -5478,17 +3828,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_s16>:
@@ -5499,17 +3842,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_s32>:
@@ -5520,17 +3856,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.8b, v0.8b, v1.8b
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_u8>:
@@ -5541,17 +3870,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.4h, v0.4h, v1.4h
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_u16>:
@@ -5562,17 +3884,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	v0.2s, v0.2s, v1.2s
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_u32>:
@@ -5583,17 +3898,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_s64>:
@@ -5604,17 +3912,10 @@ Disassembly of section .text:
                	ret
 
 <w_vtst_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	cmtst	d0, d0, d1
-               	stur	d0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x8]
-               	str	x1, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	str	d0, [x0]
                	ret
 
 <w_vtstq_u64>:

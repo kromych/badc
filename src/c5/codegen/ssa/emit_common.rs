@@ -2822,12 +2822,24 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("ssa::mem2reg::run vector parts", &mut ssa_funcs, |funcs| {
             use super::super::ir::{FunctionSsa, Inst, LoadKind};
             let whole = |k: &LoadKind| matches!(k, LoadKind::V128 | LoadKind::V256);
+            // A vector the parts carry: a whole register's part, or an
+            // 8-byte vector's, which moves as the 64 bits of a double.
+            let vector = |f: &FunctionSsa, d: Option<u32>| {
+                d.is_some_and(|d| f.agg_descs.get(d as usize).is_some_and(|d| d.vector))
+            };
             let vector_parts = |f: &FunctionSsa| {
                 f.insts.iter().any(|i| match i {
-                    Inst::ParamPart { kind, .. } | Inst::RetPart { kind, .. } => whole(kind),
-                    Inst::AggParts { parts, .. } => parts.iter().any(|&p| {
-                        matches!(f.insts.get(p as usize), Some(Inst::Load { kind, .. }) if whole(kind))
-                    }),
+                    Inst::ParamPart { idx, kind, .. } => {
+                        whole(kind) || vector(f, f.param_aggs.get(*idx as usize).copied().flatten())
+                    }
+                    Inst::RetPart { kind, .. } => whole(kind),
+                    Inst::Call { ret_agg, .. } => vector(f, *ret_agg),
+                    Inst::AggParts { desc, parts, .. } => {
+                        vector(f, Some(*desc))
+                            || parts.iter().any(|&p| {
+                                matches!(f.insts.get(p as usize), Some(Inst::Load { kind, .. }) if whole(kind))
+                            })
+                    }
                     _ => false,
                 })
             };

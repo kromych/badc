@@ -194,16 +194,13 @@ Disassembly of section .text:
                	movsd	(%r10), %xmm0
                	callq	<addr>
                	movsd	%xmm0, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %rax
-               	movzwq	-0x6(%rbp), %rcx
-               	movzwq	-0x2(%rbp), %rdx
-               	movswq	%ax, %rax
+               	movswq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	jne	<addr>
-               	movswq	%cx, %rax
+               	movswq	-0x6(%rbp), %rax
                	cmpl	$0x2, %eax
                	jne	<addr>
-               	movswq	%dx, %rax
+               	movswq	-0x2(%rbp), %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax

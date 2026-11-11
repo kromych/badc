@@ -3253,6 +3253,23 @@ int main(void) { return mmx(); }\n";
     );
 }
 
+/// An 8-byte NEON vector parameter and result stay in their registers, as
+/// with gcc 16: `vadd_s32(a, b)` returned is `add v0.2s, v0.2s, v1.2s` and
+/// `ret`. The result went through the frame twice, once as a `double` and
+/// once as an integer word.
+#[test]
+fn an_8_byte_neon_vector_crosses_calls_in_its_register() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+int32x2_t add2(int32x2_t a, int32x2_t b) { return vadd_s32(a, b); }\n\
+float32x4_t add4(float32x4_t a, float32x4_t b) { return vaddq_f32(a, b); }\n";
+    let mut m = Misses::default();
+    for name in ["add2", "add4"] {
+        let f = a64(SRC, name);
+        m.expect(f.len() == 2, || format!("AArch64 {name}: {f:08x?}"));
+    }
+    m.finish();
+}
+
 /// A vector of constants an operation reads is one load of read-only data,
 /// as with gcc 16: `_mm256_setr_epi8` of 32 constants (a compound literal,
 /// as each of the set / setr constructors is) and a constant compound

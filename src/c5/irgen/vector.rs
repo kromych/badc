@@ -149,6 +149,9 @@ impl<'a> Walker<'a> {
                 return Ok(dst);
             }
         }
+        if let Some(r) = self.walk_vector_row(b, op, lhs, rhs, ty)? {
+            return Ok(r);
+        }
         if lhs_vec && rhs_vec && matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
             return self.walk_vector_chunked(b, op, lhs, rhs, ty);
         }
@@ -213,7 +216,69 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// Element-wise unary `-` / `~` over a vector, lowered per lane like
+    /// `op` over an integer vector as the one SIMD row of the target that
+    /// computes it ([`crate::c5::simd::find`]): a comparison of two vectors,
+    /// `<` and `<=` and their unsigned forms as the swapped `>` and `>=`,
+    /// or a shift by a constant count less than the lane width. `None`
+    /// leaves `op` to the lane-wise lowering.
+    fn walk_vector_row(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<Option<ValueId>, WalkError> {
+        use crate::c5::simd::{Form, Sem};
+        use BinOp as B;
+        let size = self.struct_size(ty);
+        if !matches!(size, 8 | 16 | 32 | 64) || self.no_fp_regs || !self.expr_is_vector(lhs) {
+            return Ok(None);
+        }
+        let operand_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
+        let (elem_ty, _) = self.vector_lanes(operand_ty);
+        if is_floating_scalar(elem_ty) {
+            return Ok(None);
+        }
+        let Some(w) = load_kind_for(elem_ty, self.target).int_bytes() else {
+            return Ok(None);
+        };
+        let pair = self.expr_is_vector(rhs);
+        let count = match self.ast.expr(rhs) {
+            Expr::IntLit { val, .. } if (1..i64::from(8 * w)).contains(val) => Some(*val as u8),
+            _ => None,
+        };
+        let (sem, form, swap) = match (vector_lane_binop(op, elem_ty), pair, count) {
+            (B::Eq, true, _) => (Sem::CmpEq(w), Form::Vv, false),
+            (B::Gt, true, _) => (Sem::CmpGt(w), Form::Vv, false),
+            (B::Lt, true, _) => (Sem::CmpGt(w), Form::Vv, true),
+            (B::Ge, true, _) => (Sem::CmpGe(w), Form::Vv, false),
+            (B::Le, true, _) => (Sem::CmpGe(w), Form::Vv, true),
+            (B::Ugt, true, _) => (Sem::CmpHi(w), Form::Vv, false),
+            (B::Ult, true, _) => (Sem::CmpHi(w), Form::Vv, true),
+            (B::Uge, true, _) => (Sem::CmpHs(w), Form::Vv, false),
+            (B::Ule, true, _) => (Sem::CmpHs(w), Form::Vv, true),
+            (B::Shl, false, Some(_)) => (Sem::Shl(w), Form::Shift, false),
+            (B::Shr, false, Some(_)) => (Sem::Sar(w), Form::Shift, false),
+            (B::Shru, false, Some(_)) => (Sem::Shr(w), Form::Shift, false),
+            _ => return Ok(None),
+        };
+        let Some(row) = crate::c5::simd::find(self.target, self.x86, sem, form, size as u8) else {
+            return Ok(None);
+        };
+        let mut ops = alloc::vec![self.walk_copy_operand(b, lhs)?];
+        if pair {
+            ops.push(self.walk_copy_operand(b, rhs)?);
+        }
+        if swap {
+            ops.reverse();
+        }
+        let imm = if form == Form::Shift { count } else { None };
+        Ok(Some(self.emit_simd_row(b, row, imm, ops)))
+    }
+
+    /// Element-wise unary `-` / `~` over a vector: the target's SIMD row
+    /// for it where it has one, else lowered per lane like
     /// [`Self::walk_vector_binop`].
     pub(super) fn walk_vector_unary(
         &mut self,
@@ -223,6 +288,21 @@ impl<'a> Walker<'a> {
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let (elem_ty, lanes) = self.vector_lanes(ty);
+        let size = self.struct_size(ty);
+        if matches!(size, 8 | 16 | 32 | 64) && !self.no_fp_regs && !is_floating_scalar(elem_ty) {
+            use crate::c5::simd::{Form, Sem};
+            let sem = match (op, load_kind_for(elem_ty, self.target).int_bytes()) {
+                (UnOp::BitNot, _) => Some(Sem::Not),
+                (UnOp::Neg, Some(w)) => Some(Sem::Neg(w)),
+                _ => None,
+            };
+            let row = sem
+                .and_then(|s| crate::c5::simd::find(self.target, self.x86, s, Form::V, size as u8));
+            if let Some(row) = row {
+                let src = self.walk_copy_operand(b, child)?;
+                return Ok(self.emit_simd_row(b, row, None, alloc::vec![src]));
+            }
+        }
         let size = self.struct_size(ty);
         let elem_size = size / lanes;
         let lk = load_kind_for(elem_ty, self.target);
@@ -257,11 +337,11 @@ impl<'a> Walker<'a> {
         i64::from(self.struct_align(ty).min(16))
     }
 
-    /// Lower an x86 SIMD builtin to its instruction. A 128-bit operand is
+    /// Lower a SIMD builtin to its instruction. A 128-bit operand is
     /// passed by address; the result lands in a synthetic slot whose
     /// address the expression yields, which is the protocol every other
     /// vector-valued expression uses.
-    pub(super) fn walk_x86_simd(
+    pub(super) fn walk_simd(
         &mut self,
         b: &mut SsaBuilder,
         op: u32,
@@ -282,18 +362,10 @@ impl<'a> Walker<'a> {
             ops.push(v);
         }
         if matches!(form, Form::Store | Form::MaskStore) {
-            b.x86_simd(op, imm, ops);
+            b.simd(op, imm, ops);
             return Ok(b.imm(0));
         }
-        let result_bytes = if form.returns_vector() {
-            i64::from(row.ret_bytes())
-        } else {
-            8
-        };
-        let slot = b.alloc_synthetic_struct(result_bytes, result_bytes);
-        let dst = b.local_addr(slot);
-        ops.insert(0, dst);
-        b.x86_simd(op, imm, ops);
+        let dst = self.emit_simd_row(b, op, imm, ops);
         if form.returns_vector() {
             Ok(dst)
         } else if simd::get(op).ret == Ret::Int64 {
@@ -301,6 +373,29 @@ impl<'a> Walker<'a> {
         } else {
             Ok(b.load(dst, LoadKind::I32))
         }
+    }
+
+    /// The row `op` over the operands `ops` (a vector's address, an
+    /// integer's value), its result in a fresh synthetic slot whose address
+    /// it yields: a vector result's bytes, or 8 for an integer one.
+    fn emit_simd_row(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: u32,
+        imm: Option<u8>,
+        mut ops: alloc::vec::Vec<ValueId>,
+    ) -> ValueId {
+        let row = crate::c5::simd::get(op);
+        let result_bytes = if row.form.returns_vector() {
+            i64::from(row.ret_bytes())
+        } else {
+            8
+        };
+        let slot = b.alloc_synthetic_struct(result_bytes, result_bytes);
+        let dst = b.local_addr(slot);
+        ops.insert(0, dst);
+        b.simd(op, imm, ops);
+        dst
     }
 
     /// Lower a bitwise operator (`^` / `&` / `|`) on two same-width

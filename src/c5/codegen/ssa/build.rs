@@ -1945,7 +1945,7 @@ impl SsaBuilder {
         })
     }
 
-    pub(crate) fn x86_simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn simd(&mut self, op: u32, imm: Option<u8>, args: Vec<ValueId>) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Simd { op, imm, args })
     }

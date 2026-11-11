@@ -23,25 +23,7 @@ Disassembly of section .text:
                	ret
 
 <neg>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	d0, [x29, #-0x8]
-               	ldursh	x0, [x29, #-0x8]
-               	neg	x0, x0
-               	sturh	w0, [x29, #-0x10]
-               	ldursh	x0, [x29, #-0x6]
-               	neg	x0, x0
-               	sturh	w0, [x29, #-0xe]
-               	ldursh	x0, [x29, #-0x4]
-               	neg	x0, x0
-               	sturh	w0, [x29, #-0xc]
-               	ldursh	x0, [x29, #-0x2]
-               	neg	x0, x0
-               	sturh	w0, [x29, #-0xa]
-               	ldur	d0, [x29, #-0x10]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	neg	v0.4h, v0.4h
                	ret
 
 <swap>:

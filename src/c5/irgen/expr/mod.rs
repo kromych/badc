@@ -175,7 +175,7 @@ impl<'a> Walker<'a> {
             Expr::Simd { op, args, imm, .. } => {
                 let (op, imm) = (*op, *imm);
                 let args = args.clone();
-                self.walk_x86_simd(b, op, &args, imm)
+                self.walk_simd(b, op, &args, imm)
             }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.

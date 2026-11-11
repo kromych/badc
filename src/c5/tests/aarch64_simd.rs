@@ -121,3 +121,36 @@ fn the_interpreter_runs_the_integer_intrinsics() {
         "a failing group sets its bit in the exit code"
     );
 }
+
+/// A GNU vector comparison, a shift by a constant count and a negation are
+/// the target's one instruction for the whole vector where it has one
+/// (`simd::find`): `<` is `cmgt` with the operands swapped.
+#[cfg(feature = "full")]
+#[test]
+fn the_vector_operators_take_the_rows() {
+    use crate::{NativeOptions, Target};
+    let src = "typedef int v4 __attribute__((vector_size(16)));\n\
+        typedef unsigned short u8h __attribute__((vector_size(16)));\n\
+        v4 lt(v4 a, v4 b) { return a < b; }\n\
+        u8h shr(u8h a) { return a >> 3; }\n\
+        v4 neg(v4 a) { return -a; }\n\
+        int main(void) { return 0; }";
+    let program = super::compile_str_bare_for(src, Target::LinuxAarch64);
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native for linux-aarch64");
+    for (word, what) in [
+        (0x4ea0_3420u32, "cmgt v0.4s, v1.4s, v0.4s"),
+        (0x6f1d_0400, "ushr v0.8h, v0.8h, #3"),
+        (0x6ea0_b800, "neg v0.4s, v0.4s"),
+    ] {
+        let needle = word.to_le_bytes();
+        assert!(
+            bytes.windows(4).any(|w| w == needle),
+            "{what}: expected {word:#010x} in the emitted code"
+        );
+    }
+}

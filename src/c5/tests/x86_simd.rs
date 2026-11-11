@@ -2410,3 +2410,35 @@ int main(void) {\n\
         .expect("emit_native for linux-x64");
     }
 }
+
+/// A GNU vector comparison and a shift by a constant count are one SSE
+/// instruction on the whole vector (`simd::find`).
+#[cfg(feature = "full")]
+#[test]
+fn the_vector_operators_take_the_rows() {
+    use crate::{NativeOptions, Target};
+    let src = "typedef int v4 __attribute__((vector_size(16)));\n\
+         typedef unsigned short u8h __attribute__((vector_size(16)));\n\
+         v4 lt(v4 a, v4 b) { return a < b; }\n\
+         u8h shr(u8h a) { return a >> 3; }\n\
+         int main(void) { return 0; }";
+    let program = super::compile_str_bare_for(src, Target::LinuxX64);
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native for linux-x64");
+    for (needle, what) in [
+        (
+            &[0x66u8, 0x44, 0x0f, 0x66, 0xf8][..],
+            "pcmpgtd %xmm0, %xmm15",
+        ),
+        (&[0x66, 0x0f, 0x71, 0xd0, 0x03][..], "psrlw $3, %xmm0"),
+    ] {
+        assert!(
+            bytes.windows(needle.len()).any(|w| w == needle),
+            "{what}: expected encoding {needle:02x?} not in the emitted code"
+        );
+    }
+}

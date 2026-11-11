@@ -2611,18 +2611,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	0x100(%rsp), %rdi
-               	movslq	0x100(%rsp), %rax
-               	sarq	$0x3, %rax
-               	movslq	0x104(%rsp), %rdx
-               	sarq	$0x3, %rdx
-               	movslq	0x108(%rsp), %rsi
-               	sarq	$0x3, %rsi
-               	movslq	0x10c(%rsp), %r8
-               	sarq	$0x3, %r8
-               	movl	%eax, 0x40(%rsp)
-               	movl	%edx, 0x44(%rsp)
-               	movl	%esi, 0x48(%rsp)
-               	movl	%r8d, 0x4c(%rsp)
+               	movups	0x100(%rsp), %xmm0
+               	psrad	$0x3, %xmm0
+               	movups	%xmm0, 0x40(%rsp)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
@@ -2645,18 +2636,9 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	0xe0(%rsp), %rdi
-               	movl	0xe0(%rsp), %eax
-               	shrq	$0x3, %rax
-               	movl	0xe4(%rsp), %edx
-               	shrq	$0x3, %rdx
-               	movl	0xe8(%rsp), %esi
-               	shrq	$0x3, %rsi
-               	movl	0xec(%rsp), %r8d
-               	shrq	$0x3, %r8
-               	movl	%eax, 0x40(%rsp)
-               	movl	%edx, 0x44(%rsp)
-               	movl	%esi, 0x48(%rsp)
-               	movl	%r8d, 0x4c(%rsp)
+               	movups	0xe0(%rsp), %xmm0
+               	psrld	$0x3, %xmm0
+               	movups	%xmm0, 0x40(%rsp)
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx

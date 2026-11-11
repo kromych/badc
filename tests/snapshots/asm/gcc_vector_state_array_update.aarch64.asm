@@ -14,125 +14,59 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mix>:
-               	stp	x20, x21, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	umov	w0, v0.b[0]
-               	lsl	x0, x0, #1
-               	mov	x1, #0x0                // =0
-               	fmov	d1, x1
-               	mov	v1.b[0], w0
-               	umov	w0, v0.b[1]
-               	lsl	x0, x0, #1
-               	mov	v1.b[1], w0
-               	umov	w0, v0.b[2]
-               	lsl	x0, x0, #1
-               	mov	v1.b[2], w0
-               	umov	w0, v0.b[3]
-               	lsl	x0, x0, #1
-               	mov	v1.b[3], w0
-               	umov	w0, v0.b[4]
-               	lsl	x0, x0, #1
-               	mov	v1.b[4], w0
-               	umov	w0, v0.b[5]
-               	lsl	x0, x0, #1
-               	mov	v1.b[5], w0
-               	umov	w0, v0.b[6]
-               	lsl	x0, x0, #1
-               	mov	v1.b[6], w0
-               	umov	w0, v0.b[7]
-               	lsl	x0, x0, #1
-               	mov	v1.b[7], w0
-               	umov	w0, v0.b[8]
-               	lsl	x0, x0, #1
-               	mov	v1.b[8], w0
-               	umov	w0, v0.b[9]
-               	lsl	x0, x0, #1
-               	mov	v1.b[9], w0
-               	umov	w0, v0.b[10]
-               	lsl	x0, x0, #1
-               	mov	v1.b[10], w0
-               	umov	w0, v0.b[11]
-               	lsl	x0, x0, #1
-               	mov	v1.b[11], w0
-               	umov	w0, v0.b[12]
-               	lsl	x0, x0, #1
-               	mov	v1.b[12], w0
-               	umov	w0, v0.b[13]
-               	lsl	x0, x0, #1
-               	mov	v1.b[13], w0
-               	umov	w0, v0.b[14]
-               	lsl	x0, x0, #1
-               	mov	v1.b[14], w0
-               	umov	w0, v0.b[15]
-               	lsl	x0, x0, #1
-               	mov	v1.b[15], w0
-               	umov	w1, v0.b[0]
-               	umov	w2, v0.b[1]
-               	umov	w3, v0.b[2]
-               	umov	w4, v0.b[3]
-               	umov	w5, v0.b[4]
-               	umov	w6, v0.b[5]
-               	umov	w7, v0.b[6]
-               	umov	w8, v0.b[7]
-               	umov	w9, v0.b[8]
-               	umov	w10, v0.b[9]
-               	umov	w11, v0.b[10]
-               	umov	w12, v0.b[11]
-               	umov	w13, v0.b[12]
-               	umov	w14, v0.b[13]
-               	umov	w15, v0.b[14]
-               	umov	w20, v0.b[15]
+               	shl	v1.16b, v0.16b, #0x1
+               	ushr	v0.16b, v0.16b, #0x7
                	mov	x0, #0x1b               // =27
-               	ubfx	x1, x1, #7, #8
+               	umov	w1, v0.b[0]
                	mul	x1, x1, x0
-               	mov	x21, #0x0               // =0
-               	fmov	d0, x21
-               	mov	v0.b[0], w1
-               	ubfx	x1, x2, #7, #8
+               	mov	x2, #0x0                // =0
+               	fmov	d2, x2
+               	mov	v2.b[0], w1
+               	umov	w1, v0.b[1]
                	mul	x1, x1, x0
-               	mov	v0.b[1], w1
-               	ubfx	x1, x3, #7, #8
+               	mov	v2.b[1], w1
+               	umov	w1, v0.b[2]
                	mul	x1, x1, x0
-               	mov	v0.b[2], w1
-               	ubfx	x1, x4, #7, #8
+               	mov	v2.b[2], w1
+               	umov	w1, v0.b[3]
                	mul	x1, x1, x0
-               	mov	v0.b[3], w1
-               	ubfx	x1, x5, #7, #8
+               	mov	v2.b[3], w1
+               	umov	w1, v0.b[4]
                	mul	x1, x1, x0
-               	mov	v0.b[4], w1
-               	ubfx	x1, x6, #7, #8
+               	mov	v2.b[4], w1
+               	umov	w1, v0.b[5]
                	mul	x1, x1, x0
-               	mov	v0.b[5], w1
-               	ubfx	x1, x7, #7, #8
+               	mov	v2.b[5], w1
+               	umov	w1, v0.b[6]
                	mul	x1, x1, x0
-               	mov	v0.b[6], w1
-               	ubfx	x1, x8, #7, #8
+               	mov	v2.b[6], w1
+               	umov	w1, v0.b[7]
                	mul	x1, x1, x0
-               	mov	v0.b[7], w1
-               	ubfx	x1, x9, #7, #8
+               	mov	v2.b[7], w1
+               	umov	w1, v0.b[8]
                	mul	x1, x1, x0
-               	mov	v0.b[8], w1
-               	ubfx	x1, x10, #7, #8
+               	mov	v2.b[8], w1
+               	umov	w1, v0.b[9]
                	mul	x1, x1, x0
-               	mov	v0.b[9], w1
-               	ubfx	x1, x11, #7, #8
+               	mov	v2.b[9], w1
+               	umov	w1, v0.b[10]
                	mul	x1, x1, x0
-               	mov	v0.b[10], w1
-               	ubfx	x1, x12, #7, #8
+               	mov	v2.b[10], w1
+               	umov	w1, v0.b[11]
                	mul	x1, x1, x0
-               	mov	v0.b[11], w1
-               	ubfx	x1, x13, #7, #8
+               	mov	v2.b[11], w1
+               	umov	w1, v0.b[12]
                	mul	x1, x1, x0
-               	mov	v0.b[12], w1
-               	ubfx	x1, x14, #7, #8
+               	mov	v2.b[12], w1
+               	umov	w1, v0.b[13]
                	mul	x1, x1, x0
-               	mov	v0.b[13], w1
-               	ubfx	x1, x15, #7, #8
+               	mov	v2.b[13], w1
+               	umov	w1, v0.b[14]
                	mul	x1, x1, x0
-               	mov	v0.b[14], w1
-               	ubfx	x1, x20, #7, #8
+               	mov	v2.b[14], w1
+               	umov	w1, v0.b[15]
                	mul	x0, x1, x0
+               	mov	v0.16b, v2.16b
                	mov	v0.b[15], w0
                	eor	v0.16b, v1.16b, v0.16b
                	mov	x0, #0x63               // =99
@@ -187,8 +121,6 @@ Disassembly of section .text:
                	eor	x0, x1, x0
                	mov	v0.16b, v1.16b
                	mov	v0.b[15], w0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
                	ret
 
 <save_state>:

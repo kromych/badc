@@ -31,6 +31,33 @@ pub(crate) fn arch(op: u32) -> &'static str {
     if op >= A64_BASE { "AArch64" } else { "x86" }
 }
 
+/// The op id of a row of `target` that computes `sem` in `form` over
+/// `bytes`-byte vectors, among the rows the unit's x86 extensions `x86`
+/// enable: x86-64 code assumes AVX2, and a 64-byte row needs AVX-512F, or
+/// AVX-512BW for byte and word lanes. `None` when the target has no such
+/// row; a consumer then computes the operation another way.
+pub(crate) fn find(
+    target: crate::c5::Target,
+    x86: crate::c5::X86Features,
+    sem: Sem,
+    form: Form,
+    bytes: u8,
+) -> Option<u32> {
+    let fits = |o: &SimdOp| o.sem == sem && o.form == form && o.bytes == bytes;
+    if target.is_aarch64() {
+        let i = super::aarch64_simd::OPS.iter().position(fits)?;
+        return Some(i as u32 + A64_BASE);
+    }
+    if !target.is_x86_64() {
+        return None;
+    }
+    let zmm = |o: &SimdOp| x86.avx512f() && (o.ret.lane_bytes() >= 4 || x86.avx512bw());
+    let i = super::x86_simd::OPS
+        .iter()
+        .position(|o| fits(o) && (o.bytes < 64 || zmm(o)))?;
+    Some(i as u32)
+}
+
 /// Whether `target` runs the instruction an op id's row names.
 pub(crate) fn on_target(op: u32, target: crate::c5::Target) -> bool {
     if op >= A64_BASE {

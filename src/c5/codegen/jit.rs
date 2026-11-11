@@ -993,14 +993,32 @@ mod jit_impl {
             None
         };
         let data_vmaddr = data.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+        // A pc-relative word of the data image into the code bounds their
+        // distance.
+        let reach = build
+            .data_pcrel_relocs
+            .iter()
+            .filter(|r| !r.target_in_data)
+            .map(|r| match (r.branch26, r.width) {
+                (true, _) => 1u64 << 27,
+                (false, 4) => 1 << 31,
+                _ => u64::MAX,
+            })
+            .min()
+            .filter(|&r| r != u64::MAX);
+        let near = reach.filter(|_| data.is_some()).map(|reach| Near {
+            data: data_vmaddr,
+            span: build.data.len() as u64,
+            reach,
+        });
         let code = if build.rodata.bytes.is_empty() {
-            JitRegion::new(&build.text)?
+            JitRegion::new(&build.text, near)?
         } else {
             let mut blob = Vec::with_capacity(rodata_offset(build) + build.rodata.bytes.len());
             blob.extend_from_slice(&build.text);
             blob.resize(rodata_offset(build), 0);
             blob.extend_from_slice(&build.rodata.bytes);
-            JitRegion::new(&blob)?
+            JitRegion::new(&blob, near)?
         };
         let code_vmaddr = code.as_ptr() as u64;
         Ok(PlacedUnit {
@@ -1795,6 +1813,20 @@ mod jit_impl {
         usize::MAX as *mut c_void
     }
 
+    /// Where the code must lie: every byte of it and of the `span`-byte
+    /// data region at `data` within `reach` bytes of each other, the data
+    /// holding a pc-relative word into the code (a B or BL a section of
+    /// file-scope asm places there reaches 128 MiB).
+    #[derive(Clone, Copy)]
+    struct Near {
+        data: u64,
+        span: u64,
+        reach: u64,
+    }
+
+    /// Addresses `JitRegion::map_near` tries on each side of the data.
+    const MAX_PLACEMENTS: u64 = 2048;
+
     /// RAII wrapper around an executable mmap region. Drop calls
     /// `munmap` so even early-return paths don't leak the mapping.
     struct JitRegion {
@@ -1803,8 +1835,11 @@ mod jit_impl {
     }
 
     impl JitRegion {
+        /// A writable mapping of `len` bytes at `hint`, or where the system
+        /// places it. Linux: RW now, mprotect to RX once written. macOS
+        /// arm64: RWX with MAP_JIT, the per-thread W^X bit toggled to write.
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        fn new(code: &[u8]) -> Result<Self, C5Error> {
+        fn map(hint: u64, len: usize) -> Option<*mut c_void> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -1815,13 +1850,6 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let len = round_up_to_page(code.len().max(1));
-
-            // Linux: ask for RW now, mprotect to RX once we're
-            // done writing. macOS arm64: ask for RWX with MAP_JIT,
-            // then toggle the per-thread W^X bit to enable writes.
-            // The two paths converge at "writable region holding
-            // the JIT'd bytes" by the time we return.
             #[cfg(target_os = "linux")]
             let (prot, flags) = (PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS);
             #[cfg(target_os = "macos")]
@@ -1829,14 +1857,27 @@ mod jit_impl {
                 PROT_READ | PROT_WRITE | PROT_EXEC,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT,
             );
+            let ptr = unsafe { mmap(hint as *mut c_void, len, prot, flags, -1, 0) };
+            (ptr != map_failed()).then_some(ptr)
+        }
 
-            let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
-            if ptr == map_failed() {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn unmap(ptr: *mut c_void, len: usize) {
+            unsafe extern "C" {
+                fn munmap(addr: *mut c_void, len: usize) -> c_int;
+            }
+            unsafe { munmap(ptr, len) };
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn new(code: &[u8], near: Option<Near>) -> Result<Self, C5Error> {
+            let len = round_up_to_page(code.len().max(1));
+            let Some(ptr) = Self::map_near(len, near) else {
                 return Err(C5Error::internal(format!(
                     "JIT: mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
-            }
+            };
 
             // macOS: a freshly mmap'd MAP_JIT region defaults to RX
             // for the executing thread. Flip the per-thread toggle to
@@ -1863,22 +1904,32 @@ mod jit_impl {
         /// flips to PAGE_EXECUTE_READ via `make_executable`. No
         /// per-access W^X toggle; VirtualProtect is a one-shot.
         #[cfg(target_os = "windows")]
-        fn new(code: &[u8]) -> Result<Self, C5Error> {
-            let len = round_up_to_page(code.len().max(1));
+        fn map(hint: u64, len: usize) -> Option<*mut c_void> {
             let ptr = unsafe {
                 VirtualAlloc(
-                    std::ptr::null_mut(),
+                    hint as *mut c_void,
                     len,
                     MEM_COMMIT | MEM_RESERVE,
                     PAGE_READWRITE,
                 )
             };
-            if ptr.is_null() {
+            (!ptr.is_null()).then_some(ptr)
+        }
+
+        #[cfg(target_os = "windows")]
+        fn unmap(ptr: *mut c_void, _len: usize) {
+            unsafe { VirtualFree(ptr, 0, MEM_RELEASE) };
+        }
+
+        #[cfg(target_os = "windows")]
+        fn new(code: &[u8], near: Option<Near>) -> Result<Self, C5Error> {
+            let len = round_up_to_page(code.len().max(1));
+            let Some(ptr) = Self::map_near(len, near) else {
                 return Err(C5Error::internal(format!(
                     "JIT: VirtualAlloc failed: {}",
                     std::io::Error::last_os_error()
                 )));
-            }
+            };
             unsafe {
                 std::ptr::copy_nonoverlapping(code.as_ptr(), ptr as *mut u8, code.len());
             }
@@ -1886,6 +1937,37 @@ mod jit_impl {
                 ptr: ptr as *mut u8,
                 len,
             })
+        }
+
+        /// A mapping of `len` bytes within `near`'s reach of the data
+        /// region when there is one: tried at addresses stepping away from
+        /// the region on either side, an allocation granule apart, then
+        /// wherever the system places it -- the relocation then reports
+        /// the distance if it does not reach.
+        fn map_near(len: usize, near: Option<Near>) -> Option<*mut c_void> {
+            let Some(n) = near else {
+                return Self::map(0, len);
+            };
+            let gran = granularity() as u64;
+            let len64 = len as u64;
+            let fits = |p: u64| {
+                let (lo, hi) = (p.min(n.data), (p + len64).max(n.data + n.span));
+                hi - lo <= n.reach
+            };
+            let after = (n.data + n.span).next_multiple_of(gran);
+            let before = n.data.saturating_sub(len64) / gran * gran;
+            for k in 0..(n.reach / gran).min(MAX_PLACEMENTS) {
+                for at in [after + k * gran, before.saturating_sub(k * gran)] {
+                    let Some(p) = Self::map(at, len) else {
+                        continue;
+                    };
+                    if fits(p as u64) {
+                        return Some(p);
+                    }
+                    Self::unmap(p, len);
+                }
+            }
+            Self::map(0, len)
         }
 
         fn make_executable(&self) -> Result<(), C5Error> {
@@ -1991,7 +2073,7 @@ mod jit_impl {
         _active_processor_mask: usize,
         _number_of_processors: u32,
         _processor_type: u32,
-        _allocation_granularity: u32,
+        allocation_granularity: u32,
         _processor_level: u16,
         _processor_revision: u16,
     }
@@ -2957,6 +3039,21 @@ mod jit_impl {
         crate::c5::layout::round_up(n, page_size())
     }
 
+    /// The boundary a mapping starts on: the page, or Windows' 64 KiB
+    /// allocation granularity.
+    fn granularity() -> usize {
+        #[cfg(target_os = "windows")]
+        {
+            let mut info: SystemInfo = unsafe { core::mem::zeroed() };
+            unsafe { GetSystemInfo(&mut info as *mut SystemInfo) };
+            (info.allocation_granularity as usize).max(page_size())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            page_size()
+        }
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn page_size() -> usize {
         unsafe extern "C" {
@@ -3060,6 +3157,35 @@ mod jit_impl {
         unsafe {
             core::arch::asm!("dsb ish", options(nostack, preserves_flags));
             core::arch::asm!("isb", options(nostack, preserves_flags));
+        }
+    }
+
+    #[cfg(test)]
+    mod placement {
+        use super::{JitRegion, Near, page_size};
+
+        /// The code a data image branches into is mapped within the
+        /// branch's 128 MiB of the data wherever the data lies: here an
+        /// address far from where the system places a mapping by itself.
+        #[test]
+        fn code_is_mapped_within_reach_of_the_data_branching_into_it() {
+            let near = Near {
+                data: 0x3000_0000_0000,
+                span: 0x1_0000,
+                reach: 1 << 27,
+            };
+            let len = page_size();
+            let p = JitRegion::map_near(len, Some(near)).expect("map") as u64;
+            JitRegion::unmap(p as *mut core::ffi::c_void, len);
+            let (lo, hi) = (
+                p.min(near.data),
+                (p + len as u64).max(near.data + near.span),
+            );
+            assert!(
+                hi - lo <= near.reach,
+                "code at {p:#x}, data at {:#x}",
+                near.data
+            );
         }
     }
 }

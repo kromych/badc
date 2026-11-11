@@ -726,11 +726,18 @@ fn walk_block(
         match &func.insts[idx] {
             Inst::Mcpy { dst, src, size, .. } => {
                 let size = *size;
+                // A copy of a frame range one fill covers carries that fill.
+                let carried = frame_addr(func, *src, 0).and_then(|s| {
+                    let (&lo, &(hi, fill)) = state.range(..=s).next_back()?;
+                    (s + size <= hi).then(|| fill.advanced(s - lo))
+                });
                 match frame_addr(func, *dst, 0) {
                     Some(lo) => {
                         kill(state, lo, lo + size);
                         if let Some(s) = data_addr(func, ext, *src, 0) {
                             state.insert(lo, (lo + size, Filled::Template(s)));
+                        } else if let Some(fill) = carried {
+                            state.insert(lo, (lo + size, fill));
                         }
                     }
                     None => state.clear(),

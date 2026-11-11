@@ -3220,6 +3220,39 @@ int none(const v4l *a, const v4l *b) {\n\
     m.finish();
 }
 
+/// The saturating packs of constant MMX vectors fold to their results: a
+/// lane read through the parameter copies the inliner chains through one
+/// frame region reads the template the constructor's literal was copied
+/// from, a copy of a frame range one fill covers carrying that fill. The
+/// packs clamped in line on lanes read from the stack.
+#[test]
+fn constant_mmx_packs_fold_through_parameter_copies() {
+    const SRC: &str = "#include <pmmintrin.h>\n\
+#define Q(m) ((unsigned long long)_mm_cvtm64_si64(m))\n\
+__attribute__((noinline)) static int mmx(void) {\n\
+    if (_mm_cvtsi64_si32(_mm_set_pi16(4, 3, 2, 1)) != 0x00020001) return 1;\n\
+    if (Q(_mm_set_pi32(7, 5)) != 0x0000000700000005ULL) return 2;\n\
+    if (Q(_mm_setr_pi8(1, 2, 3, 4, 5, 6, 7, 8)) != 0x0807060504030201ULL) return 3;\n\
+    if (Q(_mm_packs_pi16(_mm_setr_pi16(300, -300, 5, -5), _mm_setr_pi16(127, -128, 32767, -32768)))\n\
+        != 0x807F807FFB05807FULL) return 4;\n\
+    if (Q(_mm_packs_pu16(_mm_setr_pi16(300, -300, 5, 255), _mm_setr_pi16(256, 0, 128, -1)))\n\
+        != 0x008000FFFF0500FFULL) return 5;\n\
+    if (Q(_mm_packs_pi32(_mm_setr_pi32(70000, -70000), _mm_setr_pi32(1, -1)))\n\
+        != 0xFFFF000180007FFFULL) return 6;\n\
+    return 0;\n\
+}\n\
+int main(void) { return mmx(); }\n";
+    let mmx = x64(SRC, "mmx");
+    // No call and no clamp: a signed-compare jump, `jl` / `jge` / `jle` / `jg`
+    // (7C-7F, 0F8C-0F8F).
+    assert!(
+        mmx.iter().all(|i| i.op != 0xE8
+            && !(0x7C..=0x7F).contains(&i.op)
+            && !(0x0F8C..=0x0F8F).contains(&i.op)),
+        "x86-64 mmx: {mmx:x?}"
+    );
+}
+
 /// A vector of constants an operation reads is one load of read-only data,
 /// as with gcc 16: `_mm256_setr_epi8` of 32 constants (a compound literal,
 /// as each of the set / setr constructors is) and a constant compound

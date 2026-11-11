@@ -145,13 +145,19 @@ Disassembly of section .text:
                	ldr	x16, [x1]
                	str	x16, [x0]
                	adrp	x1, <page>
-               	ldr	d0, [x1, #0x18]
+               	ldr	d2, [x1, #0x18]
                	sub	x1, x29, #0x40
                	ldr	x16, [x0]
                	str	x16, [x1]
-               	ldur	x0, [x29, #-0x40]
-               	fmov	d16, x0
-               	add	v0.8b, v16.8b, v0.8b
+               	mov	x16, #0x201             // =513
+               	movk	x16, #0x403, lsl #16
+               	movk	x16, #0x605, lsl #32
+               	movk	x16, #0x807, lsl #48
+               	str	x16, [sp, #0x10]
+               	str	d2, [sp, #0x18]
+               	ldr	d1, [sp, #0x10]
+               	ldr	d2, [sp, #0x18]
+               	add	v0.8b, v1.8b, v2.8b
                	stur	d0, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	stur	x0, [x29, #-0x48]

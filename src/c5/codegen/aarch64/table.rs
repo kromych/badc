@@ -709,6 +709,17 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "fabs" => Some(0x1E60_C000u32),
         "fneg" => Some(0x1E61_4000),
         "fsqrt" => Some(0x1E61_C000),
+        "frintn" => Some(0x1E64_4000),
+        "frintp" => Some(0x1E64_C000),
+        "frintm" => Some(0x1E65_4000),
+        "frintz" => Some(0x1E65_C000),
+        "frinta" => Some(0x1E66_4000),
+        "frintx" => Some(0x1E67_4000),
+        "frinti" => Some(0x1E67_C000),
+        "frint32z" => Some(0x1E68_4000),
+        "frint32x" => Some(0x1E68_C000),
+        "frint64z" => Some(0x1E69_4000),
+        "frint64x" => Some(0x1E69_C000),
         _ => None,
     } && let [
         Opnd::VReg { num: rd, is_d: d0 },
@@ -1686,6 +1697,39 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((v >> 5) << 16)
             | (cmode << 12)
             | ((v & 0x1F) << 5)
+            | (rd as u32));
+    }
+    // The vector FP roundings `frint<n|p|m|z|a|x|i|32z|32x|64z|64x> Vd.T, Vn.T`
+    // on 2s/4s/2d: sz at bit 22, the opcode's bit 23 in the base word.
+    if let Some(base) = match mnemonic {
+        "frintn" => Some(0x0E21_8800u32),
+        "frintm" => Some(0x0E21_9800),
+        "frintp" => Some(0x0EA1_8800),
+        "frintz" => Some(0x0EA1_9800),
+        "frinta" => Some(0x2E21_8800),
+        "frintx" => Some(0x2E21_9800),
+        "frinti" => Some(0x2EA1_9800),
+        "frint32z" => Some(0x0E21_E800),
+        "frint32x" => Some(0x2E21_E800),
+        "frint64z" => Some(0x0E21_F800),
+        "frint64x" => Some(0x2E21_F800),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+    ] = *ops
+    {
+        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+            return Err(format!("inline asm: bad `{mnemonic}` arrangement"));
+        }
+        return Ok(base
+            | (if q { 1u32 << 30 } else { 0 })
+            | (if size == 3 { 1u32 << 22 } else { 0 })
+            | ((rn as u32) << 5)
             | (rd as u32));
     }
     // SIMD two-register misc (one source): the sign ops abs/neg and their
@@ -2718,42 +2762,102 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((base as u32) << 5)
             | (*first as u32));
     }
-    // SHA3 three-source xor `eor3 Vd.16b, Vn.16b, Vm.16b, Va.16b`
-    // (FEAT_SHA3): Vd = Vn ^ Vm ^ Va, .16b only.
-    if let (
-        "eor3",
-        [
-            Opnd::VecReg {
-                num: rd,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: rn,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: rm,
-                size: 0,
-                q: true,
-            },
-            Opnd::VecReg {
-                num: ra,
-                size: 0,
-                q: true,
-            },
-        ],
-    ) = (mnemonic, ops)
-    {
-        return Ok(0xCE00_0000
-            | ((*rm as u32) << 16)
-            | ((*ra as u32) << 10)
-            | ((*rn as u32) << 5)
-            | (*rd as u32));
+    // The four-register crypto forms `op Vd.T, Vn.T, Vm.T, Va.T`: the SHA3
+    // `eor3` (Vn ^ Vm ^ Va) and `bcax` (Vn ^ (Vm & ~Va)) on .16b, and
+    // `sm3ss1` on .4s.
+    if let Some((base, esize)) = match mnemonic {
+        "eor3" => Some((0xCE00_0000u32, 0u8)),
+        "bcax" => Some((0xCE20_0000, 0)),
+        "sm3ss1" => Some((0xCE40_0000, 2)),
+        _ => None,
+    } {
+        let reg = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q: true } if size == esize => Some(num as u32),
+            _ => None,
+        };
+        let regs: Option<Vec<u32>> = ops.iter().map(reg).collect();
+        let [rd, rn, rm, ra] = regs.as_deref().unwrap_or(&[]) else {
+            return Err(format!(
+                "inline asm: `{mnemonic}` takes four {} registers",
+                if esize == 0 { ".16b" } else { ".4s" }
+            ));
+        };
+        return Ok(base | (rm << 16) | (ra << 10) | (rn << 5) | rd);
     }
-    if mnemonic == "eor3" {
-        return Err(String::from("inline asm: eor3 operands must be .16b"));
+    // The SHA3 and SM3/SM4 forms on whole registers: `rax1` / `xar` (with a
+    // rotate amount, 0..63) on .2d, `sm3partw1` / `sm3partw2` / `sm4ekey`
+    // and the two-register `sm4e` on .4s, and `sm3tt1a` .. `sm3tt2b`, whose
+    // third source is a .s element.
+    if let Some((base, esize)) = match mnemonic {
+        "rax1" => Some((0xCE60_8C00u32, 3u8)),
+        "xar" => Some((0xCE80_0000, 3)),
+        "sm3partw1" => Some((0xCE60_C000, 2)),
+        "sm3partw2" => Some((0xCE60_C400, 2)),
+        "sm4ekey" => Some((0xCE60_C800, 2)),
+        "sm4e" => Some((0xCEC0_8400, 2)),
+        "sm3tt1a" => Some((0xCE40_8000, 2)),
+        "sm3tt1b" => Some((0xCE40_8400, 2)),
+        "sm3tt2a" => Some((0xCE40_8800, 2)),
+        "sm3tt2b" => Some((0xCE40_8C00, 2)),
+        _ => None,
+    } {
+        let reg = |o: &Opnd| match *o {
+            Opnd::VecReg { num, size, q: true } if size == esize => Some(num as u32),
+            _ => None,
+        };
+        // The register fields and the immediate field: imm6 at bit 10 for
+        // `xar`, the element index at bit 12 for `sm3tt*`.
+        let fields = match (mnemonic, ops) {
+            ("sm4e", [d, n]) => reg(d).zip(reg(n)).map(|(d, n)| (d, n, 0, 0)),
+            ("xar", [d, n, m, Opnd::Imm(i @ 0..=63)]) => reg(d)
+                .zip(reg(n))
+                .zip(reg(m))
+                .map(|((d, n), m)| (d, n, m, (*i as u32) << 10)),
+            (
+                "sm3tt1a" | "sm3tt1b" | "sm3tt2a" | "sm3tt2b",
+                [
+                    d,
+                    n,
+                    Opnd::VecElem {
+                        num,
+                        size: 2,
+                        index: index @ 0..=3,
+                    },
+                ],
+            ) => reg(d)
+                .zip(reg(n))
+                .map(|(d, n)| (d, n, *num as u32, (*index as u32) << 12)),
+            ("rax1" | "sm3partw1" | "sm3partw2" | "sm4ekey", [d, n, m]) => reg(d)
+                .zip(reg(n))
+                .zip(reg(m))
+                .map(|((d, n), m)| (d, n, m, 0)),
+            _ => None,
+        };
+        let (rd, rn, rm, imm) = fields.ok_or_else(|| {
+            format!("inline asm: no A64 encoding for `{mnemonic}` with these operands")
+        })?;
+        return Ok(base | (rm << 16) | imm | (rn << 5) | rd);
+    }
+    // Javascript conversion `fjcvtzs Wd, Dn` (FEAT_JSCVT): the double to a
+    // 32-bit integer, rounding toward zero, modulo 2^32.
+    if mnemonic == "fjcvtzs" {
+        let [
+            Opnd::Reg {
+                num: rd,
+                is64: false,
+                ..
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+        ] = *ops
+        else {
+            return Err(String::from(
+                "inline asm: `fjcvtzs` takes a W and a D register",
+            ));
+        };
+        return Ok(0x1E7E_0000 | ((rn as u32) << 5) | (rd as u32));
     }
     // SIMD table lookup `<tbl|tbx> Vd.T, {Vn.16b, ..}, Vm.T` (T = 8b/16b): each
     // byte of the index Vm selects a byte from the table register list. `len`

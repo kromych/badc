@@ -1763,6 +1763,31 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
+        // Branch target identification `bti [c|j|jc]` and `xpaclri`: hints
+        // whose operand is a keyword, `hint #32` + 2 * target and `hint #7`.
+        if matches!(mnem, "bti" | "xpaclri") {
+            let toks = split_operands(rest);
+            let op = match (mnem, toks.as_slice()) {
+                ("xpaclri", []) => 7u32,
+                ("bti", []) | ("bti", ["r"]) => 32,
+                ("bti", [t]) => match t.to_ascii_lowercase().as_str() {
+                    "c" => 34,
+                    "j" => 36,
+                    "jc" => 38,
+                    _ => return Err(format!("inline asm: bad `bti` target `{t}`")),
+                },
+                _ => return Err(format!("inline asm: bad `{mnem}` operands")),
+            };
+            insns.push(AsmInsnA64 {
+                mnemonic: String::new(),
+                operands: Vec::new(),
+                bytes: (0xD503_201F | (op << 5)).to_le_bytes().to_vec(),
+                label_def: None,
+                sym_target: None,
+                layout: None,
+            });
+            continue;
+        }
         // `dc` / `ic` / `tlbi` name a system operation as the first token and
         // take an optional address register. The op resolves to a base word; the
         // register -- explicit, an operand reference, or absent (xzr) -- is
@@ -2367,6 +2392,23 @@ mod tests {
         // An unknown option and an isb domain option are rejected.
         assert!(parse_template(b"dmb full").is_err());
         assert!(parse_template(b"isb ish").is_err());
+    }
+
+    #[test]
+    fn bti_targets_and_xpaclri_are_hints() {
+        // Each word from `clang --target=aarch64-unknown-linux-gnu`. A bti
+        // target is a keyword, not a branch label.
+        #[rustfmt::skip]
+        let cases: &[(&[u8], u32)] = &[
+            (b"bti", 0xd503241f), (b"bti c", 0xd503245f), (b"bti j", 0xd503249f),
+            (b"bti jc", 0xd50324df), (b"xpaclri", 0xd50320ff),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(insns[0].bytes, want.to_le_bytes());
+        }
+        assert!(parse_template(b"bti x").is_err());
     }
 
     #[test]

@@ -3267,3 +3267,80 @@ mod differential {
         );
     }
 }
+
+/// The SHA3, SM3 and SM4 forms and `fjcvtzs`, each word as LLVM's
+/// assembler encodes it.
+#[test]
+fn sha3_sm3_sm4_and_jscvt_forms() {
+    let v = |num: u8, size: u8| Opnd::VecReg { num, size, q: true };
+    let s = |n| v(n, 2);
+    assert_eq!(
+        enc("bcax", &[v(1, 0), v(2, 0), v(3, 0), v(4, 0)]),
+        0xCE23_1041
+    );
+    assert_eq!(enc("rax1", &[v(1, 3), v(2, 3), v(3, 3)]), 0xCE63_8C41);
+    assert_eq!(
+        enc("xar", &[v(1, 3), v(2, 3), v(3, 3), Opnd::Imm(63)]),
+        0xCE83_FC41
+    );
+    assert!(encode("xar", &[v(1, 3), v(2, 3), v(3, 3), Opnd::Imm(64)]).is_err());
+    assert_eq!(enc("sm3ss1", &[s(1), s(2), s(3), s(4)]), 0xCE43_1041);
+    let lane = |index| Opnd::VecElem {
+        num: 3,
+        size: 2,
+        index,
+    };
+    for (m, index, word) in [
+        ("sm3tt1a", 3, 0xCE43_B041),
+        ("sm3tt1b", 1, 0xCE43_9441),
+        ("sm3tt2a", 2, 0xCE43_A841),
+        ("sm3tt2b", 0, 0xCE43_8C41),
+    ] {
+        assert_eq!(enc(m, &[s(1), s(2), lane(index)]), word, "{m}");
+    }
+    assert_eq!(enc("sm3partw1", &[s(1), s(2), s(3)]), 0xCE63_C041);
+    assert_eq!(enc("sm3partw2", &[s(1), s(2), s(3)]), 0xCE63_C441);
+    assert_eq!(enc("sm4e", &[s(1), s(2)]), 0xCEC0_8441);
+    assert_eq!(enc("sm4ekey", &[s(1), s(2), s(3)]), 0xCE63_C841);
+    assert!(encode("sm4e", &[v(1, 3), v(2, 3)]).is_err());
+    assert_eq!(
+        enc("fjcvtzs", &[w(3), Opnd::VReg { num: 5, is_d: true }]),
+        0x1E7E_00A3
+    );
+}
+
+/// The FP roundings, scalar and vector, each word as LLVM's assembler
+/// encodes it.
+#[test]
+fn frint_forms() {
+    let d = |num| Opnd::VReg { num, is_d: true };
+    let s = |num| Opnd::VReg { num, is_d: false };
+    let v = |num: u8, size: u8, q: bool| Opnd::VecReg { num, size, q };
+    assert_eq!(enc("frintn", &[d(0), d(1)]), 0x1E64_4020);
+    assert_eq!(enc("frint32z", &[s(0), s(1)]), 0x1E28_4020);
+    assert_eq!(enc("frint64x", &[d(2), d(3)]), 0x1E69_C062);
+    for (m, word) in [
+        ("frintn", 0x4E21_8820),
+        ("frintp", 0x4EA1_8820),
+        ("frintm", 0x4E21_9820),
+        ("frintz", 0x4EA1_9820),
+        ("frinta", 0x6E21_8820),
+        ("frintx", 0x6E21_9820),
+        ("frinti", 0x6EA1_9820),
+        ("frint32z", 0x4E21_E820),
+        ("frint32x", 0x6E21_E820),
+        ("frint64z", 0x4E21_F820),
+    ] {
+        assert_eq!(enc(m, &[v(0, 2, true), v(1, 2, true)]), word, "{m}");
+    }
+    assert_eq!(enc("frintn", &[v(0, 3, true), v(1, 3, true)]), 0x4E61_8820);
+    assert_eq!(
+        enc("frintn", &[v(0, 2, false), v(1, 2, false)]),
+        0x0E21_8820
+    );
+    assert_eq!(
+        enc("frint64x", &[v(0, 3, true), v(1, 3, true)]),
+        0x6E61_F820
+    );
+    assert!(encode("frintn", &[v(0, 3, false), v(1, 3, false)]).is_err());
+}

@@ -53,24 +53,22 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
-               	movq	<rip>, %rbx # <addr>
-               	xorl	%edi, %edi
-               	movq	<rip>, %rsi # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	%rdi, %rdx
-               	movq	%rdi, %r8
-               	callq	<addr>
-               	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
+               	subq	$0x10, %rsp
+               	movq	<rip>, %rdx # <addr>
+               	leaq	-0x8(%rbp), %rcx
+               	leaq	<rip>, %rax
                	movq	(%rax), %r10
-               	movq	%r10, (%rbx)
-               	movq	<rip>, %rax # <addr>
-               	cmpq	$0x3, %rax
-               	jne	<addr>
+               	movq	%r10, (%rcx)
                	xorl	%eax, %eax
-               	popq	%rbx
+               	movb	%al, <rip> # <addr>
+               	movb	%al, <rip> # <addr>
+               	movzbq	<rip>, %rsi # <addr>
+               	cmpl	$0x7, %esi
+               	movq	(%rcx), %rcx
+               	movq	%rcx, (%rdx)
+               	movq	<rip>, %rcx # <addr>
+               	cmpq	$0x3, %rcx
+               	jne	<addr>
                	leave
                	retq
                	movl	$0x1, %eax

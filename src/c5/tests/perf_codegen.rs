@@ -6353,3 +6353,33 @@ void g(double v) { coef[1] = v; }\n";
     });
     m.finish();
 }
+
+/// A leaf whose constant indices and multiply-adds fold away is weighed at
+/// the size it emits: a degree-15 polynomial helper, 31 instructions once
+/// each `c[k]` is a displacement and each product fused, is spliced at its
+/// call sites under the default cap, where its arena of index chains and
+/// separate multiplies and adds measured over it.
+#[test]
+fn a_leaf_is_weighed_at_its_folded_size() {
+    const SRC: &str = "static double h(const double *c, double x) {\n\
+    return c[0] + x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * (c[5] + x * (c[6]\n\
+        + x * (c[7] + x * (c[8] + x * (c[9] + x * (c[10] + x * (c[11] + x * (c[12]\n\
+        + x * (c[13] + x * (c[14] + x * c[15]))))))))))))));\n\
+}\n\
+double f(const double *c, const double *xs, int n) {\n\
+    double s = 0;\n\
+    for (int i = 0; i < n; i++) s += h(c, xs[i]);\n\
+    return s + h(c, 0.5);\n\
+}\n";
+    let mut m = Misses::default();
+    // `bl` is 0b100101 in bits 31..26.
+    let ws = a64(SRC, "f");
+    m.expect(ws.iter().all(|&w| w >> 26 != 0b100101), || {
+        format!("AArch64 f: {ws:08x?}")
+    });
+    let insns = x64(SRC, "f");
+    m.expect(insns.iter().all(|i| i.op != 0xE8), || {
+        format!("x86-64 f: {insns:x?}")
+    });
+    m.finish();
+}

@@ -69,34 +69,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	sub	x0, x29, #0x40
-               	stur	xzr, [x29, #-0x40]
-               	mov	x1, #0x1                // =1
-               	stur	x1, [x29, #-0x38]
-               	mov	x1, #0x2                // =2
-               	stur	x1, [x29, #-0x30]
-               	mov	x1, #0x3                // =3
-               	stur	x1, [x29, #-0x28]
-               	mov	x1, #0x4                // =4
-               	stur	x1, [x29, #-0x20]
-               	mov	x1, #0x5                // =5
-               	stur	x1, [x29, #-0x18]
-               	mov	x1, #0x6                // =6
-               	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x7                // =7
-               	stur	x1, [x29, #-0x8]
-               	mov	x1, #0xa                // =10
-               	bl	<addr>
-               	cmp	x0, #0x1d
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
                	ret

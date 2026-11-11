@@ -1062,7 +1062,7 @@ fn is_inline_candidate(
     // body that fits under it needs no count.
     let bound = body_cap(func, cap);
     if func.insts.len() + func.blocks.len() > bound {
-        let n = emitted_inst_count(func);
+        let n = emitted_after_cleanup(func, bound);
         if n > bound {
             say(format_args!("{n} insts > cap {bound}"));
             return false;
@@ -1986,6 +1986,32 @@ fn emitted_inst_count(func: &FunctionSsa) -> usize {
         + func.blocks.len()
 }
 
+/// [`emitted_inst_count`] of a leaf `func` once the cleanup that follows
+/// this pass has run on it: constants folded into immediates and
+/// displacements, products fused into multiply-adds. The arena still
+/// holds each constant index's chain and the separate multiply and add,
+/// so a leaf measuring over `bound` is measured again on a cleaned copy;
+/// one past four times the bound is not worth the copy. A body that calls
+/// is measured as it stands: splicing it adds its calls' work to the
+/// caller, where a leaf's splice removes the only call.
+fn emitted_after_cleanup(func: &FunctionSsa, bound: usize) -> usize {
+    let n = emitted_inst_count(func);
+    let calls = (func.insts.iter()).any(|i| {
+        matches!(
+            i,
+            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+        )
+    });
+    if calls || n <= bound || n > bound.saturating_mul(4) {
+        return n;
+    }
+    let mut copy = [func.clone()];
+    super::constfold::run_one(&mut copy[0]);
+    super::fma::run(&mut copy, false);
+    super::index_fold::run(&mut copy);
+    emitted_inst_count(&copy[0]).min(n)
+}
+
 /// Code the emit issues for each function once this pass has spliced
 /// into it, per `funcs` index.
 ///
@@ -2022,7 +2048,7 @@ fn inlined_inst_counts(
         if !shape[i] {
             continue;
         }
-        let mut n = emitted_inst_count(&funcs[i]);
+        let mut n = emitted_after_cleanup(&funcs[i], body_cap(&funcs[i], cap));
         for inst in &funcs[i].insts {
             let Inst::Call { target_pc, .. } = inst else {
                 continue;
@@ -5638,10 +5664,12 @@ mod tests {
                 pc_rel: false,
             });
             let byte = insts.len() as ValueId - 1;
+            // In range and nonzero, so the cleanup the size is measured
+            // after keeps every shift.
             insts.push(Inst::BinopI {
                 op: BinOp::Shl,
                 lhs: byte,
-                rhs_imm: (8 * g) as i64,
+                rhs_imm: (8 * (g % 7 + 1)) as i64,
             });
             let shifted = insts.len() as ValueId - 1;
             acc = if acc == NO_VALUE {

@@ -73,25 +73,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	$0x0, -0x40(%rbp)
-               	movq	$0x1, -0x38(%rbp)
-               	movq	$0x2, -0x30(%rbp)
-               	movq	$0x3, -0x28(%rbp)
-               	movq	$0x4, -0x20(%rbp)
-               	movq	$0x5, -0x18(%rbp)
-               	movq	$0x6, -0x10(%rbp)
-               	leaq	-0x40(%rbp), %rdi
-               	movq	$0x7, -0x8(%rbp)
-               	movl	$0xa, %esi
-               	callq	<addr>
-               	cmpq	$0x1d, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
-               	leave
                	retq

@@ -666,8 +666,6 @@ Disassembly of section .text:
                	shl	v0.16b, v0.16b, #0x1
                	eor	v0.16b, v0.16b, v1.16b
                	str	q0, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	q0, [x0]
                	sub	x16, x29, #0x10
                	str	q0, [x16]

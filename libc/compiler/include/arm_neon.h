@@ -135,6 +135,15 @@ typedef struct uint8x16x4_t {
     static inline R name(T __a, U __b) {                                  \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__b, __a); \
     }
+#define __BADC_NEON_B1(name, R, T, k, si, ui, A)                          \
+    static inline R name(T __a) {                                         \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a);     \
+    }
+/* The accumulator __a is the first operand and the result. */
+#define __BADC_NEON_B3(name, R, k, si, ui, A)                             \
+    static inline R name(R __a, R __b, R __c) {                           \
+        return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b, __c); \
+    }
 
 /* One instruction into R; FN3 accumulates into __a, FROMR reads an `r`. */
 #define __BADC_NEON_FN1(name, R, T, tmpl)                                 \
@@ -349,8 +358,8 @@ __BADC_NEON_PAIRS(f32, float32x2, float32x4)
 
 /* Element reversal within each 16-, 32- or 64-bit group. */
 #define __BADC_NEON_F_UN(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)        \
-    __BADC_NEON_FN1(op##_##sfx, D, D, __BADC_NEON_I2(__BADC_NEON_PICK(k, si, ui), AD, AD)) \
-    __BADC_NEON_FN1(op##q_##sfx, Q, Q, __BADC_NEON_I2(__BADC_NEON_PICK(k, si, ui), AQ, AQ))
+    __BADC_NEON_B1(op##_##sfx, D, D, k, si, ui, AD)                       \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_UNX(op, insn, sfx, k, E, D, Q, AD, AQ, ...)         \
     __BADC_NEON_FN1(op##_##sfx, D, D, __BADC_NEON_I2(insn, AD, AD))       \
     __BADC_NEON_FN1(op##q_##sfx, Q, Q, __BADC_NEON_I2(insn, AQ, AQ))
@@ -362,8 +371,7 @@ __BADC_NEON_LANES(__BADC_NEON_F_UNX, vrev64, "rev64")
 /* Bitwise select: the mask's set bits take the first operand's. */
 #define __BADC_NEON_BSL(name, M, T, A)                                    \
     static inline T name(M __m, T __a, T __b) {                           \
-        __asm__(__BADC_NEON_I3("bsl", A, A, A) : "+w"(__m) : "w"(__a), "w"(__b)); \
-        return (T)__m;                                                    \
+        return (T)__builtin_neon_bsl_##A(__m, __a, __b);                  \
     }
 #define __BADC_NEON_F_BSL(_, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...)        \
     __BADC_NEON_BSL(vbsl_##sfx, UD, D, 8b)                                \
@@ -377,8 +385,8 @@ __BADC_NEON_ALL(__BADC_NEON_F_BSL, _)
 #define __BADC_NEON_F_BINQ(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)      \
     __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, ui, AQ)
 #define __BADC_NEON_F_ACC(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)       \
-    __BADC_NEON_FN3(op##_##sfx, D, D, D, __BADC_NEON_K3(k, si, ui, AD))   \
-    __BADC_NEON_FN3(op##q_##sfx, Q, Q, Q, __BADC_NEON_K3(k, si, ui, AQ))
+    __BADC_NEON_B3(op##_##sfx, D, k, si, ui, AD)                          \
+    __BADC_NEON_B3(op##q_##sfx, Q, k, si, ui, AQ)
 __BADC_NEON_INT(__BADC_NEON_F_BIN, vadd, __builtin_neon_add, __builtin_neon_add)
 __BADC_NEON_INT(__BADC_NEON_F_BIN, vsub, __builtin_neon_sub, __builtin_neon_sub)
 __BADC_NEON_INT(__BADC_NEON_F_BIN, vqadd, __builtin_neon_sqadd, __builtin_neon_uqadd)
@@ -394,15 +402,15 @@ __BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpadd, __builtin_neon_addp, __builtin_ne
 __BADC_NEON_I64(__BADC_NEON_F_BINQ, vpadd, __builtin_neon_addp, __builtin_neon_addp)
 __BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmax, __builtin_neon_smaxp, __builtin_neon_umaxp)
 __BADC_NEON_INT_8_32(__BADC_NEON_F_BIN, vpmin, __builtin_neon_sminp, __builtin_neon_uminp)
-__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmla, "mla", "mla")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmls, "mls", "mls")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vaba, "saba", "uaba")
-__BADC_NEON_SINT(__BADC_NEON_F_UN, vneg, "neg", "neg")
-__BADC_NEON_SINT(__BADC_NEON_F_UN, vabs, "abs", "abs")
-__BADC_NEON_SINT(__BADC_NEON_F_UN, vqneg, "sqneg", "sqneg")
-__BADC_NEON_SINT(__BADC_NEON_F_UN, vqabs, "sqabs", "sqabs")
-__BADC_NEON_INT_8_32(__BADC_NEON_F_UN, vclz, "clz", "clz")
-__BADC_NEON_SINT_8_32(__BADC_NEON_F_UN, vcls, "cls", "cls")
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmla, __builtin_neon_mla, __builtin_neon_mla)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vmls, __builtin_neon_mls, __builtin_neon_mls)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_ACC, vaba, __builtin_neon_saba, __builtin_neon_uaba)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vneg, __builtin_neon_neg, __builtin_neon_neg)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vabs, __builtin_neon_abs, __builtin_neon_abs)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vqneg, __builtin_neon_sqneg, __builtin_neon_sqneg)
+__BADC_NEON_SINT(__BADC_NEON_F_UN, vqabs, __builtin_neon_sqabs, __builtin_neon_sqabs)
+__BADC_NEON_INT_8_32(__BADC_NEON_F_UN, vclz, __builtin_neon_clz, __builtin_neon_clz)
+__BADC_NEON_SINT_8_32(__BADC_NEON_F_UN, vcls, __builtin_neon_cls, __builtin_neon_cls)
 __BADC_NEON_FN2(vmul_p8, poly8x8_t, poly8x8_t, poly8x8_t, "pmul %0.8b, %1.8b, %2.8b")
 __BADC_NEON_FN2(vmulq_p8, poly8x16_t, poly8x16_t, poly8x16_t, "pmul %0.16b, %1.16b, %2.16b")
 
@@ -410,17 +418,17 @@ __BADC_NEON_FN2(vmulq_p8, poly8x16_t, poly8x16_t, poly8x16_t, "pmul %0.16b, %1.1
 #define __BADC_NEON_F_LOGIC(op, stem, sfx, k, E, D, Q, ...)               \
     __BADC_NEON_B2(op##_##sfx, D, D, D, s, stem, stem, 8b)                \
     __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, s, stem, stem, 16b)
-#define __BADC_NEON_F_LOGIC1(op, insn, sfx, k, E, D, Q, ...)              \
-    __BADC_NEON_FN1(op##_##sfx, D, D, __BADC_NEON_I2(insn, 8b, 8b))       \
-    __BADC_NEON_FN1(op##q_##sfx, Q, Q, __BADC_NEON_I2(insn, 16b, 16b))
+#define __BADC_NEON_F_LOGIC1(op, stem, sfx, k, E, D, Q, ...)              \
+    __BADC_NEON_B1(op##_##sfx, D, D, s, stem, stem, 8b)                   \
+    __BADC_NEON_B1(op##q_##sfx, Q, Q, s, stem, stem, 16b)
 __BADC_NEON_INT(__BADC_NEON_F_LOGIC, vand, __builtin_neon_and)
 __BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorr, __builtin_neon_orr)
 __BADC_NEON_INT(__BADC_NEON_F_LOGIC, veor, __builtin_neon_eor)
 __BADC_NEON_INT(__BADC_NEON_F_LOGIC, vbic, __builtin_neon_bic)
 __BADC_NEON_INT(__BADC_NEON_F_LOGIC, vorn, __builtin_neon_orn)
-__BADC_NEON_INT_8_32(__BADC_NEON_F_LOGIC1, vmvn, "mvn")
-__BADC_NEON_R_p8(__BADC_NEON_F_LOGIC1, vmvn, "mvn")
-__BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, "cnt")
+__BADC_NEON_INT_8_32(__BADC_NEON_F_LOGIC1, vmvn, __builtin_neon_mvn)
+__BADC_NEON_R_p8(__BADC_NEON_F_LOGIC1, vmvn, __builtin_neon_mvn)
+__BADC_NEON_E8(__BADC_NEON_F_LOGIC1, vcnt, __builtin_neon_cnt)
 
 /* All-ones lanes where the relation holds; vcle and vclt swap the operands
  * of vcge and vcgt. vshl, vrshl and vqshl shift by a signed lane count. */
@@ -825,6 +833,11 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
     __asm__(__BADC_NEON_I2(insn, A, A) ", #%2" : "=w"(__sr) : "w"(__sa), "i"(__n)); \
     __sr;                                                                 \
 })
+#define __BADC_NEON_SHB(T, stem, A, r, __a, __n) __extension__({          \
+    T __sa = (__a);                                                       \
+    __BADC_NEON_SHIFT_RANGE(__n, r, __sa[0]);                             \
+    (T)__BADC_NEON_B(stem, A)(__sa, __n);                                 \
+})
 #define __BADC_NEON_SHA(T, insn, A, r, __a, __b, __n) __extension__({     \
     T __sa = (__a), __sb = (__b);                                         \
     __BADC_NEON_SHIFT_RANGE(__n, r, __sa[0]);                             \
@@ -839,12 +852,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
     __sr;                                                                 \
 })
 
-#define vshl_n_s8(__a, __n) __BADC_NEON_SH(int8x8_t, "shl", 8b, 0, __a, __n)
-#define vshlq_n_s8(__a, __n) __BADC_NEON_SH(int8x16_t, "shl", 16b, 0, __a, __n)
+#define vshl_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_shl, 8b, 0, __a, __n)
+#define vshlq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_shl, 16b, 0, __a, __n)
 #define vqshl_n_s8(__a, __n) __BADC_NEON_SH(int8x8_t, "sqshl", 8b, 0, __a, __n)
 #define vqshlq_n_s8(__a, __n) __BADC_NEON_SH(int8x16_t, "sqshl", 16b, 0, __a, __n)
-#define vshr_n_s8(__a, __n) __BADC_NEON_SH(int8x8_t, "sshr", 8b, 1, __a, __n)
-#define vshrq_n_s8(__a, __n) __BADC_NEON_SH(int8x16_t, "sshr", 16b, 1, __a, __n)
+#define vshr_n_s8(__a, __n) __BADC_NEON_SHB(int8x8_t, __builtin_neon_sshr, 8b, 1, __a, __n)
+#define vshrq_n_s8(__a, __n) __BADC_NEON_SHB(int8x16_t, __builtin_neon_sshr, 16b, 1, __a, __n)
 #define vrshr_n_s8(__a, __n) __BADC_NEON_SH(int8x8_t, "srshr", 8b, 1, __a, __n)
 #define vrshrq_n_s8(__a, __n) __BADC_NEON_SH(int8x16_t, "srshr", 16b, 1, __a, __n)
 #define vsra_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, "ssra", 8b, 1, __a, __b, __n)
@@ -852,12 +865,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x8_t, "srsra", 8b, 1, __a, __b, __n)
 #define vrsraq_n_s8(__a, __b, __n) __BADC_NEON_SHA(int8x16_t, "srsra", 16b, 1, __a, __b, __n)
 
-#define vshl_n_u8(__a, __n) __BADC_NEON_SH(uint8x8_t, "shl", 8b, 0, __a, __n)
-#define vshlq_n_u8(__a, __n) __BADC_NEON_SH(uint8x16_t, "shl", 16b, 0, __a, __n)
+#define vshl_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_shl, 8b, 0, __a, __n)
+#define vshlq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_shl, 16b, 0, __a, __n)
 #define vqshl_n_u8(__a, __n) __BADC_NEON_SH(uint8x8_t, "uqshl", 8b, 0, __a, __n)
 #define vqshlq_n_u8(__a, __n) __BADC_NEON_SH(uint8x16_t, "uqshl", 16b, 0, __a, __n)
-#define vshr_n_u8(__a, __n) __BADC_NEON_SH(uint8x8_t, "ushr", 8b, 1, __a, __n)
-#define vshrq_n_u8(__a, __n) __BADC_NEON_SH(uint8x16_t, "ushr", 16b, 1, __a, __n)
+#define vshr_n_u8(__a, __n) __BADC_NEON_SHB(uint8x8_t, __builtin_neon_ushr, 8b, 1, __a, __n)
+#define vshrq_n_u8(__a, __n) __BADC_NEON_SHB(uint8x16_t, __builtin_neon_ushr, 16b, 1, __a, __n)
 #define vrshr_n_u8(__a, __n) __BADC_NEON_SH(uint8x8_t, "urshr", 8b, 1, __a, __n)
 #define vrshrq_n_u8(__a, __n) __BADC_NEON_SH(uint8x16_t, "urshr", 16b, 1, __a, __n)
 #define vsra_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, "usra", 8b, 1, __a, __b, __n)
@@ -865,12 +878,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x8_t, "ursra", 8b, 1, __a, __b, __n)
 #define vrsraq_n_u8(__a, __b, __n) __BADC_NEON_SHA(uint8x16_t, "ursra", 16b, 1, __a, __b, __n)
 
-#define vshl_n_s16(__a, __n) __BADC_NEON_SH(int16x4_t, "shl", 4h, 0, __a, __n)
-#define vshlq_n_s16(__a, __n) __BADC_NEON_SH(int16x8_t, "shl", 8h, 0, __a, __n)
+#define vshl_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_shl, 4h, 0, __a, __n)
+#define vshlq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_shl, 8h, 0, __a, __n)
 #define vqshl_n_s16(__a, __n) __BADC_NEON_SH(int16x4_t, "sqshl", 4h, 0, __a, __n)
 #define vqshlq_n_s16(__a, __n) __BADC_NEON_SH(int16x8_t, "sqshl", 8h, 0, __a, __n)
-#define vshr_n_s16(__a, __n) __BADC_NEON_SH(int16x4_t, "sshr", 4h, 1, __a, __n)
-#define vshrq_n_s16(__a, __n) __BADC_NEON_SH(int16x8_t, "sshr", 8h, 1, __a, __n)
+#define vshr_n_s16(__a, __n) __BADC_NEON_SHB(int16x4_t, __builtin_neon_sshr, 4h, 1, __a, __n)
+#define vshrq_n_s16(__a, __n) __BADC_NEON_SHB(int16x8_t, __builtin_neon_sshr, 8h, 1, __a, __n)
 #define vrshr_n_s16(__a, __n) __BADC_NEON_SH(int16x4_t, "srshr", 4h, 1, __a, __n)
 #define vrshrq_n_s16(__a, __n) __BADC_NEON_SH(int16x8_t, "srshr", 8h, 1, __a, __n)
 #define vsra_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, "ssra", 4h, 1, __a, __b, __n)
@@ -878,12 +891,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x4_t, "srsra", 4h, 1, __a, __b, __n)
 #define vrsraq_n_s16(__a, __b, __n) __BADC_NEON_SHA(int16x8_t, "srsra", 8h, 1, __a, __b, __n)
 
-#define vshl_n_u16(__a, __n) __BADC_NEON_SH(uint16x4_t, "shl", 4h, 0, __a, __n)
-#define vshlq_n_u16(__a, __n) __BADC_NEON_SH(uint16x8_t, "shl", 8h, 0, __a, __n)
+#define vshl_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_shl, 4h, 0, __a, __n)
+#define vshlq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_shl, 8h, 0, __a, __n)
 #define vqshl_n_u16(__a, __n) __BADC_NEON_SH(uint16x4_t, "uqshl", 4h, 0, __a, __n)
 #define vqshlq_n_u16(__a, __n) __BADC_NEON_SH(uint16x8_t, "uqshl", 8h, 0, __a, __n)
-#define vshr_n_u16(__a, __n) __BADC_NEON_SH(uint16x4_t, "ushr", 4h, 1, __a, __n)
-#define vshrq_n_u16(__a, __n) __BADC_NEON_SH(uint16x8_t, "ushr", 8h, 1, __a, __n)
+#define vshr_n_u16(__a, __n) __BADC_NEON_SHB(uint16x4_t, __builtin_neon_ushr, 4h, 1, __a, __n)
+#define vshrq_n_u16(__a, __n) __BADC_NEON_SHB(uint16x8_t, __builtin_neon_ushr, 8h, 1, __a, __n)
 #define vrshr_n_u16(__a, __n) __BADC_NEON_SH(uint16x4_t, "urshr", 4h, 1, __a, __n)
 #define vrshrq_n_u16(__a, __n) __BADC_NEON_SH(uint16x8_t, "urshr", 8h, 1, __a, __n)
 #define vsra_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, "usra", 4h, 1, __a, __b, __n)
@@ -891,12 +904,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x4_t, "ursra", 4h, 1, __a, __b, __n)
 #define vrsraq_n_u16(__a, __b, __n) __BADC_NEON_SHA(uint16x8_t, "ursra", 8h, 1, __a, __b, __n)
 
-#define vshl_n_s32(__a, __n) __BADC_NEON_SH(int32x2_t, "shl", 2s, 0, __a, __n)
-#define vshlq_n_s32(__a, __n) __BADC_NEON_SH(int32x4_t, "shl", 4s, 0, __a, __n)
+#define vshl_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_shl, 2s, 0, __a, __n)
+#define vshlq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_shl, 4s, 0, __a, __n)
 #define vqshl_n_s32(__a, __n) __BADC_NEON_SH(int32x2_t, "sqshl", 2s, 0, __a, __n)
 #define vqshlq_n_s32(__a, __n) __BADC_NEON_SH(int32x4_t, "sqshl", 4s, 0, __a, __n)
-#define vshr_n_s32(__a, __n) __BADC_NEON_SH(int32x2_t, "sshr", 2s, 1, __a, __n)
-#define vshrq_n_s32(__a, __n) __BADC_NEON_SH(int32x4_t, "sshr", 4s, 1, __a, __n)
+#define vshr_n_s32(__a, __n) __BADC_NEON_SHB(int32x2_t, __builtin_neon_sshr, 2s, 1, __a, __n)
+#define vshrq_n_s32(__a, __n) __BADC_NEON_SHB(int32x4_t, __builtin_neon_sshr, 4s, 1, __a, __n)
 #define vrshr_n_s32(__a, __n) __BADC_NEON_SH(int32x2_t, "srshr", 2s, 1, __a, __n)
 #define vrshrq_n_s32(__a, __n) __BADC_NEON_SH(int32x4_t, "srshr", 4s, 1, __a, __n)
 #define vsra_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, "ssra", 2s, 1, __a, __b, __n)
@@ -904,12 +917,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x2_t, "srsra", 2s, 1, __a, __b, __n)
 #define vrsraq_n_s32(__a, __b, __n) __BADC_NEON_SHA(int32x4_t, "srsra", 4s, 1, __a, __b, __n)
 
-#define vshl_n_u32(__a, __n) __BADC_NEON_SH(uint32x2_t, "shl", 2s, 0, __a, __n)
-#define vshlq_n_u32(__a, __n) __BADC_NEON_SH(uint32x4_t, "shl", 4s, 0, __a, __n)
+#define vshl_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_shl, 2s, 0, __a, __n)
+#define vshlq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_shl, 4s, 0, __a, __n)
 #define vqshl_n_u32(__a, __n) __BADC_NEON_SH(uint32x2_t, "uqshl", 2s, 0, __a, __n)
 #define vqshlq_n_u32(__a, __n) __BADC_NEON_SH(uint32x4_t, "uqshl", 4s, 0, __a, __n)
-#define vshr_n_u32(__a, __n) __BADC_NEON_SH(uint32x2_t, "ushr", 2s, 1, __a, __n)
-#define vshrq_n_u32(__a, __n) __BADC_NEON_SH(uint32x4_t, "ushr", 4s, 1, __a, __n)
+#define vshr_n_u32(__a, __n) __BADC_NEON_SHB(uint32x2_t, __builtin_neon_ushr, 2s, 1, __a, __n)
+#define vshrq_n_u32(__a, __n) __BADC_NEON_SHB(uint32x4_t, __builtin_neon_ushr, 4s, 1, __a, __n)
 #define vrshr_n_u32(__a, __n) __BADC_NEON_SH(uint32x2_t, "urshr", 2s, 1, __a, __n)
 #define vrshrq_n_u32(__a, __n) __BADC_NEON_SH(uint32x4_t, "urshr", 4s, 1, __a, __n)
 #define vsra_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, "usra", 2s, 1, __a, __b, __n)
@@ -917,12 +930,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x2_t, "ursra", 2s, 1, __a, __b, __n)
 #define vrsraq_n_u32(__a, __b, __n) __BADC_NEON_SHA(uint32x4_t, "ursra", 4s, 1, __a, __b, __n)
 
-#define vshl_n_s64(__a, __n) __BADC_NEON_SH(int64x1_t, "shl", d, 0, __a, __n)
-#define vshlq_n_s64(__a, __n) __BADC_NEON_SH(int64x2_t, "shl", 2d, 0, __a, __n)
+#define vshl_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_shl, d, 0, __a, __n)
+#define vshlq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_shl, 2d, 0, __a, __n)
 #define vqshl_n_s64(__a, __n) __BADC_NEON_SH(int64x1_t, "sqshl", d, 0, __a, __n)
 #define vqshlq_n_s64(__a, __n) __BADC_NEON_SH(int64x2_t, "sqshl", 2d, 0, __a, __n)
-#define vshr_n_s64(__a, __n) __BADC_NEON_SH(int64x1_t, "sshr", d, 1, __a, __n)
-#define vshrq_n_s64(__a, __n) __BADC_NEON_SH(int64x2_t, "sshr", 2d, 1, __a, __n)
+#define vshr_n_s64(__a, __n) __BADC_NEON_SHB(int64x1_t, __builtin_neon_sshr, d, 1, __a, __n)
+#define vshrq_n_s64(__a, __n) __BADC_NEON_SHB(int64x2_t, __builtin_neon_sshr, 2d, 1, __a, __n)
 #define vrshr_n_s64(__a, __n) __BADC_NEON_SH(int64x1_t, "srshr", d, 1, __a, __n)
 #define vrshrq_n_s64(__a, __n) __BADC_NEON_SH(int64x2_t, "srshr", 2d, 1, __a, __n)
 #define vsra_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, "ssra", d, 1, __a, __b, __n)
@@ -930,12 +943,12 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vrsra_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x1_t, "srsra", d, 1, __a, __b, __n)
 #define vrsraq_n_s64(__a, __b, __n) __BADC_NEON_SHA(int64x2_t, "srsra", 2d, 1, __a, __b, __n)
 
-#define vshl_n_u64(__a, __n) __BADC_NEON_SH(uint64x1_t, "shl", d, 0, __a, __n)
-#define vshlq_n_u64(__a, __n) __BADC_NEON_SH(uint64x2_t, "shl", 2d, 0, __a, __n)
+#define vshl_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_shl, d, 0, __a, __n)
+#define vshlq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_shl, 2d, 0, __a, __n)
 #define vqshl_n_u64(__a, __n) __BADC_NEON_SH(uint64x1_t, "uqshl", d, 0, __a, __n)
 #define vqshlq_n_u64(__a, __n) __BADC_NEON_SH(uint64x2_t, "uqshl", 2d, 0, __a, __n)
-#define vshr_n_u64(__a, __n) __BADC_NEON_SH(uint64x1_t, "ushr", d, 1, __a, __n)
-#define vshrq_n_u64(__a, __n) __BADC_NEON_SH(uint64x2_t, "ushr", 2d, 1, __a, __n)
+#define vshr_n_u64(__a, __n) __BADC_NEON_SHB(uint64x1_t, __builtin_neon_ushr, d, 1, __a, __n)
+#define vshrq_n_u64(__a, __n) __BADC_NEON_SHB(uint64x2_t, __builtin_neon_ushr, 2d, 1, __a, __n)
 #define vrshr_n_u64(__a, __n) __BADC_NEON_SH(uint64x1_t, "urshr", d, 1, __a, __n)
 #define vrshrq_n_u64(__a, __n) __BADC_NEON_SH(uint64x2_t, "urshr", 2d, 1, __a, __n)
 #define vsra_n_u64(__a, __b, __n) __BADC_NEON_SHA(uint64x1_t, "usra", d, 1, __a, __b, __n)

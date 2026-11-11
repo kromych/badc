@@ -482,9 +482,11 @@ pub(super) fn emit_inst(
             scratch,
         ),
         Inst::Fneg(src) => emit_fneg(code, *src, v, dst, alloc, frame),
-        Inst::Simd { op, args, .. } => emit_a64_simd(code, *op, args, alloc, frame, scratch),
-        Inst::SimdVal { op, args, .. } => {
-            emit_a64_simd_val(code, *op, args, dst, alloc, frame, scratch)
+        Inst::Simd { op, imm, args } => {
+            emit_a64_simd(code, (*op, *imm), args, alloc, frame, scratch)
+        }
+        Inst::SimdVal { op, imm, args } => {
+            emit_a64_simd_val(code, (*op, *imm), args, dst, alloc, frame, scratch)
         }
         Inst::VecBinop {
             op,

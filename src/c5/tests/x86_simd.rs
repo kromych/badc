@@ -1797,7 +1797,18 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::CmpHs(_)
         | Sem::CmpTst(_)
         | Sem::PairMax(..)
-        | Sem::PairMin(..) => false,
+        | Sem::PairMin(..)
+        | Sem::Neg(_)
+        | Sem::NegSat(_)
+        | Sem::AbsSat(_)
+        | Sem::Clz(_)
+        | Sem::Cls(_)
+        | Sem::PopCnt
+        | Sem::Not
+        | Sem::MulAcc(_)
+        | Sem::MulSub(_)
+        | Sem::AbsDiffAcc(..)
+        | Sem::BitSelect => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

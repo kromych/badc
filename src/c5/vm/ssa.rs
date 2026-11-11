@@ -4047,6 +4047,16 @@ fn run_x86_simd(
     }
     let imm8 = imm.unwrap_or(0);
     match row.form {
+        Form::Vvv if row.bytes <= 16 => {
+            let (acc, a, b) = (read(mem, reg(1))?, read(mem, reg(2))?, read(mem, reg(3))?);
+            let Some(out) = simd::eval_acc(row.sem, &acc, &a, &b) else {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: {} has no 16-byte form",
+                    row.name
+                )));
+            };
+            mem.write_bytes(reg(0), &out[..n])?;
+        }
         Form::Vvv
         | Form::VvvI
         | Form::CmpMask
@@ -4076,7 +4086,7 @@ fn run_x86_simd(
             let a = read(mem, reg(1))?;
             let out = simd::eval_float(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8)
                 .unwrap_or_else(|| simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
-            mem.write_bytes(reg(0), &out)?;
+            mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::Shift => {
             let a = read(mem, reg(1))?;
@@ -4087,7 +4097,7 @@ fn run_x86_simd(
                 None => frame.regs[args[2] as usize] as u64,
             };
             let out = simd::eval(row.sem, &a, &[0u8; 16], 0, count);
-            mem.write_bytes(reg(0), &out)?;
+            mem.write_bytes(reg(0), &out[..n])?;
         }
         Form::Load => {
             let a = read(mem, reg(1))?;

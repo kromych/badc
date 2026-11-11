@@ -105,3 +105,19 @@ fn the_rows_are_aarch64_only() {
         "names the reason: {err:?}"
     );
 }
+
+/// Every element type's integer arithmetic, saturating, halving, pairwise,
+/// bitwise, bit-count, select and compare intrinsic, checked against the
+/// operation the Arm ARM defines over 128-bit integers: the fixture runs
+/// natively on the AArch64 lanes, and here under the interpreter on any
+/// host.
+#[test]
+fn the_interpreter_runs_the_integer_intrinsics() {
+    let src = super::load_fixture("arm_neon_integer_arithmetic_bitwise_and_compares.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "a failing group sets its bit in the exit code"
+    );
+}

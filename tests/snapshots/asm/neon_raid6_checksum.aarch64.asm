@@ -20,8 +20,8 @@ Disassembly of section .text:
                	stp	d14, d15, [sp, #0x30]
                	stp	x29, x30, [sp, #0x80]
                	add	x29, sp, #0x80
-               	ldr	x6, [x2, #0x28]
-               	ldr	x7, [x2, #0x30]
+               	ldr	x7, [x2, #0x28]
+               	ldr	x8, [x2, #0x30]
                	mov	x16, #0x1d              // =29
                	dup	v0.16b, w16
                	mov	x1, #0x0                // =0
@@ -37,24 +37,24 @@ Disassembly of section .text:
                	add	x0, x0, x4
                	ldr	q6, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x30
-               	add	x0, x0, x4
+               	add	x5, x1, #0x30
+               	add	x0, x0, x5
                	ldr	q5, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x40
-               	add	x0, x0, x4
+               	add	x5, x1, #0x40
+               	add	x0, x0, x5
                	ldr	q4, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x50
-               	add	x0, x0, x4
+               	add	x5, x1, #0x50
+               	add	x0, x0, x5
                	ldr	q3, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x60
-               	add	x0, x0, x4
+               	add	x5, x1, #0x60
+               	add	x0, x0, x5
                	ldr	q2, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x70
-               	add	x0, x0, x4
+               	add	x5, x1, #0x70
+               	add	x0, x0, x5
                	ldr	q1, [x0]
                	mov	x0, #0x3                // =3
                	mov	v20.16b, v1.16b
@@ -65,36 +65,35 @@ Disassembly of section .text:
                	mov	v23.16b, v4.16b
                	mov	v22.16b, v3.16b
                	mov	v21.16b, v2.16b
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x4, x4, x1
-               	ldr	q28, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x4, x4, x3
-               	ldr	q29, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x20
-               	add	x4, x4, x5
-               	ldr	q30, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x30
-               	add	x4, x4, x5
-               	ldr	q31, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x40
-               	add	x4, x4, x5
-               	ldr	q8, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x50
-               	add	x4, x4, x5
-               	ldr	q9, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x60
-               	add	x4, x4, x5
-               	ldr	q10, [x4]
-               	ldr	x4, [x2, x0, lsl #3]
-               	add	x5, x1, #0x70
-               	add	x4, x4, x5
-               	ldr	q11, [x4]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x5, x5, x1
+               	ldr	q28, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x5, x5, x3
+               	ldr	q29, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x5, x5, x4
+               	ldr	q30, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x6, x1, #0x30
+               	add	x5, x5, x6
+               	ldr	q31, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x6, x1, #0x40
+               	add	x5, x5, x6
+               	ldr	q8, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x6, x1, #0x50
+               	add	x5, x5, x6
+               	ldr	q9, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x6, x1, #0x60
+               	add	x5, x5, x6
+               	ldr	q10, [x5]
+               	ldr	x5, [x2, x0, lsl #3]
+               	add	x6, x1, #0x70
+               	add	x5, x5, x6
+               	ldr	q11, [x5]
                	eor	v27.16b, v27.16b, v28.16b
                	eor	v26.16b, v26.16b, v29.16b
                	eor	v25.16b, v25.16b, v30.16b
@@ -162,48 +161,48 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	add	x0, x6, x1
+               	add	x0, x7, x1
                	str	q27, [x0]
                	add	x0, x1, #0x10
-               	add	x3, x6, x0
+               	add	x3, x7, x0
                	str	q26, [x3]
                	add	x3, x1, #0x20
-               	add	x4, x6, x3
+               	add	x4, x7, x3
                	str	q25, [x4]
                	add	x4, x1, #0x30
-               	add	x5, x6, x4
+               	add	x5, x7, x4
                	str	q24, [x5]
                	add	x5, x1, #0x40
-               	add	x5, x6, x5
+               	add	x5, x7, x5
                	str	q23, [x5]
                	add	x5, x1, #0x50
-               	add	x5, x6, x5
+               	add	x5, x7, x5
                	str	q22, [x5]
                	add	x5, x1, #0x60
-               	add	x5, x6, x5
+               	add	x5, x7, x5
                	str	q21, [x5]
                	add	x5, x1, #0x70
-               	add	x5, x6, x5
+               	add	x5, x7, x5
                	str	q20, [x5]
-               	add	x5, x7, x1
+               	add	x5, x8, x1
                	str	q19, [x5]
-               	add	x0, x7, x0
+               	add	x0, x8, x0
                	str	q7, [x0]
-               	add	x0, x7, x3
+               	add	x0, x8, x3
                	str	q6, [x0]
-               	add	x0, x7, x4
+               	add	x0, x8, x4
                	str	q5, [x0]
                	add	x0, x1, #0x40
-               	add	x0, x7, x0
+               	add	x0, x8, x0
                	str	q4, [x0]
                	add	x0, x1, #0x50
-               	add	x0, x7, x0
+               	add	x0, x8, x0
                	str	q3, [x0]
                	add	x0, x1, #0x60
-               	add	x0, x7, x0
+               	add	x0, x8, x0
                	str	q2, [x0]
                	add	x0, x1, #0x70
-               	add	x0, x7, x0
+               	add	x0, x8, x0
                	str	q1, [x0]
                	add	x1, x1, #0x80
                	cmp	w1, #0x200

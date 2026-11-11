@@ -313,6 +313,29 @@ pub(crate) enum Sem {
     /// `true`, the first operand's pairs low (`smaxp`, `uminp`).
     PairMax(u8, bool),
     PairMin(u8, bool),
+    /// Lane-wise negation, wrapping (`neg`) or saturating (`sqneg`).
+    Neg(u8),
+    NegSat(u8),
+    /// Lane magnitude saturated, the most negative lane the largest (`sqabs`).
+    AbsSat(u8),
+    /// Lane-wise count of leading zero bits (`clz`) and of the leading bits
+    /// below the sign that equal it (`cls`).
+    Clz(u8),
+    Cls(u8),
+    /// The number of set bits of each byte (`cnt`).
+    PopCnt,
+    /// The complement of each bit (`mvn`).
+    Not,
+    /// The accumulator plus or minus the lane-wise product of the other two
+    /// operands, wrapping (`mla`, `mls`).
+    MulAcc(u8),
+    MulSub(u8),
+    /// The accumulator plus `|a - b|` of the other two operands, signed when
+    /// `true` (`saba`, `uaba`).
+    AbsDiffAcc(u8, bool),
+    /// Each bit of the accumulator selects the first operand's bit where
+    /// set and the second's where clear (`bsl`).
+    BitSelect,
 }
 
 impl Sem {
@@ -730,6 +753,30 @@ pub(crate) fn eval64(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) 
     o
 }
 
+/// A form that accumulates into its first operand: `acc` combined with
+/// the lane-wise result of `a` and `b` ([`Sem::MulAcc`], [`Sem::MulSub`],
+/// [`Sem::AbsDiffAcc`], [`Sem::BitSelect`]); `None` for another semantics.
+pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> Option<[u8; 16]> {
+    let (w, part) = match sem {
+        Sem::MulAcc(w) | Sem::MulSub(w) => (w, eval(Sem::MulLo(w), a, b, 0, 0)),
+        Sem::AbsDiffAcc(w, signed) => (w, eval(Sem::AbsDiff(w, signed), a, b, 0, 0)),
+        Sem::BitSelect => {
+            let mut o = [0u8; 16];
+            for i in 0..16 {
+                o[i] = (acc[i] & a[i]) | (!acc[i] & b[i]);
+            }
+            return Some(o);
+        }
+        _ => return None,
+    };
+    let combine = if matches!(sem, Sem::MulSub(_)) {
+        Sem::Sub(w)
+    } else {
+        Sem::Add(w)
+    };
+    Some(eval(combine, acc, &part, 0, 0))
+}
+
 pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) -> [u8; 16] {
     let mut o = [0u8; 16];
     match sem {
@@ -1033,6 +1080,43 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, lane(src, w, if first { k } else { k + 1 }));
             }
         }
+        Sem::Neg(w) | Sem::NegSat(w) | Sem::AbsSat(w) => {
+            let bits = 8 * w as u32;
+            let (lo, hi) = (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1);
+            for i in 0..16 / w as usize {
+                let x = i128::from(slane(a, w, i));
+                let r = match sem {
+                    Sem::Neg(_) => -x,
+                    Sem::NegSat(_) => (-x).clamp(lo, hi),
+                    _ => x.abs().clamp(lo, hi),
+                };
+                set_lane(&mut o, w, i, r as u64 & mask(w));
+            }
+        }
+        Sem::Clz(w) | Sem::Cls(w) => {
+            let bits = 8 * u32::from(w);
+            for i in 0..16 / w as usize {
+                let x = lane(a, w, i) << (64 - bits);
+                let n = match sem {
+                    Sem::Clz(_) => x.leading_zeros().min(bits),
+                    // The bits after the sign that equal it: bit `k` of
+                    // `x ^ x << 1` compares bits `k` and `k - 1`, and the
+                    // set bit past the lane stops the count at its end.
+                    _ => ((x ^ (x << 1)) | (1u64 << (64 - bits))).leading_zeros(),
+                };
+                set_lane(&mut o, w, i, u64::from(n));
+            }
+        }
+        Sem::PopCnt => {
+            for i in 0..16 {
+                o[i] = a[i].count_ones() as u8;
+            }
+        }
+        Sem::Not => {
+            for i in 0..16 {
+                o[i] = !a[i];
+            }
+        }
         Sem::MulHrs => {
             for i in 0..8 {
                 let p = slane(a, 2, i) * slane(b, 2, i);
@@ -1112,9 +1196,11 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             }
         }
         Sem::Move | Sem::Rand => o = *a,
-        // `eval_float` computes these in a floating-point environment, and
-        // `eval_wide` the permutations across a 32-byte vector.
+        // `eval_float` computes these in a floating-point environment,
+        // `eval_acc` the accumulating forms, and `eval_wide` the
+        // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
+        Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128

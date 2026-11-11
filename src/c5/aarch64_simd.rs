@@ -173,6 +173,22 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "cmhi" Vv CmpHi (): b8 b16 h4 h8 s2 s4 d1 d2;
     "cmhs" Vv CmpHs (): b8 b16 h4 h8 s2 s4 d1 d2;
     "cmtst" Vv CmpTst (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "neg" V Neg (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "abs" V Abs (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sqneg" V NegSat (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sqabs" V AbsSat (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "clz" V Clz (): b8 b16 h4 h8 s2 s4;
+    "cls" V Cls (): b8 b16 h4 h8 s2 s4;
+    "cnt" V PopCnt -: b8 b16;
+    "mvn" V Not -: b8 b16;
+    "mla" Vvv MulAcc (): b8 b16 h4 h8 s2 s4;
+    "mls" Vvv MulSub (): b8 b16 h4 h8 s2 s4;
+    "saba" Vvv AbsDiffAcc (true): b8 b16 h4 h8 s2 s4;
+    "uaba" Vvv AbsDiffAcc (false): b8 b16 h4 h8 s2 s4;
+    "bsl" Vvv BitSelect -: b8 b16;
+    "shl" Shift Shl (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sshr" Shift Sar (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "ushr" Shift Shr (): b8 b16 h4 h8 s2 s4 d1 d2;
 };
 
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD

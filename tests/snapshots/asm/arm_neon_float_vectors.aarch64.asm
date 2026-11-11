@@ -686,13 +686,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fcmgt	v0.4s, v3.4s, v4.4s
-               	str	q0, [sp]
-               	str	q3, [sp, #0x10]
-               	str	q4, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	bsl	v0.16b, v1.16b, v2.16b
+               	bsl	v0.16b, v3.16b, v4.16b
                	fmov	s1, #1.50000000
                	fmov	s2, #4.00000000
                	fmov	s7, #3.25000000
@@ -716,13 +710,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fcmgt	v0.2d, v5.2d, v19.2d
-               	str	q0, [sp]
-               	str	q19, [sp, #0x10]
-               	str	q5, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	bsl	v0.16b, v1.16b, v2.16b
+               	bsl	v0.16b, v19.16b, v5.16b
                	mov	d1, v0.d[0]
                	fmov	d2, #2.00000000
                	fcmp	d1, d2

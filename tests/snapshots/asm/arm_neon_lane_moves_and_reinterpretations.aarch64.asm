@@ -6854,497 +6854,211 @@ Disassembly of section .text:
                	ret
 
 <w_vbsl_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_p16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_p16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_p64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_p64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbsl_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	ldr	d2, [x3]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	str	d2, [sp, #0x10]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
                	bsl	v0.8b, v1.8b, v2.8b
                	str	d0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vbslq_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	ldr	q2, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
                	bsl	v0.16b, v1.16b, v2.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrev16_s8>:

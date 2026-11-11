@@ -6,7 +6,8 @@
 //! one met by `V256` or `V512` accesses becomes one the same way at its
 //! width, provided something reads it and it meets a SIMD operand or a
 //! vector ABI piece directly or through whole copies. A one-cell object an
-//! 8-byte SIMD operand meets becomes `F64` accesses the same way
+//! 8-byte SIMD operand -- of an asm or a SIMD instruction -- meets becomes
+//! `F64` accesses the same way
 //! ([`cell_slots`]). An asm output keeps its address for `asm_outputs`,
 //! which makes it a value stored to the slot.
 
@@ -1193,9 +1194,13 @@ fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             Inst::InlineAsm { asm, .. } => asm.operands.iter().any(|o| {
                 o.value && o.is_output && o.width == 8 && o.constraint == AsmConstraint::Fp
             }),
-            _ => by[value as usize]
-                .iter()
-                .any(|&u| matches!(func.insts[u as usize], Inst::AggParts { .. })),
+            // An argument part, or a SIMD instruction's 8-byte operand.
+            _ => by[value as usize].iter().any(|&u| {
+                matches!(
+                    func.insts[u as usize],
+                    Inst::AggParts { .. } | Inst::SimdVal { .. } | Inst::VecBinop { bytes: 8, .. }
+                )
+            }),
         };
         if part {
             touched.push(off);

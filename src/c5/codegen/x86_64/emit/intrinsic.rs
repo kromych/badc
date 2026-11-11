@@ -1694,11 +1694,12 @@ fn finish_atomic(code: &mut Vec<u8>, regs: &[&SiteRegs], dst: Place, r: Reg, fra
     write_atomic_result(code, dst, r, frame);
 }
 
-/// C11 7.17.7.2-7.17.7.5 read-modify-write (Intel SDM Vol.2): `XCHG` for
-/// exchange and `LOCK XADD` for addition and subtraction, the operand
-/// negated, both leaving the prior contents in their register; for the
-/// bitwise operators a `LOCK AND` / `OR` / `XOR` when the prior contents
-/// are unread, else a `LOCK CMPXCHG` retry on rax. A locked instruction
+/// C11 7.17.7.2-7.17.7.5 read-modify-write (Intel SDM Vol.2): when the
+/// prior contents are unread, one `LOCK ADD` / `SUB` / `AND` / `OR` /
+/// `XOR`, its operand an immediate where `Allocation::imm_store` says so;
+/// else `XCHG` for exchange and `LOCK XADD` for addition and subtraction,
+/// the operand negated, both leaving the prior contents in their
+/// register, and for the bitwise operators a `LOCK CMPXCHG` retry on rax. A locked instruction
 /// is a full barrier, so every order lowers alike (the x86 mapping of
 /// C11 atomics). The address rides its own register or r11.
 #[allow(clippy::too_many_arguments)]
@@ -1706,10 +1707,13 @@ pub(super) fn emit_atomic_rmw(
     code: &mut Vec<u8>,
     v: super::super::ir::ValueId,
     dst: Place,
-    op: super::super::ir::AtomicRmwOp,
-    addr: super::super::ir::ValueId,
-    value: super::super::ir::ValueId,
-    width: u8,
+    (op, addr, value, width): (
+        super::super::ir::AtomicRmwOp,
+        super::super::ir::ValueId,
+        super::super::ir::ValueId,
+        u8,
+    ),
+    func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -1718,6 +1722,30 @@ pub(super) fn emit_atomic_rmw(
     let Some(a) = materialize_int(code, place_of(alloc, addr), SCRATCH_R11, frame) else {
         return fail("AtomicRmw: address not int reg / spill");
     };
+    // Prior contents nothing reads: one locked operation on the object.
+    if dst == Place::None && op != Op::Xchg {
+        let mnem = match op {
+            Op::Add => Mnem::Add,
+            Op::Sub => Mnem::Sub,
+            Op::And => Mnem::And,
+            Op::Or => Mnem::Or,
+            _ => Mnem::Xor,
+        };
+        if alloc.imm_store.get(v as usize).copied().unwrap_or(false) {
+            let Some(imm) =
+                crate::c5::codegen::ssa::reg_alloc::atomic_immediate(func, value, width)
+            else {
+                return fail("AtomicRmw: operand not an immediate");
+            };
+            super::encode::emit_lock_alu_mem_imm(code, mnem, a, 0, imm, width);
+            return Ok(());
+        }
+        let Some(x) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
+            return fail("AtomicRmw: operand not int reg / spill");
+        };
+        super::encode::emit_lock_alu_mem_r(code, mnem, a, 0, x, width);
+        return Ok(());
+    }
     let mnem = match op {
         Op::Xchg | Op::Add | Op::Sub => {
             // The exchanged register: the result's own, unless the
@@ -1748,10 +1776,6 @@ pub(super) fn emit_atomic_rmw(
     let Some(x) = materialize_int(code, place_of(alloc, value), SCRATCH_R10, frame) else {
         return fail("AtomicRmw: operand not int reg / spill");
     };
-    if dst == Place::None {
-        super::encode::emit_lock_alu_mem_r(code, mnem, a, 0, x, width);
-        return Ok(());
-    }
     let a = off_rax(code, a, SCRATCH_R11);
     let x = off_rax(code, x, SCRATCH_R10);
     let fixed = frame.fixed_regs;

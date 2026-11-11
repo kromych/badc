@@ -146,9 +146,8 @@ Disassembly of section .text:
                	movl	$0x64, %edx
                	movq	%rdx, %r10
                	xchgq	%r10, (%rax)
-               	movq	%rcx, %r10
                	lock
-               	xaddq	%r10, (%rax)
+               	addq	%rcx, (%rax)
                	movq	(%rax), %rdx
                	cmpq	$0x65, %rdx
                	je	<addr>

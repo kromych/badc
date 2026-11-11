@@ -39,24 +39,17 @@ Disassembly of section .text:
                	movb	%dil, -0x3e(%rbp)
                	xorl	%ebx, %ebx
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, %eax
-               	movq	%rax, %r10
                	lock
-               	xaddl	%r10d, (%rcx)
+               	addl	$0x1, (%rcx)
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %r10
-               	negq	%r10
                	lock
-               	xaddq	%r10, (%rcx)
+               	subq	$0x1, (%rcx)
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %r10
                	lock
-               	xaddb	%r10b, (%rcx)
+               	addb	$0x1, (%rcx)
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x8, %ecx
-               	movq	%rcx, %r10
                	lock
-               	xaddq	%r10, (%rax)
+               	addq	$0x8, (%rax)
                	leaq	<rip>, %rdx # <addr>
                	movl	(%rdx), %ecx
                	jmp	<addr>
@@ -205,10 +198,8 @@ Disassembly of section .text:
                	cmpl	%edx, %eax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x1, %ecx
-               	movq	%rcx, %r10
                	lock
-               	xaddl	%r10d, (%rax)
+               	addl	$0x1, (%rax)
                	incq	%rbx
                	cmpl	$0x4e20, %ebx           # imm = 0x4E20
                	jl	<addr>

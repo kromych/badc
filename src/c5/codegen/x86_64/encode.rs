@@ -781,10 +781,11 @@ pub(crate) fn emit_lock_cmpxchg16b_mem(code: &mut Vec<u8>, base: Reg, disp: i32)
     emit_modrm_mem(code, Reg(1), base, disp);
 }
 
-/// `LOCK AND` / `OR` / `XOR [base + disp], reg` -- combine the memory
-/// operand with `reg` atomically, keeping no prior contents (Intel SDM
-/// Vol.2, the r/m, r forms with the `F0` LOCK prefix). Encoding: `F0 [66]
-/// [REX] 20/21, 08/09 or 30/31 /r`, the byte opcode first.
+/// `LOCK ADD` / `SUB` / `AND` / `OR` / `XOR [base + disp], reg` -- combine
+/// the memory operand with `reg` atomically, keeping no prior contents
+/// (Intel SDM Vol.2, the r/m, r forms with the `F0` LOCK prefix).
+/// Encoding: `F0 [66] [REX] 00/01, 28/29, 20/21, 08/09 or 30/31 /r`, the
+/// byte opcode first.
 pub(crate) fn emit_lock_alu_mem_r(
     code: &mut Vec<u8>,
     mnem: Mnem,
@@ -794,6 +795,8 @@ pub(crate) fn emit_lock_alu_mem_r(
     width: u8,
 ) {
     let opcode = match mnem {
+        Mnem::Add => 0x00,
+        Mnem::Sub => 0x28,
         Mnem::And => 0x20,
         Mnem::Or => 0x08,
         Mnem::Xor => 0x30,
@@ -803,6 +806,20 @@ pub(crate) fn emit_lock_alu_mem_r(
     atomic_prefix(code, width, reg, base);
     emit_byte(code, if width == 1 { opcode } else { opcode + 1 });
     emit_modrm_mem(code, reg, base, disp);
+}
+
+/// `LOCK op [base + disp], imm` -- [`emit_lock_alu_mem_r`] with the
+/// immediate forms of [`emit_mi`].
+pub(crate) fn emit_lock_alu_mem_imm(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    base: Reg,
+    disp: i32,
+    imm: i32,
+    width: u8,
+) {
+    emit_byte(code, 0xF0);
+    emit_mi(code, mnem, width, base, disp, imm);
 }
 
 // ---- SSE2 floating-point. ----

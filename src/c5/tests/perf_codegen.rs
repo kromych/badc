@@ -4266,6 +4266,35 @@ long w(struct S s) { long t = 0; for (; s.a < s.b; s.a++) t += s.c; return t; }\
     m.finish();
 }
 
+/// An atomic read-modify-write whose prior contents nothing reads is one
+/// locked operation on the object, a constant operand its immediate: no
+/// `xadd`, no `cmpxchg` retry, and nothing else but the return.
+#[test]
+fn x64_unread_atomic_update_is_one_locked_operation() {
+    const SRC: &str = "void add1(long *p) { __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST); }\n\
+void addv(long *p, long v) { __atomic_fetch_add(p, v, __ATOMIC_RELAXED); }\n\
+void sub2(int *p) { __sync_fetch_and_sub(p, 2); }\n\
+void and4(short *p) { __atomic_fetch_and(p, ~4, __ATOMIC_SEQ_CST); }\n\
+void orv(long *p, long v) { __atomic_fetch_or(p, v, __ATOMIC_SEQ_CST); }\n\
+void xorb(unsigned char *p) { __atomic_fetch_xor(p, 0x81, __ATOMIC_SEQ_CST); }\n";
+    // The r/m, r and r/m, imm forms of `add`, `sub`, `and`, `or`, `xor`.
+    let alu = |i: &X64Insn| {
+        matches!(
+            i.op,
+            0x00 | 0x01 | 0x28 | 0x29 | 0x20 | 0x21 | 0x08 | 0x09 | 0x30 | 0x31
+        ) || (matches!(i.op, 0x80 | 0x81 | 0x83) && !i.reg_form())
+    };
+    let mut m = Misses::default();
+    for name in ["add1", "addv", "sub2", "and4", "orv", "xorb"] {
+        let insns = x64(SRC, name);
+        m.expect(
+            insns.len() == 2 && alu(&insns[0]) && insns[1].op == 0xC3,
+            || format!("{name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

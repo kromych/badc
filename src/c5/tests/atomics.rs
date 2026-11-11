@@ -506,8 +506,9 @@ fn lookup<'a>(code: &'a [(String, Vec<u8>)], name: &'a str) -> (&'a str, &'a [u8
 }
 
 /// Does `code` carry a `LOCK`-prefixed read-modify-write against memory:
-/// `XADD` (`0F C0` / `C1`), `CMPXCHG` (`0F B0` / `B1`), or `AND` / `OR`
-/// / `XOR` (`20` / `21`, `08` / `09`, `30` / `31`)?
+/// `XADD` (`0F C0` / `C1`), `CMPXCHG` (`0F B0` / `B1`), or `ADD` / `SUB`
+/// / `AND` / `OR` / `XOR`, of a register (`00` / `01`, `28` / `29`, `20` /
+/// `21`, `08` / `09`, `30` / `31`) or an immediate (`80`, `81`, `83`)?
 fn has_lock_rmw(code: &[u8]) -> bool {
     x64_insns(code).iter().any(|i| {
         let locked = code[i.at..]
@@ -518,7 +519,23 @@ fn has_lock_rmw(code: &[u8]) -> bool {
             && !i.reg_form()
             && matches!(
                 i.op,
-                0x0FB0 | 0x0FB1 | 0x0FC0 | 0x0FC1 | 0x20 | 0x21 | 0x08 | 0x09 | 0x30 | 0x31
+                0x0FB0
+                    | 0x0FB1
+                    | 0x0FC0
+                    | 0x0FC1
+                    | 0x00
+                    | 0x01
+                    | 0x28
+                    | 0x29
+                    | 0x20
+                    | 0x21
+                    | 0x08
+                    | 0x09
+                    | 0x30
+                    | 0x31
+                    | 0x80
+                    | 0x81
+                    | 0x83
             )
     })
 }

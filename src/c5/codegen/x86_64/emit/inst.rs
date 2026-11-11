@@ -449,7 +449,16 @@ pub(super) fn emit_inst(
             value,
             width,
             ..
-        } => emit_atomic_rmw(code, v, dst, *op, *addr, *value, *width, alloc, frame, abi),
+        } => emit_atomic_rmw(
+            code,
+            v,
+            dst,
+            (*op, *addr, *value, *width),
+            func,
+            alloc,
+            frame,
+            abi,
+        ),
         Inst::AtomicCas {
             addr,
             expected,

@@ -603,9 +603,8 @@ Disassembly of section .text:
                	movl	$0x5, -0x18(%rbp)
                	leaq	-0x18(%rbp), %rax
                	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %r10
                	lock
-               	xaddl	%r10d, (%rax)
+               	addl	%ecx, (%rax)
                	movl	-0x18(%rbp), %eax
                	cmpl	$0x8, %eax
                	je	<addr>
@@ -616,9 +615,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	<rip>, %rcx # <addr>
                	addq	$0x2, %rcx
-               	movq	%rcx, %r10
                	lock
-               	xaddq	%r10, (%rax)
+               	addq	%rcx, (%rax)
                	movq	-0x10(%rbp), %rax
                	cmpq	$0x2, %rax
                	je	<addr>

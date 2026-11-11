@@ -34,18 +34,14 @@ Disassembly of section .text:
                	movq	(%rdi), %rcx
                	leaq	<rip>, %rax # <addr>
                	movl	$0x1, %edx
-               	movq	%rdx, %r10
                	lock
-               	xaddq	%r10, (%rax)
+               	addq	%rdx, (%rax)
                	leaq	<rip>, %rax # <addr>
-               	movq	%rdx, %r10
-               	negq	%r10
                	lock
-               	xaddq	%r10, (%rax)
+               	subq	%rdx, (%rax)
                	leaq	<rip>, %rax # <addr>
-               	movq	%rdx, %r10
                	lock
-               	xaddw	%r10w, (%rax)
+               	addw	%dx, (%rax)
                	leaq	<rip>, %rsi # <addr>
                	lock
                	xorl	%r9d, (%rsi)

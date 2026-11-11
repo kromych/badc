@@ -152,10 +152,11 @@ pub(crate) struct Allocation {
     /// one, which its `csinc` forms; that increment, read by nothing else,
     /// is never materialized.
     pub select_inc: Vec<bool>,
-    /// True for a store that writes its value, an `Imm`, from its own
-    /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
-    /// a store, so its use count is zero and it is never materialized;
-    /// the store's own value is unread.
+    /// True for a store, or an x86-64 locked read-modify-write, that takes
+    /// its operand, an `Imm`, from its own encoding ([`store_immediate`]).
+    /// Every reader of that `Imm` is such an instruction, so its use count
+    /// is zero and it is never materialized; the instruction's own value
+    /// is unread.
     pub imm_store: Vec<bool>,
     /// The `Imm` values every reader of which is an integer argument a
     /// call places on the stack ([`stack_arg_immediates`]), with their
@@ -428,6 +429,15 @@ fn zero_testable_load(inst: &Inst) -> bool {
 /// writes the constant's own bits, not a conversion of them to the other
 /// width.
 fn store_immediate(func: &FunctionSsa, inst: &Inst, target: Target) -> Option<ValueId> {
+    if let Inst::AtomicRmw {
+        op, value, width, ..
+    } = *inst
+    {
+        return (target.is_x86_64() && op != AtomicRmwOp::Xchg)
+            .then(|| atomic_immediate(func, value, width))
+            .flatten()
+            .map(|_| value);
+    }
     let (value, kind) = match inst {
         Inst::Store { value, kind, .. }
         | Inst::StoreLocal { value, kind, .. }
@@ -805,6 +815,20 @@ fn asm_rw_apart(
                 apart[b as usize].push(a);
             }
         }
+    }
+}
+
+/// The immediate an x86-64 locked operation on `width` bytes encodes for
+/// the `Imm` `value`: its low bytes, sign-extended from 32 bits at 8.
+pub(crate) fn atomic_immediate(func: &FunctionSsa, value: ValueId, width: u8) -> Option<i32> {
+    let Some(&Inst::Imm(k)) = func.insts.get(value as usize) else {
+        return None;
+    };
+    match width {
+        1 => Some(k as i8 as i32),
+        2 => Some(k as i16 as i32),
+        4 => Some(k as i32),
+        _ => i32::try_from(k).ok(),
     }
 }
 

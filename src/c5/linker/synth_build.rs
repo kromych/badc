@@ -504,6 +504,7 @@ fn synth_program(
         image_align_error: None,
         data_ro_len: 0,
         data_relro_len: 0,
+        zero_fill_len: 0,
         data_object_starts: Vec::new(),
         const_data_ranges: Vec::new(),
         data_pad_ranges: Vec::new(),

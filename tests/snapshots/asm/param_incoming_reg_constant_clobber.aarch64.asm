@@ -30,20 +30,20 @@ Disassembly of section .text:
                	ret
 
 <func_10>:
+               	adrp	x1, <page>
                	adrp	x3, <page>
-               	adrp	x0, <page>
-               	ldrsw	x1, [x3, #0x60]
-               	cmp	w1, #0x5
+               	ldrsw	x0, [x1, #0x60]
+               	cmp	w0, #0x5
                	b.gt	<addr>
-               	ldrsw	x1, [x2]
-               	str	w1, [x2]
-               	ldrsw	x1, [x0, #0x68]
-               	cbnz	x1, <addr>
-               	ldrsw	x1, [x3, #0x60]
-               	add	x1, x1, #0x1
-               	str	w1, [x3, #0x60]
-               	ldrsw	x1, [x3, #0x60]
-               	cmp	w1, #0x5
+               	ldrsw	x0, [x2]
+               	str	w0, [x2]
+               	ldrsw	x0, [x3, #0x68]
+               	cbnz	x0, <addr>
+               	ldrsw	x0, [x1, #0x60]
+               	add	x0, x0, #0x1
+               	str	w0, [x1, #0x60]
+               	ldrsw	x0, [x1, #0x60]
+               	cmp	w0, #0x5
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

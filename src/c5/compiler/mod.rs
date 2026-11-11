@@ -4256,6 +4256,7 @@ impl Compiler {
             image_align_error: self.image_align_error,
             data_ro_len: 0,
             data_relro_len: 0,
+            zero_fill_len: 0,
             data_object_starts: self.data_object_starts,
             const_data_ranges: self.const_data_ranges,
             data_pad_ranges: self.data_pad_ranges,

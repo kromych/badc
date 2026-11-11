@@ -45,7 +45,8 @@ Disassembly of section .text:
                	jg	<addr>
                	movl	(%rdx), %eax
                	movl	%eax, (%rdx)
-               	cmpl	$0x0, <rip> # <addr>
+               	movslq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax

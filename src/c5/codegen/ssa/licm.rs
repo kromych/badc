@@ -35,12 +35,21 @@
 //! function worse than the un-hoisted baseline. The number of values
 //! hoisted into one destination is also capped against the register
 //! file, so one loop cannot force the whole plan out.
+//!
+//! A second phase moves loads. In a loop whose body writes no memory --
+//! no store, call, atomic, inline asm or intrinsic -- a load of an
+//! invariant address reads the same value every iteration. The copy
+//! executes even when the loop runs no iteration, so only a load that
+//! cannot fault moves: one of a frame slot, or one of the unit's data
+//! image within its bounds. It goes before the outermost such loop, and
+//! is kept when the spill traffic it adds does not exceed the loads it
+//! removes.
 
 use alloc::vec;
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::Allocation;
 use super::tape::{At, Insertion, Undo};
@@ -399,6 +408,204 @@ fn cap_per_destination(
     hoists
 }
 
+/// A load placed before the loops that re-read it, with its sites.
+struct LoadHoist {
+    /// Tape index the copy goes ahead of; inside the destination block.
+    at: ValueId,
+    inst: Inst,
+    /// The data offset of an address defined inside the loop, which a
+    /// copy of its own `ImmData` gives the moved load.
+    remat: Option<i64>,
+    is_f32: bool,
+    /// Loop-weighted loads the sites stop issuing.
+    profit: u64,
+    redirect: Vec<ValueId>,
+}
+
+/// Loads worth placing before the loops that hold them: a non-volatile
+/// `LoadLocal`, or a `Load` of an address an unbound `ImmData` gives
+/// within `data_len`, the unit's data image. The destination precedes
+/// the outermost loop of the site's nest whose body writes no memory and
+/// defines no part of the address.
+fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
+    if func.has_returns_twice_call || func.blocks.len() < 2 {
+        return Vec::new();
+    }
+    let idom = dominators(func);
+    let preds = predecessors(func);
+    let rpo = rpo_numbers(func);
+    let loops = natural_loops(func, &idom, &preds, &rpo);
+    if loops.is_empty() {
+        return Vec::new();
+    }
+    let mut block_of = vec![NO_BLOCK; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b as BlockId;
+        }
+    }
+    let writes: Vec<bool> = (loops.iter())
+        .map(|l| {
+            (l.body.iter()).any(|&b| {
+                (func.blocks[b as usize].inst_range.clone())
+                    .any(|v| func.insts[v as usize].may_write_memory())
+            })
+        })
+        .collect();
+    let bound = sym_of(&func.extern_imm_data_refs);
+    let weights = super::reg_alloc::block_weights(func);
+    let uses = super::reg_alloc::compute_use_counts(func);
+    let mut out: Vec<LoadHoist> = Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        let b = b as BlockId;
+        // The loops holding `b`, outermost first.
+        let mut nest: Vec<usize> = (0..loops.len()).filter(|&l| loops[l].contains(b)).collect();
+        nest.sort_by_key(|&l| core::cmp::Reverse(loops[l].body.len()));
+        if nest.is_empty() {
+            continue;
+        }
+        for v in block.inst_range.clone() {
+            if uses.get(v as usize).copied().unwrap_or(0) == 0 {
+                continue;
+            }
+            // The data offset a `Load`'s address names; a constant, so
+            // the address is invariant wherever it is defined.
+            let data = match func.insts[v as usize] {
+                Inst::LoadLocal {
+                    volatile: false, ..
+                } => None,
+                Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    volatile: false,
+                    ..
+                } => match func.insts[addr as usize] {
+                    Inst::ImmData(k)
+                        if !bound.contains_key(&addr)
+                            && k.checked_add(disp as i64).is_some_and(|a| {
+                                a >= 0 && a as u64 + kind.bytes() as u64 <= data_len as u64
+                            }) =>
+                    {
+                        Some((addr, k))
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            let Some(&l) = nest.iter().find(|&&l| !writes[l]) else {
+                continue;
+            };
+            let dest = idom[loops[l].header as usize];
+            if dest == NO_BLOCK || dest == loops[l].header {
+                continue;
+            }
+            let Some(at) = insert_point(func, dest) else {
+                continue;
+            };
+            // The address is reused where it precedes the copy outside the
+            // loop, and rematerialized beside the copy otherwise.
+            let remat = data.and_then(|(a, k)| {
+                let b = block_of[a as usize];
+                (loops[l].contains(b) || (b == dest && a >= at)).then_some(k)
+            });
+            let inst = func.insts[v as usize].clone();
+            let key = (load_key(&inst), remat);
+            let profit = weights[b as usize];
+            match (out.iter_mut()).find(|h| h.at == at && (load_key(&h.inst), h.remat) == key) {
+                Some(h) => {
+                    h.profit = h.profit.saturating_add(profit);
+                    h.redirect.push(v);
+                }
+                None => out.push(LoadHoist {
+                    at,
+                    remat,
+                    is_f32: func.f32_values.get(v as usize).copied().unwrap_or(false),
+                    inst,
+                    profit,
+                    redirect: alloc::vec![v],
+                }),
+            }
+        }
+    }
+    out.sort_by_key(|h| h.at);
+    out
+}
+
+/// Identity of a load: two with the same key read the same bytes the
+/// same way, so one copy serves both.
+fn load_key(inst: &Inst) -> Option<(i64, ValueId, i32, LoadKind, u8, bool)> {
+    match *inst {
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => Some((off, NO_VALUE, disp, kind, 0, false)),
+        Inst::Load {
+            addr,
+            disp,
+            kind,
+            align,
+            pc_rel,
+            ..
+        } => Some((0, addr, disp, kind, align, pc_rel)),
+        _ => None,
+    }
+}
+
+/// Place each load's copy and point its sites at it.
+fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
+    // A rematerialized address goes just ahead of its load; an operand
+    // past the old tape names an insertion.
+    let n_old = func.insts.len() as ValueId;
+    let mut ins: Vec<Insertion> = Vec::new();
+    let mut copy_at: Vec<usize> = Vec::with_capacity(hoists.len());
+    for h in hoists {
+        let mut inst = h.inst.clone();
+        if let (Some(k), Inst::Load { addr, .. }) = (h.remat, &mut inst) {
+            ins.push(Insertion {
+                at: At::Before(h.at),
+                inst: Inst::ImmData(k),
+                is_f32: false,
+            });
+            *addr = n_old + ins.len() as ValueId - 1;
+        }
+        copy_at.push(ins.len());
+        ins.push(Insertion {
+            at: At::Before(h.at),
+            inst,
+            is_f32: h.is_f32,
+        });
+    }
+    let (rewrite, undo) = super::tape::insert_undoable(func, &ins);
+    let mut redirect: Vec<ValueId> = vec![NO_VALUE; func.insts.len()];
+    for (k, h) in hoists.iter().enumerate() {
+        for &site in &h.redirect {
+            redirect[rewrite.remap[site as usize] as usize] = rewrite.ids[copy_at[k]];
+        }
+    }
+    redirect_uses(func, &redirect);
+    undo
+}
+
+/// Point every operand, terminator and `exit_acc` that names a value
+/// with a `redirect` entry at that entry.
+fn redirect_uses(func: &mut FunctionSsa, redirect: &[ValueId]) {
+    let redirect_of = |op: &mut ValueId| {
+        if *op != NO_VALUE && (*op as usize) < redirect.len() && redirect[*op as usize] != NO_VALUE
+        {
+            *op = redirect[*op as usize];
+        }
+    };
+    for inst in func.insts.iter_mut() {
+        inst.for_each_operand_mut(redirect_of);
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE {
+            redirect_of(&mut block.exit_acc);
+        }
+        block.terminator.for_each_operand_mut(redirect_of);
+    }
+}
+
 /// Place each hoist's copy and point its sites at it.
 /// [`super::tape::insert`] carries the renumbering the copies force.
 fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
@@ -458,21 +665,7 @@ fn apply(func: &mut FunctionSsa, hoists: &[Hoist]) -> Undo {
             redirect[rewrite.remap[site as usize] as usize] = copy_id[k];
         }
     }
-    let redirect_of = |op: &mut ValueId| {
-        if *op != NO_VALUE && (*op as usize) < redirect.len() && redirect[*op as usize] != NO_VALUE
-        {
-            *op = redirect[*op as usize];
-        }
-    };
-    for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(redirect_of);
-    }
-    for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            redirect_of(&mut block.exit_acc);
-        }
-        block.terminator.for_each_operand_mut(redirect_of);
-    }
+    redirect_uses(func, &redirect);
     undo
 }
 
@@ -496,24 +689,60 @@ pub(crate) fn allocate_hoisted(
     func: &mut FunctionSsa,
     target: Target,
     fixed: FixedRegs,
+    data_len: usize,
 ) -> Allocation {
     let hoists = plan(func, target, fixed);
-    if hoists.is_empty() {
+    // The loads are planned past the materializations, whose copies are
+    // what makes an address invariant.
+    let early = if hoists.is_empty() {
+        plan_loads(func, data_len)
+    } else {
+        Vec::new()
+    };
+    if hoists.is_empty() && early.is_empty() {
         return super::split_ranges::allocate_split(func, target, fixed);
     }
     let base = super::reg_alloc::allocate(func, target, fixed);
     let base_cost = placement_cost(func, &base);
-    let undo = apply(func, &hoists);
-    let alt = super::reg_alloc::allocate(func, target, fixed);
-    // A hoist removes work from the loop unconditionally; the only way
-    // it can lose is by taking a register the function had another use
-    // for, which shows up here as extra traffic or an extra save.
-    let kept = placement_cost(func, &alt) <= base_cost;
-    let picked = if kept {
-        alt
+    // A hoisted materialization removes work from the loop
+    // unconditionally; the only way it can lose is by taking a register
+    // the function had another use for, which shows up as extra traffic
+    // or an extra save. The loads it makes invariant are judged with it:
+    // a moved load stops one load per iteration, and a reload the longer
+    // ranges add costs one.
+    let mat = (!hoists.is_empty()).then(|| {
+        let undo = apply(func, &hoists);
+        let alt = super::reg_alloc::allocate(func, target, fixed);
+        let cost = placement_cost(func, &alt);
+        (undo, alt, cost)
+    });
+    let loads = if hoists.is_empty() {
+        early
     } else {
-        undo.restore(func);
-        base
+        plan_loads(func, data_len)
+    };
+    let both = (!loads.is_empty()).then(|| {
+        let removed: u64 = loads.iter().map(|h| h.profit).sum();
+        let undo = apply_loads(func, &loads);
+        let alt = super::reg_alloc::allocate(func, target, fixed);
+        let cost = placement_cost(func, &alt);
+        (undo, alt, cost <= base_cost.saturating_add(removed))
+    });
+    let picked = match (mat, both) {
+        (_, Some((_, alt, true))) => alt,
+        (mat, both) => {
+            if let Some((undo, _, _)) = both {
+                undo.restore(func);
+            }
+            match mat {
+                Some((_, alt, cost)) if cost <= base_cost => alt,
+                Some((undo, _, _)) => {
+                    undo.restore(func);
+                    base
+                }
+                None => base,
+            }
+        }
     };
     super::split_ranges::allocate_split_with(func, target, fixed, picked)
 }
@@ -528,7 +757,7 @@ mod tests {
     }
 
     fn allocate_hoisted(func: &mut FunctionSsa, target: Target) -> Allocation {
-        super::allocate_hoisted(func, target, FixedRegs::NONE)
+        super::allocate_hoisted(func, target, FixedRegs::NONE, 0)
     }
 
     /// Tape index of the first body instruction in [`loop_func`].
@@ -1072,5 +1301,113 @@ mod tests {
         for b in &f.blocks {
             assert!(b.inst_range.end as usize <= f.insts.len());
         }
+    }
+
+    /// `pre -> header -> body -> header`, `header -> exit`: the body reads
+    /// `read` and adds it to a sum the header carries, so the read is
+    /// live and the body writes nothing unless `extra` does.
+    /// `pre` holds `ImmData(0x38)` at 0 and `Imm(0)` at 1.
+    fn sum_loop(read: Inst, extra: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![Inst::ImmData(0x38), Inst::Imm(0)];
+        // Header: the sum's phi and the trip test.
+        let body = 4 + extra.len() as u32;
+        insts.push(Inst::Phi {
+            incoming: vec![(0, 1), (2, body + 1)],
+            kind: LoadKind::I64,
+        });
+        insts.push(Inst::BinopI {
+            op: BinOp::Lt,
+            lhs: 2,
+            rhs_imm: 7,
+        });
+        insts.extend(extra);
+        insts.push(read);
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs: body,
+        });
+        let n = insts.len() as u32;
+        func_with(
+            insts,
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..4,
+                    Terminator::Bz {
+                        cond: 3,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(4..n, Terminator::Jmp(1)),
+                block(n..n, Terminator::Return(2)),
+            ],
+        )
+    }
+
+    fn load_at(disp: i32) -> Inst {
+        Inst::Load {
+            addr: 0,
+            disp,
+            kind: LoadKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        }
+    }
+
+    /// A load of the data image in a loop that writes nothing moves to the
+    /// preheader, and the sum reads the copy.
+    #[test]
+    fn a_data_load_in_a_loop_that_writes_nothing_moves_out() {
+        let mut f = sum_loop(load_at(8), vec![]);
+        let loads = plan_loads(&f, 0x48);
+        assert_eq!(loads.len(), 1);
+        assert_eq!(loads[0].redirect, vec![4]);
+        apply_loads(&mut f, &loads);
+        let copy = (f.blocks[0].inst_range.clone())
+            .find(|&v| matches!(f.insts[v as usize], Inst::Load { .. }))
+            .expect("copy in the preheader");
+        let add = f.blocks[2].inst_range.end - 1;
+        assert!(matches!(f.insts[add as usize], Inst::Binop { rhs, .. } if rhs == copy));
+    }
+
+    /// A frame slot's load moves the same way.
+    #[test]
+    fn a_frame_slot_load_moves_out() {
+        let f = sum_loop(local(-2), vec![]);
+        assert_eq!(plan_loads(&f, 0).len(), 1);
+    }
+
+    /// The copy runs even when the loop runs no iteration, so a load that
+    /// could fault stays: one past the data image, of an address another
+    /// unit's symbol gives, or a volatile one; and one the loop's own
+    /// store may change stays too.
+    #[test]
+    fn a_load_that_could_fault_or_change_stays() {
+        assert!(plan_loads(&sum_loop(load_at(8), vec![]), 0x40 + 8 - 1).is_empty());
+        let mut bound = sum_loop(load_at(8), vec![]);
+        bound.extern_imm_data_refs.push((0, 3));
+        assert!(plan_loads(&bound, 0x48).is_empty());
+        let volatile = Inst::Load {
+            addr: 0,
+            disp: 8,
+            kind: LoadKind::I64,
+            volatile: true,
+            align: 0,
+            pc_rel: false,
+        };
+        assert!(plan_loads(&sum_loop(volatile, vec![]), 0x48).is_empty());
+        let store = Inst::Store {
+            addr: 0,
+            disp: 16,
+            value: 1,
+            kind: StoreKind::I64,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        assert!(plan_loads(&sum_loop(load_at(8), vec![store]), 0x48).is_empty());
     }
 }

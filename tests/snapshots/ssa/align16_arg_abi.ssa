@@ -665,7 +665,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=0
     v154 Imm(0)                                           -> x2
     v155 Imm(0)                                           -> x2
     v156 Imm(0)                                           -> x2
-    v157 Imm(-1)                                          -> x2
+    v157 BinopI { op=shr, lhs=v152, rhs_imm=63 }          -> x2
     v158 Imm(0)                                           -> x2
     v159 Imm(0)                                           -> x2
     v160 Imm(0)                                           -> x2

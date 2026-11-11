@@ -1587,6 +1587,7 @@ pub(crate) fn apply_data_liveness(
             crate::c5::layout::DataOffsets::remap_data_offsets(f, &through);
         }
     }
+    out.zero_fill_len = bss_size as usize;
     (out, bss_size, DataMap::new(starts, &new_base, &obj_lens))
 }
 

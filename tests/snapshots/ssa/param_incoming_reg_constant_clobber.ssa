@@ -88,12 +88,14 @@ fn ent_pc=4 n_params=5 variadic=false locals=0
     v65  Imm(0)                                           -> x0
     v66  Load { addr=v5, disp=0, kind=I32 }               -> x0
     v67  Store { addr=v5, disp=0, value=v66, kind=I32 }   -> -
-    v68  Extend { value=v66, kind=I32 }                   -> x0
-    terminator Jmp(b2)   (exit_acc=v68)
+    v68  ImmData(72)                                      -> x0
+    v69  Load { addr=v68, disp=0, kind=I32 pc_rel }       -> x0
+    v70  Extend { value=v66, kind=I32 }                   -> x1
+    terminator Jmp(b2)   (exit_acc=v70)
   block 2  start_pc=0
-    v72  ImmData(72)                                      -> x0
-    v73  Load { addr=v72, disp=0, kind=I32 pc_rel }       -> x0
-    terminator Bz { cond=v73, target=b3, fall=b2 }   (exit_acc=v73)
+    v74  ImmData(72)                                      -> x1
+    v75  Load { addr=v74, disp=0, kind=I32 pc_rel }       -> x1
+    terminator Bz { cond=v69, target=b3, fall=b2 }   (exit_acc=v69)
   block 3  start_pc=0
     v61  ImmData(64)                                      -> x0
     v62  Load { addr=v61, disp=0, kind=I32 pc_rel }       -> x0
@@ -106,10 +108,10 @@ fn ent_pc=4 n_params=5 variadic=false locals=0
     v60  BinopI { op=le, lhs=v59, rhs_imm=5 }             -> x0
     terminator Bz { cond=v60, target=b5, fall=b1 }   (exit_acc=v60)
   block 5  start_pc=0
-    v69  ImmData(32)                                      -> x0
-    v70  Load { addr=v69, disp=0, kind=U16 pc_rel }       -> x0
-    v71  AggParts { desc=0, parts=[v70], fp_mask=0x0 }    -> -
-    terminator Return(v71)   (exit_acc=v69)
+    v71  ImmData(32)                                      -> x0
+    v72  Load { addr=v71, disp=0, kind=U16 pc_rel }       -> x0
+    v73  AggParts { desc=0, parts=[v72], fp_mask=0x0 }    -> -
+    terminator Return(v73)   (exit_acc=v71)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=func_17
 fn ent_pc=5 n_params=0 variadic=false locals=0

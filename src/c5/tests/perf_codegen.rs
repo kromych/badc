@@ -6305,3 +6305,51 @@ fn static_object_access_takes_the_page_offset_in_the_access() {
         assert!(a64(src, name).iter().any(page_add), "{name}");
     }
 }
+
+/// In a loop that writes no memory, the entries of a file-scope table it
+/// reads at constant offsets are loaded once, before it: the loop body
+/// reads `xs[i]` and nothing else. Each table entry was loaded every
+/// iteration.
+#[test]
+fn table_loads_leave_a_loop_that_writes_nothing() {
+    const SRC: &str = "static double coef[3];\n\
+double f(const double *xs, int n) {\n\
+    double s = 0;\n\
+    for (int i = 0; i < n; i++) {\n\
+        double x = xs[i];\n\
+        s += coef[0] + x * (coef[1] + x * coef[2]);\n\
+    }\n\
+    return s;\n\
+}\n\
+void g(double v) { coef[1] = v; }\n";
+    let mut m = Misses::default();
+    let ws = a64(SRC, "f");
+    // Loads and stores: op0 bits 27 and 25 are 1 and 0, bit 22 the load.
+    let is_load = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && w & (1 << 22) != 0;
+    let spans: Vec<(usize, usize)> = (ws.iter().enumerate())
+        .filter_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, _)) if t >= 0 && t as usize <= i => Some((t as usize, i)),
+            _ => None,
+        })
+        .collect();
+    let loads = |(a, b): (usize, usize)| ws[a..=b].iter().filter(|&&w| is_load(w)).count();
+    m.expect(
+        !spans.is_empty() && spans.iter().all(|&s| loads(s) == 1),
+        || format!("AArch64: {ws:08x?}"),
+    );
+    let insns = x64(SRC, "f");
+    let reads = insns
+        .iter()
+        .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
+        .map(|b| {
+            (insns.iter())
+                .filter(|i| i.at >= b.target() && i.at <= b.at)
+                .filter(|i| i.modrm.is_some() && !i.reg_form())
+                .count()
+        })
+        .collect::<Vec<_>>();
+    m.expect(!reads.is_empty() && reads.iter().all(|&n| n == 1), || {
+        format!("x86-64: {insns:x?}")
+    });
+    m.finish();
+}

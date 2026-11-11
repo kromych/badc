@@ -415,35 +415,6 @@ fn stored_facts(
         .collect()
 }
 
-/// Whether an instruction may write memory (or transfer control to code
-/// that can), ending the validity of every load-keyed fact. Volatile
-/// loads read strictly per the abstract machine but write nothing; an
-/// atomic load is an ordering point after which another thread's
-/// writes may be visible (C11 5.1.2.4), so it ends the facts too.
-fn writes_memory(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Store { .. }
-            | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. }
-            | Inst::SegStore { .. }
-            | Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::TailExt(_)
-            | Inst::Mcpy { .. }
-            | Inst::Mzero { .. }
-            | Inst::AtomicRmw { .. }
-            | Inst::AtomicCas { .. }
-            | Inst::AtomicCas16 { .. }
-            | Inst::AtomicLoad { .. }
-            | Inst::AtomicStore { .. }
-            | Inst::Intrinsic { .. }
-            | Inst::InlineAsm { .. }
-            | Inst::AllocaInit(_)
-    )
-}
-
 fn load_kind_code(k: LoadKind) -> u32 {
     match k {
         LoadKind::I64 => 0,
@@ -2017,7 +1988,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
         let range = func.blocks[b as usize].inst_range.clone();
         for pc in range.start..range.end {
             let inst = &func.insts[pc as usize];
-            if writes_memory(inst) {
+            if Inst::may_write_memory(inst) {
                 // What a store puts in memory bounds a later read of
                 // the same location. Read the value's range before the
                 // wipe -- it may itself rest on a load fact -- and

@@ -3200,6 +3200,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // reallocated with its loop-invariant materializations hoisted and
     // with the spilled values' call-free reuse runs split out; a retry
     // is kept only when it lowers the function's loop-weighted cost.
+    let data_len = program.data.len() + program.zero_fill_len;
     let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
         pipeline.run("ssa::reg_alloc::allocate", &mut ssa_funcs, |funcs| {
             funcs
@@ -3208,7 +3209,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                     super::mem2reg::zero_read_undefs(f);
                     if native.optimize && !f.has_seh() {
                         super::remat::split_across_calls(f, target);
-                        super::licm::allocate_hoisted(f, target, native.fixed_regs)
+                        super::licm::allocate_hoisted(f, target, native.fixed_regs, data_len)
                     } else {
                         super::reg_alloc::allocate(f, target, native.fixed_regs)
                     }

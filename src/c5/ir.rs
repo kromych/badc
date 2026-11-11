@@ -785,6 +785,38 @@ impl Inst {
         )
     }
 
+    /// Whether the inst may write memory, or transfer control to code that
+    /// can, so a load of any address may read something else after it.
+    /// An atomic load is an ordering point after which another thread's
+    /// writes may be visible (C11 5.1.2.4); the end of an object's
+    /// lifetime ends what a load of it may read; an x86 SIMD instruction
+    /// in its memory form writes its result through an address.
+    pub(crate) fn may_write_memory(&self) -> bool {
+        matches!(
+            self,
+            Inst::Store { .. }
+                | Inst::StoreLocal { .. }
+                | Inst::StoreIndexed { .. }
+                | Inst::SegStore { .. }
+                | Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::TailExt(_)
+                | Inst::Mcpy { .. }
+                | Inst::Mzero { .. }
+                | Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
+                | Inst::AtomicLoad { .. }
+                | Inst::AtomicStore { .. }
+                | Inst::Intrinsic { .. }
+                | Inst::X86Simd { .. }
+                | Inst::InlineAsm { .. }
+                | Inst::AllocaInit(_)
+                | Inst::LifetimeEnd(_)
+        )
+    }
+
     /// True for the end-of-lifetime marker, which states a fact about
     /// frame storage and issues no code: every size budget measured in
     /// emitted instructions leaves it out.
@@ -1231,6 +1263,20 @@ pub(crate) enum LoadKind {
 }
 
 impl LoadKind {
+    /// Bytes the access reads; an `F80` reads its 10 bytes from a 16-byte
+    /// object.
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            LoadKind::I8 | LoadKind::U8 => 1,
+            LoadKind::I16 | LoadKind::U16 => 2,
+            LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+            LoadKind::I64 | LoadKind::F64 => 8,
+            LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => 16,
+            LoadKind::V256 => 32,
+            LoadKind::V512 => 64,
+        }
+    }
+
     /// Bytes an integer kind reads; `None` for the floating and vector
     /// kinds.
     pub(crate) fn int_bytes(self) -> Option<u8> {

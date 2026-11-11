@@ -274,6 +274,10 @@ pub struct Program {
     /// [`Self::data_ro_len`] when the layout produced no such object,
     /// and is reset with it by any repack.
     pub data_relro_len: usize,
+    /// Bytes of zero-filled storage past `data` that the data compaction
+    /// moved out of the file image: data offsets `[data.len(), data.len() +
+    /// zero_fill_len)` name them. Zero until that pass runs.
+    pub zero_fill_len: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -827,6 +831,7 @@ impl DataOffsets for Program {
             image_align_error: _,
             data_ro_len,
             data_relro_len,
+            zero_fill_len,
             data_object_starts,
             const_data_ranges,
             data_pad_ranges,
@@ -882,6 +887,7 @@ impl DataOffsets for Program {
         // re-establishes them for the layout it emitted.
         *data_ro_len = 0;
         *data_relro_len = 0;
+        *zero_fill_len = 0;
         data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
             Some(_) if !r.in_data(*s) => false,
             Some(new) => {
@@ -978,6 +984,7 @@ mod data_offset_tests {
             asm_idents: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
+            zero_fill_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

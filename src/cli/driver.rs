@@ -12,7 +12,7 @@ use super::objects::{
 use super::options::Mode;
 use super::paths::{
     compiler_include_dir, declared_home, declared_sysroot, install_dir, install_embedded,
-    print_file_name, sysroot_include_paths,
+    print_file_name, sdk_version, sysroot_include_paths,
 };
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
@@ -166,6 +166,9 @@ fn resolve_search_paths(cli: &mut Cli) {
     cli.front.compiler_include_dir =
         compiler_include_dir().map(|d| d.to_string_lossy().into_owned());
     cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
+    if cli.target.binary_format() == badc::BinaryFormat::MachO {
+        cli.link.mach_o.sdk = cli.sysroot.as_deref().and_then(sdk_version);
+    }
     cli.front.system_include_paths = match &cli.sysroot {
         Some(root) => sysroot_include_paths(cli.target, root),
         None => Vec::new(),

@@ -67,6 +67,29 @@ pub(crate) fn declared_sysroot(flag: Option<&Path>, target: Target) -> Option<Pa
     }
 }
 
+/// The version an SDK root declares in its `SDKSettings.json` (the
+/// `"Version"` member, `major[.minor[.patch]]`), encoded as
+/// `LC_BUILD_VERSION` records it; none when the file or the member is
+/// missing or malformed.
+pub(crate) fn sdk_version(root: &Path) -> Option<u32> {
+    let text = std::fs::read_to_string(root.join("SDKSettings.json")).ok()?;
+    let rest = &text[text.find("\"Version\"")? + "\"Version\"".len()..];
+    let rest = rest.trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let version = &rest[..rest.find('"')?];
+    let mut parts = version.split('.').map(str::parse::<u32>);
+    let major = parts.next()?.ok().filter(|&m| m <= 0xffff)?;
+    let mut field = |shift: u32| match parts.next() {
+        None => Some(0),
+        Some(n) => n.ok().filter(|&n| n <= 0xff).map(|n| n << shift),
+    };
+    let (minor, patch) = (field(8)?, field(0)?);
+    parts
+        .next()
+        .is_none()
+        .then_some(major << 16 | minor | patch)
+}
+
 /// The directories of the `LIB` environment variable, which link.exe searches
 /// for every library a PE link names; none for another format.
 pub(crate) fn pe_lib_env_paths(target: badc::Target) -> Vec<String> {

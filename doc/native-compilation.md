@@ -212,7 +212,11 @@ same image on every host. The sysroot's include directories supply the headers
 the bundled set lacks (`<zlib.h>`). They are searched after the bundled
 headers, so a standard header keeps the bundled copy. For a Mach-O target
 `$SDKROOT` is the default sysroot, as for Apple's tools; `--sysroot=` with no
-directory withdraws it.
+directory withdraws it. A Mach-O image records the macOS 11.0 deployment target
+and, in `LC_BUILD_VERSION`, the SDK version the sysroot's `SDKSettings.json`
+names, or 26.0 when no sysroot names one. libSystem selects its
+linked-on-or-after behaviors, the small-block allocator among them, by that SDK
+version.
 
 Linkage follows C99 6.2.2. A file-scope `static` is internal; any other
 file-scope declaration is external. `extern T x;` with no definition in the

@@ -2352,8 +2352,10 @@ fn an_efi_image_with_a_try_scope_imports_nothing() {
 /// ld64's `-bundle` writes an `MH_BUNDLE` image that names itself by no
 /// install name and enters nowhere; `-flat_namespace` clears `MH_TWOLEVEL`
 /// and gives every import a flat lookup; `-bundle_loader` binds what the
-/// executable exports to the main executable, which no load command names.
-/// A host `dlopen`s each form and the bundle reaches the host's function.
+/// executable exports to the main executable, which no load command names,
+/// and an image that binds no library loads libSystem, as dyld requires of
+/// one built against SDK 15.4 or later. A host `dlopen`s each form and the
+/// bundle reaches the host's function.
 /// A library carries no `MH_PIE`, and a non-Mach-O link refuses the options.
 #[test]
 fn a_bundle_loads_into_its_host() {
@@ -2402,7 +2404,7 @@ fn a_bundle_loads_into_its_host() {
         assert_eq!(filetype, MH_BUNDLE, "{form:?}");
         assert_eq!(flags & MH_TWOLEVEL == 0, flat, "{form:?}: flags {flags:#x}");
         assert_eq!(flags & MH_PIE, 0, "{form:?}: flags {flags:#x}");
-        let mut off = 32;
+        let (mut off, mut loads) = (32, 0);
         for _ in 0..ncmds {
             let cmd = u32le(&image, off);
             assert!(
@@ -2412,9 +2414,11 @@ fn a_bundle_loads_into_its_host() {
             if cmd == LC_LOAD_DYLIB {
                 let name = &image[off + u32le(&image, off + 8) as usize..];
                 assert!(!name.starts_with(b"host\0"), "{form:?}: loads the host");
+                loads += 1;
             }
             off += u32le(&image, off + 4) as usize;
         }
+        assert!(loads > 0, "{form:?}: loads no library");
         if cfg!(target_os = "macos") {
             let status = Command::new(dir.join("host"))
                 .arg("./p.bundle")

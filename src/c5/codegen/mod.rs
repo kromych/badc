@@ -4982,11 +4982,15 @@ pub struct ElfImageOptions {
 
 /// The image forms ld64 selects with `-bundle`, a Mach-O image that only
 /// `dlopen` loads (`MH_BUNDLE`), and `-flat_namespace`, whose imports name
-/// no library and resolve in every image loaded (no `MH_TWOLEVEL`).
+/// no library and resolve in every image loaded (no `MH_TWOLEVEL`), and
+/// the SDK version `LC_BUILD_VERSION` records (`xxxx.yy.zz` in nibbles),
+/// by which libSystem selects its linked-on-or-after behaviors; none
+/// stamps the writer's default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MachOImageOptions {
     pub bundle: bool,
     pub flat_namespace: bool,
+    pub sdk: Option<u32>,
 }
 
 impl Default for NativeOptions {

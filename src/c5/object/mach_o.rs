@@ -59,7 +59,10 @@ const PAGE_SIZE: u64 = crate::c5::layout::MACHO_PAGE_SIZE as u64;
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
 const MIN_MACOS: u32 = 11 << 16;
-const SDK_MACOS: u32 = 11 << 16;
+/// The SDK an image claims when the link declares none: libSystem gives
+/// an image the behaviors of the SDK it was built against (the allocator
+/// among them), and this is the current one.
+const SDK_MACOS: u32 = 26 << 16;
 
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
@@ -900,7 +903,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
 }
 
 /// `LC_BUILD_VERSION` -- platform + min OS + SDK.
-fn build_version() -> Vec<u8> {
+fn build_version(sdk: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -909,7 +912,7 @@ fn build_version() -> Vec<u8> {
             cmdsize: BUILD_VERSION_COMMAND_SIZE as u32,
             platform: PLATFORM_MACOS,
             minos: MIN_MACOS,
-            sdk: SDK_MACOS,
+            sdk,
             ntools: 0,
         },
     );
@@ -2032,7 +2035,14 @@ impl<'a> MachOWriter<'a> {
             .filter(|d| !d.main_executable)
             .map(|d| load_dylib(&d.path))
             .collect();
-        c.build_version = build_version();
+        // dyld refuses an image built against SDK 15.4 or later that loads
+        // no library; one that binds none loads libSystem.
+        if c.dylib_lcs.is_empty() {
+            let runtime =
+                crate::c5::codegen::ResolvedDylib::runtime_default(crate::c5::Target::MacOSAarch64);
+            c.dylib_lcs.push(load_dylib(&runtime.path));
+        }
+        c.build_version = build_version(build.mach_o.sdk.unwrap_or(SDK_MACOS));
         c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
         // The install name is `@rpath/<name>`, so a consumer linking by
         // name resolves it through its rpath at runtime.

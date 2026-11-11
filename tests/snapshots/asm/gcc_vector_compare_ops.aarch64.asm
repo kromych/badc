@@ -3718,32 +3718,26 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0x50
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	sub	x0, x29, #0x40
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	q0, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	q1, [x0]
                	mov	x0, #-0x1               // =-1
                	mov	x1, #0x0                // =0
-               	fmov	s0, w0
+               	fmov	s2, w0
                	mov	x1, #0x0                // =0
-               	mov	v0.s[1], w1
-               	mov	v0.s[2], w0
-               	mov	v0.s[3], w1
-               	ldur	q1, [x29, #-0x50]
-               	and	v0.16b, v0.16b, v1.16b
+               	mov	v2.s[1], w1
+               	mov	v2.s[2], w0
+               	mov	v2.s[3], w1
+               	and	v0.16b, v2.16b, v0.16b
                	mov	x2, #0x0                // =0
-               	fmov	s1, w1
-               	mov	v1.s[1], w0
-               	mov	v1.s[2], w1
-               	mov	v1.s[3], w0
-               	ldur	q2, [x29, #-0x40]
-               	and	v1.16b, v1.16b, v2.16b
+               	fmov	s2, w1
+               	mov	v2.s[1], w0
+               	mov	v2.s[2], w1
+               	mov	v2.s[3], w0
+               	and	v1.16b, v2.16b, v1.16b
                	orr	v0.16b, v0.16b, v1.16b
                	smov	x0, v0.s[0]
                	cmp	x0, #0x1

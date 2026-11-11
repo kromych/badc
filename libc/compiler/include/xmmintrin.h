@@ -137,13 +137,9 @@ static inline __m128 _mm_undefined_ps(void) {
     return _mm_setzero_ps();
 }
 
-static inline __m128 _mm_set_ps(float __D, float __C, float __B, float __A) {
-    return (__m128){__A, __B, __C, __D};
-}
+#define _mm_set_ps(D, C, B, A) ((__m128){(A), (B), (C), (D)})
 
-static inline __m128 _mm_setr_ps(float __A, float __B, float __C, float __D) {
-    return (__m128){__A, __B, __C, __D};
-}
+#define _mm_setr_ps(A, B, C, D) ((__m128){(A), (B), (C), (D)})
 
 static inline __m128 _mm_set1_ps(float __A) {
     return (__m128){__A, __A, __A, __A};

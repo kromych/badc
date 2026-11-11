@@ -2005,7 +2005,7 @@ Disassembly of section .text:
 <compare>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -2016,15 +2016,11 @@ Disassembly of section .text:
                	movq	%r8, %r14
                	movq	%rcx, %r13
                	movq	%rsi, %rbx
-               	movups	%xmm0, -0x20(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
+               	leaq	-0x10(%rbp), %rdi
+               	movups	%xmm0, -0x10(%rbp)
                	movl	0x4(%rbx), %eax
                	cmpl	%eax, %edx
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rdi
                	leaq	0x8(%rbx), %rsi
                	movl	$0x10, %edx
                	xorl	%eax, %eax

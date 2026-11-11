@@ -4168,29 +4168,23 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x40(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm0
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm1
                	movq	$-0x1, %rax
                	xorl	%ecx, %ecx
-               	vmovd	%eax, %xmm0
+               	vmovd	%eax, %xmm2
                	xorl	%ecx, %ecx
-               	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
-               	movups	-0x50(%rbp), %xmm1
-               	pand	%xmm1, %xmm0
+               	vpinsrd	$0x1, %ecx, %xmm2, %xmm2
+               	vpinsrd	$0x2, %eax, %xmm2, %xmm2
+               	vpinsrd	$0x3, %ecx, %xmm2, %xmm2
+               	pand	%xmm2, %xmm0
                	xorl	%edx, %edx
-               	vmovd	%ecx, %xmm1
-               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
-               	vpinsrd	$0x3, %eax, %xmm1, %xmm1
-               	movups	-0x40(%rbp), %xmm2
+               	vmovd	%ecx, %xmm2
+               	vpinsrd	$0x1, %eax, %xmm2, %xmm2
+               	vpinsrd	$0x2, %ecx, %xmm2, %xmm2
+               	vpinsrd	$0x3, %eax, %xmm2, %xmm2
                	pand	%xmm2, %xmm1
                	por	%xmm1, %xmm0
                	vmovd	%xmm0, %eax

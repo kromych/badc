@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=412 ---
+; --- SSA dump (ok=true) ent_pc=393 ---
 ; name=rnd_d
-fn ent_pc=412 n_params=0 variadic=false locals=2
+fn ent_pc=393 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -91,9 +91,9 @@ fn ent_pc=412 n_params=0 variadic=false locals=2
     v52  BinopI { op=mul, lhs=v49, rhs_imm=-7046029254386353131 } -> x0
     v53  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v52)
-; --- SSA dump (ok=true) ent_pc=415 ---
+; --- SSA dump (ok=true) ent_pc=396 ---
 ; name=singles
-fn ent_pc=415 n_params=2 variadic=false locals=9
+fn ent_pc=396 n_params=2 variadic=false locals=9
   spill_count=4 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=V128)                  -> [spill 0]
@@ -3705,9 +3705,9 @@ fn ent_pc=415 n_params=2 variadic=false locals=9
     terminator Jmp(b121)
   block 219  start_pc=0
     terminator Jmp(b104)
-; --- SSA dump (ok=true) ent_pc=416 ---
+; --- SSA dump (ok=true) ent_pc=397 ---
 ; name=doubles
-fn ent_pc=416 n_params=3 variadic=false locals=13
+fn ent_pc=397 n_params=3 variadic=false locals=13
   spill_count=6 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=V128)                  -> [spill 0]
@@ -6999,9 +6999,9 @@ fn ent_pc=416 n_params=3 variadic=false locals=13
     terminator Jmp(b115)
   block 207  start_pc=0
     terminator Jmp(b104)
-; --- SSA dump (ok=true) ent_pc=418 ---
+; --- SSA dump (ok=true) ent_pc=399 ---
 ; name=main
-fn ent_pc=418 n_params=0 variadic=false locals=2
+fn ent_pc=399 n_params=0 variadic=false locals=2
   spill_count=8 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -7756,7 +7756,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v849 Imm(0)                                           -> x0
     v850 Imm(0)                                           -> x0
     v851 Imm(0)                                           -> x0
-    v852 Call { target_pc=412, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v852 Call { target_pc=393, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v853 Imm(0)                                           -> x0
     v854 VecInsert { vec=v174, value=v852, off=0, kind=F64, bytes=16 } -> [spill 4]
     v855 Imm(0)                                           -> x0
@@ -7764,7 +7764,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v857 Imm(0)                                           -> x0
     v858 Imm(0)                                           -> x0
     v859 Imm(0)                                           -> x0
-    v860 Call { target_pc=412, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v860 Call { target_pc=393, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v861 Imm(0)                                           -> x0
     v862 VecInsert { vec=v173, value=v860, off=0, kind=F64, bytes=16 } -> [spill 2]
     v863 Imm(0)                                           -> x0
@@ -7777,7 +7777,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v870 Imm(1)                                           -> x0
     v871 Imm(8)                                           -> x0
     v872 Imm(8)                                           -> x0
-    v873 Call { target_pc=412, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v873 Call { target_pc=393, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v874 Imm(0)                                           -> x0
     v875 VecInsert { vec=v854, value=v873, off=8, kind=F64, bytes=16 } -> [spill 4]
     v876 Imm(0)                                           -> x0
@@ -7785,7 +7785,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v878 Imm(1)                                           -> x0
     v879 Imm(8)                                           -> x0
     v880 Imm(8)                                           -> x0
-    v881 Call { target_pc=412, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
+    v881 Call { target_pc=393, args=[], fixed_args=0, fp_return=true, fp_arg_mask=0x0 } -> d0
     v882 Imm(0)                                           -> x0
     v883 VecInsert { vec=v862, value=v881, off=8, kind=F64, bytes=16 } -> [spill 2]
     v884 Imm(0)                                           -> x0
@@ -7804,7 +7804,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v897 Imm(0)                                           -> x1
     v898 StoreLocal { off=-97, value=v837, kind=V128 }    -> -
     v899 LocalAddr(-97)                                   -> x1
-    v900 Call { target_pc=415, args=[v891, v896], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v900 Call { target_pc=396, args=[v891, v896], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v901 LifetimeEnd(-96)                                 -> -
     v902 LifetimeEnd(-97)                                 -> -
     v903 Imm(0)                                           -> x0
@@ -7822,7 +7822,7 @@ fn ent_pc=418 n_params=0 variadic=false locals=2
     v915 Imm(0)                                           -> x2
     v916 StoreLocal { off=-100, value=v837, kind=V128 }   -> -
     v917 LocalAddr(-100)                                  -> x2
-    v918 Call { target_pc=416, args=[v904, v909, v914], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v918 Call { target_pc=397, args=[v904, v909, v914], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v919 LifetimeEnd(-98)                                 -> -
     v920 LifetimeEnd(-99)                                 -> -
     v921 LifetimeEnd(-100)                                -> -

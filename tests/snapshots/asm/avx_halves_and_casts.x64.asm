@@ -590,13 +590,8 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	0x10(%rcx), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	vmovups	-0x50(%rbp), %ymm0
+               	leaq	<rip>, %rax
+               	vmovups	(%rax), %ymm0
                	vextracti128	$0x1, %ymm0, %xmm1
                	movups	%xmm1, -0x70(%rbp)
                	movsd	-0x70(%rbp), %xmm1

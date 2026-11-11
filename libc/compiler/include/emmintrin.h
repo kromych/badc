@@ -50,43 +50,27 @@ static inline __m128i _mm_setzero_si128(void) {
     return (__m128i)(__v4si){0, 0, 0, 0};
 }
 
-static inline __m128i _mm_set_epi32(int __q3, int __q2, int __q1, int __q0) {
-    return (__m128i)(__v4si){__q0, __q1, __q2, __q3};
-}
+#define _mm_set_epi32(Q3, Q2, Q1, Q0) ((__m128i)(__v4si){(Q0), (Q1), (Q2), (Q3)})
 
-static inline __m128i _mm_setr_epi32(int __q0, int __q1, int __q2, int __q3) {
-    return (__m128i)(__v4si){__q0, __q1, __q2, __q3};
-}
+#define _mm_setr_epi32(Q0, Q1, Q2, Q3) ((__m128i)(__v4si){(Q0), (Q1), (Q2), (Q3)})
 
-static inline __m128i _mm_set_epi64x(long long __q1, long long __q0) {
-    return (__m128i)(__v2di){__q0, __q1};
-}
+#define _mm_set_epi64x(Q1, Q0) ((__m128i)(__v2di){(Q0), (Q1)})
 
-static inline __m128i _mm_set_epi16(short __q7, short __q6, short __q5, short __q4, short __q3,
-                                    short __q2, short __q1, short __q0) {
-    return (__m128i)(__v8hi){__q0, __q1, __q2, __q3, __q4, __q5, __q6, __q7};
-}
+#define _mm_set_epi16(Q7, Q6, Q5, Q4, Q3, Q2, Q1, Q0) \
+    ((__m128i)(__v8hi){(Q0), (Q1), (Q2), (Q3), (Q4), (Q5), (Q6), (Q7)})
 
-static inline __m128i _mm_setr_epi16(short __q0, short __q1, short __q2, short __q3, short __q4,
-                                     short __q5, short __q6, short __q7) {
-    return (__m128i)(__v8hi){__q0, __q1, __q2, __q3, __q4, __q5, __q6, __q7};
-}
+#define _mm_setr_epi16(Q0, Q1, Q2, Q3, Q4, Q5, Q6, Q7) \
+    ((__m128i)(__v8hi){(Q0), (Q1), (Q2), (Q3), (Q4), (Q5), (Q6), (Q7)})
 
-static inline __m128i _mm_set_epi8(char __b15, char __b14, char __b13, char __b12, char __b11,
-                                   char __b10, char __b09, char __b08, char __b07, char __b06,
-                                   char __b05, char __b04, char __b03, char __b02, char __b01,
-                                   char __b00) {
-    return (__m128i)(__v16qi){__b00, __b01, __b02, __b03, __b04, __b05, __b06, __b07,
-                              __b08, __b09, __b10, __b11, __b12, __b13, __b14, __b15};
-}
+#define _mm_set_epi8(B15, B14, B13, B12, B11, B10, B09, B08, B07, B06, B05, B04, B03, B02, B01, \
+        B00) \
+    ((__m128i)(__v16qi){(B00), (B01), (B02), (B03), (B04), (B05), (B06), (B07), (B08), (B09), \
+        (B10), (B11), (B12), (B13), (B14), (B15)})
 
-static inline __m128i _mm_setr_epi8(char __b00, char __b01, char __b02, char __b03, char __b04,
-                                    char __b05, char __b06, char __b07, char __b08, char __b09,
-                                    char __b10, char __b11, char __b12, char __b13, char __b14,
-                                    char __b15) {
-    return (__m128i)(__v16qi){__b00, __b01, __b02, __b03, __b04, __b05, __b06, __b07,
-                              __b08, __b09, __b10, __b11, __b12, __b13, __b14, __b15};
-}
+#define _mm_setr_epi8(B00, B01, B02, B03, B04, B05, B06, B07, B08, B09, B10, B11, B12, B13, B14, \
+        B15) \
+    ((__m128i)(__v16qi){(B00), (B01), (B02), (B03), (B04), (B05), (B06), (B07), (B08), (B09), \
+        (B10), (B11), (B12), (B13), (B14), (B15)})
 
 static inline __m128i _mm_set1_epi8(char __b) {
     return (__m128i)(__v16qi){__b, __b, __b, __b, __b, __b, __b, __b,
@@ -161,13 +145,9 @@ static inline __m128i _mm_movpi64_epi64(__m64 __A) {
     return (__m128i)(__v2di){(long long)__A, 0};
 }
 
-static inline __m128i _mm_set_epi64(__m64 __q1, __m64 __q0) {
-    return (__m128i)(__v2di){(long long)__q0, (long long)__q1};
-}
+#define _mm_set_epi64(Q1, Q0) ((__m128i)(__v2di){(long long)(Q0), (long long)(Q1)})
 
-static inline __m128i _mm_setr_epi64(__m64 __q0, __m64 __q1) {
-    return (__m128i)(__v2di){(long long)__q0, (long long)__q1};
-}
+#define _mm_setr_epi64(Q0, Q1) ((__m128i)(__v2di){(long long)(Q0), (long long)(Q1)})
 
 static inline __m128i _mm_set1_epi64(__m64 __q) {
     return (__m128i)(__v2di){(long long)__q, (long long)__q};
@@ -602,13 +582,9 @@ static inline __m128d _mm_undefined_pd(void) {
     return _mm_setzero_pd();
 }
 
-static inline __m128d _mm_set_pd(double __B, double __A) {
-    return (__m128d){__A, __B};
-}
+#define _mm_set_pd(B, A) ((__m128d){(A), (B)})
 
-static inline __m128d _mm_setr_pd(double __A, double __B) {
-    return (__m128d){__A, __B};
-}
+#define _mm_setr_pd(A, B) ((__m128d){(A), (B)})
 
 static inline __m128d _mm_set1_pd(double __A) {
     return (__m128d){__A, __A};

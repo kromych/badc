@@ -465,13 +465,10 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 .or_else(|| derived.get(&a).copied())
         };
         match inst {
-            Inst::Mcpy {
-                dst,
-                src,
-                size,
-                align,
-            } => {
-                let ok = *size == bytes && *align >= 16 && !used[v];
+            // The copy's alignment bounds nothing: the vector moves are the
+            // unaligned forms.
+            Inst::Mcpy { dst, src, size, .. } => {
+                let ok = *size == bytes && !used[v];
                 check(*dst, ok, &mut reject);
                 check(*src, ok, &mut reject);
                 if let Some(&s) = addr.get(src) {

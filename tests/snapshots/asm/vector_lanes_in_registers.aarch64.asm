@@ -55,20 +55,12 @@ Disassembly of section .text:
                	ret
 
 <put_i>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	sxtw	x0, w0
                	mov	v0.s[2], w0
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldur	q1, [x29, #-0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	q1, [x0]
                	eor	v0.16b, v0.16b, v1.16b
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <get_i>:

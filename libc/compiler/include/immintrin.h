@@ -186,48 +186,25 @@ static inline __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpeqq256(__A, __B);
 }
 
-static inline __m256i _mm256_set_epi64x(long long __D, long long __C, long long __B,
-                                        long long __A) {
-    return (__m256i){__A, __B, __C, __D};
-}
+#define _mm256_set_epi64x(D, C, B, A) ((__m256i){(A), (B), (C), (D)})
 
-static inline __m256i _mm256_set_epi32(int __H, int __G, int __F, int __E, int __D, int __C,
-                                       int __B, int __A) {
-    return (__m256i)(__v8si){__A, __B, __C, __D, __E, __F, __G, __H};
-}
+#define _mm256_set_epi32(H, G, F, E, D, C, B, A) \
+    ((__m256i)(__v8si){(A), (B), (C), (D), (E), (F), (G), (H)})
 
-static inline __m256i _mm256_setr_epi32(int __A, int __B, int __C, int __D, int __E, int __F,
-                                        int __G, int __H) {
-    return (__m256i)(__v8si){__A, __B, __C, __D, __E, __F, __G, __H};
-}
+#define _mm256_setr_epi32(A, B, C, D, E, F, G, H) \
+    ((__m256i)(__v8si){(A), (B), (C), (D), (E), (F), (G), (H)})
 
-static inline __m256i _mm256_setr_epi8(char __b0, char __b1, char __b2, char __b3, char __b4,
-                                       char __b5, char __b6, char __b7, char __b8, char __b9,
-                                       char __b10, char __b11, char __b12, char __b13,
-                                       char __b14, char __b15, char __b16, char __b17,
-                                       char __b18, char __b19, char __b20, char __b21,
-                                       char __b22, char __b23, char __b24, char __b25,
-                                       char __b26, char __b27, char __b28, char __b29,
-                                       char __b30, char __b31) {
-    return (__m256i)(__v32qi){__b0,  __b1,  __b2,  __b3,  __b4,  __b5,  __b6,  __b7,
-                              __b8,  __b9,  __b10, __b11, __b12, __b13, __b14, __b15,
-                              __b16, __b17, __b18, __b19, __b20, __b21, __b22, __b23,
-                              __b24, __b25, __b26, __b27, __b28, __b29, __b30, __b31};
-}
+#define _mm256_setr_epi8(B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, \
+        B16, B17, B18, B19, B20, B21, B22, B23, B24, B25, B26, B27, B28, B29, B30, B31) \
+    ((__m256i)(__v32qi){(B0), (B1), (B2), (B3), (B4), (B5), (B6), (B7), (B8), (B9), (B10), \
+        (B11), (B12), (B13), (B14), (B15), (B16), (B17), (B18), (B19), (B20), (B21), (B22), \
+        (B23), (B24), (B25), (B26), (B27), (B28), (B29), (B30), (B31)})
 
-static inline __m256i _mm256_set_epi8(char __b31, char __b30, char __b29, char __b28,
-                                      char __b27, char __b26, char __b25, char __b24,
-                                      char __b23, char __b22, char __b21, char __b20,
-                                      char __b19, char __b18, char __b17, char __b16,
-                                      char __b15, char __b14, char __b13, char __b12,
-                                      char __b11, char __b10, char __b9, char __b8, char __b7,
-                                      char __b6, char __b5, char __b4, char __b3, char __b2,
-                                      char __b1, char __b0) {
-    return _mm256_setr_epi8(__b0, __b1, __b2, __b3, __b4, __b5, __b6, __b7, __b8, __b9, __b10,
-                            __b11, __b12, __b13, __b14, __b15, __b16, __b17, __b18, __b19,
-                            __b20, __b21, __b22, __b23, __b24, __b25, __b26, __b27, __b28,
-                            __b29, __b30, __b31);
-}
+#define _mm256_set_epi8(B31, B30, B29, B28, B27, B26, B25, B24, B23, B22, B21, B20, B19, B18, \
+        B17, B16, B15, B14, B13, B12, B11, B10, B9, B8, B7, B6, B5, B4, B3, B2, B1, B0) \
+    (_mm256_setr_epi8((B0), (B1), (B2), (B3), (B4), (B5), (B6), (B7), (B8), (B9), (B10), \
+        (B11), (B12), (B13), (B14), (B15), (B16), (B17), (B18), (B19), (B20), (B21), (B22), \
+        (B23), (B24), (B25), (B26), (B27), (B28), (B29), (B30), (B31)))
 
 static inline __m256i _mm256_set_m128i(__m128i __H, __m128i __L) {
     return _mm256_inserti128_si256(_mm256_castsi128_si256(__L), __H, 1);
@@ -550,26 +527,17 @@ static inline __m128i _mm_broadcastq_epi64(__m128i __X) {
 
 #define _mm_broadcastsi128_si256 _mm256_broadcastsi128_si256
 
-static inline __m256i _mm256_set_epi16(short __q15, short __q14, short __q13, short __q12,
-                                       short __q11, short __q10, short __q09, short __q08,
-                                       short __q07, short __q06, short __q05, short __q04,
-                                       short __q03, short __q02, short __q01, short __q00) {
-    return (__m256i)(__v16hi){__q00, __q01, __q02, __q03, __q04, __q05, __q06, __q07,
-                              __q08, __q09, __q10, __q11, __q12, __q13, __q14, __q15};
-}
+#define _mm256_set_epi16(Q15, Q14, Q13, Q12, Q11, Q10, Q09, Q08, Q07, Q06, Q05, Q04, Q03, Q02, \
+        Q01, Q00) \
+    ((__m256i)(__v16hi){(Q00), (Q01), (Q02), (Q03), (Q04), (Q05), (Q06), (Q07), (Q08), (Q09), \
+        (Q10), (Q11), (Q12), (Q13), (Q14), (Q15)})
 
-static inline __m256i _mm256_setr_epi16(short __q00, short __q01, short __q02, short __q03,
-                                        short __q04, short __q05, short __q06, short __q07,
-                                        short __q08, short __q09, short __q10, short __q11,
-                                        short __q12, short __q13, short __q14, short __q15) {
-    return (__m256i)(__v16hi){__q00, __q01, __q02, __q03, __q04, __q05, __q06, __q07,
-                              __q08, __q09, __q10, __q11, __q12, __q13, __q14, __q15};
-}
+#define _mm256_setr_epi16(Q00, Q01, Q02, Q03, Q04, Q05, Q06, Q07, Q08, Q09, Q10, Q11, Q12, Q13, \
+        Q14, Q15) \
+    ((__m256i)(__v16hi){(Q00), (Q01), (Q02), (Q03), (Q04), (Q05), (Q06), (Q07), (Q08), (Q09), \
+        (Q10), (Q11), (Q12), (Q13), (Q14), (Q15)})
 
-static inline __m256i _mm256_setr_epi64x(long long __A, long long __B, long long __C,
-                                         long long __D) {
-    return (__m256i){__A, __B, __C, __D};
-}
+#define _mm256_setr_epi64x(A, B, C, D) ((__m256i){(A), (B), (C), (D)})
 
 static inline __m256i _mm256_setr_m128i(__m128i __L, __m128i __H) {
     return __badc_join_si(__L, __H);
@@ -790,27 +758,17 @@ static inline __m256d _mm256_setzero_pd(void) {
     return (__m256d){0, 0, 0, 0};
 }
 
-static inline __m256 _mm256_set_ps(float __H, float __G, float __F, float __E, float __D,
-                                   float __C, float __B, float __A) {
-    return (__m256){__A, __B, __C, __D, __E, __F, __G, __H};
-}
+#define _mm256_set_ps(H, G, F, E, D, C, B, A) ((__m256){(A), (B), (C), (D), (E), (F), (G), (H)})
 
-static inline __m256 _mm256_setr_ps(float __A, float __B, float __C, float __D, float __E,
-                                    float __F, float __G, float __H) {
-    return (__m256){__A, __B, __C, __D, __E, __F, __G, __H};
-}
+#define _mm256_setr_ps(A, B, C, D, E, F, G, H) ((__m256){(A), (B), (C), (D), (E), (F), (G), (H)})
 
 static inline __m256 _mm256_set1_ps(float __A) {
     return (__m256){__A, __A, __A, __A, __A, __A, __A, __A};
 }
 
-static inline __m256d _mm256_set_pd(double __D, double __C, double __B, double __A) {
-    return (__m256d){__A, __B, __C, __D};
-}
+#define _mm256_set_pd(D, C, B, A) ((__m256d){(A), (B), (C), (D)})
 
-static inline __m256d _mm256_setr_pd(double __A, double __B, double __C, double __D) {
-    return (__m256d){__A, __B, __C, __D};
-}
+#define _mm256_setr_pd(A, B, C, D) ((__m256d){(A), (B), (C), (D)})
 
 static inline __m256d _mm256_set1_pd(double __A) {
     return (__m256d){__A, __A, __A, __A};
@@ -1985,26 +1943,15 @@ static inline __m512i _mm512_set1_epi16(short __A) {
 static inline __m512i _mm512_set1_epi8(char __A) {
     return _mm512_set1_epi64((long long)((unsigned char)__A * 0x0101010101010101ull));
 }
-static inline __m512i _mm512_set_epi64(long long __H, long long __G, long long __F, long long __E,
-                                       long long __D, long long __C, long long __B, long long __A) {
-    return (__m512i){__A, __B, __C, __D, __E, __F, __G, __H};
-}
-static inline __m512i _mm512_setr_epi64(long long __A, long long __B, long long __C, long long __D,
-                                        long long __E, long long __F, long long __G, long long __H) {
-    return (__m512i){__A, __B, __C, __D, __E, __F, __G, __H};
-}
-static inline __m512i _mm512_set_epi32(int __P, int __O, int __N, int __M, int __L, int __K, int __J,
-                                       int __I, int __H, int __G, int __F, int __E, int __D, int __C,
-                                       int __B, int __A) {
-    return (__m512i)(__v16si){__A, __B, __C, __D, __E, __F, __G, __H,
-                              __I, __J, __K, __L, __M, __N, __O, __P};
-}
-static inline __m512i _mm512_setr_epi32(int __A, int __B, int __C, int __D, int __E, int __F, int __G,
-                                        int __H, int __I, int __J, int __K, int __L, int __M, int __N,
-                                        int __O, int __P) {
-    return (__m512i)(__v16si){__A, __B, __C, __D, __E, __F, __G, __H,
-                              __I, __J, __K, __L, __M, __N, __O, __P};
-}
+#define _mm512_set_epi64(H, G, F, E, D, C, B, A) ((__m512i){(A), (B), (C), (D), (E), (F), (G), (H)})
+#define _mm512_setr_epi64(A, B, C, D, E, F, G, H) \
+    ((__m512i){(A), (B), (C), (D), (E), (F), (G), (H)})
+#define _mm512_set_epi32(P, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A) \
+    ((__m512i)(__v16si){(A), (B), (C), (D), (E), (F), (G), (H), (I), (J), (K), (L), (M), (N), \
+        (O), (P)})
+#define _mm512_setr_epi32(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P) \
+    ((__m512i)(__v16si){(A), (B), (C), (D), (E), (F), (G), (H), (I), (J), (K), (L), (M), (N), \
+        (O), (P)})
 #define _mm512_set4_epi64(D, C, B, A) _mm512_set_epi64(D, C, B, A, D, C, B, A)
 #define _mm512_set4_epi32(D, C, B, A)                                             \
     _mm512_set_epi32(D, C, B, A, D, C, B, A, D, C, B, A, D, C, B, A)

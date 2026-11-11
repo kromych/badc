@@ -3220,6 +3220,44 @@ int none(const v4l *a, const v4l *b) {\n\
     m.finish();
 }
 
+/// A vector of constants an operation reads is one load of read-only data,
+/// as with gcc 16: `_mm256_setr_epi8` of 32 constants (a compound literal,
+/// as each of the set / setr constructors is) and a constant compound
+/// literal held in a local are a `vmovups` from their image, with no stack
+/// copy. The
+/// constructor was a call building the vector byte by byte, and the local
+/// took two 16-byte copies to the stack and a 32-byte load from it.
+#[test]
+fn constant_vectors_are_one_load() {
+    const SRC: &str = "#include <immintrin.h>\n\
+void k(__m256i *p) {\n\
+    *p = _mm256_shuffle_epi8(*p, _mm256_setr_epi8(2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13, 14, 15,\n\
+                                                  8, 9, 2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13,\n\
+                                                  14, 15, 8, 9));\n\
+}\n\
+typedef char v32qi __attribute__((vector_size(32)));\n\
+void x(__m256i *p, int n) {\n\
+    const __m256i k = (__m256i)(v32qi){1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,\n\
+                                       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};\n\
+    for (int i = 0; i < n; i++) p[i] = p[i] ^ k;\n\
+}\n";
+    let mut m = Misses::default();
+    let k = x64(SRC, "k");
+    m.expect(
+        k.iter().all(|i| i.op != 0xE8 && i.op >> 8 != 0x3A) && k.len() <= 7,
+        || format!("x86-64 k: {k:x?}"),
+    );
+    // No store to the stack: no `vmovups` / `movups` or `mov` to memory based
+    // on `%rsp` or `%rbp`.
+    let x = x64(SRC, "x");
+    let stack_stores = x
+        .iter()
+        .filter(|i| matches!(i.op, 0x0F11 | 0x89) && matches!(i.mem_base(), Some(4 | 5)))
+        .count();
+    m.expect(stack_stores == 0, || format!("x86-64 x: {x:x?}"));
+    m.finish();
+}
+
 /// A helper computing `~a & b` over a ymm vector lane by lane and testing
 /// the lanes is spliced at both of its call sites: the bodies the inliner
 /// measures hold one instruction per lane write, the 128-bit part split

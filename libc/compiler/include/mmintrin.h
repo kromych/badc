@@ -63,31 +63,19 @@ static inline long long _mm_cvtm64_si64(__m64 __m) {
 /* Composition, the highest lane first in _mm_set_*, lane zero first in
 ** _mm_setr_*. */
 
-static inline __m64 _mm_set_pi32(int __i1, int __i0) {
-    return (__m64)(__v2si){__i0, __i1};
-}
+#define _mm_set_pi32(I1, I0) ((__m64)(__v2si){(I0), (I1)})
 
-static inline __m64 _mm_set_pi16(short __w3, short __w2, short __w1, short __w0) {
-    return (__m64)(__v4hi){__w0, __w1, __w2, __w3};
-}
+#define _mm_set_pi16(W3, W2, W1, W0) ((__m64)(__v4hi){(W0), (W1), (W2), (W3)})
 
-static inline __m64 _mm_set_pi8(char __b7, char __b6, char __b5, char __b4, char __b3, char __b2,
-                                char __b1, char __b0) {
-    return (__m64)(__v8qi){__b0, __b1, __b2, __b3, __b4, __b5, __b6, __b7};
-}
+#define _mm_set_pi8(B7, B6, B5, B4, B3, B2, B1, B0) \
+    ((__m64)(__v8qi){(B0), (B1), (B2), (B3), (B4), (B5), (B6), (B7)})
 
-static inline __m64 _mm_setr_pi32(int __i0, int __i1) {
-    return (__m64)(__v2si){__i0, __i1};
-}
+#define _mm_setr_pi32(I0, I1) ((__m64)(__v2si){(I0), (I1)})
 
-static inline __m64 _mm_setr_pi16(short __w0, short __w1, short __w2, short __w3) {
-    return (__m64)(__v4hi){__w0, __w1, __w2, __w3};
-}
+#define _mm_setr_pi16(W0, W1, W2, W3) ((__m64)(__v4hi){(W0), (W1), (W2), (W3)})
 
-static inline __m64 _mm_setr_pi8(char __b0, char __b1, char __b2, char __b3, char __b4,
-                                 char __b5, char __b6, char __b7) {
-    return (__m64)(__v8qi){__b0, __b1, __b2, __b3, __b4, __b5, __b6, __b7};
-}
+#define _mm_setr_pi8(B0, B1, B2, B3, B4, B5, B6, B7) \
+    ((__m64)(__v8qi){(B0), (B1), (B2), (B3), (B4), (B5), (B6), (B7)})
 
 static inline __m64 _mm_set1_pi32(int __i) {
     return (__m64)(__v2si){__i, __i};

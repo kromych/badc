@@ -278,16 +278,10 @@ Disassembly of section .text:
                	movzbq	-0x1(%rbp), %rax
                	cmpl	$0x27, %eax
                	jne	<addr>
-               	leaq	(%rsp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	0x20(%rsp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	(%rsp), %xmm0
-               	movups	0x20(%rsp), %xmm1
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm0
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm1
                	addps	%xmm1, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movl	$0x41300000, %eax       # imm = 0x41300000

@@ -147,14 +147,14 @@ Disassembly of section .text:
                	movl	%ecx, %ecx
                	addq	%rdx, %rcx
                	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
-               	movl	$0x72c4a902, %edx       # imm = 0x72C4A902
-               	movq	$-0x32e2fdfb, %rsi      # imm = 0xCD1D0205
-               	movq	$-0x3de0216b, %rdi      # imm = 0xC21FDE95
                	xorl	%ecx, %ecx
-               	vmovd	%edi, %xmm1
+               	movq	$-0x3de0216b, %rdx      # imm = 0xC21FDE95
+               	vmovd	%edx, %xmm1
                	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpinsrd	$0x2, %esi, %xmm1, %xmm1
-               	vpinsrd	$0x3, %edx, %xmm1, %xmm1
+               	movq	$-0x32e2fdfb, %rax      # imm = 0xCD1D0205
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
+               	movl	$0x72c4a902, %eax       # imm = 0x72C4A902
+               	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
@@ -181,14 +181,14 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	xorq	%rdi, %rdx
                	vpinsrd	$0x3, %edx, %xmm0, %xmm0
-               	movq	$-0x5551e47c, %rcx      # imm = 0xAAAE1B84
-               	movl	$0x5b90feb, %edx        # imm = 0x5B90FEB
-               	movl	$0x85e82f0, %esi        # imm = 0x85E82F0
-               	movl	$0x1ec1c7a7, %edi       # imm = 0x1EC1C7A7
                	xorl	%eax, %eax
-               	vmovd	%edi, %xmm1
-               	vpinsrd	$0x1, %esi, %xmm1, %xmm1
-               	vpinsrd	$0x2, %edx, %xmm1, %xmm1
+               	movl	$0x1ec1c7a7, %ecx       # imm = 0x1EC1C7A7
+               	vmovd	%ecx, %xmm1
+               	movl	$0x85e82f0, %ecx        # imm = 0x85E82F0
+               	vpinsrd	$0x1, %ecx, %xmm1, %xmm1
+               	movl	$0x5b90feb, %ecx        # imm = 0x5B90FEB
+               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
+               	movq	$-0x5551e47c, %rcx      # imm = 0xAAAE1B84
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %ecx
@@ -239,14 +239,14 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	movl	%ecx, %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
-               	movq	$-0x7e90cd4b, %rax      # imm = 0x816F32B5
-               	movq	$-0x2e6ed3c1, %rcx      # imm = 0xD1912C3F
-               	movq	$-0x35c94364, %rdx      # imm = 0xCA36BC9C
-               	movq	$-0x5a9811d2, %rsi      # imm = 0xA567EE2E
                	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
+               	movq	$-0x5a9811d2, %rax      # imm = 0xA567EE2E
+               	vmovd	%eax, %xmm1
+               	movq	$-0x35c94364, %rax      # imm = 0xCA36BC9C
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movq	$-0x2e6ed3c1, %rax      # imm = 0xD1912C3F
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
+               	movq	$-0x7e90cd4b, %rax      # imm = 0x816F32B5
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -267,14 +267,14 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
+               	xorl	%eax, %eax
+               	movl	$0x11b31b64, %ecx       # imm = 0x11B31B64
+               	vmovd	%ecx, %xmm1
+               	movq	$-0x60da7e8a, %rax      # imm = 0x9F258176
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x464e48ab, %eax       # imm = 0x464E48AB
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movq	$-0x10007c93, %rax      # imm = 0xEFFF836D
-               	movl	$0x464e48ab, %ecx       # imm = 0x464E48AB
-               	movq	$-0x60da7e8a, %rdx      # imm = 0x9F258176
-               	movl	$0x11b31b64, %esi       # imm = 0x11B31B64
-               	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -296,14 +296,14 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
+               	xorl	%eax, %eax
+               	movl	$0x5d913a37, %ecx       # imm = 0x5D913A37
+               	vmovd	%ecx, %xmm1
+               	movl	$0x2dea0e03, %eax       # imm = 0x2DEA0E03
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0xa4a0700, %eax        # imm = 0xA4A0700
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x1927c1b5, %eax       # imm = 0x1927C1B5
-               	movl	$0xa4a0700, %ecx        # imm = 0xA4A0700
-               	movl	$0x2dea0e03, %edx       # imm = 0x2DEA0E03
-               	movl	$0x5d913a37, %esi       # imm = 0x5D913A37
-               	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -325,14 +325,14 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
+               	xorl	%eax, %eax
+               	movq	$-0xd3c8514, %rcx       # imm = 0xF2C37AEC
+               	vmovd	%ecx, %xmm1
+               	movq	$-0x12291c8b, %rax      # imm = 0xEDD6E375
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x23493796, %eax       # imm = 0x23493796
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x2347af9e, %eax       # imm = 0x2347AF9E
-               	movl	$0x23493796, %ecx       # imm = 0x23493796
-               	movq	$-0x12291c8b, %rdx      # imm = 0xEDD6E375
-               	movq	$-0xd3c8514, %rsi       # imm = 0xF2C37AEC
-               	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -354,14 +354,14 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
                	callq	<addr>
+               	xorl	%eax, %eax
+               	movq	$-0x4b8c903c, %rcx      # imm = 0xB4736FC4
+               	vmovd	%ecx, %xmm1
+               	movl	$0x6112f53b, %eax       # imm = 0x6112F53B
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movq	$-0x5f3257f2, %rax      # imm = 0xA0CDA80E
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0xf2332cf, %eax        # imm = 0xF2332CF
-               	movq	$-0x5f3257f2, %rcx      # imm = 0xA0CDA80E
-               	movl	$0x6112f53b, %edx       # imm = 0x6112F53B
-               	movq	$-0x4b8c903c, %rsi      # imm = 0xB4736FC4
-               	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -499,13 +499,13 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
                	movl	%eax, %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	movq	$-0x2d41f027, %rax      # imm = 0xD2BE0FD9
+               	vmovd	%eax, %xmm1
+               	movl	$0x3ab9d7d7, %eax       # imm = 0x3AB9D7D7
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x1bf59c86, %eax       # imm = 0x1BF59C86
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x712bdf61, %eax       # imm = 0x712BDF61
-               	movl	$0x1bf59c86, %ecx       # imm = 0x1BF59C86
-               	movl	$0x3ab9d7d7, %edx       # imm = 0x3AB9D7D7
-               	movq	$-0x2d41f027, %rsi      # imm = 0xD2BE0FD9
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -591,14 +591,14 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	movl	%eax, %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	xorl	%eax, %eax
+               	movl	$0x5775367d, %ecx       # imm = 0x5775367D
+               	vmovd	%ecx, %xmm1
+               	movq	$-0x5d0977e1, %rax      # imm = 0xA2F6881F
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movq	$-0x10207080, %rax      # imm = 0xEFDF8F80
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movq	$-0x2df2afb9, %rax      # imm = 0xD20D5047
-               	movq	$-0x10207080, %rcx      # imm = 0xEFDF8F80
-               	movq	$-0x5d0977e1, %rdx      # imm = 0xA2F6881F
-               	movl	$0x5775367d, %esi       # imm = 0x5775367D
-               	xorl	%edi, %edi
-               	vmovd	%esi, %xmm1
-               	vpinsrd	$0x1, %edx, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
@@ -685,13 +685,13 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	movl	%edi, %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	movq	$-0xab221f1, %rax       # imm = 0xF54DDE0F
+               	vmovd	%eax, %xmm1
+               	movq	$-0x17800a5f, %rax      # imm = 0xE87FF5A1
+               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
+               	movl	$0x2b6121c1, %eax       # imm = 0x2B6121C1
+               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x1209722c, %eax       # imm = 0x1209722C
-               	movl	$0x2b6121c1, %ecx       # imm = 0x2B6121C1
-               	movq	$-0x17800a5f, %rsi      # imm = 0xE87FF5A1
-               	movq	$-0xab221f1, %rdi       # imm = 0xF54DDE0F
-               	vmovd	%edi, %xmm1
-               	vpinsrd	$0x1, %esi, %xmm1, %xmm1
-               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax

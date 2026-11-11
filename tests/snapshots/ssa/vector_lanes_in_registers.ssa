@@ -184,26 +184,28 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(8)                                           -> x0
+    v6   Imm(0)                                           -> x0
     v7   Imm(8)                                           -> x0
-    v8   Imm(0)                                           -> x0
+    v8   Imm(8)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  VecInsert { vec=v0, value=v2, off=8, kind=I32, bytes=16 } -> d0
-    v11  Imm(0)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  VecInsert { vec=v0, value=v2, off=8, kind=I32, bytes=16 } -> d0
     v12  Imm(0)                                           -> x0
-    v13  LocalAddr(-7)                                    -> x0
-    v14  ImmData(8)                                       -> x1
-    v15  Mcpy { dst=v13, src=v14, size=16, align=8 }      -> -
-    v16  LocalAddr(-7)                                    -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  ImmData(8)                                       -> x0
+    v16  Load { addr=v15, disp=0, kind=V128 }             -> d1
     v17  Imm(0)                                           -> x0
-    v18  LoadLocal { off=-7, kind=V128 }                  -> d1
-    v19  VecBinop { op=Xor, lane=I32, bytes=16, lhs=v10, rhs=v18 } -> d0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
-    v21  Imm(0)                                           -> x0
-    v22  LifetimeEnd(0)                                   -> -
+    v21  VecBinop { op=Xor, lane=I32, bytes=16, lhs=v11, rhs=v16 } -> d0
+    v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
-    v24  AggParts { desc=0, parts=[v19], fp_mask=0x1 }    -> -
-    terminator Return(v24)
+    v24  LifetimeEnd(0)                                   -> -
+    v25  Imm(0)                                           -> x0
+    v26  AggParts { desc=0, parts=[v21], fp_mask=0x1 }    -> -
+    terminator Return(v26)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=get_i
 fn ent_pc=7 n_params=1 variadic=false locals=0

@@ -79,18 +79,11 @@ Disassembly of section .text:
                	retq
 
 <put_i>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	vpinsrd	$0x2, %edi, %xmm0, %xmm0
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	-0x10(%rbp), %xmm1
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm1
                	pxor	%xmm1, %xmm0
-               	leave
                	retq
 
 <get_i>:

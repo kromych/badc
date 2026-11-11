@@ -554,12 +554,9 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2
                	cbnz	w0, <addr>
-               	sub	x0, x29, #0x80
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldur	q0, [x29, #-0x80]
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	ldr	q0, [x0]
                	frsqrte	v0.2d, v0.2d
                	mov	d0, v0.d[0]
                	stur	d0, [x29, #-0x30]

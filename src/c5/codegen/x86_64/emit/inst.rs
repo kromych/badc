@@ -333,6 +333,7 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
         }
+        Inst::Imm(_) if alloc.imm_held.get(v as usize).copied().unwrap_or(false) => Ok(()),
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");

@@ -7892,7 +7892,6 @@ Disassembly of section .text:
                	movq	%rax, <rip> # <addr>
                	movq	%rax, <rip> # <addr>
                	movq	%rax, <rip> # <addr>
-               	movabsq	$-0x340d631b7bdddcdb, %rax # imm = 0xCBF29CE484222325
                	movq	%rax, <rip> # <addr>
                	movq	%rax, <rip> # <addr>
                	movq	%rax, <rip> # <addr>

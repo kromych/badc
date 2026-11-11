@@ -152,6 +152,9 @@ pub(crate) struct Allocation {
     /// one, which its `csinc` forms; that increment, read by nothing else,
     /// is never materialized.
     pub select_inc: Vec<bool>,
+    /// Per value: an `Imm` whose register already holds its constant
+    /// ([`imm_already_held`]), which emits nothing.
+    pub imm_held: Vec<bool>,
     /// True for a store, or an x86-64 locked read-modify-write, that takes
     /// its operand, an `Imm`, from its own encoding ([`store_immediate`]).
     /// Every reader of that `Imm` is such an instruction, so its use count
@@ -818,6 +821,69 @@ fn asm_rw_apart(
     }
 }
 
+/// Per value: an `Imm` placed in the register an earlier `Imm` of the same
+/// constant in its block was placed in, with only instructions between
+/// whose lowering writes no register but its result's, none of them that
+/// one: the register still holds the constant.
+fn imm_already_held(
+    func: &FunctionSsa,
+    places: &[Place],
+    use_counts: &[u32],
+    target: Target,
+) -> Vec<bool> {
+    let mut held = vec![false; func.insts.len()];
+    let place = |v: usize| places.get(v).copied().unwrap_or(Place::None);
+    for block in &func.blocks {
+        // The registers known to hold a constant, with it.
+        let mut known: Vec<(u8, i64)> = Vec::new();
+        for v in block.inst_range.clone().map(|v| v as usize) {
+            let inst = &func.insts[v];
+            if use_counts.get(v).copied().unwrap_or(0) == 0 && inst.is_pure() {
+                continue;
+            }
+            if let (&Inst::Imm(k), Place::IntReg(r)) = (inst, place(v)) {
+                held[v] = known.contains(&(r, k));
+                known.retain(|e| e.0 != r);
+                known.push((r, k));
+                continue;
+            }
+            let quiet = matches!(
+                inst,
+                Inst::ImmData(_)
+                    | Inst::ImmCode(_)
+                    | Inst::LocalAddr(_)
+                    | Inst::Load { .. }
+                    | Inst::LoadLocal { .. }
+                    | Inst::LoadIndexed { .. }
+                    | Inst::Store { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::StoreIndexed { .. }
+                    | Inst::Binop { .. }
+                    | Inst::BinopI { .. }
+                    | Inst::Extend { .. }
+                    | Inst::Copy { .. }
+                    | Inst::Neg(_)
+                    | Inst::Select { .. }
+            ) || inst.is_lifetime_marker();
+            if !quiet {
+                known.clear();
+                continue;
+            }
+            let implicit = if target.is_x86_64() {
+                x86_implicit_writes(inst)
+            } else {
+                0
+            };
+            let written = match place(v) {
+                Place::IntReg(r) => Some(r),
+                _ => None,
+            };
+            known.retain(|&(r, _)| Some(r) != written && u64::from(implicit) >> r & 1 == 0);
+        }
+    }
+    held
+}
+
 /// The immediate an x86-64 locked operation on `width` bytes encodes for
 /// the `Imm` `value`: its low bytes, sign-extended from 32 bits at 8.
 pub(crate) fn atomic_immediate(func: &FunctionSsa, value: ValueId, width: u8) -> Option<i32> {
@@ -1438,6 +1504,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             branch_fused: Vec::new(),
             mask_tests: Vec::new(),
             select_inc: Vec::new(),
+            imm_held: Vec::new(),
             imm_store: Vec::new(),
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),
@@ -2209,6 +2276,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     );
 
     let asm_preserve = asm_preserve_masks(func, target, region_base);
+    let imm_held = imm_already_held(func, &places, &use_counts, target);
     Allocation {
         places,
         spill_count,
@@ -2222,6 +2290,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         branch_fused,
         mask_tests,
         select_inc,
+        imm_held,
         imm_store,
         stack_imm,
         stack_load,

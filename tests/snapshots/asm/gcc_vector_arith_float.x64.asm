@@ -386,7 +386,6 @@ Disassembly of section .text:
                	movss	%xmm1, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rcx
                	movss	0x2c(%rsp), %xmm1
-               	movl	$0x40200000, %eax       # imm = 0x40200000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm1
                	movss	%xmm1, -0x4(%rbp)
@@ -430,7 +429,6 @@ Disassembly of section .text:
                	movss	%xmm1, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rcx
                	movss	0x2c(%rsp), %xmm1
-               	movl	$0x40400000, %eax       # imm = 0x40400000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm1
                	movss	%xmm1, -0x4(%rbp)

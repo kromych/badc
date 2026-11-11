@@ -4295,6 +4295,18 @@ void xorb(unsigned char *p) { __atomic_fetch_xor(p, 0x81, __ATOMIC_SEQ_CST); }\n
     m.finish();
 }
 
+/// A constant whose register still holds it from an earlier definition of
+/// the same constant in the block is not set again: `return a` after
+/// `*p = 200` reads the 200 the store took from x0.
+#[test]
+fn a64_constant_its_register_holds_is_not_set_again() {
+    const SRC: &str = "int f(void) { int a; int *p; a = 100; p = &a; *p = 200; return a; }\n";
+    let ws = a64(SRC, "f");
+    // `movz xd, #200`.
+    let set_200 = |w: u32| w & 0xFFFF_FFE0 == 0xD280_1900;
+    assert_eq!(ws.iter().filter(|&&w| set_200(w)).count(), 1, "{ws:08x?}");
+}
+
 /// x86-64 negates with `neg`, never the three-operand `imul` by -1.
 #[test]
 fn x64_negation_takes_neg() {

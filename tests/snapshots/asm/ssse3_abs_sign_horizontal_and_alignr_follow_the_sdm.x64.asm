@@ -363,7 +363,6 @@ Disassembly of section .text:
                	movq	%rcx, %r13
                	orq	%rax, %r13
                	movl	$0x4, %edx
-               	xorl	%ecx, %ecx
                	leaq	-0x20(%rbp), %r9
                	movq	%rbx, %rdi
                	movq	%rcx, %r8

@@ -608,6 +608,7 @@ mod tests {
             branch_fused: alloc::vec![false; n],
             mask_tests: alloc::vec![false; n],
             select_inc: alloc::vec![false; n],
+            imm_held: alloc::vec![false; n],
             imm_store: alloc::vec![false; n],
             stack_imm: alloc::collections::BTreeMap::new(),
             stack_load: alloc::collections::BTreeMap::new(),

@@ -130,7 +130,6 @@ Disassembly of section .text:
                	mov	x1, #0x80000000         // =2147483648
                	str	w1, [x0, #0x78]
                	ldr	w0, [x0, #0x78]
-               	mov	x1, #0x80000000         // =2147483648
                	cmp	w0, w1
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

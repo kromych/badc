@@ -15,7 +15,7 @@ pub(crate) const A64_BASE: u32 = 1 << 16;
 /// The row an op id names.
 pub(crate) fn get(op: u32) -> &'static SimdOp {
     match op.checked_sub(A64_BASE) {
-        Some(i) => &super::aarch64_simd::OPS[i as usize],
+        Some(i) => super::aarch64_simd::get(i as usize),
         None => &super::x86_simd::OPS[op as usize],
     }
 }
@@ -45,7 +45,7 @@ pub(crate) fn find(
 ) -> Option<u32> {
     let fits = |o: &SimdOp| o.sem == sem && o.form == form && o.bytes == bytes;
     if target.is_aarch64() {
-        let i = super::aarch64_simd::OPS.iter().position(fits)?;
+        let i = super::aarch64_simd::rows().position(fits)?;
         return Some(i as u32 + A64_BASE);
     }
     if !target.is_x86_64() {
@@ -158,6 +158,17 @@ pub(crate) enum Ret {
 }
 
 impl Ret {
+    /// Width in bytes of a vector result; 0 for a scalar or void one.
+    pub(crate) fn bytes(self) -> u8 {
+        match self {
+            Ret::V8qi | Ret::V4hi | Ret::V2si | Ret::V1di | Ret::V2sf | Ret::V1df => 8,
+            Ret::V32qi | Ret::V16hi | Ret::V8si | Ret::V4di | Ret::V8sf | Ret::V4df => 32,
+            Ret::V64qi | Ret::V32hi | Ret::V16si | Ret::V8di => 64,
+            Ret::Int | Ret::Int64 | Ret::Void => 0,
+            _ => 16,
+        }
+    }
+
     /// Width in bytes of a vector result's lanes; 0 for a scalar or void one.
     pub(crate) fn lane_bytes(self) -> u8 {
         match self.lane_ty() {
@@ -378,6 +389,44 @@ pub(crate) enum Sem {
     /// The accumulator plus, or minus when `true`, the product of the other
     /// two operands, rounded once (`fmla`, `fmls`).
     FloatFma(u8, bool),
+    /// Lanes of the source width, signed when the first flag is set, taken
+    /// from the low half of their 16 bytes or from the high half when the
+    /// second is: `op` of each pair into a lane twice as wide (`saddl`,
+    /// `umull2`).
+    Long(LongOp, u8, bool, bool),
+    /// The first operand's lanes, twice the source width, with `op` of the
+    /// second's narrow lanes (`saddw`, `usubw2`).
+    Wide(LongOp, u8, bool, bool),
+    /// The accumulator's wide lanes plus `op` of the narrow lanes of the
+    /// other two operands (`smlal`, `uabal2`); `op` is `Mul`, `MulSub` or
+    /// `AbsDiff`.
+    LongAcc(LongOp, u8, bool, bool),
+    /// Each lane of the source width into a lane half as wide, in the low 8
+    /// bytes of the result (`xtn`, `sqxtn`, `uqxtn`, `sqxtun`).
+    Narrow(u8, NarrowKind),
+}
+
+/// The operation of a widening form: on the narrow lanes, its result as
+/// wide as their double.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum LongOp {
+    Add,
+    Sub,
+    Mul,
+    /// The product subtracted from the accumulator (`smlsl`).
+    MulSub,
+    AbsDiff,
+}
+
+/// How a narrowing form fits a lane into half its width: the low bits, or
+/// saturated to the signed or the unsigned range, from a signed or (`Uns`)
+/// unsigned lane.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum NarrowKind {
+    Trunc,
+    SatSigned,
+    SatUns,
+    SatSignedToUns,
 }
 
 impl Sem {
@@ -565,22 +614,43 @@ impl Form {
 
 impl SimdOp {
     /// Width in bytes of vector source `i`, counted from 0 without the
-    /// destination: `bytes`, or `int_width` for a part.
+    /// destination: `bytes`, `int_width` for a part, or the wide first
+    /// operand of a form that adds narrow lanes to it or accumulates
+    /// into it.
     pub(crate) fn arg_bytes(&self, i: usize) -> u8 {
-        match self.form {
-            Form::Widen if i == 1 => self.int_width,
-            Form::Zext => self.int_width,
+        match (self.form, self.sem) {
+            (Form::Widen, _) if i == 1 => self.int_width,
+            (Form::Zext, _) => self.int_width,
+            (_, Sem::Wide(..) | Sem::LongAcc(..)) if i == 0 => 16,
             _ => self.bytes,
         }
     }
 
     /// Width in bytes of a vector result.
     pub(crate) fn ret_bytes(&self) -> u8 {
-        if self.form == Form::Narrow {
-            self.int_width
-        } else {
-            self.bytes
+        match self.ret.bytes() {
+            0 if self.form == Form::Narrow => self.int_width,
+            0 => self.bytes,
+            n => n,
         }
+    }
+
+    /// The lane width and the register width, in bytes, of operand `i`,
+    /// the destination 0 and the sources from 1, as an instruction names
+    /// its arrangements.
+    pub(crate) fn arrangement(&self, i: usize) -> (u8, u8) {
+        let lane = self.ret.lane_bytes();
+        if i == 0 {
+            return (lane, self.ret_bytes());
+        }
+        let src = match self.sem {
+            Sem::Long(_, w, ..) => w,
+            Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
+            Sem::Narrow(w, _) => w,
+            Sem::Extend(from, ..) => from,
+            _ => lane,
+        };
+        (src, self.arg_bytes(i - 1))
     }
 }
 
@@ -803,11 +873,26 @@ pub(crate) fn eval64(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) 
 
 /// A form that accumulates into its first operand: `acc` combined with
 /// the lane-wise result of `a` and `b` ([`Sem::MulAcc`], [`Sem::MulSub`],
-/// [`Sem::AbsDiffAcc`], [`Sem::BitSelect`]); `None` for another semantics.
+/// [`Sem::AbsDiffAcc`], [`Sem::BitSelect`], [`Sem::LongAcc`]); `None` for
+/// another semantics.
 pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> Option<[u8; 16]> {
     let (w, part) = match sem {
         Sem::MulAcc(w) | Sem::MulSub(w) => (w, eval(Sem::MulLo(w), a, b, 0, 0)),
         Sem::AbsDiffAcc(w, signed) => (w, eval(Sem::AbsDiff(w, signed), a, b, 0, 0)),
+        Sem::LongAcc(op, w, signed, high) => {
+            let part_op = if op == LongOp::MulSub {
+                LongOp::Mul
+            } else {
+                op
+            };
+            let part = eval(Sem::Long(part_op, w, signed, high), a, b, 0, 0);
+            let combine = if op == LongOp::MulSub {
+                Sem::Sub(2 * w)
+            } else {
+                Sem::Add(2 * w)
+            };
+            return Some(eval(combine, acc, &part, 0, 0));
+        }
         Sem::BitSelect => {
             let mut o = [0u8; 16];
             for i in 0..16 {
@@ -1160,6 +1245,47 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 o[i] = a[i].count_ones() as u8;
             }
         }
+        Sem::Long(op, w, signed, high) | Sem::Wide(op, w, signed, high) => {
+            let base = if high { 8 / w as usize } else { 0 };
+            let get = |v: &[u8; 16], i: usize| match signed {
+                true => i128::from(slane(v, w, i)),
+                false => i128::from(lane(v, w, i)),
+            };
+            for i in 0..8 / w as usize {
+                let x = match sem {
+                    Sem::Wide(..) if signed => i128::from(slane(a, 2 * w, i)),
+                    Sem::Wide(..) => i128::from(lane(a, 2 * w, i)),
+                    _ => get(a, base + i),
+                };
+                let y = get(b, base + i);
+                let r = match op {
+                    LongOp::Add => x + y,
+                    LongOp::Sub => x - y,
+                    LongOp::Mul | LongOp::MulSub => x * y,
+                    LongOp::AbsDiff => (x - y).abs(),
+                };
+                set_lane(&mut o, 2 * w, i, r as u64 & mask(2 * w));
+            }
+        }
+        Sem::Narrow(w, kind) => {
+            let h = w / 2;
+            let bits = 8 * u32::from(h);
+            for i in 0..16 / w as usize {
+                let (s, u) = (i128::from(slane(a, w, i)), i128::from(lane(a, w, i)));
+                let (smin, smax, umax) = (
+                    -(1i128 << (bits - 1)),
+                    (1i128 << (bits - 1)) - 1,
+                    (1i128 << bits) - 1,
+                );
+                let r = match kind {
+                    NarrowKind::Trunc => u,
+                    NarrowKind::SatSigned => s.clamp(smin, smax),
+                    NarrowKind::SatUns => u.min(umax),
+                    NarrowKind::SatSignedToUns => s.clamp(0, umax),
+                };
+                set_lane(&mut o, h, i, r as u64 & mask(h));
+            }
+        }
         Sem::FAbs(w) | Sem::FNeg(w) => {
             let sign = 1u64 << (8 * u32::from(w) - 1);
             for i in 0..16 / w as usize {
@@ -1261,7 +1387,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect => {}
-        Sem::FloatRel(..) | Sem::FloatFma(..) => {}
+        Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
         | Sem::Perm2x128

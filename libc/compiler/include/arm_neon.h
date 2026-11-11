@@ -20,7 +20,7 @@
  * vand vorr veor vbic vorn vmvn vtst vcnt vclz vcls, vceq vcge vcgt vcle
  * vclt, vshl/vrshl/vqshl by register, vshl_n vqshl_n vshr_n vrshr_n vsra_n
  * vrsra_n vsli_n vsri_n vshrn_n vrshrn_n, vmovl vmovn vqmovn vqmovun vaddl
- * vsubl vaddw vsubw vmull vmlal vmlsl with their _high forms, vaddv vaddlv
+ * vsubl vaddw vsubw vmull vmlal vmlsl vabdl vabal with their _high forms, vaddv vaddlv
  * vmaxv vminv. Floating: vadd vsub vmul vdiv vmax vmin vabs vneg vsqrt vfma
  * vfms vrecpe vrecps vrsqrte vrsqrts, the compares, and the conversions to
  * and from the integers of one width (truncating) and between single and
@@ -30,7 +30,7 @@
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
  * the doubling multiplies, the saturating narrowing shifts, vqshlu_n,
- * vshll_n, vabdl, vabal, vpadal, compares against zero, the other structure
+ * vshll_n, vpadal, compares against zero, the other structure
  * loads, stores and table lookups, the floating pairwise, across-lane,
  * absolute-difference, rounding and maxnum forms, the fixed-point and
  * rounding-mode conversions and the dot products.
@@ -139,9 +139,11 @@ typedef struct uint8x16x4_t {
     static inline R name(T __a) {                                         \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a);     \
     }
-/* The accumulator __a is the first operand and the result. */
-#define __BADC_NEON_B3(name, R, k, si, ui, A)                             \
-    static inline R name(R __a, R __b, R __c) {                           \
+/* The accumulator __a is the first operand and the result; B3T's other
+ * operands are of types T and U. */
+#define __BADC_NEON_B3(name, R, k, si, ui, A) __BADC_NEON_B3T(name, R, R, R, k, si, ui, A)
+#define __BADC_NEON_B3T(name, R, T, U, k, si, ui, A)                      \
+    static inline R name(R __a, T __b, U __c) {                           \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b, __c); \
     }
 
@@ -477,24 +479,19 @@ __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, "sqshl", "uqshl")
 
 /* Widening and narrowing. The _high forms read the upper half of a 128-bit
  * source, or place a narrowed result above the 64-bit first operand. */
+/* A row is named by its narrow arrangement, or by the wide source one when
+ * it narrows; the _high form's stem ends in 2. */
 #define __BADC_NEON_F_LONG(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
-    __BADC_NEON_FN2(op##_##n, WQ, ND, ND,                                 \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), WAQ, NA, NA)) \
-    __BADC_NEON_FN2(op##_high_##n, WQ, NQ, NQ,                            \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si "2", ui "2"), WAQ, NAQ, NAQ))
+    __BADC_NEON_B2(op##_##n, WQ, ND, ND, k, si, ui, NA)                   \
+    __BADC_NEON_B2(op##_high_##n, WQ, NQ, NQ, k, si##2, ui##2, NAQ)
 #define __BADC_NEON_F_LONGACC(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
-    __BADC_NEON_FN3(op##_##n, WQ, ND, ND,                                 \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), WAQ, NA, NA)) \
-    __BADC_NEON_FN3(op##_high_##n, WQ, NQ, NQ,                            \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si "2", ui "2"), WAQ, NAQ, NAQ))
+    __BADC_NEON_B3T(op##_##n, WQ, ND, ND, k, si, ui, NA)                  \
+    __BADC_NEON_B3T(op##_high_##n, WQ, NQ, NQ, k, si##2, ui##2, NAQ)
 #define __BADC_NEON_F_WIDEN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
-    __BADC_NEON_FN2(op##_##n, WQ, WQ, ND,                                 \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), WAQ, WAQ, NA)) \
-    __BADC_NEON_FN2(op##_high_##n, WQ, WQ, NQ,                            \
-                    __BADC_NEON_I3(__BADC_NEON_PICK(k, si "2", ui "2"), WAQ, WAQ, NAQ))
+    __BADC_NEON_B2(op##_##n, WQ, WQ, ND, k, si, ui, NA)                   \
+    __BADC_NEON_B2(op##_high_##n, WQ, WQ, NQ, k, si##2, ui##2, NAQ)
 #define __BADC_NEON_F_MOVL(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
-    __BADC_NEON_FN1(vmovl_##n, WQ, ND,                                    \
-                    __BADC_NEON_I2(__BADC_NEON_PICK(k, "sxtl", "uxtl"), WAQ, NA)) \
+    __BADC_NEON_B1(vmovl_##n, WQ, ND, k, __builtin_neon_sxtl, __builtin_neon_uxtl, NA) \
     __BADC_NEON_FN1(vmovl_high_##n, WQ, NQ,                               \
                     __BADC_NEON_I2(__BADC_NEON_PICK(k, "sxtl2", "uxtl2"), WAQ, NAQ)) \
     __BADC_NEON_FN1(vpaddl_##n, WD, ND,                                   \
@@ -502,25 +499,27 @@ __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, "sqshl", "uqshl")
     __BADC_NEON_FN1(vpaddlq_##n, WQ, NQ,                                  \
                     __BADC_NEON_I2(__BADC_NEON_PICK(k, "saddlp", "uaddlp"), WAQ, NAQ))
 #define __BADC_NEON_F_MOVN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
-    __BADC_NEON_FN1(op##_##w, ND, WQ, __BADC_NEON_I2(__BADC_NEON_PICK(k, si, ui), NA, WAQ)) \
+    __BADC_NEON_B1(op##_##w, ND, WQ, k, si, ui, WAQ)                      \
     static inline NQ op##_high_##w(ND __r, WQ __a) {                      \
         return (NQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)op##_##w(__a)); \
     }
 #define __BADC_NEON_F_QMOVUN(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
-    __BADC_NEON_FN1(vqmovun_##w, UND, WQ, __BADC_NEON_I2("sqxtun", NA, WAQ)) \
+    __BADC_NEON_B1(vqmovun_##w, UND, WQ, s, __builtin_neon_sqxtun, __builtin_neon_sqxtun, WAQ) \
     static inline UNQ vqmovun_high_##w(UND __r, WQ __a) {                 \
         return (UNQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)vqmovun_##w(__a)); \
     }
-__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vaddl, "saddl", "uaddl")
-__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vsubl, "ssubl", "usubl")
-__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vmull, "smull", "umull")
-__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlal, "smlal", "umlal")
-__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlsl, "smlsl", "umlsl")
-__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vaddw, "saddw", "uaddw")
-__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vsubw, "ssubw", "usubw")
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vaddl, __builtin_neon_saddl, __builtin_neon_uaddl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vsubl, __builtin_neon_ssubl, __builtin_neon_usubl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vmull, __builtin_neon_smull, __builtin_neon_umull)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONG, vabdl, __builtin_neon_sabdl, __builtin_neon_uabdl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlal, __builtin_neon_smlal, __builtin_neon_umlal)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vmlsl, __builtin_neon_smlsl, __builtin_neon_umlsl)
+__BADC_NEON_WIDE(__BADC_NEON_F_LONGACC, vabal, __builtin_neon_sabal, __builtin_neon_uabal)
+__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vaddw, __builtin_neon_saddw, __builtin_neon_uaddw)
+__BADC_NEON_WIDE(__BADC_NEON_F_WIDEN, vsubw, __builtin_neon_ssubw, __builtin_neon_usubw)
 __BADC_NEON_WIDE(__BADC_NEON_F_MOVL, _)
-__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, "xtn", "xtn")
-__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, "sqxtn", "uqxtn")
+__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vmovn, __builtin_neon_xtn, __builtin_neon_xtn)
+__BADC_NEON_WIDE(__BADC_NEON_F_MOVN, vqmovn, __builtin_neon_sqxtn, __builtin_neon_uqxtn)
 __BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
 
 /* Across lanes, into the scalar view `view` of the result. A 2-lane

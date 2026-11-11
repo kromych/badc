@@ -4023,13 +4023,17 @@ fn run_x86_simd(
         return run_x86_simd_wide(mem, frame, row, imm, args);
     }
     let reg = |i: usize| frame.regs[args[i] as usize] as usize;
-    // An MMX form reads and writes the low `row.bytes` of each image.
+    // An MMX form reads and writes the low `row.bytes` of each image; a
+    // widening or narrowing one its operands' and its result's widths.
     let n = usize::from(row.bytes);
-    let read = |mem: &Memory, addr: usize| -> Result<[u8; 16], C5Error> {
+    let read_n = |mem: &Memory, addr: usize, n: usize| -> Result<[u8; 16], C5Error> {
         let mut v = [0u8; 16];
         v[..n].copy_from_slice(mem.read_bytes(addr, n)?);
         Ok(v)
     };
+    let read = |mem: &Memory, addr: usize| read_n(mem, addr, n);
+    let arg = |mem: &Memory, k: usize| read_n(mem, reg(k + 1), usize::from(row.arg_bytes(k)));
+    let ret_n = usize::from(row.ret_bytes()).max(1);
     // The destination plus the sources, less what the node carries as an
     // immediate: the folded `imm8` and a constant shift count.
     let want = if row.form == Form::Store {
@@ -4048,7 +4052,7 @@ fn run_x86_simd(
     let imm8 = imm.unwrap_or(0);
     match row.form {
         Form::Vvv if row.bytes <= 16 => {
-            let (acc, a, b) = (read(mem, reg(1))?, read(mem, reg(2))?, read(mem, reg(3))?);
+            let (acc, a, b) = (arg(mem, 0)?, arg(mem, 1)?, arg(mem, 2)?);
             let out = simd::eval_float_acc(&mut mem.fp, row.sem, (&acc, &a, &b), n)
                 .or_else(|| simd::eval_acc(row.sem, &acc, &a, &b));
             let Some(out) = out else {
@@ -4057,7 +4061,7 @@ fn run_x86_simd(
                     row.name
                 )));
             };
-            mem.write_bytes(reg(0), &out[..n])?;
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::Vvv
         | Form::VvvI
@@ -4074,22 +4078,22 @@ fn run_x86_simd(
             )));
         }
         Form::Vv | Form::VvI => {
-            let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
+            let (a, b) = (arg(mem, 0)?, arg(mem, 1)?);
             let out =
                 simd::eval_float_in(&mut mem.fp, row.sem, &a, &b, imm8, n).unwrap_or_else(|| {
-                    if n == 8 {
+                    if n == 8 && ret_n == 8 {
                         simd::eval64(row.sem, &a, &b, imm8, 0)
                     } else {
                         simd::eval(row.sem, &a, &b, imm8, 0)
                     }
                 });
-            mem.write_bytes(reg(0), &out[..n])?;
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::V | Form::VI => {
-            let a = read(mem, reg(1))?;
+            let a = arg(mem, 0)?;
             let out = simd::eval_float_in(&mut mem.fp, row.sem, &a, &[0u8; 16], imm8, n)
                 .unwrap_or_else(|| simd::eval(row.sem, &a, &[0u8; 16], imm8, 0));
-            mem.write_bytes(reg(0), &out[..n])?;
+            mem.write_bytes(reg(0), &out[..ret_n])?;
         }
         Form::Shift => {
             let a = read(mem, reg(1))?;

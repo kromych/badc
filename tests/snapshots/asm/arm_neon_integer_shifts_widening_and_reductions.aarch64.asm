@@ -5228,459 +5228,243 @@ Disassembly of section .text:
                	ret
 
 <w_vmlal_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlal	v0.8h, v1.8b, v2.8b
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal	v16.8h, v0.8b, v1.8b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlal2	v0.8h, v1.16b, v2.16b
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal2	v16.8h, v0.16b, v1.16b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlal	v0.8h, v1.8b, v2.8b
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal	v16.8h, v0.8b, v1.8b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlal2	v0.8h, v1.16b, v2.16b
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal2	v16.8h, v0.16b, v1.16b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlal	v0.4s, v1.4h, v2.4h
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal	v16.4s, v0.4h, v1.4h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlal2	v0.4s, v1.8h, v2.8h
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal2	v16.4s, v0.8h, v1.8h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlal	v0.4s, v1.4h, v2.4h
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal	v16.4s, v0.4h, v1.4h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlal2	v0.4s, v1.8h, v2.8h
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal2	v16.4s, v0.8h, v1.8h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlal	v0.2d, v1.2s, v2.2s
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal	v16.2d, v0.2s, v1.2s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlal2	v0.2d, v1.4s, v2.4s
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlal2	v16.2d, v0.4s, v1.4s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlal	v0.2d, v1.2s, v2.2s
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal	v16.2d, v0.2s, v1.2s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlal_high_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlal2	v0.2d, v1.4s, v2.4s
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlal2	v16.2d, v0.4s, v1.4s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlsl	v0.8h, v1.8b, v2.8b
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl	v16.8h, v0.8b, v1.8b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlsl2	v0.8h, v1.16b, v2.16b
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl2	v16.8h, v0.16b, v1.16b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlsl	v0.8h, v1.8b, v2.8b
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl	v16.8h, v0.8b, v1.8b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlsl2	v0.8h, v1.16b, v2.16b
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl2	v16.8h, v0.16b, v1.16b
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlsl	v0.4s, v1.4h, v2.4h
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl	v16.4s, v0.4h, v1.4h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlsl2	v0.4s, v1.8h, v2.8h
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl2	v16.4s, v0.8h, v1.8h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlsl	v0.4s, v1.4h, v2.4h
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl	v16.4s, v0.4h, v1.4h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlsl2	v0.4s, v1.8h, v2.8h
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl2	v16.4s, v0.8h, v1.8h
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	smlsl	v0.2d, v1.2s, v2.2s
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl	v16.2d, v0.2s, v1.2s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	smlsl2	v0.2d, v1.4s, v2.4s
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	smlsl2	v16.2d, v0.4s, v1.4s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	d1, [x1]
-               	ldr	d2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	d1, [sp, #0x10]
-               	str	d2, [sp, #0x18]
-               	ldr	q0, [sp]
-               	ldr	d1, [sp, #0x10]
-               	ldr	d2, [sp, #0x18]
-               	umlsl	v0.2d, v1.2s, v2.2s
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl	v16.2d, v0.2s, v1.2s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmlsl_high_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q0, [x3]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	str	q2, [sp, #0x20]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ldr	q2, [sp, #0x20]
-               	umlsl2	v0.2d, v1.4s, v2.4s
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	ldr	q2, [x3]
+               	mov	v16.16b, v2.16b
+               	umlsl2	v16.2d, v0.4s, v1.4s
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vaddw_s8>:

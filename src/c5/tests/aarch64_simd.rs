@@ -209,3 +209,17 @@ fn the_interpreter_runs_the_floating_rows() {
         "the failing check's number"
     );
 }
+
+/// The widening and narrowing intrinsics on every element type, checked
+/// against the operation computed on the wide type: the fixture runs
+/// natively on the AArch64 lanes, and here under the interpreter.
+#[test]
+fn the_interpreter_runs_the_widening_intrinsics() {
+    let src = super::load_fixture("arm_neon_widening_and_narrowing_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "a failing element type sets its bit in the exit code"
+    );
+}

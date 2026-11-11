@@ -23,18 +23,26 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 }
 
 /// The instruction a row names over v registers `regs`, destination first,
-/// with a shift's count.
+/// each in its operand's arrangement, with a shift's count. An
+/// accumulating form names its accumulator once, as the destination.
 fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::string::String> {
     use super::table::{self, Opnd};
-    let size = row.ret.lane_bytes().trailing_zeros() as u8;
-    let q = row.bytes == 16;
-    // One 64-bit lane is the scalar form on the D view.
-    let scalar = size == 3 && !q;
+    let skip = usize::from(row.form == Form::Vvv);
     let mut ops: Vec<Opnd> = regs
         .iter()
-        .map(|&num| match scalar {
-            true => Opnd::VReg { num, is_d: true },
-            false => Opnd::VecReg { num, size, q },
+        .enumerate()
+        .map(|(k, &num)| {
+            let (lane, bytes) = row.arrangement(if k == 0 { 0 } else { k + skip });
+            let size = lane.trailing_zeros() as u8;
+            // One 64-bit lane is the scalar form on the D view.
+            match (size, bytes) {
+                (3, 8) => Opnd::VReg { num, is_d: true },
+                _ => Opnd::VecReg {
+                    num,
+                    size,
+                    q: bytes == 16,
+                },
+            }
         })
         .collect();
     ops.extend(imm.map(|n| Opnd::Imm(i64::from(n))));
@@ -76,7 +84,7 @@ pub(super) fn emit_a64_simd(
     if args.len() < n + 1 {
         return fail(alloc::format!("{}: expects {n} operands", row.name));
     }
-    let transfer = |code: &mut Vec<u8>, addr: ValueId, v: u8, load: bool| -> Emit {
+    let transfer = |code: &mut Vec<u8>, addr: ValueId, v: u8, (bytes, load): (u8, bool)| -> Emit {
         let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
             return fail(alloc::format!(
                 "{}: operand address not int reg / spill",
@@ -85,7 +93,7 @@ pub(super) fn emit_a64_simd(
         };
         emit(
             code,
-            match (row.bytes, load) {
+            match (bytes, load) {
                 (16, true) => enc_ldr_q_imm(v, rn, 0),
                 (16, false) => enc_str_q_imm(v, rn, 0),
                 (_, true) => enc_ldr_d_imm(v, rn, 0),
@@ -96,7 +104,7 @@ pub(super) fn emit_a64_simd(
     };
     let regs = &frame.fp_scratch[..n];
     for (k, &v) in regs.iter().enumerate() {
-        transfer(code, args[k + 1], v, true)?;
+        transfer(code, args[k + 1], v, (row.arg_bytes(k), true))?;
     }
     // An accumulating form writes its first source; the others write a
     // destination of their own, the first scratch.
@@ -110,7 +118,7 @@ pub(super) fn emit_a64_simd(
         Ok(word) => emit(code, word),
         Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
     }
-    transfer(code, args[0], frame.fp_scratch[0], false)
+    transfer(code, args[0], frame.fp_scratch[0], (row.ret_bytes(), false))
 }
 
 /// `Inst::SimdVal`: the instruction on the operands' v registers, the
@@ -146,7 +154,7 @@ pub(super) fn emit_a64_simd_val(
     let mut regs = [0u8; 3];
     for k in 0..n {
         let tmp = frame.fp_scratch[k];
-        let reg = if row.bytes == 16 {
+        let reg = if row.arg_bytes(k) == 16 {
             materialize_v128(code, place_of(alloc, args[k]), tmp, frame, scratch.primary)
         } else {
             materialize_fp(code, place_of(alloc, args[k]), tmp, frame)
@@ -177,7 +185,7 @@ pub(super) fn emit_a64_simd_val(
     if acc != vd {
         emit(code, enc_mov_v16b(vd, acc));
     }
-    if row.bytes == 16 {
+    if row.ret_bytes() == 16 {
         propagate_v128(code, frame, dst, vd, scratch.primary);
     } else {
         store_spilled_fp(code, frame, dst, vd);

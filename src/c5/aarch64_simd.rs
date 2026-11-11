@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{FOp, Form, Ret, Sem, SimdOp};
+use super::simd::{FOp, Form, LongOp, NarrowKind, Ret, Sem, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -169,6 +169,41 @@ macro_rules! arr {
     };
 }
 
+/// A widening row, named by its narrow arrangement: `Sem::$s` of `LongOp::$op`
+/// over source lanes of `$w` bytes, signed when `$sg`, from the high half
+/// when `$h`, into `$ret`.
+macro_rules! long {
+    ($m:literal, $f:ident, $s:ident, ($op:ident, $sg:expr), $arr:literal, $ret:ident, $w:expr, $b:expr, $h:expr) => {
+        row(
+            concat!("__builtin_neon_", $m, "_", $arr),
+            $m,
+            Form::$f,
+            Ret::$ret,
+            Sem::$s(LongOp::$op, $w, $sg, $h),
+            $b,
+        )
+    };
+}
+
+/// The widening and narrowing rows of a family, over each source width:
+/// `low` reads the low halves, `high` (the `2` instruction) the high ones,
+/// and `narrow` names the wide source.
+macro_rules! widening {
+    ($($m:literal $f:ident $s:ident $a:tt : $part:ident;)*) => {
+        &[$(widening!(@ $part, $m, $f, $s, $a)),*]
+    };
+    (@ low, $m:literal, $f:ident, $s:ident, $a:tt) => {
+        [long!($m, $f, $s, $a, "8b", V8hi, 1, 8, false),
+         long!($m, $f, $s, $a, "4h", V4si, 2, 8, false),
+         long!($m, $f, $s, $a, "2s", V2di, 4, 8, false)]
+    };
+    (@ high, $m:literal, $f:ident, $s:ident, $a:tt) => {
+        [long!($m, $f, $s, $a, "16b", V8hi, 1, 16, true),
+         long!($m, $f, $s, $a, "8h", V4si, 2, 16, true),
+         long!($m, $f, $s, $a, "4s", V2di, 4, 16, true)]
+    };
+}
+
 /// The rows of each family, one per arrangement it lists: `d1` is the
 /// scalar form over one 64-bit lane in a D register, and `f2s` .. `f2d`
 /// the floating arrangements, `fd` the scalar double. `-` marks a
@@ -250,8 +285,106 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "fmls" Vvv FloatFma (true): f2s f4s f2d;
 };
 
+/// The widening forms, three source widths each.
+#[rustfmt::skip]
+const LONG: &[[SimdOp; 3]] = widening! {
+    "saddl" Vv Long (Add, true): low;
+    "uaddl" Vv Long (Add, false): low;
+    "ssubl" Vv Long (Sub, true): low;
+    "usubl" Vv Long (Sub, false): low;
+    "smull" Vv Long (Mul, true): low;
+    "umull" Vv Long (Mul, false): low;
+    "saddl2" Vv Long (Add, true): high;
+    "uaddl2" Vv Long (Add, false): high;
+    "ssubl2" Vv Long (Sub, true): high;
+    "usubl2" Vv Long (Sub, false): high;
+    "smull2" Vv Long (Mul, true): high;
+    "umull2" Vv Long (Mul, false): high;
+    "saddw" Vv Wide (Add, true): low;
+    "uaddw" Vv Wide (Add, false): low;
+    "ssubw" Vv Wide (Sub, true): low;
+    "usubw" Vv Wide (Sub, false): low;
+    "saddw2" Vv Wide (Add, true): high;
+    "uaddw2" Vv Wide (Add, false): high;
+    "ssubw2" Vv Wide (Sub, true): high;
+    "usubw2" Vv Wide (Sub, false): high;
+    "smlal" Vvv LongAcc (Mul, true): low;
+    "umlal" Vvv LongAcc (Mul, false): low;
+    "smlsl" Vvv LongAcc (MulSub, true): low;
+    "umlsl" Vvv LongAcc (MulSub, false): low;
+    "sabdl" Vv Long (AbsDiff, true): low;
+    "uabdl" Vv Long (AbsDiff, false): low;
+    "sabdl2" Vv Long (AbsDiff, true): high;
+    "uabdl2" Vv Long (AbsDiff, false): high;
+    "sabal" Vvv LongAcc (AbsDiff, true): low;
+    "uabal" Vvv LongAcc (AbsDiff, false): low;
+    "sabal2" Vvv LongAcc (AbsDiff, true): high;
+    "uabal2" Vvv LongAcc (AbsDiff, false): high;
+    "smlal2" Vvv LongAcc (Mul, true): high;
+    "umlal2" Vvv LongAcc (Mul, false): high;
+    "smlsl2" Vvv LongAcc (MulSub, true): high;
+    "umlsl2" Vvv LongAcc (MulSub, false): high;
+};
+
+/// A narrowing row, named by its wide source arrangement.
+const fn narrow(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    w: u8,
+    kind: NarrowKind,
+) -> SimdOp {
+    row(name, mnem, Form::V, ret, Sem::Narrow(w, kind), 16)
+}
+
+/// A lengthening move, named by its narrow source arrangement.
+const fn extend(name: &'static str, mnem: &'static str, ret: Ret, w: u8, signed: bool) -> SimdOp {
+    row(name, mnem, Form::V, ret, Sem::Extend(w, 2 * w, signed), 8)
+}
+
+#[rustfmt::skip]
+const NARROW: &[SimdOp] = &[
+    narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
+    narrow("__builtin_neon_xtn_4s", "xtn", Ret::V4hi, 4, NarrowKind::Trunc),
+    narrow("__builtin_neon_xtn_2d", "xtn", Ret::V2si, 8, NarrowKind::Trunc),
+    narrow("__builtin_neon_sqxtn_8h", "sqxtn", Ret::V8qi, 2, NarrowKind::SatSigned),
+    narrow("__builtin_neon_sqxtn_4s", "sqxtn", Ret::V4hi, 4, NarrowKind::SatSigned),
+    narrow("__builtin_neon_sqxtn_2d", "sqxtn", Ret::V2si, 8, NarrowKind::SatSigned),
+    narrow("__builtin_neon_uqxtn_8h", "uqxtn", Ret::V8qi, 2, NarrowKind::SatUns),
+    narrow("__builtin_neon_uqxtn_4s", "uqxtn", Ret::V4hi, 4, NarrowKind::SatUns),
+    narrow("__builtin_neon_uqxtn_2d", "uqxtn", Ret::V2si, 8, NarrowKind::SatUns),
+    narrow("__builtin_neon_sqxtun_8h", "sqxtun", Ret::V8qi, 2, NarrowKind::SatSignedToUns),
+    narrow("__builtin_neon_sqxtun_4s", "sqxtun", Ret::V4hi, 4, NarrowKind::SatSignedToUns),
+    narrow("__builtin_neon_sqxtun_2d", "sqxtun", Ret::V2si, 8, NarrowKind::SatSignedToUns),
+    extend("__builtin_neon_sxtl_8b", "sxtl", Ret::V8hi, 1, true),
+    extend("__builtin_neon_sxtl_4h", "sxtl", Ret::V4si, 2, true),
+    extend("__builtin_neon_sxtl_2s", "sxtl", Ret::V2di, 4, true),
+    extend("__builtin_neon_uxtl_8b", "uxtl", Ret::V8hi, 1, false),
+    extend("__builtin_neon_uxtl_4h", "uxtl", Ret::V4si, 2, false),
+    extend("__builtin_neon_uxtl_2s", "uxtl", Ret::V2di, 4, false),
+];
+
+/// The row at index `i` of the rows [`OPS`], then the widening and the
+/// narrowing ones, numbered in that order.
+pub(crate) fn get(i: usize) -> &'static SimdOp {
+    let long = LONG.len() * 3;
+    if i < OPS.len() {
+        &OPS[i]
+    } else if i < OPS.len() + long {
+        let k = i - OPS.len();
+        &LONG[k / 3][k % 3]
+    } else {
+        &NARROW[i - OPS.len() - long]
+    }
+}
+
+/// Every AArch64 row, in [`get`]'s numbering.
+pub(crate) fn rows() -> impl Iterator<Item = &'static SimdOp> {
+    OPS.iter().chain(LONG.iter().flatten()).chain(NARROW)
+}
+
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD
 /// builtin.
 pub(crate) fn lookup(name: &str) -> Option<u32> {
-    OPS.iter().position(|o| o.name == name).map(|i| i as u32)
+    rows().position(|o| o.name == name).map(|i| i as u32)
 }

@@ -2012,6 +2012,10 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             "umlal" => Some((0x0E20_8000, 1)),
             "smlsl" => Some((0x0E20_A000, 0)),
             "umlsl" => Some((0x0E20_A000, 1)),
+            "sabal" => Some((0x0E20_5000, 0)),
+            "uabal" => Some((0x0E20_5000, 1)),
+            "sabdl" => Some((0x0E20_7000, 0)),
+            "uabdl" => Some((0x0E20_7000, 1)),
             _ => None,
         }
         && let [

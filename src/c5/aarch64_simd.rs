@@ -275,6 +275,8 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "uqshl" Vv ShlReg (false, false, true): b8 b16 h4 h8 s2 s4 d1 d2;
     "sshr" Shift Sar (): b8 b16 h4 h8 s2 s4 d1 d2;
     "ushr" Shift Shr (): b8 b16 h4 h8 s2 s4 d1 d2;
+    "srshr" Shift ShrRound (true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "urshr" Shift ShrRound (false): b8 b16 h4 h8 s2 s4 d1 d2;
     "fadd" Vv Float [Add]: f2s f4s fd f2d;
     "fsub" Vv Float [Sub]: f2s f4s fd f2d;
     "fmul" Vv Float [Mul]: f2s f4s fd f2d;
@@ -438,6 +440,85 @@ const fn unary(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem, bytes
     row(name, mnem, Form::V, ret, sem, bytes)
 }
 
+/// The rows of a shift by an immediate whose register-count form takes the
+/// instruction's name: `__builtin_neon_<m>_n_<arrangement>`.
+macro_rules! shift_n {
+    ($m:literal, $s:ident, $sg:expr) => {
+        [
+            row(
+                concat!("__builtin_neon_", $m, "_n_8b"),
+                $m,
+                Form::Shift,
+                Ret::V8qi,
+                Sem::$s(1, $sg),
+                8,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_16b"),
+                $m,
+                Form::Shift,
+                Ret::V16qi,
+                Sem::$s(1, $sg),
+                16,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_4h"),
+                $m,
+                Form::Shift,
+                Ret::V4hi,
+                Sem::$s(2, $sg),
+                8,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_8h"),
+                $m,
+                Form::Shift,
+                Ret::V8hi,
+                Sem::$s(2, $sg),
+                16,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_2s"),
+                $m,
+                Form::Shift,
+                Ret::V2si,
+                Sem::$s(4, $sg),
+                8,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_4s"),
+                $m,
+                Form::Shift,
+                Ret::V4si,
+                Sem::$s(4, $sg),
+                16,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_d"),
+                $m,
+                Form::Shift,
+                Ret::V1di,
+                Sem::$s(8, $sg),
+                8,
+            ),
+            row(
+                concat!("__builtin_neon_", $m, "_n_2d"),
+                $m,
+                Form::Shift,
+                Ret::V2di,
+                Sem::$s(8, $sg),
+                16,
+            ),
+        ]
+    };
+}
+
+#[rustfmt::skip]
+const SHIFT_N: &[[SimdOp; 8]] = &[
+    shift_n!("sqshl", ShlSat, true),
+    shift_n!("uqshl", ShlSat, false),
+];
+
 /// `dup` from lane `imm` of a `src`-byte vector into every lane of `ret`.
 const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
     row(name, "dup", Form::VI, ret, Sem::DupLane(w), src)
@@ -445,6 +526,12 @@ const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
 
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
+    row("__builtin_neon_shrn_8h", "shrn", Form::Shift, Ret::V8qi, Sem::ShrNarrow(2, false), 16),
+    row("__builtin_neon_shrn_4s", "shrn", Form::Shift, Ret::V4hi, Sem::ShrNarrow(4, false), 16),
+    row("__builtin_neon_shrn_2d", "shrn", Form::Shift, Ret::V2si, Sem::ShrNarrow(8, false), 16),
+    row("__builtin_neon_rshrn_8h", "rshrn", Form::Shift, Ret::V8qi, Sem::ShrNarrow(2, true), 16),
+    row("__builtin_neon_rshrn_4s", "rshrn", Form::Shift, Ret::V4hi, Sem::ShrNarrow(4, true), 16),
+    row("__builtin_neon_rshrn_2d", "rshrn", Form::Shift, Ret::V2si, Sem::ShrNarrow(8, true), 16),
     row("__builtin_neon_tbl_8b", "tbl", Form::Vv, Ret::V8qi, Sem::Tbl(8), 8),
     row("__builtin_neon_tbl_16b", "tbl", Form::Vv, Ret::V16qi, Sem::Tbl(16), 16),
     row("__builtin_neon_tbx_8b", "tbx", Form::Vvv, Ret::V8qi, Sem::Tbx(8), 8),
@@ -613,12 +700,13 @@ const PERMS: &[[SimdOp; 7]] = &[
 ];
 
 /// The row at index `i` of the rows [`OPS`], then the widening, the
-/// narrowing and other single, the reduction and the permutation ones,
-/// numbered in that order.
+/// narrowing and other single, the reduction, the permutation and the
+/// immediate-shift ones, numbered in that order.
 pub(crate) fn get(i: usize) -> &'static SimdOp {
     let long = LONG.len() * 3;
     let narrow = long + NARROW.len();
     let across = narrow + ACROSS.len() * 5;
+    let perms = across + PERMS.len() * 7;
     if i < OPS.len() {
         &OPS[i]
     } else if i < OPS.len() + long {
@@ -629,9 +717,12 @@ pub(crate) fn get(i: usize) -> &'static SimdOp {
     } else if i < OPS.len() + across {
         let k = i - OPS.len() - narrow;
         &ACROSS[k / 5][k % 5]
-    } else {
+    } else if i < OPS.len() + perms {
         let k = i - OPS.len() - across;
         &PERMS[k / 7][k % 7]
+    } else {
+        let k = i - OPS.len() - perms;
+        &SHIFT_N[k / 8][k % 8]
     }
 }
 
@@ -642,6 +733,7 @@ pub(crate) fn rows() -> impl Iterator<Item = &'static SimdOp> {
         .chain(NARROW)
         .chain(ACROSS.iter().flatten())
         .chain(PERMS.iter().flatten())
+        .chain(SHIFT_N.iter().flatten())
 }
 
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD

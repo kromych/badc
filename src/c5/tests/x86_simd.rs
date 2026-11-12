@@ -1828,7 +1828,10 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Ext(..)
         | Sem::DupLane(..)
         | Sem::Tbl(..)
-        | Sem::Tbx(..) => false,
+        | Sem::Tbx(..)
+        | Sem::ShrRound(..)
+        | Sem::ShlSat(..)
+        | Sem::ShrNarrow(..) => false,
     };
     /// Counts the operations a row asks of the environment.
     struct Counting(u32);

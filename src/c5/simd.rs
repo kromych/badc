@@ -430,6 +430,15 @@ pub(crate) enum Sem {
     /// The source's lane of the width the immediate names, in every lane
     /// of the result (`dup` from an element).
     DupLane(u8),
+    /// A right shift by the immediate, rounding, signed when `true`
+    /// (`srshr`, `urshr`).
+    ShrRound(u8, bool),
+    /// A left shift by the immediate saturating to the lane, signed when
+    /// `true` (`sqshl`, `uqshl` by an immediate).
+    ShlSat(u8, bool),
+    /// A right shift by the immediate of lanes of the width into lanes half
+    /// as wide, rounding when `true` (`shrn`, `rshrn`).
+    ShrNarrow(u8, bool),
     /// The bytes of a 16-byte table the second operand's bytes index, zero
     /// for an index past it, over results of the width (`tbl`).
     Tbl(u8),
@@ -709,7 +718,7 @@ impl SimdOp {
         let src = match self.sem {
             Sem::Long(_, w, ..) | Sem::Across(_, w, ..) | Sem::PairAddLong(w, _) => w,
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
-            Sem::Narrow(w, _) => w,
+            Sem::Narrow(w, _) | Sem::ShrNarrow(w, _) => w,
             Sem::Extend(from, ..) => from,
             Sem::Convert(Cvt::SingleToDouble) => 4,
             Sem::Convert(Cvt::DoubleToSingle) => 8,
@@ -735,6 +744,15 @@ fn set_lane(v: &mut [u8; 16], width: u8, i: usize, x: u64) {
     for k in 0..width as usize {
         v[off + k] = (x >> (8 * k)) as u8;
     }
+}
+
+/// Every lane of the width holding `x`.
+fn splat(width: u8, x: i64) -> [u8; 16] {
+    let mut o = [0u8; 16];
+    for i in 0..16 / width as usize {
+        set_lane(&mut o, width, i, x as u64 & mask(width));
+    }
+    o
 }
 
 fn mask(width: u8) -> u64 {
@@ -1394,6 +1412,22 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     false => (lane(a, w, 2 * i) as i128, lane(a, w, 2 * i + 1) as i128),
                 };
                 set_lane(&mut o, 2 * w, i, (x + y) as u64 & mask(2 * w));
+            }
+        }
+        // The shift forms carry their count in `count`.
+        Sem::ShrRound(w, signed) => {
+            let n = count.min(64) as i64;
+            o = eval(Sem::ShlReg(w, signed, true, false), a, &splat(w, -n), 0, 0);
+        }
+        Sem::ShlSat(w, signed) => {
+            let n = count.min(64) as i64;
+            o = eval(Sem::ShlReg(w, signed, false, true), a, &splat(w, n), 0, 0);
+        }
+        Sem::ShrNarrow(w, round) => {
+            let n = count.min(64) as i64;
+            let wide = eval(Sem::ShlReg(w, false, round, false), a, &splat(w, -n), 0, 0);
+            for i in 0..16 / w as usize {
+                set_lane(&mut o, w / 2, i, lane(&wide, w, i) & mask(w / 2));
             }
         }
         Sem::Tbl(bytes) => {

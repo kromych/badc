@@ -62,6 +62,10 @@ fn the_permutes_emit_their_instruction() {
         uint16x4_t dup(uint16x8_t a) { return vdup_laneq_u16(a, 6); }\n\
         uint8x16_t tbl(uint8x16_t t, uint8x16_t i) { return vqtbl1q_u8(t, i); }\n\
         uint8x8_t tbx(uint8x8_t d, uint8x16_t t, uint8x8_t i) { return vqtbx1_u8(d, t, i); }\n\
+        int8x16_t qshl(int8x16_t a) { return vqshlq_n_s8(a, 3); }\n\
+        uint16x8_t rshr(uint16x8_t a) { return vrshrq_n_u16(a, 16); }\n\
+        int8x8_t shrn(int16x8_t a) { return vshrn_n_s16(a, 3); }\n\
+        uint16x4_t rshrn(uint32x4_t a) { return vrshrn_n_u32(a, 16); }\n\
         int main(void) { return 0; }";
     let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
         .compile()
@@ -85,6 +89,10 @@ fn the_permutes_emit_their_instruction() {
         (0x0e1a_0400, "dup v0.4h, v0.h[6]"),
         (0x4e01_0000, "tbl v0.16b, {v0.16b}, v1.16b"),
         (0x0e02_1020, "tbx v0.8b, {v1.16b}, v2.8b"),
+        (0x4f0b_7400, "sqshl v0.16b, v0.16b, #3"),
+        (0x6f10_2400, "urshr v0.8h, v0.8h, #16"),
+        (0x0f0d_8400, "shrn v0.8b, v0.8h, #3"),
+        (0x0f10_8c00, "rshrn v0.4h, v0.4s, #16"),
     ] {
         let needle = word.to_le_bytes();
         assert!(
@@ -347,6 +355,20 @@ fn the_interpreter_runs_the_permutes() {
         super::Vm::new(program).run().expect("interpreted run"),
         0,
         "a failing type sets its bit in the exit code"
+    );
+}
+
+/// The saturating, rounding and narrowing shifts by an immediate, checked
+/// against the operations computed lane by lane: natively on the AArch64
+/// lanes, and here under the interpreter.
+#[test]
+fn the_interpreter_runs_the_immediate_shifts() {
+    let src = super::load_fixture("arm_neon_immediate_shifts.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "a failing group sets its bit in the exit code"
     );
 }
 

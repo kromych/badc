@@ -289,6 +289,11 @@ pub(crate) enum Sem {
     AesDecLast,
     AesImc,
     AesKeygen,
+    /// AArch64's `aese` (`false`) and `aesd`: the state xor the round key,
+    /// then ShiftRows and SubBytes or their inverses.
+    AesRound(bool),
+    /// AArch64's `aesmc`: MixColumns.
+    AesMix,
     /// Data movement: the form carries the direction.
     Move,
     /// Hardware random number generator.
@@ -1610,6 +1615,14 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             o = xor16(&s, b);
         }
         Sem::AesImc => o = mix_columns(a, INV_MIX),
+        Sem::AesRound(decrypt) => {
+            let x = xor16(a, b);
+            o = match decrypt {
+                false => sub_bytes(&shift_rows(&x)),
+                true => inv_sub_bytes(&inv_shift_rows(&x)),
+            };
+        }
+        Sem::AesMix => o = mix_columns(a, MIX),
         Sem::AesKeygen => {
             let x1 = lane(a, 4, 1) as u32;
             let x3 = lane(a, 4, 3) as u32;

@@ -25,10 +25,14 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 }
 
 /// Whether the instruction computes in the register of the row's first
-/// source: the three-operand forms and the accumulating and inserting
-/// shifts by an immediate.
+/// source: the three-operand forms, the accumulating and inserting shifts
+/// by an immediate, and the AES rounds.
 fn accumulates(row: &SimdOp) -> bool {
-    row.form == Form::Vvv || matches!(row.sem, simd::Sem::ShrAcc(..) | simd::Sem::ShiftInsert(..))
+    row.form == Form::Vvv
+        || matches!(
+            row.sem,
+            simd::Sem::ShrAcc(..) | simd::Sem::ShiftInsert(..) | simd::Sem::AesRound(_)
+        )
 }
 
 /// The instruction a row names over v registers `regs`, destination first,

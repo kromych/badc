@@ -1022,29 +1022,16 @@ __BADC_NEON_TBL(p8, poly8x8, poly8x16)
 /* AES single rounds (FEAT_AES): AddRoundKey + SubBytes + ShiftRows (aese /
  * aesd) and the [inverse] MixColumns (aesmc / aesimc). */
 __BADC_INTRIN uint8x16_t vaeseq_u8(uint8x16_t __d, uint8x16_t __k) {
-    __asm__(".arch_extension aes\n\t"
-            "aese %0.16b, %1.16b" : "+w"(__d) : "w"(__k));
-    return __d;
+    return (uint8x16_t)__builtin_neon_aese_16b(__d, __k);
 }
-
 __BADC_INTRIN uint8x16_t vaesdq_u8(uint8x16_t __d, uint8x16_t __k) {
-    __asm__(".arch_extension aes\n\t"
-            "aesd %0.16b, %1.16b" : "+w"(__d) : "w"(__k));
-    return __d;
+    return (uint8x16_t)__builtin_neon_aesd_16b(__d, __k);
 }
-
 __BADC_INTRIN uint8x16_t vaesmcq_u8(uint8x16_t __d) {
-    uint8x16_t __r;
-    __asm__(".arch_extension aes\n\t"
-            "aesmc %0.16b, %1.16b" : "=w"(__r) : "w"(__d));
-    return __r;
+    return (uint8x16_t)__builtin_neon_aesmc_16b(__d);
 }
-
 __BADC_INTRIN uint8x16_t vaesimcq_u8(uint8x16_t __d) {
-    uint8x16_t __r;
-    __asm__(".arch_extension aes\n\t"
-            "aesimc %0.16b, %1.16b" : "=w"(__r) : "w"(__d));
-    return __r;
+    return (uint8x16_t)__builtin_neon_aesimc_16b(__d);
 }
 
 /* 64x64->128 carryless multiply (FEAT_PMULL). The scalar operands move to

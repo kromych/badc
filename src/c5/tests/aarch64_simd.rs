@@ -543,6 +543,41 @@ fn the_lane_conversions_saturate_as_the_instructions_do() {
     assert_eq!(words, [0x4EA1_B800, 0xD65F_03C0], "f: {words:08x?}");
 }
 
+/// The AES rounds are rows: `aese` / `aesd` xor the round key and apply
+/// [inverse] ShiftRows and SubBytes, `aesmc` / `aesimc` [inverse]
+/// MixColumns. The interpreter's checksum of a round each way is the one
+/// AArch64 hardware and clang compute (148); under -O each is one
+/// instruction, the round on its state's register.
+#[cfg(feature = "full")]
+#[test]
+fn the_aes_rounds_are_rows() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        uint8x16_t enc(uint8x16_t s, uint8x16_t k) { return vaesmcq_u8(vaeseq_u8(s, k)); }\n\
+        uint8x16_t dec(uint8x16_t s, uint8x16_t k) { return vaesimcq_u8(vaesdq_u8(s, k)); }\n\
+        int main(void) {\n\
+            volatile unsigned char seed = 0x3b;\n\
+            uint8x16_t s, k;\n\
+            for (int i = 0; i < 16; i++) {\n\
+                s[i] = (unsigned char)(seed * (i + 1));\n\
+                k[i] = (unsigned char)(seed ^ (i * 17));\n\
+            }\n\
+            uint8x16_t e = enc(s, k), d = dec(e, k);\n\
+            unsigned sum = 0;\n\
+            for (int i = 0; i < 16; i++) sum = sum * 31 + e[i] + 7 * d[i];\n\
+            return (int)(sum % 251);\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("enc", &[0x4E28_4820u32, 0x4E28_6800, RET][..]),
+        ("dec", &[0x4E28_5820, 0x4E28_7800, RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 148);
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

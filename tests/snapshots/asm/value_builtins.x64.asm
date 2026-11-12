@@ -68,14 +68,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, -0x20(%rbp)
                	movsd	%xmm0, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rcx
+               	movq	%xmm0, %rcx
                	movabsq	$0x7ff8000000000000, %r11 # imm = 0x7FF8000000000000
                	cmpq	%r11, %rcx
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movq	%rax, -0x20(%rbp)
                	movsd	%xmm0, -0x20(%rbp)
-               	movq	-0x20(%rbp), %rcx
+               	movq	%xmm0, %rcx
                	movabsq	$0x7ff8000000000010, %r11 # imm = 0x7FF8000000000010
                	cmpq	%r11, %rcx
                	je	<addr>

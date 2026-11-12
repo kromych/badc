@@ -544,10 +544,10 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
         Inst::FpCast { kind, value } => f(
             *value,
             match kind {
-                FpCastKind::FpToInt | FpCastKind::UFpToInt => true,
+                FpCastKind::FpToInt | FpCastKind::UFpToInt | FpCastKind::FpBits => true,
                 FpCastKind::F32ToF64 => single(*value),
                 FpCastKind::F64ToF32 => !single(*value),
-                FpCastKind::IntToFp | FpCastKind::UIntToFp => false,
+                FpCastKind::IntToFp | FpCastKind::UIntToFp | FpCastKind::BitsFp => false,
             },
         ),
         Inst::Store {
@@ -3930,11 +3930,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
-            FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
+            FpCastKind::FpToInt | FpCastKind::UFpToInt | FpCastKind::FpBits => ResultKind::Int,
             FpCastKind::IntToFp
             | FpCastKind::UIntToFp
             | FpCastKind::F32ToF64
-            | FpCastKind::F64ToF32 => ResultKind::Fp,
+            | FpCastKind::F64ToF32
+            | FpCastKind::BitsFp => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),

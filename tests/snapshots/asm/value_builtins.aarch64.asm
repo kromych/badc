@@ -66,7 +66,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x20]
                	stur	d0, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x20]
+               	fmov	x1, d0
                	mov	x17, #0x7ff8000000000000 // =9221120237041090560
                	cmp	x1, x17
                	b.ne	<addr>
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	ldr	d0, [x1, #0x28]
                	stur	x0, [x29, #-0x20]
                	stur	d0, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x20]
+               	fmov	x1, d0
                	mov	x17, #0x10              // =16
                	movk	x17, #0x7ff8, lsl #48
                	cmp	x1, x17

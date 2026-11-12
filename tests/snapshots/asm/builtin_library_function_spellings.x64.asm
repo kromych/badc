@@ -172,7 +172,7 @@ Disassembly of section .text:
                	andq	%r11, %rcx
                	orq	%rcx, %rax
                	movq	%rax, -0x30(%rbp)
-               	movsd	-0x30(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

@@ -20,8 +20,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     v14  BinopI { op=and, lhs=v13, rhs_imm=-9223372036854775808 } -> x2
     v15  Binop { op=or, lhs=v11, rhs=v14 }                -> x1
     v16  StoreLocal { off=-2, value=v15, kind=I64 }       -> -
-    v17  Imm(0)                                           -> x1
-    v18  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v17  Imm(0)                                           -> x2
+    v18  FpCast { kind=BitsFp, value=v15 }                -> d0
     v19  LifetimeEnd(-1)                                  -> -
     v20  LifetimeEnd(-2)                                  -> -
     v21  Imm(4613937818241073152)                         -> x1
@@ -48,8 +48,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     v38  BinopI { op=and, lhs=v37, rhs_imm=-9223372036854775808 } -> x6
     v39  Binop { op=or, lhs=v35, rhs=v38 }                -> x1
     v40  StoreLocal { off=-2, value=v39, kind=I64 }       -> -
-    v41  Imm(0)                                           -> x1
-    v42  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v41  Imm(0)                                           -> x6
+    v42  FpCast { kind=BitsFp, value=v39 }                -> d0
     v43  LifetimeEnd(-1)                                  -> -
     v44  LifetimeEnd(-2)                                  -> -
     v45  Imm(4613937818241073152)                         -> x1
@@ -77,8 +77,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     v63  BinopI { op=and, lhs=v62, rhs_imm=-9223372036854775808 } -> x1
     v64  Binop { op=or, lhs=v60, rhs=v63 }                -> x0
     v65  StoreLocal { off=-2, value=v64, kind=I64 }       -> -
-    v66  Imm(0)                                           -> x0
-    v67  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v66  Imm(0)                                           -> x1
+    v67  FpCast { kind=BitsFp, value=v64 }                -> d0
     v68  LifetimeEnd(-1)                                  -> -
     v69  LifetimeEnd(-2)                                  -> -
     v70  FpCast { kind=F64ToF32, value=v67 }              -> d0 [f32]

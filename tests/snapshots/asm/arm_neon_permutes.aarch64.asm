@@ -1647,35 +1647,29 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	zip1	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x10]
-               	zip2	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x8]
-               	ldur	x2, [x29, #-0x10]
-               	ldur	x3, [x29, #-0x8]
+               	zip2	v3.4h, v0.4h, v1.4h
+               	stur	d3, [x29, #-0x8]
                	sub	x1, x29, #0x90
-               	stur	x2, [x29, #-0x90]
-               	stur	x3, [x29, #-0x88]
+               	stur	d2, [x29, #-0x90]
+               	stur	d3, [x29, #-0x88]
                	stur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
                	uzp1	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x10]
-               	uzp2	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x8]
-               	ldur	x3, [x29, #-0x10]
-               	ldur	x4, [x29, #-0x8]
+               	uzp2	v3.4h, v0.4h, v1.4h
+               	stur	d3, [x29, #-0x8]
                	sub	x2, x29, #0x80
-               	stur	x3, [x29, #-0x80]
-               	stur	x4, [x29, #-0x78]
+               	stur	d2, [x29, #-0x80]
+               	stur	d3, [x29, #-0x78]
                	stur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x8]
                	trn1	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x10]
-               	trn2	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x8]
-               	ldur	x4, [x29, #-0x10]
-               	ldur	x5, [x29, #-0x8]
+               	trn2	v3.4h, v0.4h, v1.4h
+               	stur	d3, [x29, #-0x8]
                	sub	x3, x29, #0x70
-               	stur	x4, [x29, #-0x70]
-               	stur	x5, [x29, #-0x68]
+               	stur	d2, [x29, #-0x70]
+               	stur	d3, [x29, #-0x68]
                	sub	x5, x29, #0x60
                	stp	xzr, xzr, [x5]
                	stp	xzr, xzr, [x5, #0x10]

@@ -1419,6 +1419,7 @@ fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Optio
     Some(match kind {
         FpCastKind::F32ToF64 if src_f32 && !dst_f32 => double(real()?),
         FpCastKind::F64ToF32 if !src_f32 && dst_f32 => float(real()? as f32),
+        FpCastKind::FpBits | FpCastKind::BitsFp if !src_f32 && !dst_f32 => k,
         FpCastKind::IntToFp if !src_f32 && dst_f32 => float(k as f32),
         FpCastKind::IntToFp if !src_f32 => double(k as f64),
         FpCastKind::UIntToFp if !src_f32 && dst_f32 => float(k as u64 as f32),

@@ -1437,6 +1437,28 @@ fn emit_fp_cast(
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }
+        FpCastKind::FpBits => {
+            let Some(dn) = materialize_fp(code, src_place, frame.fp_scratch[0], frame) else {
+                return fail("FpCast FpBits: value not fp reg / spill");
+            };
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("FpCast FpBits: dst not int reg / spill");
+            };
+            emit(code, super::encode::enc_fmov_d_to_x(rd, dn));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
+        FpCastKind::BitsFp => {
+            let Some(rn) = materialize_int(code, src_place, scratch.primary, frame) else {
+                return fail("FpCast BitsFp: value not int reg / spill");
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return fail("FpCast BitsFp: dst not fp reg / spill");
+            };
+            emit(code, super::encode::enc_fmov_x_to_d(dd, rn));
+            store_spilled_fp(code, frame, dst, dd);
+            Ok(())
+        }
         FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => {
             let widen = matches!(kind, FpCastKind::F32ToF64);
             let dn = if widen {

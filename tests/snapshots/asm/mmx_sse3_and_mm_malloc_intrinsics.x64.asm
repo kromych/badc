@@ -154,10 +154,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	jne	<addr>
                	movq	$0x0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	vmovq	%xmm0, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
                	movl	$0xf, -0x8(%rbp)
                	movl	$0xf, -0x4(%rbp)
                	movsd	-0x8(%rbp), %xmm0

@@ -66,11 +66,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rcx
                	movq	%rcx, -0x38(%rbp)
-               	movsd	-0x38(%rbp), %xmm0
+               	movq	%rcx, %xmm0
                	movq	%rsi, %xmm15
                	addsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x30(%rbp)
-               	movq	-0x30(%rbp), %rdi
+               	movq	%xmm0, %rdi
                	movq	%rcx, %rax
                	lock
                	cmpxchgq	%rdi, (%rdx)
@@ -314,7 +314,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movq	%rax, -0x48(%rbp)
-               	movsd	-0x48(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	movabsq	$0x40d3880000000000, %rax # imm = 0x40D3880000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

@@ -37,10 +37,13 @@
 //!   - A signed sub-width load (`I8`/`I16`/`I32`) of a same-width store
 //!     becomes `Extend { value=s, kind }`; `narrow_store` writes the low
 //!     bytes and the load sign-extends them, which `Extend` reproduces.
-//!   - Unsigned sub-width loads and the scalar floating kinds are not
-//!     forwarded: `Inst::Extend` does not zero-extend the unsigned widths
-//!     (it assumes a clean upper half), so reusing the stored value there
-//!     would be unsound.
+//!   - An `F64` load of an `F64` store from a floating register reuses the
+//!     stored value; an `F64` load of an 8-byte integer store, or an `I64`
+//!     load of such an `F64` store, becomes the bit-for-bit `FpCast`
+//!     (`BitsFp`, `FpBits`).
+//!   - Unsigned sub-width loads and `F32` loads are not forwarded:
+//!     `Inst::Extend` does not zero-extend the unsigned widths (it assumes
+//!     a clean upper half), and an `F32` load widens.
 //!   - A whole vector load of a store of the same vector kind reuses the
 //!     stored register, unless the stored value is an immediate.
 //! A load forwards from an earlier load only when the load kinds match
@@ -62,7 +65,9 @@
 //! nor seeds on either discipline.
 
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
-use crate::c5::ir::{FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
+use crate::c5::ir::{
+    FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
+};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
@@ -107,18 +112,9 @@ fn is_int_store(kind: StoreKind) -> bool {
 /// whole vector's or a double's FP register holds the bytes a load of that
 /// kind reads back; `None` for a store that seeds nothing.
 fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<Option<LoadKind>> {
-    if is_int_store(kind) {
-        return Some(None);
-    }
-    let vector = match kind {
-        StoreKind::V128 => LoadKind::V128,
-        StoreKind::V256 => LoadKind::V256,
-        StoreKind::V512 => LoadKind::V512,
-        // A double from an FP register reads back the same 64 bits.
-        StoreKind::F64 => LoadKind::F64,
-        _ => return None,
+    let Some(inst) = func.insts.get(value as usize) else {
+        return is_int_store(kind).then_some(None);
     };
-    let inst = func.insts.get(value as usize)?;
     let fp = crate::c5::codegen::ssa::reg_alloc::produces_fp_result(inst);
     // A single-precision value is not the double a load reads back.
     let single = func
@@ -126,7 +122,21 @@ fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<O
         .get(value as usize)
         .copied()
         .unwrap_or(false);
-    (fp && !single && !matches!(inst, Inst::Imm(_))).then_some(Some(vector))
+    let double = fp && !single && !matches!(inst, Inst::Imm(_));
+    let vector = match kind {
+        // An integer store of an FP register's value writes its bits: an
+        // 8-byte one those of the double, a narrower one serves no load.
+        StoreKind::I64 | StoreKind::I32 | StoreKind::I16 | StoreKind::I8 if !fp => {
+            return Some(None);
+        }
+        StoreKind::V128 => LoadKind::V128,
+        StoreKind::V256 => LoadKind::V256,
+        StoreKind::V512 => LoadKind::V512,
+        // A double from an FP register reads back the same 64 bits.
+        StoreKind::F64 | StoreKind::I64 => LoadKind::F64,
+        _ => return None,
+    };
+    double.then_some(Some(vector))
 }
 
 /// Whether a load of `kind` reads a lane of a `bytes`-byte vector the
@@ -226,12 +236,14 @@ struct IndexedEntry {
     load_kind: Option<LoadKind>,
 }
 
-/// How a load takes a location's available value: as it stands, or
-/// sign-extended from the load's width.
+/// How a load takes a location's available value: as it stands,
+/// sign-extended from the load's width, or its 64 bits moved to the other
+/// register file.
 #[derive(Clone, Copy)]
 enum Reuse {
     Direct,
     Extended,
+    Bits(FpCastKind),
 }
 
 /// The reuse open to a load of `kind` from an entry of origin `origin`
@@ -241,8 +253,10 @@ fn reuse(origin: Option<LoadKind>, kind: LoadKind) -> Option<Reuse> {
         None => match kind {
             LoadKind::I64 => Some(Reuse::Direct),
             LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Some(Reuse::Extended),
+            LoadKind::F64 => Some(Reuse::Bits(FpCastKind::BitsFp)),
             _ => None,
         },
+        Some(LoadKind::F64) if kind == LoadKind::I64 => Some(Reuse::Bits(FpCastKind::FpBits)),
         Some(k) => (k == kind).then_some(Reuse::Direct),
     }
 }
@@ -319,7 +333,47 @@ fn take(
             ));
             false
         }
+        Some(Reuse::Bits(kind)) => {
+            rewrites.push((i, Inst::FpCast { kind, value }));
+            false
+        }
         None => false,
+    }
+}
+
+/// An 8-byte store of a bit-for-bit `FpCast` writes the same bytes from
+/// the cast's operand, in that operand's register file.
+fn store_bits_directly(func: &mut FunctionSsa) {
+    for i in 0..func.insts.len() {
+        let (Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. }) = &func.insts[i]
+        else {
+            continue;
+        };
+        let retyped = match (*kind, &func.insts[*value as usize]) {
+            (
+                StoreKind::I64,
+                &Inst::FpCast {
+                    kind: FpCastKind::FpBits,
+                    value,
+                },
+            ) => (StoreKind::F64, value),
+            (
+                StoreKind::F64,
+                &Inst::FpCast {
+                    kind: FpCastKind::BitsFp,
+                    value,
+                },
+            ) => (StoreKind::I64, value),
+            _ => continue,
+        };
+        if let Inst::Store { value, kind, .. }
+        | Inst::StoreLocal { value, kind, .. }
+        | Inst::StoreIndexed { value, kind, .. } = &mut func.insts[i]
+        {
+            (*kind, *value) = retyped;
+        }
     }
 }
 
@@ -748,6 +802,7 @@ fn run_one(func: &mut FunctionSsa) {
     for (idx, inst) in rewrites {
         func.insts[idx] = inst;
     }
+    store_bits_directly(func);
     if !any {
         return;
     }
@@ -1202,7 +1257,9 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::run_one;
-    use crate::c5::ir::{Block, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator};
+    use crate::c5::ir::{
+        Block, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, Terminator,
+    };
     use alloc::vec::Vec;
 
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
@@ -2702,5 +2759,125 @@ mod tests {
         let filler = live_filler(4);
         let (v, _) = indexed_reload(load_indexed(0, 1, 1, LoadKind::I8), filler, LoadKind::I8);
         assert_ne!(v, 3, "a reuse past the bound reloads");
+    }
+
+    /// A double stored from a floating register and read back as a 64-bit
+    /// integer, or the reverse, is the bit-for-bit cast of the stored
+    /// value, and an 8-byte store of that cast stores its operand.
+    #[test]
+    fn a_load_of_the_other_register_file_moves_the_bits() {
+        for (param, stored, loaded, cast) in [
+            (
+                LoadKind::F64,
+                StoreKind::F64,
+                LoadKind::I64,
+                FpCastKind::FpBits,
+            ),
+            (
+                LoadKind::I64,
+                StoreKind::I64,
+                LoadKind::F64,
+                FpCastKind::BitsFp,
+            ),
+        ] {
+            let store = |off, value, kind| Inst::StoreLocal {
+                off,
+                disp: 0,
+                value,
+                kind,
+                volatile: false,
+                nsw: false,
+            };
+            let restored = if stored == StoreKind::F64 {
+                StoreKind::I64
+            } else {
+                StoreKind::F64
+            };
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: param
+                    },
+                    store(-2, 0, stored),
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 0,
+                        kind: loaded,
+                        volatile: false,
+                    },
+                    store(-3, 2, restored),
+                ],
+                Terminator::Return(2),
+                4,
+            );
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[2], Inst::FpCast { kind, value: 0 } if kind == cast),
+                "{cast:?}: {:?}",
+                f.insts[2]
+            );
+            assert!(
+                matches!(f.insts[3], Inst::StoreLocal { value: 0, kind, .. } if kind == stored),
+                "{cast:?}: {:?}",
+                f.insts[3]
+            );
+        }
+    }
+
+    /// An integer store of a double held in an FP register writes the
+    /// double's bits: an 8-byte reload of either kind reads them, and a
+    /// narrower one reads memory.
+    #[test]
+    fn an_integer_store_of_a_double_is_the_double() {
+        for (stored, loaded, want) in [
+            (StoreKind::I64, LoadKind::I64, Some(FpCastKind::FpBits)),
+            (StoreKind::I64, LoadKind::F64, None),
+            (StoreKind::I32, LoadKind::I32, None),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::F64
+                    },
+                    Inst::StoreLocal {
+                        off: -2,
+                        disp: 0,
+                        value: 0,
+                        kind: stored,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 0,
+                        kind: loaded,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(2),
+                2,
+            );
+            run_one(&mut f);
+            let ret = match f.blocks[0].terminator {
+                Terminator::Return(r) => r,
+                _ => unreachable!(),
+            };
+            match want {
+                Some(cast) => assert!(
+                    ret == 2
+                        && matches!(f.insts[2], Inst::FpCast { kind, value: 0 } if kind == cast),
+                    "{stored:?} -> {loaded:?}: {:?}",
+                    f.insts[2]
+                ),
+                None if stored == StoreKind::I32 => assert!(
+                    ret == 2 && matches!(f.insts[2], Inst::LoadLocal { .. }),
+                    "{stored:?} -> {loaded:?}: {:?}",
+                    f.insts[2]
+                ),
+                None => assert_eq!(ret, 0, "{stored:?} -> {loaded:?} reuses the double"),
+            }
+        }
     }
 }

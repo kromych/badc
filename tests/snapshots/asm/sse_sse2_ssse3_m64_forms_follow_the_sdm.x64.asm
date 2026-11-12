@@ -2160,8 +2160,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%r12, -0x58(%rbp)
                	movq	%rax, -0x50(%rbp)
-               	movsd	-0x58(%rbp), %xmm0
-               	movsd	-0x50(%rbp), %xmm1
+               	movq	%r12, %xmm0
+               	movq	%rax, %xmm1
                	vpmuludq	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	movl	%r12d, %edx

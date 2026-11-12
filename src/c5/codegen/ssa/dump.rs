@@ -641,6 +641,8 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
         FpCastKind::UIntToFp => "UIntToFp",
         FpCastKind::F32ToF64 => "F32ToF64",
         FpCastKind::F64ToF32 => "F64ToF32",
+        FpCastKind::FpBits => "FpBits",
+        FpCastKind::BitsFp => "BitsFp",
     }
 }
 

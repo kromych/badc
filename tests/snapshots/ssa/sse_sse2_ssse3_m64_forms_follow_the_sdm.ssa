@@ -7545,8 +7545,8 @@ fn ent_pc=447 n_params=0 variadic=false locals=11
     v249 StoreLocal { off=-10, value=v241, kind=I64 }     -> -
     v250 Imm(0)                                           -> x1
     v251 Imm(0)                                           -> x1
-    v252 LoadLocal { off=-11, kind=F64 }                  -> d0
-    v253 LoadLocal { off=-10, kind=F64 }                  -> d1
+    v252 FpCast { kind=BitsFp, value=v239 }               -> d0
+    v253 FpCast { kind=BitsFp, value=v241 }               -> d1
     v254 SimdVal { op=__builtin_ia32_pmuludq, imm=None, args=[v252, v253] } -> d0
     v255 Imm(0)                                           -> x1
     v256 Imm(0)                                           -> x1

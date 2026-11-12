@@ -3222,6 +3222,23 @@ d2 pair(d2 a, d2 b) { return (d2){b[0], a[0]}; }\n";
     m.finish();
 }
 
+/// A pair of 8-byte vectors returned in a structure and copied out stores
+/// each vector from its register: the copy's 64-bit reloads of the
+/// doubles just stored read those registers.
+#[test]
+fn a_pair_of_8_byte_vectors_stores_from_its_registers() {
+    const SRC: &str = "typedef signed char c8 __attribute__((vector_size(8)));\n\
+typedef struct { c8 v[2]; } c8x2;\n\
+static inline __attribute__((always_inline)) c8x2 mk(c8 a, c8 b) { return (c8x2){{a + b, a - b}}; }\n\
+void pair(c8x2 *o, const c8 *a, const c8 *b) { *o = mk(*a, *b); }\n";
+    let mut m = Misses::default();
+    let words = a64(SRC, "pair");
+    m.expect(words.len() == 7, || format!("aarch64: {words:08x?}"));
+    let insns = x64(SRC, "pair");
+    m.expect(insns.len() == 7, || format!("x86-64: {insns:x?}"));
+    m.finish();
+}
+
 /// A lane written from memory or written to it moves through the pointer
 /// alone: `ld1` / `st1` of the lane, and `str` of the low lane's width.
 #[test]
@@ -5559,9 +5576,12 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
         long narrow(int p) { sinki(&p); return p; }\n";
     // Each volatile access is performed once, in its own instruction.
     const VOL: &str = "int vol(int x) { volatile int v = x; return v + v; }\n";
-    // The object lives in the over-aligned region, not at its slot.
-    const OVER: &str = "unsigned long long over(double x) {\n\
+    // The object lives in the over-aligned region, not at its slot; the
+    // call reads it, so its store and the reload after the call stay.
+    const OVER: &str = "void sinkd(double *);\n\
+        unsigned long long over(double x) {\n\
         _Alignas(32) double d = x;\n\
+        sinkd(&d);\n\
         return *(unsigned long long *)&d;\n}\n";
     let mut m = Misses::default();
 

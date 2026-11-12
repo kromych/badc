@@ -115,7 +115,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v90  AtomicLoad { addr=v83, width=8, order=Acquire }  -> x0
     v91  LocalAddr(-1)                                    -> x2
     v92  StoreLocal { off=-1, value=v90, kind=I64 }       -> -
-    v93  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v93  FpCast { kind=BitsFp, value=v90 }                -> d0
     v94  Binop { op=fne, lhs=v93, rhs=v84 }               -> x0
     terminator Bz { cond=v94, target=b12, fall=b11 }   (exit_acc=v94)
   block 11  start_pc=0

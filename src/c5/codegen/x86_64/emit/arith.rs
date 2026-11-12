@@ -876,6 +876,28 @@ pub(super) fn emit_fp_cast(
             fp_spill_dst_to_slot(code, dst, dd, frame);
             Ok(())
         }
+        FpCastKind::FpBits => {
+            let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
+                return fail("FpCast FpBits: value not fp reg / spill / int reg");
+            };
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("FpCast FpBits: dst not int reg / spill");
+            };
+            emit_movq_r_xmm(code, rd, dn);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
+        FpCastKind::BitsFp => {
+            let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
+                return fail("FpCast BitsFp: value not int reg / spill");
+            };
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return fail("FpCast BitsFp: dst not fp reg / spill");
+            };
+            emit_movq_xmm_r(code, dd, rn);
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            Ok(())
+        }
         FpCastKind::F64ToF32 => {
             let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast F64ToF32: value not fp reg / spill / int reg");

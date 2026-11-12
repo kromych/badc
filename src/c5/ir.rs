@@ -1803,6 +1803,11 @@ pub(crate) enum FpCastKind {
     /// explicit `(float)d` cast and an assignment / return converting
     /// a `double` value to a `float` object.
     F64ToF32,
+    /// The 64 bits of a double as an integer, bit for bit: a `double`
+    /// stored and read back as a 64-bit integer.
+    FpBits,
+    /// A 64-bit integer's bits as a double, bit for bit.
+    BitsFp,
 }
 
 /// Register-name size for an inline-asm template `%`-reference, from a

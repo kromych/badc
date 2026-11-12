@@ -327,7 +327,7 @@ Disassembly of section .text:
                	movk	x16, #0x102, lsl #48
                	fmov	d0, x16
                	stur	d0, [x29, #-0x38]
-               	ldur	x0, [x29, #-0x38]
+               	fmov	x0, d0
                	mov	x17, #0x708             // =1800
                	movk	x17, #0x506, lsl #16
                	movk	x17, #0x304, lsl #32

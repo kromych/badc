@@ -350,11 +350,11 @@ Disassembly of section .text:
                	ret
                	ldur	d0, [x29, #-0x48]
                	stur	d0, [x29, #-0xc0]
-               	ldur	x0, [x29, #-0xc0]
+               	fmov	x0, d0
                	cbnz	x0, <addr>
                	ldur	d0, [x29, #-0x40]
                	stur	d0, [x29, #-0xc0]
-               	ldur	x0, [x29, #-0xc0]
+               	fmov	x0, d0
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
                	cmp	x0, x17
                	b.ne	<addr>

@@ -35,18 +35,12 @@ Disassembly of section .text:
                	ret
 
 <read_s>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, v0.d[0]
                	mov	x17, #0x1               // =1
                	movk	x17, #0x2, lsl #32
                	eor	x0, x0, x17
-               	stur	x0, [x29, #-0x8]
-               	ldur	d0, [x29, #-0x8]
+               	fmov	d0, x0
                	mov	w0, v0.s[1]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

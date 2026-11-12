@@ -309,11 +309,12 @@ Disassembly of section .text:
                	retq
                	movsd	-0x48(%rbp), %xmm0
                	movsd	%xmm0, -0xc0(%rbp)
-               	cmpq	$0x0, -0xc0(%rbp)
+               	movq	%xmm0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movsd	-0x40(%rbp), %xmm0
                	movsd	%xmm0, -0xc0(%rbp)
-               	movq	-0xc0(%rbp), %rax
+               	movq	%xmm0, %rax
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	cmpq	%r11, %rax
                	jne	<addr>

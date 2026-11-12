@@ -75,11 +75,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v62  Imm(0)                                           -> x0
     v63  LocalAddr(-7)                                    -> x0
     v64  StoreLocal { off=-7, value=v61, kind=I64 }       -> -
-    v65  LoadLocal { off=-7, kind=F64 }                   -> d0
+    v65  FpCast { kind=BitsFp, value=v61 }                -> d0
     v66  Binop { op=fadd, lhs=v65, rhs=v58 }              -> d0
     v67  LocalAddr(-6)                                    -> x0
     v68  StoreLocal { off=-6, value=v66, kind=F64 }       -> -
-    v69  LoadLocal { off=-6, kind=I64 }                   -> x7
+    v69  FpCast { kind=FpBits, value=v66 }                -> x7
     v70  AtomicCas { addr=v57, expected=v61, desired=v69, width=8, order=SeqCst } -> x0
     v71  Imm(0)                                           -> x7
     v72  Binop { op=eq, lhs=v70, rhs=v61 }                -> x1
@@ -394,7 +394,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v65  AtomicLoad { addr=v64, width=8, order=SeqCst }   -> x0
     v66  LocalAddr(-9)                                    -> x1
     v67  StoreLocal { off=-9, value=v65, kind=I64 }       -> -
-    v68  LoadLocal { off=-9, kind=F64 }                   -> d0
+    v68  FpCast { kind=BitsFp, value=v65 }                -> d0
     v69  Imm(20000)                                       -> x0
     v70  Imm(4671226772094713856)                         -> x0
     v71  Binop { op=feq, lhs=v68, rhs=v70 }               -> x0

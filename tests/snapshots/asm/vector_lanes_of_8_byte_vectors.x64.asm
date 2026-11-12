@@ -46,16 +46,11 @@ Disassembly of section .text:
                	retq
 
 <read_s>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	vmovq	%xmm0, %rax
                	movabsq	$0x200000001, %r11      # imm = 0x200000001
                	xorq	%r11, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	vpextrd	$0x1, %xmm0, %eax
-               	leave
                	retq
 
 <main>:

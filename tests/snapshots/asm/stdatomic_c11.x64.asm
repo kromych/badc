@@ -79,7 +79,7 @@ Disassembly of section .text:
                	movq	%rdx, (%rax)
                	movq	(%rax), %rax
                	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

@@ -54,15 +54,15 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	fmov	d0, #0.50000000
+               	fmov	d1, #0.50000000
                	ldar	x0, [x2]
                	b	<addr>
                	mov	x0, x1
                	stur	x0, [x29, #-0x38]
-               	ldur	d1, [x29, #-0x38]
-               	fadd	d1, d1, d0
-               	stur	d1, [x29, #-0x30]
-               	ldur	x3, [x29, #-0x30]
+               	fmov	d0, x0
+               	fadd	d0, d0, d1
+               	stur	d0, [x29, #-0x30]
+               	fmov	x3, d0
                	mov	x1, x0
                	casal	x1, x3, [x2]
                	cmp	x1, x0
@@ -422,7 +422,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldar	x0, [x0]
                	stur	x0, [x29, #-0x48]
-               	ldur	d0, [x29, #-0x48]
+               	fmov	d0, x0
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x20]
                	fcmp	d0, d1

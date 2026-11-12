@@ -344,10 +344,10 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v25  VecExtract { vec=v11, off=0, kind=I64, bytes=8 } -> x1
     v26  Imm(0)                                           -> x2
     v27  Binop { op=xor, lhs=v25, rhs=v21 }               -> x0
-    v28  StoreLocal { off=-1, value=v27, kind=I64 }       -> -
+    v28  Imm(0)                                           -> x1
     v29  LifetimeEnd(0)                                   -> -
     v30  LifetimeEnd(0)                                   -> -
-    v31  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v31  FpCast { kind=BitsFp, value=v27 }                -> d0
     v32  AggParts { desc=0, parts=[v31], fp_mask=0x1 }    -> -
     terminator Return(v32)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=8 ---
@@ -412,10 +412,10 @@ fn ent_pc=9 n_params=2 variadic=false locals=1
     v24  Imm(0)                                           -> x1
     v25  VecExtract { vec=v18, off=0, kind=I64, bytes=8 } -> x1
     v26  Binop { op=and, lhs=v23, rhs=v25 }               -> x0
-    v27  StoreLocal { off=-1, value=v26, kind=I64 }       -> -
+    v27  Imm(0)                                           -> x1
     v28  LifetimeEnd(0)                                   -> -
     v29  LifetimeEnd(0)                                   -> -
-    v30  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v30  FpCast { kind=BitsFp, value=v26 }                -> d0
     v31  AggParts { desc=0, parts=[v30], fp_mask=0x1 }    -> -
     terminator Return(v31)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=10 ---

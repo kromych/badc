@@ -97,9 +97,9 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v13  Imm(0)                                           -> x1
     v14  Imm(8589934593)                                  -> x1
     v15  BinopI { op=xor, lhs=v12, rhs_imm=8589934593 }   -> x0
-    v16  StoreLocal { off=-1, value=v15, kind=I64 }       -> -
-    v17  Imm(0)                                           -> x0
-    v18  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    v18  FpCast { kind=BitsFp, value=v15 }                -> d0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(4)                                           -> x0

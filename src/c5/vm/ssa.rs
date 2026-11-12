@@ -1685,6 +1685,7 @@ fn run_inst<H: Host>(
                 FpCastKind::UIntToFp => fp.int_to_float(i128::from(raw as u64), f) as i64,
                 FpCastKind::F32ToF64 => fp.widen(raw as u64) as i64,
                 FpCastKind::F64ToF32 => fp.narrow(raw as u64) as i64,
+                FpCastKind::FpBits | FpCastKind::BitsFp => raw,
             };
             return Ok(());
         }

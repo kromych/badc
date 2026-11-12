@@ -43,7 +43,7 @@ Disassembly of section .text:
                	andq	%r11, %rdx
                	orq	%rdx, %rcx
                	movq	%rcx, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
+               	movq	%rcx, %xmm0
                	movabsq	$-0x3ff8000000000000, %rcx # imm = 0xC008000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	andq	%r11, %rsi
                	orq	%rsi, %rcx
                	movq	%rcx, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
+               	movq	%rcx, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	andq	%r11, %rcx
                	orq	%rcx, %rax
                	movq	%rax, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
+               	movq	%rax, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0xc0000000, %eax       # imm = 0xC0000000
                	movq	%rax, %xmm15

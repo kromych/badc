@@ -96,18 +96,13 @@ Disassembly of section .text:
                	retq
 
 <b8_ops>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	vpaddb	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm0, %rax
                	vmovq	%xmm1, %rcx
                	orq	%rcx, %rax
                	vmovq	%xmm2, %rcx
                	xorq	%rcx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
+               	movq	%rax, %xmm0
                	retq
 
 <h8_ops>:
@@ -116,17 +111,12 @@ Disassembly of section .text:
                	retq
 
 <i8_ops>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	vpsubd	%xmm1, %xmm0, %xmm2
                	vpaddd	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm2, %rax
                	vmovq	%xmm0, %rcx
                	andq	%rcx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
+               	movq	%rax, %xmm0
                	retq
 
 <f8_ops>:

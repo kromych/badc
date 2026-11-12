@@ -27,7 +27,7 @@ Disassembly of section .text:
                	and	x1, x1, #0x8000000000000000
                	orr	x0, x0, x1
                	stur	x0, [x29, #-0x10]
-               	ldur	d0, [x29, #-0x10]
+               	fmov	d0, x0
                	fmov	d3, #-3.00000000
                	fcmp	d0, d3
                	b.eq	<addr>
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	and	x1, x1, #0x8000000000000000
                	orr	x0, x0, x1
                	stur	x0, [x29, #-0x10]
-               	ldur	d3, [x29, #-0x10]
+               	fmov	d3, x0
                	fcmp	d3, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	and	x1, x1, #0x8000000000000000
                	orr	x0, x0, x1
                	stur	x0, [x29, #-0x10]
-               	ldur	d1, [x29, #-0x10]
+               	fmov	d1, x0
                	fcvt	s1, d1
                	fmov	s3, #-2.00000000
                	fcmp	s1, s3

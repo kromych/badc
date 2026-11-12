@@ -1,5 +1,10 @@
 /* Umbrella over the x86 intrinsic family this build carries. */
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "immintrin.h is only available when targeting x86"
@@ -35,23 +40,23 @@ typedef double __m256d_u __attribute__((__vector_size__(32), __may_alias__, __al
 typedef unsigned int __v4su __attribute__((__vector_size__(16)));
 #pragma pop_macro("__attribute__")
 
-static inline __m256i _mm256_loadu_si256(__m256i_u const *__P) {
+__BADC_INTRIN __m256i _mm256_loadu_si256(__m256i_u const *__P) {
     return (__m256i)__builtin_ia32_loaddqu256((char const *)__P);
 }
 
-static inline __m256i _mm256_load_si256(__m256i const *__P) {
+__BADC_INTRIN __m256i _mm256_load_si256(__m256i const *__P) {
     return _mm256_loadu_si256((__m256i_u const *)__P);
 }
 
-static inline void _mm256_storeu_si256(__m256i_u *__P, __m256i __A) {
+__BADC_INTRIN void _mm256_storeu_si256(__m256i_u *__P, __m256i __A) {
     __builtin_ia32_storedqu256((char *)__P, __A);
 }
 
-static inline void _mm256_store_si256(__m256i *__P, __m256i __A) {
+__BADC_INTRIN void _mm256_store_si256(__m256i *__P, __m256i __A) {
     _mm256_storeu_si256((__m256i_u *)__P, __A);
 }
 
-static inline __m256i _mm256_setzero_si256(void) {
+__BADC_INTRIN __m256i _mm256_setzero_si256(void) {
     return (__m256i){0, 0, 0, 0};
 }
 
@@ -76,33 +81,33 @@ static inline __m256i _mm256_set1_epi32(int __A) {
     return (__m256i)__r;
 }
 
-static inline __m256i _mm256_set1_epi64x(long long __A) {
+__BADC_INTRIN __m256i _mm256_set1_epi64x(long long __A) {
     return (__m256i){__A, __A, __A, __A};
 }
 
 /* VPBROADCASTB/W/D/Q: the low lane of a 128-bit operand in every lane. */
-static inline __m256i _mm256_broadcastb_epi8(__m128i __X) {
+__BADC_INTRIN __m256i _mm256_broadcastb_epi8(__m128i __X) {
     return _mm256_set1_epi8(((__v16qi)__X)[0]);
 }
 
-static inline __m256i _mm256_broadcastw_epi16(__m128i __X) {
+__BADC_INTRIN __m256i _mm256_broadcastw_epi16(__m128i __X) {
     return _mm256_set1_epi16(((__v8hi)__X)[0]);
 }
 
-static inline __m256i _mm256_broadcastd_epi32(__m128i __X) {
+__BADC_INTRIN __m256i _mm256_broadcastd_epi32(__m128i __X) {
     return _mm256_set1_epi32(((__v4si)__X)[0]);
 }
 
-static inline __m256i _mm256_broadcastq_epi64(__m128i __X) {
+__BADC_INTRIN __m256i _mm256_broadcastq_epi64(__m128i __X) {
     return _mm256_set1_epi64x(((__v2di)__X)[0]);
 }
 
-static inline __m128i _mm256_castsi256_si128(__m256i __A) {
+__BADC_INTRIN __m128i _mm256_castsi256_si128(__m256i __A) {
     return (__m128i)__builtin_ia32_extract128i256((__v4di)__A, 0);
 }
 
 /* The upper half is undefined in the SDM; this gives zero. */
-static inline __m256i _mm256_castsi128_si256(__m128i __A) {
+__BADC_INTRIN __m256i _mm256_castsi128_si256(__m128i __A) {
     return (__m256i)__builtin_ia32_si256_si((__v4si)__A);
 }
 
@@ -113,19 +118,19 @@ static inline __m256i _mm256_castsi128_si256(__m128i __A) {
     ((__m256i)__builtin_ia32_insert128i256((__v4di)(__m256i)(A), (__v2di)(__m128i)(B),  \
                                            (int)(N)))
 
-static inline __m256i _mm256_and_si256(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_and_si256(__m256i __A, __m256i __B) {
     return __A & __B;
 }
 
-static inline __m256i _mm256_andnot_si256(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_andnot_si256(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_andnotsi256(__A, __B);
 }
 
-static inline __m256i _mm256_or_si256(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_or_si256(__m256i __A, __m256i __B) {
     return __A | __B;
 }
 
-static inline __m256i _mm256_xor_si256(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_xor_si256(__m256i __A, __m256i __B) {
     return __A ^ __B;
 }
 
@@ -137,52 +142,52 @@ static inline int _mm256_testz_si256(__m256i __A, __m256i __B) {
 
 /* Lane-wise add and subtract wrap, as on the unsigned lanes they are
 ** computed on. */
-static inline __m256i _mm256_add_epi8(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_add_epi8(__m256i __A, __m256i __B) {
     return (__m256i)((__v32qu)__A + (__v32qu)__B);
 }
 
-static inline __m256i _mm256_add_epi16(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_add_epi16(__m256i __A, __m256i __B) {
     return (__m256i)((__v16hu)__A + (__v16hu)__B);
 }
 
-static inline __m256i _mm256_add_epi32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_add_epi32(__m256i __A, __m256i __B) {
     return (__m256i)((__v8su)__A + (__v8su)__B);
 }
 
-static inline __m256i _mm256_add_epi64(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_add_epi64(__m256i __A, __m256i __B) {
     return (__m256i)((__v4du)__A + (__v4du)__B);
 }
 
-static inline __m256i _mm256_sub_epi8(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_sub_epi8(__m256i __A, __m256i __B) {
     return (__m256i)((__v32qu)__A - (__v32qu)__B);
 }
 
-static inline __m256i _mm256_sub_epi16(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_sub_epi16(__m256i __A, __m256i __B) {
     return (__m256i)((__v16hu)__A - (__v16hu)__B);
 }
 
-static inline __m256i _mm256_sub_epi32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_sub_epi32(__m256i __A, __m256i __B) {
     return (__m256i)((__v8su)__A - (__v8su)__B);
 }
 
-static inline __m256i _mm256_sub_epi64(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_sub_epi64(__m256i __A, __m256i __B) {
     return (__m256i)((__v4du)__A - (__v4du)__B);
 }
 
 /* VPCMPEQB/W/D/Q: all ones in a lane where the operands are equal. */
-static inline __m256i _mm256_cmpeq_epi8(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpeq_epi8(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpeqb256(__A, __B);
 }
 
-static inline __m256i _mm256_cmpeq_epi16(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpeq_epi16(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpeqw256(__A, __B);
 }
 
-static inline __m256i _mm256_cmpeq_epi32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpeq_epi32(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpeqd256(__A, __B);
 }
 
-static inline __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpeqq256(__A, __B);
 }
 
@@ -206,32 +211,32 @@ static inline __m256i _mm256_cmpeq_epi64(__m256i __A, __m256i __B) {
         (B11), (B12), (B13), (B14), (B15), (B16), (B17), (B18), (B19), (B20), (B21), (B22), \
         (B23), (B24), (B25), (B26), (B27), (B28), (B29), (B30), (B31)))
 
-static inline __m256i _mm256_set_m128i(__m128i __H, __m128i __L) {
+__BADC_INTRIN __m256i _mm256_set_m128i(__m128i __H, __m128i __L) {
     return _mm256_inserti128_si256(_mm256_castsi128_si256(__L), __H, 1);
 }
 
-static inline __m256i _mm256_zextsi128_si256(__m128i __A) {
+__BADC_INTRIN __m256i _mm256_zextsi128_si256(__m128i __A) {
     return _mm256_castsi128_si256(__A);
 }
 
-static inline __m256i _mm256_broadcastsi128_si256(__m128i __A) {
+__BADC_INTRIN __m256i _mm256_broadcastsi128_si256(__m128i __A) {
     return _mm256_inserti128_si256(_mm256_castsi128_si256(__A), __A, 1);
 }
 
-static inline __m256i _mm256_cmpgt_epi32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpgt_epi32(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpgtd256(__A, __B);
 }
 
-static inline __m256i _mm256_cmpgt_epi64(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_cmpgt_epi64(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pcmpgtq256(__A, __B);
 }
 
 /* An extract zero-extends its byte, as gcc's and clang's do. */
-static inline int _mm256_extract_epi8(__m256i __A, const int __N) {
+__BADC_INTRIN int _mm256_extract_epi8(__m256i __A, const int __N) {
     return ((__v32qu)__A)[__N & 31];
 }
 
-static inline int _mm256_extract_epi32(__m256i __A, const int __N) {
+__BADC_INTRIN int _mm256_extract_epi32(__m256i __A, const int __N) {
     return ((__v8si)__A)[__N & 7];
 }
 
@@ -248,7 +253,7 @@ static inline __m256i _mm256_insert_epi32(__m256i __A, int __I, const int __N) {
 }
 
 #ifdef __x86_64__
-static inline long long _mm256_extract_epi64(__m256i __A, const int __N) {
+__BADC_INTRIN long long _mm256_extract_epi64(__m256i __A, const int __N) {
     return __A[__N & 3];
 }
 
@@ -258,12 +263,12 @@ static inline __m256i _mm256_insert_epi64(__m256i __A, long long __I, const int 
 }
 #endif
 
-static inline __m256i _mm256_mullo_epi32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_mullo_epi32(__m256i __A, __m256i __B) {
     return (__m256i)((__v8su)__A * (__v8su)__B);
 }
 
 /* VPMULUDQ: the low doubleword of each quadword, multiplied unsigned. */
-static inline __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_pmuludq256(__A, __B);
 }
 
@@ -315,7 +320,7 @@ static inline __m256i _mm256_mul_epu32(__m256i __A, __m256i __B) {
                        __badc_blend_epi32(__badc_hi_si(__badc_a), __badc_hi_si(__badc_b), (M) >> 4)); \
     })
 
-static inline __m256i _mm256_permutevar8x32_epi32(__m256i __A, __m256i __I) {
+__BADC_INTRIN __m256i _mm256_permutevar8x32_epi32(__m256i __A, __m256i __I) {
     return (__m256i)__builtin_ia32_permvarsi256(__A, __I);
 }
 
@@ -329,20 +334,20 @@ static inline __m256i _mm256_permutevar8x32_epi32(__m256i __A, __m256i __I) {
 ** the cross-half ones, the variable shifts, the masked transfers and the
 ** gathers are written lane by lane. */
 
-static inline __m128i __badc_lo_si(__m256i __A) {
+__BADC_INTRIN __m128i __badc_lo_si(__m256i __A) {
     return (__m128i){__A[0], __A[1]};
 }
 
-static inline __m128i __badc_hi_si(__m256i __A) {
+__BADC_INTRIN __m128i __badc_hi_si(__m256i __A) {
     return (__m128i){__A[2], __A[3]};
 }
 
-static inline __m256i __badc_join_si(__m128i __L, __m128i __H) {
+__BADC_INTRIN __m256i __badc_join_si(__m128i __L, __m128i __H) {
     return (__m256i){__L[0], __L[1], __H[0], __H[1]};
 }
 
 #define __BADC_AVX2_BINARY(name, row)                                             \
-    static inline __m256i _mm256_##name(__m256i __A, __m256i __B) {               \
+    __BADC_INTRIN __m256i _mm256_##name(__m256i __A, __m256i __B) {               \
         return (__m256i)__builtin_ia32_##row(__A, __B);                           \
     }
 __BADC_AVX2_BINARY(adds_epi8, paddsb256)
@@ -404,7 +409,7 @@ __BADC_AVX2_BINARY(shuffle_epi8, pshufb256)
 /* VAES and VPCLMULQDQ: the AES-NI and PCLMULQDQ instruction on each 128-bit
 ** lane, the immediate's qword selectors within each lane. */
 #define __BADC_LANES(name, op)                                                    \
-    static inline __m256i name(__m256i __A, __m256i __B) {                         \
+    __BADC_INTRIN __m256i name(__m256i __A, __m256i __B) {                         \
         return __badc_join_si(op(__badc_lo_si(__A), __badc_lo_si(__B)),            \
                               op(__badc_hi_si(__A), __badc_hi_si(__B)));           \
     }
@@ -415,25 +420,25 @@ __BADC_LANES(_mm256_aesdeclast_epi128, _mm_aesdeclast_si128)
 #undef __BADC_LANES
 #define _mm256_clmulepi64_epi128(A, B, I) __BADC_AVX2_IMM2(_mm_clmulepi64_si128, A, B, I)
 
-static inline int _mm256_movemask_epi8(__m256i __A) {
+__BADC_INTRIN int _mm256_movemask_epi8(__m256i __A) {
     return __builtin_ia32_pmovmskb256(__A);
 }
 
-static inline __m256i _mm256_abs_epi8(__m256i __A) {
+__BADC_INTRIN __m256i _mm256_abs_epi8(__m256i __A) {
     return (__m256i)__builtin_ia32_pabsb256(__A);
 }
 
-static inline __m256i _mm256_abs_epi16(__m256i __A) {
+__BADC_INTRIN __m256i _mm256_abs_epi16(__m256i __A) {
     return (__m256i)__builtin_ia32_pabsw256(__A);
 }
 
-static inline __m256i _mm256_abs_epi32(__m256i __A) {
+__BADC_INTRIN __m256i _mm256_abs_epi32(__m256i __A) {
     return (__m256i)__builtin_ia32_pabsd256(__A);
 }
 
 /* The shifts by a vector's low quadword, per half. */
 #define __BADC_AVX2_SHIFT(name, count)                                            \
-    static inline __m256i _mm256_##name(__m256i __A, count __C) {                 \
+    __BADC_INTRIN __m256i _mm256_##name(__m256i __A, count __C) {                 \
         return __badc_join_si(_mm_##name(__badc_lo_si(__A), __C), _mm_##name(__badc_hi_si(__A), __C)); \
     }
 __BADC_AVX2_SHIFT(sll_epi16, __m128i)
@@ -477,13 +482,13 @@ __BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SRL(u
 #undef __BADC_SRL
 #undef __BADC_SRA
 
-static inline __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
+__BADC_INTRIN __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
     return __badc_join_si(_mm_blendv_epi8(__badc_lo_si(__A), __badc_lo_si(__B), __badc_lo_si(__M)),
                           _mm_blendv_epi8(__badc_hi_si(__A), __badc_hi_si(__B), __badc_hi_si(__M)));
 }
 
 /* VMPSADBW: the low lane by imm8[2:0], the high one by imm8[5:3]. */
-static inline __m256i _mm256_mpsadbw_epu8(__m256i __A, __m256i __B, const int __M) {
+__BADC_INTRIN __m256i _mm256_mpsadbw_epu8(__m256i __A, __m256i __B, const int __M) {
     return __badc_join_si(_mm_mpsadbw_epu8(__badc_lo_si(__A), __badc_lo_si(__B), __M),
                           _mm_mpsadbw_epu8(__badc_hi_si(__A), __badc_hi_si(__B), __M >> 3));
 }
@@ -491,7 +496,7 @@ static inline __m256i _mm256_mpsadbw_epu8(__m256i __A, __m256i __B, const int __
 /* VPMOVSX / VPMOVZX: the low lanes of the 128-bit operand, widened, the
 ** upper half of the result from the lanes after the lower half's. */
 #define __BADC_AVX2_EXTEND(name, bytes)                                           \
-    static inline __m256i _mm256_##name(__m128i __A) {                            \
+    __BADC_INTRIN __m256i _mm256_##name(__m128i __A) {                            \
         return __badc_join_si(_mm_##name(__A), _mm_##name(_mm_srli_si128(__A, bytes))); \
     }
 __BADC_AVX2_EXTEND(cvtepi8_epi16, 8)
@@ -509,19 +514,19 @@ __BADC_AVX2_EXTEND(cvtepu32_epi64, 8)
 #undef __BADC_AVX2_EXTEND
 
 /* VPBROADCASTB/W/D/Q into a 128-bit result. */
-static inline __m128i _mm_broadcastb_epi8(__m128i __X) {
+__BADC_INTRIN __m128i _mm_broadcastb_epi8(__m128i __X) {
     return _mm_set1_epi8(((__v16qi)__X)[0]);
 }
 
-static inline __m128i _mm_broadcastw_epi16(__m128i __X) {
+__BADC_INTRIN __m128i _mm_broadcastw_epi16(__m128i __X) {
     return _mm_set1_epi16(((__v8hi)__X)[0]);
 }
 
-static inline __m128i _mm_broadcastd_epi32(__m128i __X) {
+__BADC_INTRIN __m128i _mm_broadcastd_epi32(__m128i __X) {
     return _mm_set1_epi32(((__v4si)__X)[0]);
 }
 
-static inline __m128i _mm_broadcastq_epi64(__m128i __X) {
+__BADC_INTRIN __m128i _mm_broadcastq_epi64(__m128i __X) {
     return _mm_set1_epi64x(((__v2di)__X)[0]);
 }
 
@@ -539,12 +544,12 @@ static inline __m128i _mm_broadcastq_epi64(__m128i __X) {
 
 #define _mm256_setr_epi64x(A, B, C, D) ((__m256i){(A), (B), (C), (D)})
 
-static inline __m256i _mm256_setr_m128i(__m128i __L, __m128i __H) {
+__BADC_INTRIN __m256i _mm256_setr_m128i(__m128i __L, __m128i __H) {
     return __badc_join_si(__L, __H);
 }
 
 /* An extract zero-extends its word, as VPEXTRW does. */
-static inline int _mm256_extract_epi16(__m256i __A, const int __N) {
+__BADC_INTRIN int _mm256_extract_epi16(__m256i __A, const int __N) {
     return ((__v16hu)__A)[__N & 15];
 }
 
@@ -554,24 +559,24 @@ static inline __m256i _mm256_insert_epi16(__m256i __A, int __I, const int __N) {
     return (__m256i)__r;
 }
 
-static inline int _mm256_cvtsi256_si32(__m256i __A) {
+__BADC_INTRIN int _mm256_cvtsi256_si32(__m256i __A) {
     return ((__v8si)__A)[0];
 }
 
 /* The non-temporal transfers are ordinary ones, VLDDQU the unaligned load. */
-static inline void _mm256_stream_si256(__m256i *__P, __m256i __A) {
+__BADC_INTRIN void _mm256_stream_si256(__m256i *__P, __m256i __A) {
     _mm256_storeu_si256((__m256i_u *)__P, __A);
 }
 
-static inline __m256i _mm256_stream_load_si256(void const *__P) {
+__BADC_INTRIN __m256i _mm256_stream_load_si256(void const *__P) {
     return _mm256_loadu_si256((__m256i_u const *)__P);
 }
 
-static inline __m256i _mm256_lddqu_si256(__m256i const *__P) {
+__BADC_INTRIN __m256i _mm256_lddqu_si256(__m256i const *__P) {
     return _mm256_loadu_si256((__m256i_u const *)__P);
 }
 
-static inline __m256i _mm256_loadu2_m128i(__m128i_u const *__H, __m128i_u const *__L) {
+__BADC_INTRIN __m256i _mm256_loadu2_m128i(__m128i_u const *__H, __m128i_u const *__L) {
     return __badc_join_si(_mm_loadu_si128((__m128i const *)__L),
                           _mm_loadu_si128((__m128i const *)__H));
 }
@@ -588,11 +593,11 @@ static inline int _mm256_testc_si256(__m256i __A, __m256i __B) {
     return (__r[0] | __r[1] | __r[2] | __r[3]) == 0;
 }
 
-static inline int _mm256_testnzc_si256(__m256i __A, __m256i __B) {
+__BADC_INTRIN int _mm256_testnzc_si256(__m256i __A, __m256i __B) {
     return !_mm256_testz_si256(__A, __B) && !_mm256_testc_si256(__A, __B);
 }
 
-static inline __m256i _mm256_undefined_si256(void) {
+__BADC_INTRIN __m256i _mm256_undefined_si256(void) {
     return _mm256_setzero_si256();
 }
 
@@ -672,36 +677,36 @@ __BADC_GATHER(_mm256, i64gather_pd, __m256d, __v4di, long long, double, __m256i,
 ** NaN operand. The transfers and lane moves work on the integer view of the
 ** lanes, which keeps every bit. No VEX instruction is emitted. */
 
-static inline __m128 __badc_lo_ps(__m256 __A) {
+__BADC_INTRIN __m128 __badc_lo_ps(__m256 __A) {
     return (__m128)_mm256_castsi256_si128((__m256i)__A);
 }
 
-static inline __m128 __badc_hi_ps(__m256 __A) {
+__BADC_INTRIN __m128 __badc_hi_ps(__m256 __A) {
     return (__m128)_mm256_extracti128_si256((__m256i)__A, 1);
 }
 
-static inline __m256 __badc_join_ps(__m128 __L, __m128 __H) {
+__BADC_INTRIN __m256 __badc_join_ps(__m128 __L, __m128 __H) {
     return (__m256)_mm256_inserti128_si256(_mm256_castsi128_si256((__m128i)__L), (__m128i)__H, 1);
 }
 
-static inline __m128d __badc_lo_pd(__m256d __A) {
+__BADC_INTRIN __m128d __badc_lo_pd(__m256d __A) {
     return (__m128d)_mm256_castsi256_si128((__m256i)__A);
 }
 
-static inline __m128d __badc_hi_pd(__m256d __A) {
+__BADC_INTRIN __m128d __badc_hi_pd(__m256d __A) {
     return (__m128d)_mm256_extracti128_si256((__m256i)__A, 1);
 }
 
-static inline __m256d __badc_join_pd(__m128d __L, __m128d __H) {
+__BADC_INTRIN __m256d __badc_join_pd(__m128d __L, __m128d __H) {
     return (__m256d)_mm256_inserti128_si256(_mm256_castsi128_si256((__m128i)__L), (__m128i)__H, 1);
 }
 
 #define __BADC_AVX_BINARY(name)                                                         \
-    static inline __m256 _mm256_##name##_ps(__m256 __A, __m256 __B) {                  \
+    __BADC_INTRIN __m256 _mm256_##name##_ps(__m256 __A, __m256 __B) {                  \
         return __badc_join_ps(_mm_##name##_ps(__badc_lo_ps(__A), __badc_lo_ps(__B)),   \
                               _mm_##name##_ps(__badc_hi_ps(__A), __badc_hi_ps(__B)));  \
     }                                                                                 \
-    static inline __m256d _mm256_##name##_pd(__m256d __A, __m256d __B) {               \
+    __BADC_INTRIN __m256d _mm256_##name##_pd(__m256d __A, __m256d __B) {               \
         return __badc_join_pd(_mm_##name##_pd(__badc_lo_pd(__A), __badc_lo_pd(__B)),   \
                               _mm_##name##_pd(__badc_hi_pd(__A), __badc_hi_pd(__B)));  \
     }
@@ -722,39 +727,39 @@ __BADC_AVX_BINARY(unpacklo)
 __BADC_AVX_BINARY(unpackhi)
 #undef __BADC_AVX_BINARY
 
-static inline __m256 _mm256_sqrt_ps(__m256 __A) {
+__BADC_INTRIN __m256 _mm256_sqrt_ps(__m256 __A) {
     return __badc_join_ps(_mm_sqrt_ps(__badc_lo_ps(__A)), _mm_sqrt_ps(__badc_hi_ps(__A)));
 }
 
-static inline __m256d _mm256_sqrt_pd(__m256d __A) {
+__BADC_INTRIN __m256d _mm256_sqrt_pd(__m256d __A) {
     return __badc_join_pd(_mm_sqrt_pd(__badc_lo_pd(__A)), _mm_sqrt_pd(__badc_hi_pd(__A)));
 }
 
-static inline __m256 _mm256_rcp_ps(__m256 __A) {
+__BADC_INTRIN __m256 _mm256_rcp_ps(__m256 __A) {
     return __badc_join_ps(_mm_rcp_ps(__badc_lo_ps(__A)), _mm_rcp_ps(__badc_hi_ps(__A)));
 }
 
-static inline __m256 _mm256_rsqrt_ps(__m256 __A) {
+__BADC_INTRIN __m256 _mm256_rsqrt_ps(__m256 __A) {
     return __badc_join_ps(_mm_rsqrt_ps(__badc_lo_ps(__A)), _mm_rsqrt_ps(__badc_hi_ps(__A)));
 }
 
-static inline __m256 _mm256_movehdup_ps(__m256 __A) {
+__BADC_INTRIN __m256 _mm256_movehdup_ps(__m256 __A) {
     return __badc_join_ps(_mm_movehdup_ps(__badc_lo_ps(__A)), _mm_movehdup_ps(__badc_hi_ps(__A)));
 }
 
-static inline __m256 _mm256_moveldup_ps(__m256 __A) {
+__BADC_INTRIN __m256 _mm256_moveldup_ps(__m256 __A) {
     return __badc_join_ps(_mm_moveldup_ps(__badc_lo_ps(__A)), _mm_moveldup_ps(__badc_hi_ps(__A)));
 }
 
-static inline __m256d _mm256_movedup_pd(__m256d __A) {
+__BADC_INTRIN __m256d _mm256_movedup_pd(__m256d __A) {
     return __badc_join_pd(_mm_movedup_pd(__badc_lo_pd(__A)), _mm_movedup_pd(__badc_hi_pd(__A)));
 }
 
-static inline __m256 _mm256_setzero_ps(void) {
+__BADC_INTRIN __m256 _mm256_setzero_ps(void) {
     return (__m256){0, 0, 0, 0, 0, 0, 0, 0};
 }
 
-static inline __m256d _mm256_setzero_pd(void) {
+__BADC_INTRIN __m256d _mm256_setzero_pd(void) {
     return (__m256d){0, 0, 0, 0};
 }
 
@@ -762,7 +767,7 @@ static inline __m256d _mm256_setzero_pd(void) {
 
 #define _mm256_setr_ps(A, B, C, D, E, F, G, H) ((__m256){(A), (B), (C), (D), (E), (F), (G), (H)})
 
-static inline __m256 _mm256_set1_ps(float __A) {
+__BADC_INTRIN __m256 _mm256_set1_ps(float __A) {
     return (__m256){__A, __A, __A, __A, __A, __A, __A, __A};
 }
 
@@ -770,55 +775,55 @@ static inline __m256 _mm256_set1_ps(float __A) {
 
 #define _mm256_setr_pd(A, B, C, D) ((__m256d){(A), (B), (C), (D)})
 
-static inline __m256d _mm256_set1_pd(double __A) {
+__BADC_INTRIN __m256d _mm256_set1_pd(double __A) {
     return (__m256d){__A, __A, __A, __A};
 }
 
-static inline __m256 _mm256_set_m128(__m128 __H, __m128 __L) {
+__BADC_INTRIN __m256 _mm256_set_m128(__m128 __H, __m128 __L) {
     return __badc_join_ps(__L, __H);
 }
 
-static inline __m256d _mm256_set_m128d(__m128d __H, __m128d __L) {
+__BADC_INTRIN __m256d _mm256_set_m128d(__m128d __H, __m128d __L) {
     return __badc_join_pd(__L, __H);
 }
 
-static inline __m256 _mm256_setr_m128(__m128 __L, __m128 __H) {
+__BADC_INTRIN __m256 _mm256_setr_m128(__m128 __L, __m128 __H) {
     return __badc_join_ps(__L, __H);
 }
 
-static inline __m256d _mm256_setr_m128d(__m128d __L, __m128d __H) {
+__BADC_INTRIN __m256d _mm256_setr_m128d(__m128d __L, __m128d __H) {
     return __badc_join_pd(__L, __H);
 }
 
-static inline __m256 _mm256_load_ps(float const *__P) {
+__BADC_INTRIN __m256 _mm256_load_ps(float const *__P) {
     return *(__m256 const *)__P;
 }
 
-static inline __m256 _mm256_loadu_ps(float const *__P) {
+__BADC_INTRIN __m256 _mm256_loadu_ps(float const *__P) {
     return *(__m256_u const *)__P;
 }
 
-static inline __m256d _mm256_load_pd(double const *__P) {
+__BADC_INTRIN __m256d _mm256_load_pd(double const *__P) {
     return *(__m256d const *)__P;
 }
 
-static inline __m256d _mm256_loadu_pd(double const *__P) {
+__BADC_INTRIN __m256d _mm256_loadu_pd(double const *__P) {
     return *(__m256d_u const *)__P;
 }
 
-static inline void _mm256_store_ps(float *__P, __m256 __A) {
+__BADC_INTRIN void _mm256_store_ps(float *__P, __m256 __A) {
     *(__m256 *)__P = __A;
 }
 
-static inline void _mm256_storeu_ps(float *__P, __m256 __A) {
+__BADC_INTRIN void _mm256_storeu_ps(float *__P, __m256 __A) {
     *(__m256_u *)__P = __A;
 }
 
-static inline void _mm256_store_pd(double *__P, __m256d __A) {
+__BADC_INTRIN void _mm256_store_pd(double *__P, __m256d __A) {
     *(__m256d *)__P = __A;
 }
 
-static inline void _mm256_storeu_pd(double *__P, __m256d __A) {
+__BADC_INTRIN void _mm256_storeu_pd(double *__P, __m256d __A) {
     *(__m256d_u *)__P = __A;
 }
 
@@ -827,7 +832,7 @@ static inline __m256 _mm256_broadcast_ss(float const *__P) {
     return (__m256)(__v8si){__x, __x, __x, __x, __x, __x, __x, __x};
 }
 
-static inline __m128 _mm_broadcast_ss(float const *__P) {
+__BADC_INTRIN __m128 _mm_broadcast_ss(float const *__P) {
     return _mm_load1_ps(__P);
 }
 
@@ -836,60 +841,60 @@ static inline __m256d _mm256_broadcast_sd(double const *__P) {
     return (__m256d)(__v4di){__x, __x, __x, __x};
 }
 
-static inline __m256 _mm256_broadcast_ps(__m128 const *__P) {
+__BADC_INTRIN __m256 _mm256_broadcast_ps(__m128 const *__P) {
     return __badc_join_ps(_mm_loadu_ps((float const *)__P), _mm_loadu_ps((float const *)__P));
 }
 
-static inline __m256d _mm256_broadcast_pd(__m128d const *__P) {
+__BADC_INTRIN __m256d _mm256_broadcast_pd(__m128d const *__P) {
     return __badc_join_pd(_mm_loadu_pd((double const *)__P), _mm_loadu_pd((double const *)__P));
 }
 
-static inline __m256d _mm256_castps_pd(__m256 __A) {
+__BADC_INTRIN __m256d _mm256_castps_pd(__m256 __A) {
     return (__m256d)__A;
 }
 
-static inline __m256 _mm256_castpd_ps(__m256d __A) {
+__BADC_INTRIN __m256 _mm256_castpd_ps(__m256d __A) {
     return (__m256)__A;
 }
 
-static inline __m256i _mm256_castps_si256(__m256 __A) {
+__BADC_INTRIN __m256i _mm256_castps_si256(__m256 __A) {
     return (__m256i)__A;
 }
 
-static inline __m256 _mm256_castsi256_ps(__m256i __A) {
+__BADC_INTRIN __m256 _mm256_castsi256_ps(__m256i __A) {
     return (__m256)__A;
 }
 
-static inline __m256i _mm256_castpd_si256(__m256d __A) {
+__BADC_INTRIN __m256i _mm256_castpd_si256(__m256d __A) {
     return (__m256i)__A;
 }
 
-static inline __m256d _mm256_castsi256_pd(__m256i __A) {
+__BADC_INTRIN __m256d _mm256_castsi256_pd(__m256i __A) {
     return (__m256d)__A;
 }
 
-static inline __m128 _mm256_castps256_ps128(__m256 __A) {
+__BADC_INTRIN __m128 _mm256_castps256_ps128(__m256 __A) {
     return __badc_lo_ps(__A);
 }
 
-static inline __m128d _mm256_castpd256_pd128(__m256d __A) {
+__BADC_INTRIN __m128d _mm256_castpd256_pd128(__m256d __A) {
     return __badc_lo_pd(__A);
 }
 
 /* The upper half is undefined in the SDM; this gives zero. */
-static inline __m256 _mm256_castps128_ps256(__m128 __A) {
+__BADC_INTRIN __m256 _mm256_castps128_ps256(__m128 __A) {
     return (__m256)_mm256_castsi128_si256((__m128i)__A);
 }
 
-static inline __m256d _mm256_castpd128_pd256(__m128d __A) {
+__BADC_INTRIN __m256d _mm256_castpd128_pd256(__m128d __A) {
     return (__m256d)_mm256_castsi128_si256((__m128i)__A);
 }
 
-static inline __m256 _mm256_zextps128_ps256(__m128 __A) {
+__BADC_INTRIN __m256 _mm256_zextps128_ps256(__m128 __A) {
     return (__m256)_mm256_castsi128_si256((__m128i)__A);
 }
 
-static inline __m256d _mm256_zextpd128_pd256(__m128d __A) {
+__BADC_INTRIN __m256d _mm256_zextpd128_pd256(__m128d __A) {
     return (__m256d)_mm256_castsi128_si256((__m128i)__A);
 }
 
@@ -911,16 +916,16 @@ static inline __m256d _mm256_zextpd128_pd256(__m128d __A) {
 #define _mm256_permute2f128_si256(A, B, M) _mm256_permute2x128_si256(A, B, M)
 
 /* VPERMILPS / VSHUFPS select within each 128-bit lane by the same imm8. */
-static inline __m256 _mm256_permute_ps(__m256 __A, const int __M) {
+__BADC_INTRIN __m256 _mm256_permute_ps(__m256 __A, const int __M) {
     return __badc_join_ps(_mm_shuffle_ps(__badc_lo_ps(__A), __badc_lo_ps(__A), __M),
                           _mm_shuffle_ps(__badc_hi_ps(__A), __badc_hi_ps(__A), __M));
 }
 
-static inline __m128 _mm_permute_ps(__m128 __A, const int __M) {
+__BADC_INTRIN __m128 _mm_permute_ps(__m128 __A, const int __M) {
     return _mm_shuffle_ps(__A, __A, __M);
 }
 
-static inline __m256 _mm256_shuffle_ps(__m256 __A, __m256 __B, const int __M) {
+__BADC_INTRIN __m256 _mm256_shuffle_ps(__m256 __A, __m256 __B, const int __M) {
     return __badc_join_ps(_mm_shuffle_ps(__badc_lo_ps(__A), __badc_lo_ps(__B), __M),
                           _mm_shuffle_ps(__badc_hi_ps(__A), __badc_hi_ps(__B), __M));
 }
@@ -977,11 +982,11 @@ static inline __m256d _mm256_blendv_pd(__m256d __A, __m256d __B, __m256d __M) {
     return (__m256d)__a;
 }
 
-static inline int _mm256_movemask_ps(__m256 __A) {
+__BADC_INTRIN int _mm256_movemask_ps(__m256 __A) {
     return _mm_movemask_ps(__badc_lo_ps(__A)) | _mm_movemask_ps(__badc_hi_ps(__A)) << 4;
 }
 
-static inline int _mm256_movemask_pd(__m256d __A) {
+__BADC_INTRIN int _mm256_movemask_pd(__m256d __A) {
     return _mm_movemask_pd(__badc_lo_pd(__A)) | _mm_movemask_pd(__badc_hi_pd(__A)) << 2;
 }
 
@@ -1081,73 +1086,73 @@ static inline __m128d _mm_cmp_sd(__m128d __A, __m128d __B, const int __P) {
 #define _CMP_GT_OQ 0x1e
 #define _CMP_TRUE_US 0x1f
 
-static inline __m256 _mm256_cvtepi32_ps(__m256i __A) {
+__BADC_INTRIN __m256 _mm256_cvtepi32_ps(__m256i __A) {
     return __badc_join_ps(_mm_cvtepi32_ps(_mm256_castsi256_si128(__A)),
                           _mm_cvtepi32_ps(_mm256_extracti128_si256(__A, 1)));
 }
 
-static inline __m256i _mm256_cvtps_epi32(__m256 __A) {
+__BADC_INTRIN __m256i _mm256_cvtps_epi32(__m256 __A) {
     return _mm256_set_m128i(_mm_cvtps_epi32(__badc_hi_ps(__A)), _mm_cvtps_epi32(__badc_lo_ps(__A)));
 }
 
-static inline __m256i _mm256_cvttps_epi32(__m256 __A) {
+__BADC_INTRIN __m256i _mm256_cvttps_epi32(__m256 __A) {
     return _mm256_set_m128i(_mm_cvttps_epi32(__badc_hi_ps(__A)),
                             _mm_cvttps_epi32(__badc_lo_ps(__A)));
 }
 
 /* AVX-512F with VL: the unsigned doubleword conversions. */
-static inline __m128 _mm_cvtepu32_ps(__m128i __A) {
+__BADC_INTRIN __m128 _mm_cvtepu32_ps(__m128i __A) {
     return __builtin_ia32_cvtudq2ps128((__v4si)__A);
 }
 
-static inline __m128i _mm_cvtps_epu32(__m128 __A) {
+__BADC_INTRIN __m128i _mm_cvtps_epu32(__m128 __A) {
     return (__m128i)__builtin_ia32_cvtps2udq128(__A);
 }
 
-static inline __m128i _mm_cvttps_epu32(__m128 __A) {
+__BADC_INTRIN __m128i _mm_cvttps_epu32(__m128 __A) {
     return (__m128i)__builtin_ia32_cvttps2udq128(__A);
 }
 
-static inline __m256 _mm256_cvtepu32_ps(__m256i __A) {
+__BADC_INTRIN __m256 _mm256_cvtepu32_ps(__m256i __A) {
     return __badc_join_ps(_mm_cvtepu32_ps(_mm256_castsi256_si128(__A)),
                           _mm_cvtepu32_ps(_mm256_extracti128_si256(__A, 1)));
 }
 
-static inline __m256i _mm256_cvtps_epu32(__m256 __A) {
+__BADC_INTRIN __m256i _mm256_cvtps_epu32(__m256 __A) {
     return _mm256_set_m128i(_mm_cvtps_epu32(__badc_hi_ps(__A)), _mm_cvtps_epu32(__badc_lo_ps(__A)));
 }
 
-static inline __m256i _mm256_cvttps_epu32(__m256 __A) {
+__BADC_INTRIN __m256i _mm256_cvttps_epu32(__m256 __A) {
     return _mm256_set_m128i(_mm_cvttps_epu32(__badc_hi_ps(__A)),
                             _mm_cvttps_epu32(__badc_lo_ps(__A)));
 }
 
-static inline __m256d _mm256_cvtps_pd(__m128 __A) {
+__BADC_INTRIN __m256d _mm256_cvtps_pd(__m128 __A) {
     return __badc_join_pd(_mm_cvtps_pd(__A), _mm_cvtps_pd(_mm_movehl_ps(__A, __A)));
 }
 
-static inline __m128 _mm256_cvtpd_ps(__m256d __A) {
+__BADC_INTRIN __m128 _mm256_cvtpd_ps(__m256d __A) {
     return _mm_movelh_ps(_mm_cvtpd_ps(__badc_lo_pd(__A)), _mm_cvtpd_ps(__badc_hi_pd(__A)));
 }
 
-static inline __m256d _mm256_cvtepi32_pd(__m128i __A) {
+__BADC_INTRIN __m256d _mm256_cvtepi32_pd(__m128i __A) {
     return __badc_join_pd(_mm_cvtepi32_pd(__A), _mm_cvtepi32_pd(_mm_shuffle_epi32(__A, 0x0E)));
 }
 
-static inline __m128i _mm256_cvtpd_epi32(__m256d __A) {
+__BADC_INTRIN __m128i _mm256_cvtpd_epi32(__m256d __A) {
     return _mm_unpacklo_epi64(_mm_cvtpd_epi32(__badc_lo_pd(__A)), _mm_cvtpd_epi32(__badc_hi_pd(__A)));
 }
 
-static inline __m128i _mm256_cvttpd_epi32(__m256d __A) {
+__BADC_INTRIN __m128i _mm256_cvttpd_epi32(__m256d __A) {
     return _mm_unpacklo_epi64(_mm_cvttpd_epi32(__badc_lo_pd(__A)),
                               _mm_cvttpd_epi32(__badc_hi_pd(__A)));
 }
 
-static inline float _mm256_cvtss_f32(__m256 __A) {
+__BADC_INTRIN float _mm256_cvtss_f32(__m256 __A) {
     return __A[0];
 }
 
-static inline double _mm256_cvtsd_f64(__m256d __A) {
+__BADC_INTRIN double _mm256_cvtsd_f64(__m256d __A) {
     return __A[0];
 }
 
@@ -1159,19 +1164,19 @@ __BADC_MASKMOV(_mm256_maskload_pd, _mm256_maskstore_pd, __m256d, __m256i, double
 #undef __BADC_MASKMOV
 
 /* VBROADCASTSS / VBROADCASTSD from a register. */
-static inline __m128 _mm_broadcastss_ps(__m128 __X) {
+__BADC_INTRIN __m128 _mm_broadcastss_ps(__m128 __X) {
     return (__m128)_mm_set1_epi32(((__v4si)__X)[0]);
 }
 
-static inline __m256 _mm256_broadcastss_ps(__m128 __X) {
+__BADC_INTRIN __m256 _mm256_broadcastss_ps(__m128 __X) {
     return (__m256)_mm256_set1_epi32(((__v4si)__X)[0]);
 }
 
-static inline __m128d _mm_broadcastsd_pd(__m128d __X) {
+__BADC_INTRIN __m128d _mm_broadcastsd_pd(__m128d __X) {
     return (__m128d)_mm_set1_epi64x(((__v2di)__X)[0]);
 }
 
-static inline __m256d _mm256_broadcastsd_pd(__m128d __X) {
+__BADC_INTRIN __m256d _mm256_broadcastsd_pd(__m128d __X) {
     return (__m256d)_mm256_set1_epi64x(((__v2di)__X)[0]);
 }
 
@@ -1208,7 +1213,7 @@ static inline __m256d _mm256_permutevar_pd(__m256d __A, __m256i __C) {
 
 #define _mm256_permute4x64_pd(A, M) ((__m256d)_mm256_permute4x64_epi64((__m256i)(A), M))
 
-static inline __m256 _mm256_permutevar8x32_ps(__m256 __A, __m256i __I) {
+__BADC_INTRIN __m256 _mm256_permutevar8x32_ps(__m256 __A, __m256i __I) {
     return (__m256)_mm256_permutevar8x32_epi32((__m256i)__A, __I);
 }
 
@@ -1231,28 +1236,28 @@ __BADC_VTEST(_mm256_testz_pd, __m256d, __v4di, 4, __a[__i] & __b[__i])
 __BADC_VTEST(_mm256_testc_pd, __m256d, __v4di, 4, ~__a[__i] & __b[__i])
 #undef __BADC_VTEST
 
-static inline int _mm_testnzc_ps(__m128 __A, __m128 __B) {
+__BADC_INTRIN int _mm_testnzc_ps(__m128 __A, __m128 __B) {
     return !_mm_testz_ps(__A, __B) && !_mm_testc_ps(__A, __B);
 }
 
-static inline int _mm256_testnzc_ps(__m256 __A, __m256 __B) {
+__BADC_INTRIN int _mm256_testnzc_ps(__m256 __A, __m256 __B) {
     return !_mm256_testz_ps(__A, __B) && !_mm256_testc_ps(__A, __B);
 }
 
-static inline int _mm_testnzc_pd(__m128d __A, __m128d __B) {
+__BADC_INTRIN int _mm_testnzc_pd(__m128d __A, __m128d __B) {
     return !_mm_testz_pd(__A, __B) && !_mm_testc_pd(__A, __B);
 }
 
-static inline int _mm256_testnzc_pd(__m256d __A, __m256d __B) {
+__BADC_INTRIN int _mm256_testnzc_pd(__m256d __A, __m256d __B) {
     return !_mm256_testz_pd(__A, __B) && !_mm256_testc_pd(__A, __B);
 }
 
 /* ROUNDPS / ROUNDPD and DPPS on each 128-bit half. */
-static inline __m256 _mm256_round_ps(__m256 __A, const int __M) {
+__BADC_INTRIN __m256 _mm256_round_ps(__m256 __A, const int __M) {
     return __badc_join_ps(_mm_round_ps(__badc_lo_ps(__A), __M), _mm_round_ps(__badc_hi_ps(__A), __M));
 }
 
-static inline __m256d _mm256_round_pd(__m256d __A, const int __M) {
+__BADC_INTRIN __m256d _mm256_round_pd(__m256d __A, const int __M) {
     return __badc_join_pd(_mm_round_pd(__badc_lo_pd(__A), __M), _mm_round_pd(__badc_hi_pd(__A), __M));
 }
 
@@ -1261,24 +1266,24 @@ static inline __m256d _mm256_round_pd(__m256d __A, const int __M) {
 #define _mm256_ceil_ps(V) _mm256_round_ps((V), _MM_FROUND_CEIL)
 #define _mm256_ceil_pd(V) _mm256_round_pd((V), _MM_FROUND_CEIL)
 
-static inline __m256 _mm256_dp_ps(__m256 __A, __m256 __B, const int __M) {
+__BADC_INTRIN __m256 _mm256_dp_ps(__m256 __A, __m256 __B, const int __M) {
     return __badc_join_ps(_mm_dp_ps(__badc_lo_ps(__A), __badc_lo_ps(__B), __M),
                           _mm_dp_ps(__badc_hi_ps(__A), __badc_hi_ps(__B), __M));
 }
 
-static inline void _mm256_stream_ps(float *__P, __m256 __A) {
+__BADC_INTRIN void _mm256_stream_ps(float *__P, __m256 __A) {
     _mm256_storeu_ps(__P, __A);
 }
 
-static inline void _mm256_stream_pd(double *__P, __m256d __A) {
+__BADC_INTRIN void _mm256_stream_pd(double *__P, __m256d __A) {
     _mm256_storeu_pd(__P, __A);
 }
 
-static inline __m256 _mm256_loadu2_m128(float const *__H, float const *__L) {
+__BADC_INTRIN __m256 _mm256_loadu2_m128(float const *__H, float const *__L) {
     return __badc_join_ps(_mm_loadu_ps(__L), _mm_loadu_ps(__H));
 }
 
-static inline __m256d _mm256_loadu2_m128d(double const *__H, double const *__L) {
+__BADC_INTRIN __m256d _mm256_loadu2_m128d(double const *__H, double const *__L) {
     return __badc_join_pd(_mm_loadu_pd(__L), _mm_loadu_pd(__H));
 }
 
@@ -1293,20 +1298,20 @@ static inline void _mm256_storeu2_m128d(double *__H, double *__L, __m256d __A) {
 }
 
 /* The SDM leaves the lanes undefined; these give zero. */
-static inline __m256 _mm256_undefined_ps(void) {
+__BADC_INTRIN __m256 _mm256_undefined_ps(void) {
     return _mm256_setzero_ps();
 }
 
-static inline __m256d _mm256_undefined_pd(void) {
+__BADC_INTRIN __m256d _mm256_undefined_pd(void) {
     return _mm256_setzero_pd();
 }
 
 /* VZEROUPPER / VZEROALL: no VEX instruction is emitted, so no upper state
 ** is left to clear. */
-static inline void _mm256_zeroupper(void) {
+__BADC_INTRIN void _mm256_zeroupper(void) {
 }
 
-static inline void _mm256_zeroall(void) {
+__BADC_INTRIN void _mm256_zeroall(void) {
 }
 
 /* FMA3: each lane rounds once, as fma does; the subtracting and negating
@@ -1358,36 +1363,36 @@ __BADC_FMA_ALT(_mm256_fmsubadd_ps, __m256, 8, __builtin_fmaf, 0)
 __BADC_FMA_ALT(_mm256_fmsubadd_pd, __m256d, 4, __builtin_fma, 0)
 #undef __BADC_FMA_ALT
 
-static inline int _rdrand16_step(unsigned short *__P) {
+__BADC_INTRIN int _rdrand16_step(unsigned short *__P) {
     return __builtin_ia32_rdrand16_step(__P);
 }
 
-static inline int _rdrand32_step(unsigned int *__P) {
+__BADC_INTRIN int _rdrand32_step(unsigned int *__P) {
     return __builtin_ia32_rdrand32_step(__P);
 }
 
 #ifdef __x86_64__
-static inline int _rdrand64_step(unsigned long long *__P) {
+__BADC_INTRIN int _rdrand64_step(unsigned long long *__P) {
     return __builtin_ia32_rdrand64_step(__P);
 }
 #endif
 
-static inline int _rdseed16_step(unsigned short *__P) {
+__BADC_INTRIN int _rdseed16_step(unsigned short *__P) {
     return __builtin_ia32_rdseed16_step(__P);
 }
 
-static inline int _rdseed32_step(unsigned int *__P) {
+__BADC_INTRIN int _rdseed32_step(unsigned int *__P) {
     return __builtin_ia32_rdseed32_step(__P);
 }
 
 #ifdef __x86_64__
-static inline int _rdseed64_step(unsigned long long *__P) {
+__BADC_INTRIN int _rdseed64_step(unsigned long long *__P) {
     return __builtin_ia32_rdseed64_step(__P);
 }
 #endif
 
 /* XCR[__A], as gcc's <immintrin.h> carries it through <xsaveintrin.h>. */
-static inline long long _xgetbv(unsigned int __A) {
+__BADC_INTRIN long long _xgetbv(unsigned int __A) {
     return __builtin_ia32_xgetbv(__A);
 }
 
@@ -1548,11 +1553,11 @@ static inline __m128i _mm256_cvtps_ph(__m256 __A, int __imm) {
 
 /* The SHA extensions, from the operation the SDM gives each instruction;
 ** element 0 holds bits 31:0. */
-static inline unsigned __badc_rol32(unsigned __x, int __n) {
+__BADC_INTRIN unsigned __badc_rol32(unsigned __x, int __n) {
     return __x << __n | __x >> (32 - __n);
 }
 
-static inline unsigned __badc_ror32(unsigned __x, int __n) {
+__BADC_INTRIN unsigned __badc_ror32(unsigned __x, int __n) {
     return __x >> __n | __x << (32 - __n);
 }
 
@@ -1607,11 +1612,11 @@ static inline __m128i _mm_sha256rnds2_epu32(__m128i __A, __m128i __B, __m128i __
     return (__m128i)(__v4su){__rf, __re, __rb, __ra};
 }
 
-static inline unsigned __badc_sha256_s0(unsigned __w) {
+__BADC_INTRIN unsigned __badc_sha256_s0(unsigned __w) {
     return __badc_ror32(__w, 7) ^ __badc_ror32(__w, 18) ^ (__w >> 3);
 }
 
-static inline unsigned __badc_sha256_s1(unsigned __w) {
+__BADC_INTRIN unsigned __badc_sha256_s1(unsigned __w) {
     return __badc_ror32(__w, 17) ^ __badc_ror32(__w, 19) ^ (__w >> 10);
 }
 
@@ -1631,23 +1636,23 @@ static inline __m128i _mm_sha256msg2_epu32(__m128i __A, __m128i __B) {
 
 /* BMI1's TZCNT, which gcc's <immintrin.h> carries through <bmiintrin.h>:
 ** the operand width for a zero operand. */
-static inline unsigned int _tzcnt_u32(unsigned int __X) {
+__BADC_INTRIN unsigned int _tzcnt_u32(unsigned int __X) {
     return __X ? (unsigned int)__builtin_ctz(__X) : 32;
 }
 
 #ifdef __x86_64__
-static inline unsigned long long _tzcnt_u64(unsigned long long __X) {
+__BADC_INTRIN unsigned long long _tzcnt_u64(unsigned long long __X) {
     return __X ? (unsigned long long)__builtin_ctzll(__X) : 64;
 }
 #endif
 
 /* POPCNT, which gcc's <immintrin.h> carries through <popcntintrin.h>. */
-static inline int _mm_popcnt_u32(unsigned int __X) {
+__BADC_INTRIN int _mm_popcnt_u32(unsigned int __X) {
     return __builtin_popcount(__X);
 }
 
 #ifdef __x86_64__
-static inline long long _mm_popcnt_u64(unsigned long long __X) {
+__BADC_INTRIN long long _mm_popcnt_u64(unsigned long long __X) {
     return __builtin_popcountll(__X);
 }
 #endif
@@ -1655,15 +1660,15 @@ static inline long long _mm_popcnt_u64(unsigned long long __X) {
 /* BMI1, BMI2, LZCNT and ADX, which gcc's <immintrin.h> carries through
 ** <bmiintrin.h>, <bmi2intrin.h>, <lzcntintrin.h> and <adxintrin.h>: the
 ** instructions' results, computed on any processor. */
-static inline unsigned int _lzcnt_u32(unsigned int __X) {
+__BADC_INTRIN unsigned int _lzcnt_u32(unsigned int __X) {
     return __X ? (unsigned int)__builtin_clz(__X) : 32;
 }
-static inline unsigned short __tzcnt_u16(unsigned short __X) {
+__BADC_INTRIN unsigned short __tzcnt_u16(unsigned short __X) {
     return __X ? (unsigned short)__builtin_ctz(__X) : 16;
 }
-static inline unsigned short _tzcnt_u16(unsigned short __X) { return __tzcnt_u16(__X); }
-static inline unsigned int __tzcnt_u32(unsigned int __X) { return _tzcnt_u32(__X); }
-static inline unsigned int _andn_u32(unsigned int __X, unsigned int __Y) {
+__BADC_INTRIN unsigned short _tzcnt_u16(unsigned short __X) { return __tzcnt_u16(__X); }
+__BADC_INTRIN unsigned int __tzcnt_u32(unsigned int __X) { return _tzcnt_u32(__X); }
+__BADC_INTRIN unsigned int _andn_u32(unsigned int __X, unsigned int __Y) {
     return ~__X & __Y;
 }
 static inline unsigned int __bextr_u32(unsigned int __X, unsigned int __C) {
@@ -1671,16 +1676,16 @@ static inline unsigned int __bextr_u32(unsigned int __X, unsigned int __C) {
     unsigned int __v = __s < 32 ? __X >> __s : 0;
     return __n < 32 ? __v & ((1u << __n) - 1) : __v;
 }
-static inline unsigned int _bextr_u32(unsigned int __X, unsigned int __S, unsigned int __N) {
+__BADC_INTRIN unsigned int _bextr_u32(unsigned int __X, unsigned int __S, unsigned int __N) {
     return __bextr_u32(__X, (__S & 0xff) | (__N & 0xff) << 8);
 }
-static inline unsigned int _blsi_u32(unsigned int __X) { return __X & -__X; }
-static inline unsigned int _blsmsk_u32(unsigned int __X) { return __X ^ (__X - 1); }
-static inline unsigned int _blsr_u32(unsigned int __X) { return __X & (__X - 1); }
-static inline unsigned int __andn_u32(unsigned int __X, unsigned int __Y) { return ~__X & __Y; }
-static inline unsigned int __blsi_u32(unsigned int __X) { return _blsi_u32(__X); }
-static inline unsigned int __blsmsk_u32(unsigned int __X) { return _blsmsk_u32(__X); }
-static inline unsigned int __blsr_u32(unsigned int __X) { return _blsr_u32(__X); }
+__BADC_INTRIN unsigned int _blsi_u32(unsigned int __X) { return __X & -__X; }
+__BADC_INTRIN unsigned int _blsmsk_u32(unsigned int __X) { return __X ^ (__X - 1); }
+__BADC_INTRIN unsigned int _blsr_u32(unsigned int __X) { return __X & (__X - 1); }
+__BADC_INTRIN unsigned int __andn_u32(unsigned int __X, unsigned int __Y) { return ~__X & __Y; }
+__BADC_INTRIN unsigned int __blsi_u32(unsigned int __X) { return _blsi_u32(__X); }
+__BADC_INTRIN unsigned int __blsmsk_u32(unsigned int __X) { return _blsmsk_u32(__X); }
+__BADC_INTRIN unsigned int __blsr_u32(unsigned int __X) { return _blsr_u32(__X); }
 static inline unsigned int _bzhi_u32(unsigned int __X, unsigned int __Y) {
     unsigned int __n = __Y & 0xff;
     return __n < 32 ? __X & ((1u << __n) - 1) : __X;
@@ -1710,7 +1715,7 @@ static inline unsigned char _addcarry_u32(unsigned char __C, unsigned int __X, u
     *__P = (unsigned int)__r;
     return (unsigned char)(__r >> 32);
 }
-static inline unsigned char _addcarryx_u32(unsigned char __C, unsigned int __X, unsigned int __Y,
+__BADC_INTRIN unsigned char _addcarryx_u32(unsigned char __C, unsigned int __X, unsigned int __Y,
                                            unsigned int *__P) {
     return _addcarry_u32(__C, __X, __Y, __P);
 }
@@ -1722,10 +1727,10 @@ static inline unsigned char _subborrow_u32(unsigned char __C, unsigned int __X, 
 }
 
 #ifdef __x86_64__
-static inline unsigned long long _lzcnt_u64(unsigned long long __X) {
+__BADC_INTRIN unsigned long long _lzcnt_u64(unsigned long long __X) {
     return __X ? (unsigned long long)__builtin_clzll(__X) : 64;
 }
-static inline unsigned long long _andn_u64(unsigned long long __X, unsigned long long __Y) {
+__BADC_INTRIN unsigned long long _andn_u64(unsigned long long __X, unsigned long long __Y) {
     return ~__X & __Y;
 }
 static inline unsigned long long __bextr_u64(unsigned long long __X, unsigned long long __C) {
@@ -1733,20 +1738,20 @@ static inline unsigned long long __bextr_u64(unsigned long long __X, unsigned lo
     unsigned long long __v = __s < 64 ? __X >> __s : 0;
     return __n < 64 ? __v & ((1ull << __n) - 1) : __v;
 }
-static inline unsigned long long _bextr_u64(unsigned long long __X, unsigned int __S,
+__BADC_INTRIN unsigned long long _bextr_u64(unsigned long long __X, unsigned int __S,
                                             unsigned int __N) {
     return __bextr_u64(__X, (__S & 0xff) | (__N & 0xff) << 8);
 }
-static inline unsigned long long _blsi_u64(unsigned long long __X) { return __X & -__X; }
-static inline unsigned long long _blsmsk_u64(unsigned long long __X) { return __X ^ (__X - 1); }
-static inline unsigned long long _blsr_u64(unsigned long long __X) { return __X & (__X - 1); }
-static inline unsigned long long __andn_u64(unsigned long long __X, unsigned long long __Y) {
+__BADC_INTRIN unsigned long long _blsi_u64(unsigned long long __X) { return __X & -__X; }
+__BADC_INTRIN unsigned long long _blsmsk_u64(unsigned long long __X) { return __X ^ (__X - 1); }
+__BADC_INTRIN unsigned long long _blsr_u64(unsigned long long __X) { return __X & (__X - 1); }
+__BADC_INTRIN unsigned long long __andn_u64(unsigned long long __X, unsigned long long __Y) {
     return ~__X & __Y;
 }
-static inline unsigned long long __blsi_u64(unsigned long long __X) { return _blsi_u64(__X); }
-static inline unsigned long long __blsmsk_u64(unsigned long long __X) { return _blsmsk_u64(__X); }
-static inline unsigned long long __blsr_u64(unsigned long long __X) { return _blsr_u64(__X); }
-static inline unsigned long long __tzcnt_u64(unsigned long long __X) { return _tzcnt_u64(__X); }
+__BADC_INTRIN unsigned long long __blsi_u64(unsigned long long __X) { return _blsi_u64(__X); }
+__BADC_INTRIN unsigned long long __blsmsk_u64(unsigned long long __X) { return _blsmsk_u64(__X); }
+__BADC_INTRIN unsigned long long __blsr_u64(unsigned long long __X) { return _blsr_u64(__X); }
+__BADC_INTRIN unsigned long long __tzcnt_u64(unsigned long long __X) { return _tzcnt_u64(__X); }
 static inline unsigned long long _bzhi_u64(unsigned long long __X, unsigned int __Y) {
     unsigned int __n = __Y & 0xff;
     return __n < 64 ? __X & ((1ull << __n) - 1) : __X;
@@ -1777,7 +1782,7 @@ static inline unsigned char _addcarry_u64(unsigned char __C, unsigned long long 
     *__P = (unsigned long long)__r;
     return (unsigned char)(__r >> 64);
 }
-static inline unsigned char _addcarryx_u64(unsigned char __C, unsigned long long __X,
+__BADC_INTRIN unsigned char _addcarryx_u64(unsigned char __C, unsigned long long __X,
                                            unsigned long long __Y, unsigned long long *__P) {
     return _addcarry_u64(__C, __X, __Y, __P);
 }
@@ -1799,66 +1804,66 @@ static inline unsigned long long _rorx_u64(unsigned long long __X, const unsigne
     unsigned int __n = __N & 63;
     return __n ? __X >> __n | __X << (64 - __n) : __X;
 }
-static inline int _sarx_i32(int __X, unsigned int __N) { return __X >> (__N & 31); }
-static inline long long _sarx_i64(long long __X, unsigned int __N) { return __X >> (__N & 63); }
-static inline unsigned int _shlx_u32(unsigned int __X, unsigned int __N) { return __X << (__N & 31); }
-static inline unsigned long long _shlx_u64(unsigned long long __X, unsigned int __N) {
+__BADC_INTRIN int _sarx_i32(int __X, unsigned int __N) { return __X >> (__N & 31); }
+__BADC_INTRIN long long _sarx_i64(long long __X, unsigned int __N) { return __X >> (__N & 63); }
+__BADC_INTRIN unsigned int _shlx_u32(unsigned int __X, unsigned int __N) { return __X << (__N & 31); }
+__BADC_INTRIN unsigned long long _shlx_u64(unsigned long long __X, unsigned int __N) {
     return __X << (__N & 63);
 }
-static inline unsigned int _shrx_u32(unsigned int __X, unsigned int __N) { return __X >> (__N & 31); }
-static inline unsigned long long _shrx_u64(unsigned long long __X, unsigned int __N) {
+__BADC_INTRIN unsigned int _shrx_u32(unsigned int __X, unsigned int __N) { return __X >> (__N & 31); }
+__BADC_INTRIN unsigned long long _shrx_u64(unsigned long long __X, unsigned int __N) {
     return __X >> (__N & 63);
 }
 #else
 /* gcc's spellings of LZCNT, which MSVC's are the compiler's own. */
-static inline unsigned short __lzcnt16(unsigned short __X) {
+__BADC_INTRIN unsigned short __lzcnt16(unsigned short __X) {
     return __X ? (unsigned short)(__builtin_clz(__X) - 16) : 16;
 }
-static inline unsigned int __lzcnt32(unsigned int __X) { return _lzcnt_u32(__X); }
+__BADC_INTRIN unsigned int __lzcnt32(unsigned int __X) { return _lzcnt_u32(__X); }
 #ifdef __x86_64__
-static inline unsigned long long __lzcnt64(unsigned long long __X) { return _lzcnt_u64(__X); }
+__BADC_INTRIN unsigned long long __lzcnt64(unsigned long long __X) { return _lzcnt_u64(__X); }
 #endif
 #endif
 
 /* CLFLUSHOPT and CLWB write a cache line back; FXSAVE / FXRSTOR and XSAVE /
 ** XRSTOR save and restore the processor state, XSAVE's in the components
 ** the mask's EDX:EAX selects. */
-static inline void _mm_clflushopt(void const *__P) {
+__BADC_INTRIN void _mm_clflushopt(void const *__P) {
     __asm__ __volatile__("clflushopt (%0)" : : "r"(__P) : "memory");
 }
-static inline void _mm_clwb(void const *__P) {
+__BADC_INTRIN void _mm_clwb(void const *__P) {
     __asm__ __volatile__("clwb (%0)" : : "r"(__P) : "memory");
 }
 struct __badc_fxarea { char __b[512]; };
-static inline void _fxsave(void *__P) {
+__BADC_INTRIN void _fxsave(void *__P) {
     __asm__ __volatile__("fxsave %0" : "=m"(*(struct __badc_fxarea *)__P));
 }
-static inline void _fxrstor(void *__P) {
+__BADC_INTRIN void _fxrstor(void *__P) {
     __asm__ __volatile__("fxrstor %0" : : "m"(*(struct __badc_fxarea *)__P));
 }
-static inline void _xsave(void *__P, long long __M) {
+__BADC_INTRIN void _xsave(void *__P, long long __M) {
     __asm__ __volatile__("xsave (%0)"
                          : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
                          : "memory");
 }
-static inline void _xrstor(void *__P, long long __M) {
+__BADC_INTRIN void _xrstor(void *__P, long long __M) {
     __asm__ __volatile__("xrstor (%0)"
                          : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
                          : "memory");
 }
 #ifdef __x86_64__
-static inline void _fxsave64(void *__P) {
+__BADC_INTRIN void _fxsave64(void *__P) {
     __asm__ __volatile__("fxsave64 (%0)" : : "r"(__P) : "memory");
 }
-static inline void _fxrstor64(void *__P) {
+__BADC_INTRIN void _fxrstor64(void *__P) {
     __asm__ __volatile__("fxrstor64 (%0)" : : "r"(__P) : "memory");
 }
-static inline void _xsave64(void *__P, long long __M) {
+__BADC_INTRIN void _xsave64(void *__P, long long __M) {
     __asm__ __volatile__("xsave64 (%0)"
                          : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
                          : "memory");
 }
-static inline void _xrstor64(void *__P, long long __M) {
+__BADC_INTRIN void _xrstor64(void *__P, long long __M) {
     __asm__ __volatile__("xrstor64 (%0)"
                          : : "r"(__P), "a"((unsigned int)__M), "d"((unsigned int)(__M >> 32))
                          : "memory");
@@ -1866,10 +1871,10 @@ static inline void _xrstor64(void *__P, long long __M) {
 #endif
 #ifndef _WIN32
 /* gcc's spellings of what MSVC's <intrin.h> names as the compiler's own. */
-static inline void _xsetbv(unsigned int __A, unsigned long long __V) {
+__BADC_INTRIN void _xsetbv(unsigned int __A, unsigned long long __V) {
     __asm__ __volatile__("xsetbv" : : "c"(__A), "a"((unsigned int)__V), "d"((unsigned int)(__V >> 32)));
 }
-static inline void _m_prefetchw(void *__P) {
+__BADC_INTRIN void _m_prefetchw(void *__P) {
     __asm__ __volatile__("prefetchw (%0)" : : "r"(__P));
 }
 #endif
@@ -1903,14 +1908,14 @@ typedef unsigned short __mmask16;
 typedef unsigned int __mmask32;
 typedef unsigned long long __mmask64;
 
-static inline __m512i _mm512_loadu_si512(void const *__P) {
+__BADC_INTRIN __m512i _mm512_loadu_si512(void const *__P) {
     return (__m512i)__builtin_ia32_loaddqu512((char const *)__P);
 }
-static inline __m512i _mm512_load_si512(void const *__P) { return _mm512_loadu_si512(__P); }
-static inline void _mm512_storeu_si512(void *__P, __m512i __A) {
+__BADC_INTRIN __m512i _mm512_load_si512(void const *__P) { return _mm512_loadu_si512(__P); }
+__BADC_INTRIN void _mm512_storeu_si512(void *__P, __m512i __A) {
     __builtin_ia32_storedqu512((char *)__P, __A);
 }
-static inline void _mm512_store_si512(void *__P, __m512i __A) { _mm512_storeu_si512(__P, __A); }
+__BADC_INTRIN void _mm512_store_si512(void *__P, __m512i __A) { _mm512_storeu_si512(__P, __A); }
 #define _mm512_loadu_epi8 _mm512_loadu_si512
 #define _mm512_loadu_epi16 _mm512_loadu_si512
 #define _mm512_loadu_epi32 _mm512_loadu_si512
@@ -1920,19 +1925,19 @@ static inline void _mm512_store_si512(void *__P, __m512i __A) { _mm512_storeu_si
 #define _mm512_storeu_epi32 _mm512_storeu_si512
 #define _mm512_storeu_epi64 _mm512_storeu_si512
 
-static inline __m512i _mm512_setzero_si512(void) { return (__m512i){0, 0, 0, 0, 0, 0, 0, 0}; }
+__BADC_INTRIN __m512i _mm512_setzero_si512(void) { return (__m512i){0, 0, 0, 0, 0, 0, 0, 0}; }
 #define _mm512_setzero_epi32 _mm512_setzero_si512
-static inline __m512i _mm512_set1_epi64(long long __A) {
+__BADC_INTRIN __m512i _mm512_set1_epi64(long long __A) {
     return (__m512i){__A, __A, __A, __A, __A, __A, __A, __A};
 }
 static inline __m512i _mm512_set1_epi32(int __A) {
     unsigned long long __q = (unsigned)__A * 0x100000001ull;
     return _mm512_set1_epi64((long long)__q);
 }
-static inline __m512i _mm512_set1_epi16(short __A) {
+__BADC_INTRIN __m512i _mm512_set1_epi16(short __A) {
     return _mm512_set1_epi64((long long)((unsigned short)__A * 0x0001000100010001ull));
 }
-static inline __m512i _mm512_set1_epi8(char __A) {
+__BADC_INTRIN __m512i _mm512_set1_epi8(char __A) {
     return _mm512_set1_epi64((long long)((unsigned char)__A * 0x0101010101010101ull));
 }
 #define _mm512_set_epi64(H, G, F, E, D, C, B, A) ((__m512i){(A), (B), (C), (D), (E), (F), (G), (H)})
@@ -1960,24 +1965,24 @@ static inline __m512i _mm512_set1_epi8(char __A) {
 
 /* The casts reinterpret; the widening ones leave the upper lanes zero, as
 ** the zero-extending ones define. */
-static inline __m256i _mm512_castsi512_si256(__m512i __A) {
+__BADC_INTRIN __m256i _mm512_castsi512_si256(__m512i __A) {
     return (__m256i){__A[0], __A[1], __A[2], __A[3]};
 }
-static inline __m128i _mm512_castsi512_si128(__m512i __A) { return (__m128i){__A[0], __A[1]}; }
-static inline __m512i _mm512_zextsi256_si512(__m256i __A) {
+__BADC_INTRIN __m128i _mm512_castsi512_si128(__m512i __A) { return (__m128i){__A[0], __A[1]}; }
+__BADC_INTRIN __m512i _mm512_zextsi256_si512(__m256i __A) {
     return (__m512i){__A[0], __A[1], __A[2], __A[3], 0, 0, 0, 0};
 }
-static inline __m512i _mm512_zextsi128_si512(__m128i __A) {
+__BADC_INTRIN __m512i _mm512_zextsi128_si512(__m128i __A) {
     return (__m512i){__A[0], __A[1], 0, 0, 0, 0, 0, 0};
 }
 #define _mm512_castsi256_si512 _mm512_zextsi256_si512
 #define _mm512_castsi128_si512 _mm512_zextsi128_si512
-static inline __m512 _mm512_castsi512_ps(__m512i __A) { return (__m512)__A; }
-static inline __m512d _mm512_castsi512_pd(__m512i __A) { return (__m512d)__A; }
-static inline __m512i _mm512_castps_si512(__m512 __A) { return (__m512i)__A; }
-static inline __m512i _mm512_castpd_si512(__m512d __A) { return (__m512i)__A; }
-static inline __m512 _mm512_castpd_ps(__m512d __A) { return (__m512)__A; }
-static inline __m512d _mm512_castps_pd(__m512 __A) { return (__m512d)__A; }
+__BADC_INTRIN __m512 _mm512_castsi512_ps(__m512i __A) { return (__m512)__A; }
+__BADC_INTRIN __m512d _mm512_castsi512_pd(__m512i __A) { return (__m512d)__A; }
+__BADC_INTRIN __m512i _mm512_castps_si512(__m512 __A) { return (__m512i)__A; }
+__BADC_INTRIN __m512i _mm512_castpd_si512(__m512d __A) { return (__m512i)__A; }
+__BADC_INTRIN __m512 _mm512_castpd_ps(__m512d __A) { return (__m512)__A; }
+__BADC_INTRIN __m512d _mm512_castps_pd(__m512 __A) { return (__m512d)__A; }
 
 static inline __m256i _mm512_extracti64x4_epi64(__m512i __A, const int __N) {
     int __h = 4 * (__N & 1);
@@ -2001,28 +2006,28 @@ static inline __m512i _mm512_inserti32x4(__m512i __A, __m128i __B, const int __N
     return __A;
 }
 #define _mm512_inserti64x2 _mm512_inserti32x4
-static inline __m512i _mm512_broadcast_i32x4(__m128i __A) {
+__BADC_INTRIN __m512i _mm512_broadcast_i32x4(__m128i __A) {
     return (__m512i){__A[0], __A[1], __A[0], __A[1], __A[0], __A[1], __A[0], __A[1]};
 }
-static inline __m512i _mm512_broadcast_i64x4(__m256i __A) {
+__BADC_INTRIN __m512i _mm512_broadcast_i64x4(__m256i __A) {
     return (__m512i){__A[0], __A[1], __A[2], __A[3], __A[0], __A[1], __A[2], __A[3]};
 }
 #define _mm512_broadcast_i64x2 _mm512_broadcast_i32x4
-static inline __m512i _mm512_broadcastd_epi32(__m128i __A) {
+__BADC_INTRIN __m512i _mm512_broadcastd_epi32(__m128i __A) {
     return _mm512_set1_epi32(((__v4si)__A)[0]);
 }
-static inline __m512i _mm512_broadcastq_epi64(__m128i __A) { return _mm512_set1_epi64(__A[0]); }
-static inline __m512i _mm512_broadcastb_epi8(__m128i __A) {
+__BADC_INTRIN __m512i _mm512_broadcastq_epi64(__m128i __A) { return _mm512_set1_epi64(__A[0]); }
+__BADC_INTRIN __m512i _mm512_broadcastb_epi8(__m128i __A) {
     return _mm512_set1_epi8(((__v16qi)__A)[0]);
 }
-static inline __m512i _mm512_broadcastw_epi16(__m128i __A) {
+__BADC_INTRIN __m512i _mm512_broadcastw_epi16(__m128i __A) {
     return _mm512_set1_epi16(((__v8hi)__A)[0]);
 }
 
 /* The element-wise integer arithmetic and the bitwise operations are the
 ** vector extension's operators. */
 #define __BADC_512_OP(name, vec, op)                                              \
-    static inline __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
+    __BADC_INTRIN __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
         return (__m512i)((vec)__A op (vec)__B);                                   \
     }
 __BADC_512_OP(add_epi8, __v64qu, +)
@@ -2045,7 +2050,7 @@ __BADC_512_OP(xor_si512, __v8du, ^)
 #define _mm512_xor_epi64 _mm512_xor_si512
 
 #define __BADC_512_ROW(name, row)                                                 \
-    static inline __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
+    __BADC_INTRIN __m512i _mm512_##name(__m512i __A, __m512i __B) {               \
         return (__m512i)__builtin_ia32_##row(__A, __B);                           \
     }
 __BADC_512_ROW(andnot_si512, andnotsi512)
@@ -2098,9 +2103,9 @@ __BADC_512_ROW(shuffle_epi8, pshufb512)
 #define _mm512_andnot_epi32 _mm512_andnot_si512
 #define _mm512_andnot_epi64 _mm512_andnot_si512
 
-static inline __m512i _mm512_abs_epi8(__m512i __A) { return (__m512i)__builtin_ia32_pabsb512(__A); }
-static inline __m512i _mm512_abs_epi16(__m512i __A) { return (__m512i)__builtin_ia32_pabsw512(__A); }
-static inline __m512i _mm512_abs_epi32(__m512i __A) { return (__m512i)__builtin_ia32_pabsd512(__A); }
+__BADC_INTRIN __m512i _mm512_abs_epi8(__m512i __A) { return (__m512i)__builtin_ia32_pabsb512(__A); }
+__BADC_INTRIN __m512i _mm512_abs_epi16(__m512i __A) { return (__m512i)__builtin_ia32_pabsw512(__A); }
+__BADC_INTRIN __m512i _mm512_abs_epi32(__m512i __A) { return (__m512i)__builtin_ia32_pabsd512(__A); }
 
 #define _mm512_slli_epi16(A, N) ((__m512i)__builtin_ia32_psllwi512((__m512i)(A), (int)(N)))
 #define _mm512_slli_epi32(A, N) ((__m512i)__builtin_ia32_pslldi512((__m512i)(A), (int)(N)))
@@ -2130,7 +2135,7 @@ static inline __m512i _mm512_abs_epi32(__m512i __A) { return (__m512i)__builtin_
 #define _mm512_ternarylogic_epi64(A, B, C, I)                                     \
     ((__m512i)__builtin_ia32_pternlogq512((__m512i)(A), (__m512i)(B), (__m512i)(C), (int)(I)))
 #define _mm512_ternarylogic_epi32 _mm512_ternarylogic_epi64
-static inline __m512i _mm512_permutexvar_epi32(__m512i __I, __m512i __A) {
+__BADC_INTRIN __m512i _mm512_permutexvar_epi32(__m512i __I, __m512i __A) {
     return (__m512i)__builtin_ia32_permvarsi512(__A, __I);
 }
 #define _mm512_permutexvar_epi64(I, A)                                            \
@@ -2140,7 +2145,7 @@ static inline __m512i _mm512_permutexvar_epi32(__m512i __I, __m512i __A) {
 /* AVX512-VNNI: each doubleword of the accumulator plus four byte or two
 ** word products. */
 #define __BADC_512_DOT(name, row)                                                 \
-    static inline __m512i _mm512_##name(__m512i __S, __m512i __A, __m512i __B) {  \
+    __BADC_INTRIN __m512i _mm512_##name(__m512i __S, __m512i __A, __m512i __B) {  \
         return (__m512i)__builtin_ia32_##row(__S, __A, __B);                      \
     }
 __BADC_512_DOT(dpbusd_epi32, vpdpbusd512)
@@ -2160,12 +2165,12 @@ __BADC_512_DOT(dpwssds_epi32, vpdpwssds512)
 #define _mm512_cmp_epi64_mask(A, B, P) ((__mmask8)__builtin_ia32_cmpq512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
 #define _mm512_cmp_epu64_mask(A, B, P) ((__mmask8)__builtin_ia32_ucmpq512_mask((__m512i)(A), (__m512i)(B), (int)(P)))
 #define __BADC_512_CMPS(t, mt)                                                    \
-    static inline mt _mm512_cmpeq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 0); } \
-    static inline mt _mm512_cmplt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 1); } \
-    static inline mt _mm512_cmple_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 2); } \
-    static inline mt _mm512_cmpneq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 4); } \
-    static inline mt _mm512_cmpge_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 5); } \
-    static inline mt _mm512_cmpgt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 6); }
+    __BADC_INTRIN mt _mm512_cmpeq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 0); } \
+    __BADC_INTRIN mt _mm512_cmplt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 1); } \
+    __BADC_INTRIN mt _mm512_cmple_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 2); } \
+    __BADC_INTRIN mt _mm512_cmpneq_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 4); } \
+    __BADC_INTRIN mt _mm512_cmpge_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 5); } \
+    __BADC_INTRIN mt _mm512_cmpgt_##t##_mask(__m512i __A, __m512i __B) { return _mm512_cmp_##t##_mask(__A, __B, 6); }
 __BADC_512_CMPS(epi8, __mmask64)
 __BADC_512_CMPS(epu8, __mmask64)
 __BADC_512_CMPS(epi16, __mmask32)
@@ -2175,29 +2180,29 @@ __BADC_512_CMPS(epu32, __mmask16)
 __BADC_512_CMPS(epi64, __mmask8)
 __BADC_512_CMPS(epu64, __mmask8)
 #undef __BADC_512_CMPS
-static inline __mmask64 _mm512_test_epi8_mask(__m512i __A, __m512i __B) {
+__BADC_INTRIN __mmask64 _mm512_test_epi8_mask(__m512i __A, __m512i __B) {
     return _mm512_cmpneq_epi8_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
 }
-static inline __mmask64 _mm512_testn_epi8_mask(__m512i __A, __m512i __B) {
+__BADC_INTRIN __mmask64 _mm512_testn_epi8_mask(__m512i __A, __m512i __B) {
     return _mm512_cmpeq_epi8_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
 }
-static inline __mmask16 _mm512_test_epi32_mask(__m512i __A, __m512i __B) {
+__BADC_INTRIN __mmask16 _mm512_test_epi32_mask(__m512i __A, __m512i __B) {
     return _mm512_cmpneq_epi32_mask(_mm512_and_si512(__A, __B), _mm512_setzero_si512());
 }
-static inline __mmask64 _mm512_movepi8_mask(__m512i __A) {
+__BADC_INTRIN __mmask64 _mm512_movepi8_mask(__m512i __A) {
     return (__mmask64)__builtin_ia32_pmovmskb512(__A);
 }
 
 /* The blends and the masked forms of an operation: the lanes a mask selects
 ** from the operation, the others from the source or zero. */
 #define __BADC_512_BLEND(t, mt, row)                                              \
-    static inline __m512i _mm512_mask_mov_##t(__m512i __S, mt __K, __m512i __A) { \
+    __BADC_INTRIN __m512i _mm512_mask_mov_##t(__m512i __S, mt __K, __m512i __A) { \
         return (__m512i)__builtin_ia32_##row(__S, __K, __A);                      \
     }                                                                             \
-    static inline __m512i _mm512_maskz_mov_##t(mt __K, __m512i __A) {             \
+    __BADC_INTRIN __m512i _mm512_maskz_mov_##t(mt __K, __m512i __A) {             \
         return _mm512_mask_mov_##t(_mm512_setzero_si512(), __K, __A);             \
     }                                                                             \
-    static inline __m512i _mm512_mask_blend_##t(mt __K, __m512i __A, __m512i __B) { \
+    __BADC_INTRIN __m512i _mm512_mask_blend_##t(mt __K, __m512i __A, __m512i __B) { \
         return _mm512_mask_mov_##t(__A, __K, __B);                                \
     }
 __BADC_512_BLEND(epi8, __mmask64, blendmb_512)
@@ -2206,10 +2211,10 @@ __BADC_512_BLEND(epi32, __mmask16, blendmd_512)
 __BADC_512_BLEND(epi64, __mmask8, blendmq_512)
 #undef __BADC_512_BLEND
 #define __BADC_512_MASKED(name, t, mt)                                            \
-    static inline __m512i _mm512_mask_##name(__m512i __S, mt __K, __m512i __A, __m512i __B) { \
+    __BADC_INTRIN __m512i _mm512_mask_##name(__m512i __S, mt __K, __m512i __A, __m512i __B) { \
         return _mm512_mask_mov_##t(__S, __K, _mm512_##name(__A, __B));            \
     }                                                                             \
-    static inline __m512i _mm512_maskz_##name(mt __K, __m512i __A, __m512i __B) { \
+    __BADC_INTRIN __m512i _mm512_maskz_##name(mt __K, __m512i __A, __m512i __B) { \
         return _mm512_maskz_mov_##t(__K, _mm512_##name(__A, __B));                \
     }
 __BADC_512_MASKED(add_epi8, epi8, __mmask64)
@@ -2251,32 +2256,32 @@ typedef enum {
 /* The compares into a mask and the blends at 256 and 128 bits (AVX512VL with
 ** AVX512BW for the byte and word lanes), as their 512-bit forms. */
 #define __BADC_VL_CMP(pre, vt, t, mt, c, bits)                                    \
-    static inline mt pre##_cmpeq_##t##_mask(vt __A, vt __B) {                     \
+    __BADC_INTRIN mt pre##_cmpeq_##t##_mask(vt __A, vt __B) {                     \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 0);                  \
     }                                                                             \
-    static inline mt pre##_cmplt_##t##_mask(vt __A, vt __B) {                     \
+    __BADC_INTRIN mt pre##_cmplt_##t##_mask(vt __A, vt __B) {                     \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 1);                  \
     }                                                                             \
-    static inline mt pre##_cmple_##t##_mask(vt __A, vt __B) {                     \
+    __BADC_INTRIN mt pre##_cmple_##t##_mask(vt __A, vt __B) {                     \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 2);                  \
     }                                                                             \
-    static inline mt pre##_cmpneq_##t##_mask(vt __A, vt __B) {                    \
+    __BADC_INTRIN mt pre##_cmpneq_##t##_mask(vt __A, vt __B) {                    \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 4);                  \
     }                                                                             \
-    static inline mt pre##_cmpge_##t##_mask(vt __A, vt __B) {                     \
+    __BADC_INTRIN mt pre##_cmpge_##t##_mask(vt __A, vt __B) {                     \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 5);                  \
     }                                                                             \
-    static inline mt pre##_cmpgt_##t##_mask(vt __A, vt __B) {                     \
+    __BADC_INTRIN mt pre##_cmpgt_##t##_mask(vt __A, vt __B) {                     \
         return (mt)__builtin_ia32_##c##bits##_mask(__A, __B, 6);                  \
     }
 #define __BADC_VL_BLEND(pre, vt, t, mt, row)                                      \
-    static inline vt pre##_mask_mov_##t(vt __S, mt __K, vt __A) {                 \
+    __BADC_INTRIN vt pre##_mask_mov_##t(vt __S, mt __K, vt __A) {                 \
         return (vt)__builtin_ia32_##row(__S, __K, __A);                           \
     }                                                                             \
-    static inline vt pre##_maskz_mov_##t(mt __K, vt __A) {                        \
+    __BADC_INTRIN vt pre##_maskz_mov_##t(mt __K, vt __A) {                        \
         return pre##_mask_mov_##t((vt){0}, __K, __A);                             \
     }                                                                             \
-    static inline vt pre##_mask_blend_##t(mt __K, vt __A, vt __B) {               \
+    __BADC_INTRIN vt pre##_mask_blend_##t(mt __K, vt __A, vt __B) {               \
         return pre##_mask_mov_##t(__A, __K, __B);                                 \
     }
 #define _mm256_cmp_epi8_mask(A, B, P) ((__mmask32)__builtin_ia32_cmpb256_mask((__m256i)(A), (__m256i)(B), (int)(P)))
@@ -2324,22 +2329,22 @@ __BADC_VL_BLEND(_mm, __m128i, epi64, __mmask8, blendmq_128)
 
 /* Masked forms of operations: the lanes the mask selects from the operation,
 ** the others from the source or zero. */
-static inline __m128i _mm_mask_shuffle_epi8(__m128i __S, __mmask16 __K, __m128i __A, __m128i __B) {
+__BADC_INTRIN __m128i _mm_mask_shuffle_epi8(__m128i __S, __mmask16 __K, __m128i __A, __m128i __B) {
     return _mm_mask_mov_epi8(__S, __K, _mm_shuffle_epi8(__A, __B));
 }
-static inline __m128i _mm_maskz_shuffle_epi8(__mmask16 __K, __m128i __A, __m128i __B) {
+__BADC_INTRIN __m128i _mm_maskz_shuffle_epi8(__mmask16 __K, __m128i __A, __m128i __B) {
     return _mm_maskz_mov_epi8(__K, _mm_shuffle_epi8(__A, __B));
 }
-static inline __m256i _mm256_mask_shuffle_epi8(__m256i __S, __mmask32 __K, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_mask_shuffle_epi8(__m256i __S, __mmask32 __K, __m256i __A, __m256i __B) {
     return _mm256_mask_mov_epi8(__S, __K, _mm256_shuffle_epi8(__A, __B));
 }
-static inline __m256i _mm256_maskz_shuffle_epi8(__mmask32 __K, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_maskz_shuffle_epi8(__mmask32 __K, __m256i __A, __m256i __B) {
     return _mm256_maskz_mov_epi8(__K, _mm256_shuffle_epi8(__A, __B));
 }
-static inline __m512i _mm512_maskz_maddubs_epi16(__mmask32 __K, __m512i __A, __m512i __B) {
+__BADC_INTRIN __m512i _mm512_maskz_maddubs_epi16(__mmask32 __K, __m512i __A, __m512i __B) {
     return _mm512_maskz_mov_epi16(__K, _mm512_maddubs_epi16(__A, __B));
 }
-static inline __m512i _mm512_maskz_set1_epi16(__mmask32 __K, short __A) {
+__BADC_INTRIN __m512i _mm512_maskz_set1_epi16(__mmask32 __K, short __A) {
     return _mm512_maskz_mov_epi16(__K, _mm512_set1_epi16(__A));
 }
 #define _mm512_maskz_extracti32x4_epi32(K, A, N)                                  \
@@ -2348,26 +2353,26 @@ static inline __m512i _mm512_maskz_set1_epi16(__mmask32 __K, short __A) {
     _mm256_maskz_mov_epi64((__mmask8)(K), _mm512_extracti64x4_epi64((A), (N)))
 
 /* AVX512VNNI with AVX512VL on ymm. */
-static inline __m256i _mm256_dpbusd_epi32(__m256i __S, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_dpbusd_epi32(__m256i __S, __m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_vpdpbusd256((__v8si)__S, (__v8si)__A, (__v8si)__B);
 }
-static inline __m256i _mm256_dpbusds_epi32(__m256i __S, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_dpbusds_epi32(__m256i __S, __m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_vpdpbusds256((__v8si)__S, (__v8si)__A, (__v8si)__B);
 }
-static inline __m256i _mm256_dpwssd_epi32(__m256i __S, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_dpwssd_epi32(__m256i __S, __m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_vpdpwssd256((__v8si)__S, (__v8si)__A, (__v8si)__B);
 }
-static inline __m256i _mm256_dpwssds_epi32(__m256i __S, __m256i __A, __m256i __B) {
+__BADC_INTRIN __m256i _mm256_dpwssds_epi32(__m256i __S, __m256i __A, __m256i __B) {
     return (__m256i)__builtin_ia32_vpdpwssds256((__v8si)__S, (__v8si)__A, (__v8si)__B);
 }
 
 /* The masked transfers (AVX512BW / AVX512F, AVX512VL at 256 and 128 bits):
 ** only the lanes a mask selects are read or written. */
 #define __BADC_MASKED_IO(pre, vt, t, mt, sfx, bits)                               \
-    static inline vt pre##_maskz_loadu_##t(mt __K, void const *__P) {             \
+    __BADC_INTRIN vt pre##_maskz_loadu_##t(mt __K, void const *__P) {             \
         return (vt)__builtin_ia32_loaddqu##sfx##bits##_mask(__K, (char const *)__P); \
     }                                                                             \
-    static inline void pre##_mask_storeu_##t(void *__P, mt __K, vt __A) {         \
+    __BADC_INTRIN void pre##_mask_storeu_##t(void *__P, mt __K, vt __A) {         \
         __builtin_ia32_storedqu##sfx##bits##_mask((char *)__P, __K, __A);         \
     }
 __BADC_MASKED_IO(_mm512, __m512i, epi8, __mmask64, qi, 512)
@@ -2383,10 +2388,10 @@ __BADC_MASKED_IO(_mm, __m128i, epi16, __mmask8, hi, 128)
 __BADC_MASKED_IO(_mm, __m128i, epi32, __mmask8, si, 128)
 __BADC_MASKED_IO(_mm, __m128i, epi64, __mmask8, di, 128)
 #undef __BADC_MASKED_IO
-static inline __m512i _mm512_mask_loadu_epi8(__m512i __S, __mmask64 __K, void const *__P) {
+__BADC_INTRIN __m512i _mm512_mask_loadu_epi8(__m512i __S, __mmask64 __K, void const *__P) {
     return _mm512_mask_mov_epi8(__S, __K, _mm512_maskz_loadu_epi8(__K, __P));
 }
-static inline __m512i _mm512_mask_loadu_epi32(__m512i __S, __mmask16 __K, void const *__P) {
+__BADC_INTRIN __m512i _mm512_mask_loadu_epi32(__m512i __S, __mmask16 __K, void const *__P) {
     return _mm512_mask_mov_epi32(__S, __K, _mm512_maskz_loadu_epi32(__K, __P));
 }
 
@@ -2425,38 +2430,38 @@ static inline __m512i _mm512_lzcnt_epi64(__m512i __A) {
 }
 
 /* The opmask operations on integers. */
-static inline __mmask64 _kand_mask64(__mmask64 __A, __mmask64 __B) { return __A & __B; }
-static inline __mmask64 _kor_mask64(__mmask64 __A, __mmask64 __B) { return __A | __B; }
-static inline __mmask64 _knot_mask64(__mmask64 __A) { return ~__A; }
-static inline __mmask16 _mm512_kand(__mmask16 __A, __mmask16 __B) { return __A & __B; }
-static inline __mmask16 _mm512_kor(__mmask16 __A, __mmask16 __B) { return __A | __B; }
-static inline __mmask16 _mm512_knot(__mmask16 __A) { return (__mmask16)~__A; }
-static inline unsigned long long _cvtmask64_u64(__mmask64 __A) { return __A; }
-static inline __mmask64 _cvtu64_mask64(unsigned long long __A) { return __A; }
-static inline unsigned int _cvtmask32_u32(__mmask32 __A) { return __A; }
-static inline __mmask32 _cvtu32_mask32(unsigned int __A) { return __A; }
-static inline int _mm512_kortestz(__mmask16 __A, __mmask16 __B) { return (__A | __B) == 0; }
-static inline unsigned char _kortestz_mask64_u8(__mmask64 __A, __mmask64 __B) {
+__BADC_INTRIN __mmask64 _kand_mask64(__mmask64 __A, __mmask64 __B) { return __A & __B; }
+__BADC_INTRIN __mmask64 _kor_mask64(__mmask64 __A, __mmask64 __B) { return __A | __B; }
+__BADC_INTRIN __mmask64 _knot_mask64(__mmask64 __A) { return ~__A; }
+__BADC_INTRIN __mmask16 _mm512_kand(__mmask16 __A, __mmask16 __B) { return __A & __B; }
+__BADC_INTRIN __mmask16 _mm512_kor(__mmask16 __A, __mmask16 __B) { return __A | __B; }
+__BADC_INTRIN __mmask16 _mm512_knot(__mmask16 __A) { return (__mmask16)~__A; }
+__BADC_INTRIN unsigned long long _cvtmask64_u64(__mmask64 __A) { return __A; }
+__BADC_INTRIN __mmask64 _cvtu64_mask64(unsigned long long __A) { return __A; }
+__BADC_INTRIN unsigned int _cvtmask32_u32(__mmask32 __A) { return __A; }
+__BADC_INTRIN __mmask32 _cvtu32_mask32(unsigned int __A) { return __A; }
+__BADC_INTRIN int _mm512_kortestz(__mmask16 __A, __mmask16 __B) { return (__A | __B) == 0; }
+__BADC_INTRIN unsigned char _kortestz_mask64_u8(__mmask64 __A, __mmask64 __B) {
     return (__A | __B) == 0;
 }
 
 /* AVX512F floating point: the vector extension's operators, and the
 ** fused forms and roots element by element. */
-static inline __m512 _mm512_setzero_ps(void) { return (__m512)_mm512_setzero_si512(); }
-static inline __m512d _mm512_setzero_pd(void) { return (__m512d)_mm512_setzero_si512(); }
-static inline __m512 _mm512_set1_ps(float __A) {
+__BADC_INTRIN __m512 _mm512_setzero_ps(void) { return (__m512)_mm512_setzero_si512(); }
+__BADC_INTRIN __m512d _mm512_setzero_pd(void) { return (__m512d)_mm512_setzero_si512(); }
+__BADC_INTRIN __m512 _mm512_set1_ps(float __A) {
     return (__m512){__A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A, __A};
 }
-static inline __m512d _mm512_set1_pd(double __A) {
+__BADC_INTRIN __m512d _mm512_set1_pd(double __A) {
     return (__m512d){__A, __A, __A, __A, __A, __A, __A, __A};
 }
-static inline __m512 _mm512_loadu_ps(void const *__P) { return (__m512)_mm512_loadu_si512(__P); }
-static inline __m512d _mm512_loadu_pd(void const *__P) { return (__m512d)_mm512_loadu_si512(__P); }
-static inline void _mm512_storeu_ps(void *__P, __m512 __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
-static inline void _mm512_storeu_pd(void *__P, __m512d __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
+__BADC_INTRIN __m512 _mm512_loadu_ps(void const *__P) { return (__m512)_mm512_loadu_si512(__P); }
+__BADC_INTRIN __m512d _mm512_loadu_pd(void const *__P) { return (__m512d)_mm512_loadu_si512(__P); }
+__BADC_INTRIN void _mm512_storeu_ps(void *__P, __m512 __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
+__BADC_INTRIN void _mm512_storeu_pd(void *__P, __m512d __A) { _mm512_storeu_si512(__P, (__m512i)__A); }
 #define __BADC_512_FOP(name, op)                                                  \
-    static inline __m512 _mm512_##name##_ps(__m512 __A, __m512 __B) { return __A op __B; } \
-    static inline __m512d _mm512_##name##_pd(__m512d __A, __m512d __B) { return __A op __B; }
+    __BADC_INTRIN __m512 _mm512_##name##_ps(__m512 __A, __m512 __B) { return __A op __B; } \
+    __BADC_INTRIN __m512d _mm512_##name##_pd(__m512d __A, __m512d __B) { return __A op __B; }
 __BADC_512_FOP(add, +)
 __BADC_512_FOP(sub, -)
 __BADC_512_FOP(mul, *)

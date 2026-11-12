@@ -6,6 +6,11 @@
 ** this build lowers; an operation outside it is absent rather than
 ** emulated. TODO: extend the subset to the rest of the family. */
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "x86intrin.h is only available when targeting x86"
@@ -13,15 +18,15 @@
 
 #include <immintrin.h>
 
-static inline int __bsfd(int __x) {
+__BADC_INTRIN int __bsfd(int __x) {
     return __builtin_ctz((unsigned int)__x);
 }
 
-static inline int __bsrd(int __x) {
+__BADC_INTRIN int __bsrd(int __x) {
     return 31 - __builtin_clz((unsigned int)__x);
 }
 
-static inline int __bswapd(int __x) {
+__BADC_INTRIN int __bswapd(int __x) {
     return (int)__builtin_bswap32((unsigned int)__x);
 }
 
@@ -31,27 +36,27 @@ static inline int __bswapd(int __x) {
 
 /* Rotate counts are reduced modulo the width, which is what the
 ** instruction does; the reduction also keeps a zero count defined. */
-static inline unsigned char __rolb(unsigned char __x, int __c) {
+__BADC_INTRIN unsigned char __rolb(unsigned char __x, int __c) {
     return (unsigned char)((__x << (__c & 7)) | (__x >> (-__c & 7)));
 }
 
-static inline unsigned char __rorb(unsigned char __x, int __c) {
+__BADC_INTRIN unsigned char __rorb(unsigned char __x, int __c) {
     return (unsigned char)((__x >> (__c & 7)) | (__x << (-__c & 7)));
 }
 
-static inline unsigned short __rolw(unsigned short __x, int __c) {
+__BADC_INTRIN unsigned short __rolw(unsigned short __x, int __c) {
     return (unsigned short)((__x << (__c & 15)) | (__x >> (-__c & 15)));
 }
 
-static inline unsigned short __rorw(unsigned short __x, int __c) {
+__BADC_INTRIN unsigned short __rorw(unsigned short __x, int __c) {
     return (unsigned short)((__x >> (__c & 15)) | (__x << (-__c & 15)));
 }
 
-static inline unsigned int __rold(unsigned int __x, int __c) {
+__BADC_INTRIN unsigned int __rold(unsigned int __x, int __c) {
     return (__x << (__c & 31)) | (__x >> (-__c & 31));
 }
 
-static inline unsigned int __rord(unsigned int __x, int __c) {
+__BADC_INTRIN unsigned int __rord(unsigned int __x, int __c) {
     return (__x >> (__c & 31)) | (__x << (-__c & 31));
 }
 
@@ -66,7 +71,7 @@ static inline unsigned long long __rdtsc(void) {
     return ((unsigned long long)__hi << 32) | __lo;
 }
 
-static inline unsigned long long __rdtscp(unsigned int *__A) {
+__BADC_INTRIN unsigned long long __rdtscp(unsigned int *__A) {
     return __builtin_ia32_rdtscp(__A);
 }
 
@@ -76,7 +81,7 @@ static inline unsigned long long __rdpmc(int __counter) {
     return ((unsigned long long)__hi << 32) | __lo;
 }
 
-static inline void __pause(void) {
+__BADC_INTRIN void __pause(void) {
     __asm__ __volatile__("pause");
 }
 
@@ -84,25 +89,25 @@ static inline void __pause(void) {
 #define _rdpmc(c) __rdpmc(c)
 
 #ifdef __x86_64__
-static inline long long __bsfq(long long __x) {
+__BADC_INTRIN long long __bsfq(long long __x) {
     return __builtin_ctzll((unsigned long long)__x);
 }
 
-static inline long long __bsrq(long long __x) {
+__BADC_INTRIN long long __bsrq(long long __x) {
     return 63 - __builtin_clzll((unsigned long long)__x);
 }
 
-static inline long long __bswapq(long long __x) {
+__BADC_INTRIN long long __bswapq(long long __x) {
     return (long long)__builtin_bswap64((unsigned long long)__x);
 }
 
 #define _bswap64(x) __bswapq(x)
 
-static inline unsigned long long __rolq(unsigned long long __x, int __c) {
+__BADC_INTRIN unsigned long long __rolq(unsigned long long __x, int __c) {
     return (__x << (__c & 63)) | (__x >> (-__c & 63));
 }
 
-static inline unsigned long long __rorq(unsigned long long __x, int __c) {
+__BADC_INTRIN unsigned long long __rorq(unsigned long long __x, int __c) {
     return (__x >> (__c & 63)) | (__x << (-__c & 63));
 }
 
@@ -110,11 +115,11 @@ static inline unsigned long long __rorq(unsigned long long __x, int __c) {
 #define _lrotr(x, c) __rorq((x), (c))
 
 /* RFLAGS; gcc's and clang's 32-bit forms are not provided. */
-static inline unsigned long long __readeflags(void) {
+__BADC_INTRIN unsigned long long __readeflags(void) {
     return __builtin_ia32_readeflags_u64();
 }
 
-static inline void __writeeflags(unsigned long long __X) {
+__BADC_INTRIN void __writeeflags(unsigned long long __X) {
     __builtin_ia32_writeeflags_u64(__X);
 }
 #else

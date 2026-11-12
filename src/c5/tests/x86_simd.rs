@@ -2510,3 +2510,29 @@ fn a_narrowing_row_stores_its_result_width() {
     let stores: Vec<_> = simd::get(op).stores().collect();
     assert_eq!(stores, [(0, 16)]);
 }
+
+/// The bundled intrinsics are inlined at every optimization level on both
+/// x86-64 ABIs, so the object defines none of them.
+#[cfg(feature = "full")]
+#[test]
+fn the_intrinsics_are_inlined_at_every_level() {
+    use crate::Target;
+    let src = "#include <immintrin.h>\n\
+         __m128i lo(__m256i a) { return _mm256_castsi256_si128(a); }\n\
+         __m256i add(__m256i a, __m256i b) { return _mm256_add_epi32(a, b); }\n\
+         __m128 mul(__m128 a, __m128 b) { return _mm_mul_ps(a, b); }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        for optimize in [false, true] {
+            let obj = super::perf_codegen::object_at(src, target, optimize);
+            let names: Vec<_> = super::codegen::elf_func_symbols(&obj)
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect();
+            assert_eq!(
+                names,
+                ["lo", "add", "mul"],
+                "{target:?} optimize={optimize}"
+            );
+        }
+    }
+}

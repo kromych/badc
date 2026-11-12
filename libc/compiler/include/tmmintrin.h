@@ -3,6 +3,11 @@
 ** extension as the SDM defines each instruction. As in gcc and clang, the
 ** SSE3 ones come from <pmmintrin.h>. */
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "tmmintrin.h is only available when targeting x86"
@@ -10,63 +15,63 @@
 
 #include <pmmintrin.h>
 
-static inline __m128i _mm_shuffle_epi8(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_shuffle_epi8(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_pshufb128((__v16qi)__X, (__v16qi)__Y);
 }
 
-static inline __m128i _mm_maddubs_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_maddubs_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_pmaddubsw128((__v16qi)__X, (__v16qi)__Y);
 }
 
-static inline __m128i _mm_abs_epi8(__m128i __X) {
+__BADC_INTRIN __m128i _mm_abs_epi8(__m128i __X) {
     return (__m128i)__builtin_ia32_pabsb128((__v16qi)__X);
 }
 
-static inline __m128i _mm_abs_epi16(__m128i __X) {
+__BADC_INTRIN __m128i _mm_abs_epi16(__m128i __X) {
     return (__m128i)__builtin_ia32_pabsw128((__v8hi)__X);
 }
 
-static inline __m128i _mm_abs_epi32(__m128i __X) {
+__BADC_INTRIN __m128i _mm_abs_epi32(__m128i __X) {
     return (__m128i)__builtin_ia32_pabsd128((__v4si)__X);
 }
 
-static inline __m128i _mm_sign_epi8(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_sign_epi8(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_psignb128((__v16qi)__X, (__v16qi)__Y);
 }
 
-static inline __m128i _mm_sign_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_sign_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_psignw128((__v8hi)__X, (__v8hi)__Y);
 }
 
-static inline __m128i _mm_sign_epi32(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_sign_epi32(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_psignd128((__v4si)__X, (__v4si)__Y);
 }
 
-static inline __m128i _mm_hadd_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hadd_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phaddw128((__v8hi)__X, (__v8hi)__Y);
 }
 
-static inline __m128i _mm_hadd_epi32(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hadd_epi32(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phaddd128((__v4si)__X, (__v4si)__Y);
 }
 
-static inline __m128i _mm_hadds_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hadds_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phaddsw128((__v8hi)__X, (__v8hi)__Y);
 }
 
-static inline __m128i _mm_hsub_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hsub_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phsubw128((__v8hi)__X, (__v8hi)__Y);
 }
 
-static inline __m128i _mm_hsub_epi32(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hsub_epi32(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phsubd128((__v4si)__X, (__v4si)__Y);
 }
 
-static inline __m128i _mm_hsubs_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_hsubs_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_phsubsw128((__v8hi)__X, (__v8hi)__Y);
 }
 
-static inline __m128i _mm_mulhrs_epi16(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_mulhrs_epi16(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_pmulhrsw128((__v8hi)__X, (__v8hi)__Y);
 }
 

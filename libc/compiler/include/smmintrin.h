@@ -7,6 +7,11 @@
 ** and the string compares, whose results are flags; ROUNDPS and its kin,
 ** DPPS, DPPD, INSERTPS, EXTRACTPS, PHMINPOSUW and MPSADBW. */
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "smmintrin.h is only available when targeting x86"
@@ -28,7 +33,7 @@
 #define _MM_FROUND_RINT (_MM_FROUND_CUR_DIRECTION | _MM_FROUND_RAISE_EXC)
 #define _MM_FROUND_NEARBYINT (_MM_FROUND_CUR_DIRECTION | _MM_FROUND_NO_EXC)
 
-static inline __m128i _mm_cmpeq_epi64(__m128i __X, __m128i __Y) {
+__BADC_INTRIN __m128i _mm_cmpeq_epi64(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_pcmpeqq((__v2di)__X, (__v2di)__Y);
 }
 
@@ -63,7 +68,7 @@ static inline __m128 _mm_insert_ps(__m128 __X, __m128 __Y, const int __N) {
 }
 
 #define __BADC_BINARY(name, builtin, cast)                                      \
-    static inline __m128i _mm_##name(__m128i __X, __m128i __Y) {               \
+    __BADC_INTRIN __m128i _mm_##name(__m128i __X, __m128i __Y) {               \
         return (__m128i)__builtin_ia32_##builtin((cast)__X, (cast)__Y);       \
     }
 __BADC_BINARY(min_epi8, pminsb128, __v16qi)
@@ -82,7 +87,7 @@ __BADC_BINARY(cmpgt_epi64, pcmpgtq, __v2di)
 
 /* PMOVSX / PMOVZX: the low lanes of the operand, sign- or zero-extended. */
 #define __BADC_EXTEND(name, builtin, cast)                                      \
-    static inline __m128i _mm_##name(__m128i __X) {                            \
+    __BADC_INTRIN __m128i _mm_##name(__m128i __X) {                            \
         return (__m128i)__builtin_ia32_##builtin((cast)__X);                  \
     }
 __BADC_EXTEND(cvtepi8_epi16, pmovsxbw128, __v16qi)
@@ -146,7 +151,7 @@ static inline int _mm_testc_si128(__m128i __M, __m128i __V) {
     return (__r[0] | __r[1]) == 0;
 }
 
-static inline int _mm_testnzc_si128(__m128i __M, __m128i __V) {
+__BADC_INTRIN int _mm_testnzc_si128(__m128i __M, __m128i __V) {
     return !_mm_testz_si128(__M, __V) && !_mm_testc_si128(__M, __V);
 }
 
@@ -155,7 +160,7 @@ static inline int _mm_testnzc_si128(__m128i __M, __m128i __V) {
 #define _mm_test_mix_ones_zeros(M, V) _mm_testnzc_si128((M), (V))
 
 /* MOVNTDQA: an ordinary load. */
-static inline __m128i _mm_stream_load_si128(void const *__P) {
+__BADC_INTRIN __m128i _mm_stream_load_si128(void const *__P) {
     return _mm_loadu_si128((__m128i const *)__P);
 }
 
@@ -313,7 +318,7 @@ static inline __m128i _mm_mpsadbw_epu8(__m128i __X, __m128i __Y, const int __M) 
 #define _SIDD_BIT_MASK 0x00
 #define _SIDD_UNIT_MASK 0x40
 
-static inline int __badc_str_count(int __m) {
+__BADC_INTRIN int __badc_str_count(int __m) {
     return __m & 1 ? 8 : 16;
 }
 

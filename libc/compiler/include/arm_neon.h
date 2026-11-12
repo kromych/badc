@@ -40,6 +40,11 @@
  */
 #ifndef BADC_ARM_NEON_H
 #define BADC_ARM_NEON_H
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #ifndef __aarch64__
 #error "arm_neon.h requires an AArch64 target"
@@ -130,57 +135,57 @@ typedef struct uint8x16x4_t {
 #define __BADC_NEON_B(stem, A) __BADC_NEON_B_(stem, A)
 #define __BADC_NEON_B_(stem, A) stem##_##A
 #define __BADC_NEON_B2(name, R, T, U, k, si, ui, A)                       \
-    static inline R name(T __a, U __b) {                                  \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b); \
     }
 #define __BADC_NEON_B2R(name, R, T, U, k, si, ui, A)                      \
-    static inline R name(T __a, U __b) {                                  \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__b, __a); \
     }
 #define __BADC_NEON_B1(name, R, T, k, si, ui, A)                          \
-    static inline R name(T __a) {                                         \
+    __BADC_INTRIN R name(T __a) {                                         \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a);     \
     }
 /* The accumulator __a is the first operand and the result; B3T's other
  * operands are of types T and U. */
 #define __BADC_NEON_B3(name, R, k, si, ui, A) __BADC_NEON_B3T(name, R, R, R, k, si, ui, A)
 #define __BADC_NEON_B3T(name, R, T, U, k, si, ui, A)                      \
-    static inline R name(R __a, T __b, U __c) {                           \
+    __BADC_INTRIN R name(R __a, T __b, U __c) {                           \
         return (R)__BADC_NEON_B(__BADC_NEON_PICK(k, si, ui), A)(__a, __b, __c); \
     }
 
 /* One instruction into R; FN3 accumulates into __a, FROMR reads an `r`. */
 #define __BADC_NEON_FN1(name, R, T, tmpl)                                 \
-    static inline R name(T __a) {                                         \
+    __BADC_INTRIN R name(T __a) {                                         \
         R __r;                                                            \
         __asm__(tmpl : "=w"(__r) : "w"(__a));                             \
         return __r;                                                       \
     }
 #define __BADC_NEON_FN2(name, R, T, U, tmpl)                              \
-    static inline R name(T __a, U __b) {                                  \
+    __BADC_INTRIN R name(T __a, U __b) {                                  \
         R __r;                                                            \
         __asm__(tmpl : "=w"(__r) : "w"(__a), "w"(__b));                   \
         return __r;                                                       \
     }
 #define __BADC_NEON_FN3(name, R, T, U, tmpl)                              \
-    static inline R name(R __a, T __b, U __c) {                           \
+    __BADC_INTRIN R name(R __a, T __b, U __c) {                           \
         __asm__(tmpl : "+w"(__a) : "w"(__b), "w"(__c));                   \
         return __a;                                                       \
     }
 #define __BADC_NEON_FROMR(name, R, E, tmpl)                               \
-    static inline R name(E __x) {                                         \
+    __BADC_INTRIN R name(E __x) {                                         \
         R __r;                                                            \
         __asm__(tmpl : "=w"(__r) : "r"(__x));                             \
         return __r;                                                       \
     }
 #define __BADC_NEON_LOAD(name, T, E, tmpl)                                \
-    static inline T name(const E *__p) {                                  \
+    __BADC_INTRIN T name(const E *__p) {                                  \
         T __r;                                                            \
         __asm__(tmpl : "=w"(__r) : "r"(__p) : "memory");                  \
         return __r;                                                       \
     }
 #define __BADC_NEON_STORE(name, T, E, view)                               \
-    static inline void name(E *__p, T __v) {                              \
+    __BADC_INTRIN void name(E *__p, T __v) {                              \
         __asm__("str %" view "1, [%0]" : : "r"(__p), "w"(__v) : "memory"); \
     }
 
@@ -261,8 +266,8 @@ __BADC_NEON_E64(__BADC_NEON_F_LD1R1, _)
     __BADC_NEON_FROMR(vdup_n_##sfx, D, E, "fmov %d0, %x1")                \
     __BADC_NEON_FROMR(vdupq_n_##sfx, Q, E, "dup %0.2d, %x1")
 #define __BADC_NEON_F_MOV(_, sfx, k, E, D, Q, ...)                        \
-    static inline D vmov_n_##sfx(E __x) { return vdup_n_##sfx(__x); }     \
-    static inline Q vmovq_n_##sfx(E __x) { return vdupq_n_##sfx(__x); }
+    __BADC_INTRIN D vmov_n_##sfx(E __x) { return vdup_n_##sfx(__x); }     \
+    __BADC_INTRIN Q vmovq_n_##sfx(E __x) { return vdupq_n_##sfx(__x); }
 __BADC_NEON_INT_8_32(__BADC_NEON_F_DUP, _)
 __BADC_NEON_R_p8(__BADC_NEON_F_DUP, _)
 __BADC_NEON_R_p16(__BADC_NEON_F_DUP, _)
@@ -284,14 +289,14 @@ __BADC_NEON_ALL(__BADC_NEON_F_HALF, _)
 /* Reinterpretations: casts between vector types of one width. AFTER_x
  * names the rows after x in ALL's order, so each pair is spelled once. */
 #define __BADC_NEON_F_CAST(a, A, AQ, b, k, E, B, BQ, ...)                 \
-    static inline A vreinterpret_##a##_##b(B __x) { return (A)__x; }      \
-    static inline B vreinterpret_##b##_##a(A __x) { return (B)__x; }      \
-    static inline AQ vreinterpretq_##a##_##b(BQ __x) { return (AQ)__x; }  \
-    static inline BQ vreinterpretq_##b##_##a(AQ __x) { return (BQ)__x; }
+    __BADC_INTRIN A vreinterpret_##a##_##b(B __x) { return (A)__x; }      \
+    __BADC_INTRIN B vreinterpret_##b##_##a(A __x) { return (B)__x; }      \
+    __BADC_INTRIN AQ vreinterpretq_##a##_##b(BQ __x) { return (AQ)__x; }  \
+    __BADC_INTRIN BQ vreinterpretq_##b##_##a(AQ __x) { return (BQ)__x; }
 #define __BADC_NEON_F_CASTS(_, a, k, E, A, AQ, ...)                       \
     __BADC_NEON_AFTER_##a(__BADC_NEON_F_CAST, a, A, AQ)                   \
-    static inline poly128_t vreinterpretq_p128_##a(AQ __x) { return (poly128_t)__x; } \
-    static inline AQ vreinterpretq_##a##_p128(poly128_t __x) { return (AQ)__x; }
+    __BADC_INTRIN poly128_t vreinterpretq_p128_##a(AQ __x) { return (poly128_t)__x; } \
+    __BADC_INTRIN AQ vreinterpretq_##a##_p128(poly128_t __x) { return (AQ)__x; }
 #define __BADC_NEON_AFTER_s8(F, ...)                                      \
     __BADC_NEON_R_u8(F, __VA_ARGS__) __BADC_NEON_AFTER_u8(F, __VA_ARGS__)
 #define __BADC_NEON_AFTER_u8(F, ...)                                      \
@@ -334,10 +339,10 @@ __BADC_NEON_PERMS(vuzp2, __builtin_neon_uzp2)
 __BADC_NEON_PERMS(vtrn1, __builtin_neon_trn1)
 __BADC_NEON_PERMS(vtrn2, __builtin_neon_trn2)
 #define __BADC_NEON_PAIR(op, sfx, DN, QN)                                 \
-    static inline DN##x2_t op##_##sfx(DN##_t __a, DN##_t __b) {           \
+    __BADC_INTRIN DN##x2_t op##_##sfx(DN##_t __a, DN##_t __b) {           \
         return (DN##x2_t){{op##1_##sfx(__a, __b), op##2_##sfx(__a, __b)}}; \
     }                                                                     \
-    static inline QN##x2_t op##q_##sfx(QN##_t __a, QN##_t __b) {          \
+    __BADC_INTRIN QN##x2_t op##q_##sfx(QN##_t __a, QN##_t __b) {          \
         return (QN##x2_t){{op##1q_##sfx(__a, __b), op##2q_##sfx(__a, __b)}}; \
     }
 #define __BADC_NEON_PAIRS(sfx, DN, QN)                                    \
@@ -374,7 +379,7 @@ __BADC_NEON_LANES(__BADC_NEON_F_UNX, vrev64, __builtin_neon_rev64)
 
 /* Bitwise select: the mask's set bits take the first operand's. */
 #define __BADC_NEON_BSL(name, M, T, A)                                    \
-    static inline T name(M __m, T __a, T __b) {                           \
+    __BADC_INTRIN T name(M __m, T __a, T __b) {                           \
         return (T)__builtin_neon_bsl_##A(__m, __a, __b);                  \
     }
 #define __BADC_NEON_F_BSL(_, sfx, k, E, D, Q, AD, AQ, UD, UQ, ...)        \
@@ -500,12 +505,12 @@ __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, __builtin_neon_sqshl, __builtin_neon_u
     __BADC_NEON_B1(vpaddlq_##n, WQ, NQ, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NAQ)
 #define __BADC_NEON_F_MOVN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
     __BADC_NEON_B1(op##_##w, ND, WQ, k, si, ui, WAQ)                      \
-    static inline NQ op##_high_##w(ND __r, WQ __a) {                      \
+    __BADC_INTRIN NQ op##_high_##w(ND __r, WQ __a) {                      \
         return (NQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)op##_##w(__a)); \
     }
 #define __BADC_NEON_F_QMOVUN(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
     __BADC_NEON_B1(vqmovun_##w, UND, WQ, s, __builtin_neon_sqxtun, __builtin_neon_sqxtun, WAQ) \
-    static inline UNQ vqmovun_high_##w(UND __r, WQ __a) {                 \
+    __BADC_INTRIN UNQ vqmovun_high_##w(UND __r, WQ __a) {                 \
         return (UNQ)vcombine_u64((uint64x1_t)__r, (uint64x1_t)vqmovun_##w(__a)); \
     }
 __BADC_NEON_WIDE(__BADC_NEON_F_LONG, vaddl, __builtin_neon_saddl, __builtin_neon_uaddl)
@@ -525,9 +530,9 @@ __BADC_NEON_SWIDE(__BADC_NEON_F_QMOVUN, _)
 /* Across lanes: lane 0 of the reduction's row. A 2-lane 32-bit or 64-bit
  * vector takes the pairwise form of the vector with itself. */
 #define __BADC_NEON_RED(name, R, T, stem, A)                              \
-    static inline R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a)[0]; }
+    __BADC_INTRIN R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a)[0]; }
 #define __BADC_NEON_RED2(name, R, T, stem, A)                             \
-    static inline R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a, __a)[0]; }
+    __BADC_INTRIN R name(T __a) { return (R)__BADC_NEON_B(stem, A)(__a, __a)[0]; }
 #define __BADC_NEON_F_ACROSS(op, si, ui, sfx, k, E, D, Q, AD, AQ, ...)    \
     __BADC_NEON_RED(op##_##sfx, E, D, __BADC_NEON_PICK(k, si, ui), AD)    \
     __BADC_NEON_RED(op##q_##sfx, E, Q, __BADC_NEON_PICK(k, si, ui), AQ)
@@ -1012,16 +1017,16 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 /* Byte table lookups in one 16-byte table: an out-of-range index gives 0
  * (vqtbl1), or keeps the destination byte (vqtbx1). */
 #define __BADC_NEON_TBL(sfx, D, Q)                                        \
-    static inline D##_t vqtbl1_##sfx(Q##_t __t, uint8x8_t __idx) {        \
+    __BADC_INTRIN D##_t vqtbl1_##sfx(Q##_t __t, uint8x8_t __idx) {        \
         return (D##_t)__builtin_neon_tbl_8b(__t, __idx);                  \
     }                                                                     \
-    static inline Q##_t vqtbl1q_##sfx(Q##_t __t, uint8x16_t __idx) {      \
+    __BADC_INTRIN Q##_t vqtbl1q_##sfx(Q##_t __t, uint8x16_t __idx) {      \
         return (Q##_t)__builtin_neon_tbl_16b(__t, __idx);                 \
     }                                                                     \
-    static inline D##_t vqtbx1_##sfx(D##_t __d, Q##_t __t, uint8x8_t __idx) { \
+    __BADC_INTRIN D##_t vqtbx1_##sfx(D##_t __d, Q##_t __t, uint8x8_t __idx) { \
         return (D##_t)__builtin_neon_tbx_8b(__d, __t, __idx);             \
     }                                                                     \
-    static inline Q##_t vqtbx1q_##sfx(Q##_t __d, Q##_t __t, uint8x16_t __idx) { \
+    __BADC_INTRIN Q##_t vqtbx1q_##sfx(Q##_t __d, Q##_t __t, uint8x16_t __idx) { \
         return (Q##_t)__builtin_neon_tbx_16b(__d, __t, __idx);            \
     }
 __BADC_NEON_TBL(u8, uint8x8, uint8x16)
@@ -1030,26 +1035,26 @@ __BADC_NEON_TBL(p8, poly8x8, poly8x16)
 
 /* AES single rounds (FEAT_AES): AddRoundKey + SubBytes + ShiftRows (aese /
  * aesd) and the [inverse] MixColumns (aesmc / aesimc). */
-static inline uint8x16_t vaeseq_u8(uint8x16_t __d, uint8x16_t __k) {
+__BADC_INTRIN uint8x16_t vaeseq_u8(uint8x16_t __d, uint8x16_t __k) {
     __asm__(".arch_extension aes\n\t"
             "aese %0.16b, %1.16b" : "+w"(__d) : "w"(__k));
     return __d;
 }
 
-static inline uint8x16_t vaesdq_u8(uint8x16_t __d, uint8x16_t __k) {
+__BADC_INTRIN uint8x16_t vaesdq_u8(uint8x16_t __d, uint8x16_t __k) {
     __asm__(".arch_extension aes\n\t"
             "aesd %0.16b, %1.16b" : "+w"(__d) : "w"(__k));
     return __d;
 }
 
-static inline uint8x16_t vaesmcq_u8(uint8x16_t __d) {
+__BADC_INTRIN uint8x16_t vaesmcq_u8(uint8x16_t __d) {
     uint8x16_t __r;
     __asm__(".arch_extension aes\n\t"
             "aesmc %0.16b, %1.16b" : "=w"(__r) : "w"(__d));
     return __r;
 }
 
-static inline uint8x16_t vaesimcq_u8(uint8x16_t __d) {
+__BADC_INTRIN uint8x16_t vaesimcq_u8(uint8x16_t __d) {
     uint8x16_t __r;
     __asm__(".arch_extension aes\n\t"
             "aesimc %0.16b, %1.16b" : "=w"(__r) : "w"(__d));
@@ -1058,7 +1063,7 @@ static inline uint8x16_t vaesimcq_u8(uint8x16_t __d) {
 
 /* 64x64->128 carryless multiply (FEAT_PMULL). The scalar operands move to
  * the low d lanes; the product fills the q register. */
-static inline poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
+__BADC_INTRIN poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
     poly128_t __r;
     __asm__(".arch_extension aes\n\t"
             "pmull %0.1q, %1.1d, %2.1d" : "=w"(__r) : "w"(__a), "w"(__b));
@@ -1066,7 +1071,7 @@ static inline poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
 }
 
 /* The same product over the upper d lane of each source. */
-static inline poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
+__BADC_INTRIN poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
     poly128_t __r;
     __asm__(".arch_extension aes\n\t"
             "pmull2 %0.1q, %1.2d, %2.2d" : "=w"(__r) : "w"(__a), "w"(__b));
@@ -1077,21 +1082,21 @@ static inline poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
  * running state as a q register, SHA-1's e as an s register; the schedule
  * updates accumulate into their first operand. */
 #define __BADC_NEON_SHA1H(name, insn)                                       \
-    static inline uint32x4_t name(uint32x4_t __abcd, uint32_t __e, uint32x4_t __wk) { \
+    __BADC_INTRIN uint32x4_t name(uint32x4_t __abcd, uint32_t __e, uint32x4_t __wk) { \
         __asm__(insn " %q0, %s1, %2.4s" : "+w"(__abcd) : "w"(__e), "w"(__wk)); \
         return __abcd;                                                      \
     }
 __BADC_NEON_SHA1H(vsha1cq_u32, "sha1c")
 __BADC_NEON_SHA1H(vsha1pq_u32, "sha1p")
 __BADC_NEON_SHA1H(vsha1mq_u32, "sha1m")
-static inline uint32_t vsha1h_u32(uint32_t __e) {
+__BADC_INTRIN uint32_t vsha1h_u32(uint32_t __e) {
     uint32_t __r;
     __asm__("sha1h %s0, %s1" : "=w"(__r) : "w"(__e));
     return __r;
 }
 __BADC_NEON_FN3(vsha1su0q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
                 __BADC_NEON_I3("sha1su0", 4s, 4s, 4s))
-static inline uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
+__BADC_INTRIN uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
     __asm__("sha1su1 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
     return __a;
 }
@@ -1099,7 +1104,7 @@ static inline uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
     __BADC_NEON_FN3(name, T, T, T, insn " %q0, %q1, %2." #A)
 __BADC_NEON_SHAQ(vsha256hq_u32, uint32x4_t, "sha256h", 4s)
 __BADC_NEON_SHAQ(vsha256h2q_u32, uint32x4_t, "sha256h2", 4s)
-static inline uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
+__BADC_INTRIN uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
     __asm__("sha256su0 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
     return __a;
 }
@@ -1111,14 +1116,14 @@ __BADC_NEON_FN3(vsha256su1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
  * (a ^ rol(b, 1)) and `xar` (ror(a ^ b, imm)). */
 __BADC_NEON_SHAQ(vsha512hq_u64, uint64x2_t, "sha512h", 2d)
 __BADC_NEON_SHAQ(vsha512h2q_u64, uint64x2_t, "sha512h2", 2d)
-static inline uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
+__BADC_INTRIN uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
     __asm__("sha512su0 %0.2d, %1.2d" : "+w"(__a) : "w"(__b));
     return __a;
 }
 __BADC_NEON_FN3(vsha512su1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
                 __BADC_NEON_I3("sha512su1", 2d, 2d, 2d))
 #define __BADC_NEON_XOR3(name, T, insn)                                     \
-    static inline T name(T __a, T __b, T __c) {                             \
+    __BADC_INTRIN T name(T __a, T __b, T __c) {                             \
         T __r;                                                              \
         __asm__(insn " %0.16b, %1.16b, %2.16b, %3.16b"                      \
                 : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));                \
@@ -1151,7 +1156,7 @@ __BADC_NEON_FN2(vrax1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
 })
 
 /* SM3 and SM4 (FEAT_SM3, FEAT_SM4). */
-static inline uint32x4_t vsm3ss1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+__BADC_INTRIN uint32x4_t vsm3ss1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
     uint32x4_t __r;
     __asm__("sm3ss1 %0.4s, %1.4s, %2.4s, %3.4s"
             : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));
@@ -1172,7 +1177,7 @@ __BADC_NEON_FN3(vsm3partw1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
                 __BADC_NEON_I3("sm3partw1", 4s, 4s, 4s))
 __BADC_NEON_FN3(vsm3partw2q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
                 __BADC_NEON_I3("sm3partw2", 4s, 4s, 4s))
-static inline uint32x4_t vsm4eq_u32(uint32x4_t __a, uint32x4_t __b) {
+__BADC_INTRIN uint32x4_t vsm4eq_u32(uint32x4_t __a, uint32x4_t __b) {
     __asm__("sm4e %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
     return __a;
 }
@@ -1211,7 +1216,7 @@ __BADC_NEON_FN2(vsm4ekeyq_u32, uint32x4_t, uint32x4_t, uint32x4_t,
     B(op##_f32, uint32x2_t, float32x2_t, float32x2_t, s, stem, stem, 2s)  \
     B(op##q_f32, uint32x4_t, float32x4_t, float32x4_t, s, stem, stem, 4s) \
     B(op##q_f64, uint64x2_t, float64x2_t, float64x2_t, s, stem, stem, 2d) \
-    static inline uint64x1_t op##_f64(float64x1_t __a, float64x1_t __b) { \
+    __BADC_INTRIN uint64x1_t op##_f64(float64x1_t __a, float64x1_t __b) { \
         return (uint64x1_t){-(uint64_t)(__a[0] rel __b[0])};              \
     }
 
@@ -1239,10 +1244,10 @@ __BADC_NEON_ARITH2A(vrsqrts, "frsqrts")
     __BADC_NEON_B3(op##q_f64, float64x2_t, s, stem, stem, 2d)
 __BADC_NEON_FUSED(vfma, __builtin_neon_fmla)
 __BADC_NEON_FUSED(vfms, __builtin_neon_fmls)
-static inline float64x1_t vfma_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
+__BADC_INTRIN float64x1_t vfma_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
     return (float64x1_t){__builtin_fma(__b[0], __c[0], __a[0])};
 }
-static inline float64x1_t vfms_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
+__BADC_INTRIN float64x1_t vfms_f64(float64x1_t __a, float64x1_t __b, float64x1_t __c) {
     return (float64x1_t){__builtin_fma(-__b[0], __c[0], __a[0])};
 }
 
@@ -1267,31 +1272,31 @@ __BADC_NEON_CVT(vcvt_u32_f32, uint32x2_t, float32x2_t, "fcvtzu", 2s)
 __BADC_NEON_CVT(vcvtq_u32_f32, uint32x4_t, float32x4_t, "fcvtzu", 4s)
 __BADC_NEON_CVT(vcvtq_s64_f64, int64x2_t, float64x2_t, "fcvtzs", 2d)
 __BADC_NEON_CVT(vcvtq_u64_f64, uint64x2_t, float64x2_t, "fcvtzu", 2d)
-static inline float64x1_t vcvt_f64_s64(int64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
-static inline float64x1_t vcvt_f64_u64(uint64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
-static inline int64x1_t vcvt_s64_f64(float64x1_t __a) { return (int64x1_t){(int64_t)__a[0]}; }
-static inline uint64x1_t vcvt_u64_f64(float64x1_t __a) { return (uint64x1_t){(uint64_t)__a[0]}; }
+__BADC_INTRIN float64x1_t vcvt_f64_s64(int64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
+__BADC_INTRIN float64x1_t vcvt_f64_u64(uint64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
+__BADC_INTRIN int64x1_t vcvt_s64_f64(float64x1_t __a) { return (int64x1_t){(int64_t)__a[0]}; }
+__BADC_INTRIN uint64x1_t vcvt_u64_f64(float64x1_t __a) { return (uint64x1_t){(uint64_t)__a[0]}; }
 
 /* Single <-> double: the lower lanes, or with _high the upper ones. */
-static inline float64x2_t vcvt_f64_f32(float32x2_t __a) {
+__BADC_INTRIN float64x2_t vcvt_f64_f32(float32x2_t __a) {
     return (float64x2_t)__builtin_neon_fcvtl_2s(__a);
 }
-static inline float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
+__BADC_INTRIN float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
     float64x2_t __r;
     __asm__("fcvtl2 %0.2d, %1.4s" : "=w"(__r) : "w"(__a));
     return __r;
 }
-static inline float32x2_t vcvt_f32_f64(float64x2_t __a) {
+__BADC_INTRIN float32x2_t vcvt_f32_f64(float64x2_t __a) {
     return (float32x2_t)__builtin_neon_fcvtn_2d(__a);
 }
-static inline float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
+__BADC_INTRIN float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
     float32x4_t __r = {__lo[0], __lo[1], 0, 0};
     __asm__("fcvtn2 %0.4s, %1.2d" : "+w"(__r) : "w"(__a));
     return __r;
 }
 
 /* Structure loads: deinterleave lane by lane into the structure types. */
-static inline uint16x8x2_t vld2q_u16(const uint16_t *__p) {
+__BADC_INTRIN uint16x8x2_t vld2q_u16(const uint16_t *__p) {
     uint16x8x2_t __r;
     for (int __i = 0; __i < 8; __i++) {
         __r.val[0][__i] = __p[2 * __i];
@@ -1300,7 +1305,7 @@ static inline uint16x8x2_t vld2q_u16(const uint16_t *__p) {
     return __r;
 }
 
-static inline uint8x16x4_t vld4q_u8(const uint8_t *__p) {
+__BADC_INTRIN uint8x16x4_t vld4q_u8(const uint8_t *__p) {
     uint8x16x4_t __r;
     for (int __i = 0; __i < 16; __i++)
         for (int __k = 0; __k < 4; __k++)

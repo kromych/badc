@@ -6,6 +6,11 @@
 ** past the lane width give the instruction's result: zero, or the sign for
 ** an arithmetic shift. */
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "mmintrin.h is only available when targeting x86"
@@ -30,29 +35,29 @@ typedef unsigned short __v4hu __attribute__((__vector_size__(8)));
 typedef signed char __v8qs __attribute__((__vector_size__(8)));
 typedef unsigned char __v8qu __attribute__((__vector_size__(8)));
 
-static inline void _mm_empty(void) {
+__BADC_INTRIN void _mm_empty(void) {
     __asm__ __volatile__("emms");
 }
 
-static inline __m64 _mm_setzero_si64(void) {
+__BADC_INTRIN __m64 _mm_setzero_si64(void) {
     return (__m64)0LL;
 }
 
 /* Conversions between the 64-bit vector and an integer. */
 
-static inline __m64 _mm_cvtsi32_si64(int __i) {
+__BADC_INTRIN __m64 _mm_cvtsi32_si64(int __i) {
     return (__m64)(__v2si){__i, 0};
 }
 
-static inline int _mm_cvtsi64_si32(__m64 __m) {
+__BADC_INTRIN int _mm_cvtsi64_si32(__m64 __m) {
     return ((__v2si)__m)[0];
 }
 
-static inline __m64 _mm_cvtsi64_m64(long long __i) {
+__BADC_INTRIN __m64 _mm_cvtsi64_m64(long long __i) {
     return (__m64)__i;
 }
 
-static inline long long _mm_cvtm64_si64(__m64 __m) {
+__BADC_INTRIN long long _mm_cvtm64_si64(__m64 __m) {
     return (long long)__m;
 }
 
@@ -77,15 +82,15 @@ static inline long long _mm_cvtm64_si64(__m64 __m) {
 #define _mm_setr_pi8(B0, B1, B2, B3, B4, B5, B6, B7) \
     ((__m64)(__v8qi){(B0), (B1), (B2), (B3), (B4), (B5), (B6), (B7)})
 
-static inline __m64 _mm_set1_pi32(int __i) {
+__BADC_INTRIN __m64 _mm_set1_pi32(int __i) {
     return (__m64)(__v2si){__i, __i};
 }
 
-static inline __m64 _mm_set1_pi16(short __w) {
+__BADC_INTRIN __m64 _mm_set1_pi16(short __w) {
     return (__m64)(__v4hi){__w, __w, __w, __w};
 }
 
-static inline __m64 _mm_set1_pi8(char __b) {
+__BADC_INTRIN __m64 _mm_set1_pi8(char __b) {
     return (__m64)(__v8qi){__b, __b, __b, __b, __b, __b, __b, __b};
 }
 
@@ -146,7 +151,7 @@ static inline __m64 _mm_unpackhi_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)(__v4hi){__a[2], __b[2], __a[3], __b[3]};
 }
 
-static inline __m64 _mm_unpackhi_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_unpackhi_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)(__v2si){((__v2si)__m1)[1], ((__v2si)__m2)[1]};
 }
 
@@ -160,90 +165,90 @@ static inline __m64 _mm_unpacklo_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)(__v4hi){__a[0], __b[0], __a[1], __b[1]};
 }
 
-static inline __m64 _mm_unpacklo_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_unpacklo_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)(__v2si){((__v2si)__m1)[0], ((__v2si)__m2)[0]};
 }
 
 /* Wrapping arithmetic, on unsigned lanes so it is defined. */
 
-static inline __m64 _mm_add_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_add_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)((__v8qu)__m1 + (__v8qu)__m2);
 }
 
-static inline __m64 _mm_add_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_add_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)((__v4hu)__m1 + (__v4hu)__m2);
 }
 
-static inline __m64 _mm_add_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_add_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)((__v2su)__m1 + (__v2su)__m2);
 }
 
-static inline __m64 _mm_add_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_add_si64(__m64 __m1, __m64 __m2) {
     return (__m64)((unsigned long long)__m1 + (unsigned long long)__m2);
 }
 
-static inline __m64 _mm_sub_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_sub_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)((__v8qu)__m1 - (__v8qu)__m2);
 }
 
-static inline __m64 _mm_sub_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_sub_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)((__v4hu)__m1 - (__v4hu)__m2);
 }
 
-static inline __m64 _mm_sub_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_sub_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)((__v2su)__m1 - (__v2su)__m2);
 }
 
-static inline __m64 _mm_sub_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_sub_si64(__m64 __m1, __m64 __m2) {
     return (__m64)((unsigned long long)__m1 - (unsigned long long)__m2);
 }
 
 /* Saturating arithmetic: PADDS*, PADDUS*, PSUBS*, PSUBUS*. */
 
-static inline __m64 _mm_adds_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_adds_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_paddsb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_adds_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_adds_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_paddsw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_adds_pu8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_adds_pu8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_paddusb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_adds_pu16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_adds_pu16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_paddusw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_subs_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_subs_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_psubsb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_subs_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_subs_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_psubsw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_subs_pu8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_subs_pu8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_psubusb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_subs_pu16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_subs_pu16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_psubusw((__v4hi)__m1, (__v4hi)__m2);
 }
 
 /* PMADDWD, PMULHW, PMULLW. The pair sum wraps where all four words are
 ** -32768, as the instruction does. */
 
-static inline __m64 _mm_madd_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_madd_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pmaddwd((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_mulhi_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_mulhi_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pmulhw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_mullo_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_mullo_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pmullw((__v4hi)__m1, (__v4hi)__m2);
 }
 
@@ -290,80 +295,80 @@ static inline __m64 _mm_sra_pi32(__m64 __m, __m64 __count) {
     return (__m64)((__v2si)__m >> (int)(__c > 31 ? 31 : __c));
 }
 
-static inline __m64 _mm_slli_pi16(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_slli_pi16(__m64 __m, int __count) {
     return _mm_sll_pi16(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_slli_pi32(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_slli_pi32(__m64 __m, int __count) {
     return _mm_sll_pi32(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_slli_si64(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_slli_si64(__m64 __m, int __count) {
     return _mm_sll_si64(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_srli_pi16(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_srli_pi16(__m64 __m, int __count) {
     return _mm_srl_pi16(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_srli_pi32(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_srli_pi32(__m64 __m, int __count) {
     return _mm_srl_pi32(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_srli_si64(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_srli_si64(__m64 __m, int __count) {
     return _mm_srl_si64(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_srai_pi16(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_srai_pi16(__m64 __m, int __count) {
     return _mm_sra_pi16(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
-static inline __m64 _mm_srai_pi32(__m64 __m, int __count) {
+__BADC_INTRIN __m64 _mm_srai_pi32(__m64 __m, int __count) {
     return _mm_sra_pi32(__m, (__m64)(unsigned long long)(unsigned)__count);
 }
 
 /* Bitwise logic. */
 
-static inline __m64 _mm_and_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_and_si64(__m64 __m1, __m64 __m2) {
     return (__m64)((__v2su)__m1 & (__v2su)__m2);
 }
 
-static inline __m64 _mm_andnot_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_andnot_si64(__m64 __m1, __m64 __m2) {
     return (__m64)(~(__v2su)__m1 & (__v2su)__m2);
 }
 
-static inline __m64 _mm_or_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_or_si64(__m64 __m1, __m64 __m2) {
     return (__m64)((__v2su)__m1 | (__v2su)__m2);
 }
 
-static inline __m64 _mm_xor_si64(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_xor_si64(__m64 __m1, __m64 __m2) {
     return (__m64)((__v2su)__m1 ^ (__v2su)__m2);
 }
 
 /* PCMPEQ*, PCMPGT*: all ones in a lane where the comparison of the signed
 ** lanes holds. */
 
-static inline __m64 _mm_cmpeq_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpeq_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpeqb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_cmpeq_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpeq_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpeqw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_cmpeq_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpeq_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpeqd((__v2si)__m1, (__v2si)__m2);
 }
 
-static inline __m64 _mm_cmpgt_pi8(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpgt_pi8(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpgtb((__v8qi)__m1, (__v8qi)__m2);
 }
 
-static inline __m64 _mm_cmpgt_pi16(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpgt_pi16(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpgtw((__v4hi)__m1, (__v4hi)__m2);
 }
 
-static inline __m64 _mm_cmpgt_pi32(__m64 __m1, __m64 __m2) {
+__BADC_INTRIN __m64 _mm_cmpgt_pi32(__m64 __m1, __m64 __m2) {
     return (__m64)__builtin_ia32_pcmpgtd((__v2si)__m1, (__v2si)__m2);
 }
 

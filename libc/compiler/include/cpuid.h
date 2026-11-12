@@ -6,6 +6,11 @@
 // The interpreter runs CPUID as zero in every register: the maximum is 0 and
 // every leaf reads as absent.
 #pragma once
+#ifndef __BADC_INTRIN
+/* An intrinsic is inlined at every optimization level, as a call to it would
+ * pass and copy its vectors around one instruction. */
+#define __BADC_INTRIN static __inline__ __attribute__((__always_inline__))
+#endif
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "cpuid.h is only available when targeting x86"
@@ -48,7 +53,7 @@ static inline int __get_cpuid_count(unsigned int __leaf, unsigned int __subleaf,
 // MSVC's spelling; the PE targets lower it as an intrinsic, as clang with
 // -fms-extensions does.
 #if !__has_builtin(__cpuidex)
-static inline void __cpuidex(int __info[4], int __leaf, int __subleaf) {
+__BADC_INTRIN void __cpuidex(int __info[4], int __leaf, int __subleaf) {
     __cpuid_count(__leaf, __subleaf, __info[0], __info[1], __info[2], __info[3]);
 }
 #endif

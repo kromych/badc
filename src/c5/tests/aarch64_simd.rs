@@ -76,28 +76,36 @@ fn the_permutes_emit_their_instruction() {
         NativeOptions::new().with_optimize(),
     )
     .expect("emit_native for linux-aarch64");
-    for (word, what) in [
-        (0x4e01_3800u32, "zip1 v0.16b, v0.16b, v1.16b"),
-        (0x0e41_5800, "uzp2 v0.4h, v0.4h, v1.4h"),
-        (0x4ec1_2800, "trn1 v0.2d, v0.2d, v1.2d"),
-        (0x0e81_6800, "trn2 v0.2s, v0.2s, v1.2s"),
-        (0x6e01_2800, "ext v0.16b, v0.16b, v1.16b, #5"),
-        (0x2e01_3000, "ext v0.8b, v0.8b, v1.8b, #6"),
-        (0x0e61_7800, "fcvtl v0.2d, v0.2s"),
-        (0x0e61_6800, "fcvtn v0.2s, v0.2d"),
-        (0x4e0f_0400, "dup v0.16b, v0.b[7]"),
-        (0x0e1a_0400, "dup v0.4h, v0.h[6]"),
-        (0x4e01_0000, "tbl v0.16b, {v0.16b}, v1.16b"),
-        (0x0e02_1020, "tbx v0.8b, {v1.16b}, v2.8b"),
-        (0x4f0b_7400, "sqshl v0.16b, v0.16b, #3"),
-        (0x6f10_2400, "urshr v0.8h, v0.8h, #16"),
-        (0x0f0d_8400, "shrn v0.8b, v0.8h, #3"),
-        (0x0f10_8c00, "rshrn v0.4h, v0.4s, #16"),
+    // The masks clear the register fields the allocator chooses, Rm with
+    // them in the three-register forms.
+    const THREE: u32 = 0xFFE0_FC00;
+    const TWO: u32 = 0xFFFF_FC00;
+    for (word, mask, what) in [
+        (0x4e01_3800u32, THREE, "zip1 v0.16b, v0.16b, v1.16b"),
+        (0x0e41_5800, THREE, "uzp2 v0.4h, v0.4h, v1.4h"),
+        (0x4ec1_2800, THREE, "trn1 v0.2d, v0.2d, v1.2d"),
+        (0x0e81_6800, THREE, "trn2 v0.2s, v0.2s, v1.2s"),
+        (0x6e01_2800, THREE, "ext v0.16b, v0.16b, v1.16b, #5"),
+        (0x2e01_3000, THREE, "ext v0.8b, v0.8b, v1.8b, #6"),
+        (0x0e61_7800, TWO, "fcvtl v0.2d, v0.2s"),
+        (0x0e61_6800, TWO, "fcvtn v0.2s, v0.2d"),
+        (0x4e0f_0400, TWO, "dup v0.16b, v0.b[7]"),
+        (0x0e1a_0400, TWO, "dup v0.4h, v0.h[6]"),
+        (0x4e01_0000, THREE, "tbl v0.16b, {v0.16b}, v1.16b"),
+        (0x0e02_1020, THREE, "tbx v0.8b, {v1.16b}, v2.8b"),
+        (0x4f0b_7400, TWO, "sqshl v0.16b, v0.16b, #3"),
+        (0x6f10_2400, TWO, "urshr v0.8h, v0.8h, #16"),
+        (0x0f0d_8400, TWO, "shrn v0.8b, v0.8h, #3"),
+        (0x0f10_8c00, TWO, "rshrn v0.4h, v0.4s, #16"),
     ] {
-        let needle = word.to_le_bytes();
+        let mut words = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w));
         assert!(
-            bytes.windows(4).any(|w| w == needle),
-            "{what}: expected {word:#010x} in the emitted code"
+            words.any(|w| w & mask == word & mask),
+            "{what}: expected {word:#010x} under {mask:#010x} in the emitted code"
         );
     }
 }

@@ -25,8 +25,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	d0, [x0, #0x10]
                	ldur	q1, [x29, #-0x10]
-               	mov	x0, #0x4141             // =16705
-               	dup	v2.8h, w0
+               	mov	x16, #0x4141            // =16705
+               	dup	v2.8h, w16
                	cmeq	v1.8h, v1.8h, v2.8h
                	shrn	v1.8b, v1.8h, #0x4
                	mov	x0, v1.d[0]
@@ -48,11 +48,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
-               	movk	x0, #0x2, lsl #16
-               	movk	x0, #0x3, lsl #32
-               	movk	x0, #0x4, lsl #48
-               	fmov	d0, x0
+               	mov	x16, #0x1               // =1
+               	movk	x16, #0x2, lsl #16
+               	movk	x16, #0x3, lsl #32
+               	movk	x16, #0x4, lsl #48
+               	fmov	d0, x16
                	dup	v0.2d, v0.d[0]
                	umov	w0, v0.h[0]
                	cmp	w0, #0x1

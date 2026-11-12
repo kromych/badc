@@ -531,6 +531,9 @@ pub(super) fn emit_inst(
         Inst::VecSplat { value, kind, bytes } => {
             emit_vec_splat(code, (*value, *kind, *bytes), (dst, alloc, frame, scratch))
         }
+        Inst::VecConst { imm, kind, bytes } => {
+            emit_vec_const(code, (*imm, *kind, *bytes), (dst, frame, scratch))
+        }
         Inst::Fma {
             a,
             b,
@@ -985,6 +988,94 @@ fn emit_vec_splat(
         (false, 8, false) => emit(code, enc_fmov_x_to_d(qd, Reg(src))),
         (true, ..) => emit(code, enc_dup_elem(qd, esize, q, src)),
         (false, ..) => emit(code, enc_dup_gen(qd, esize, q, Reg(src))),
+    }
+    if q {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
+    Ok(())
+}
+
+/// `Inst::VecConst`: one `movi` or `mvni` where the lanes have the modified
+/// immediate form -- zero, all ones, bytes of either, a byte shifted within
+/// its lane -- else the lane built in a general register and `dup`ed.
+fn emit_vec_const(
+    code: &mut Vec<u8>,
+    (imm, kind, bytes): (i64, StoreKind, u8),
+    (dst, frame, scratch): (Place, Frame, &ScratchPool),
+) -> Emit {
+    use super::table::{self, Opnd};
+    if bytes != 16 && bytes != 8 {
+        return fail("VecConst: only 8- and 16-byte vectors");
+    }
+    let esize: u32 = match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecConst: not an integer lane kind"),
+    };
+    let (q, bits) = (bytes == 16, 8 * esize);
+    let mask = u64::MAX >> (64 - bits);
+    let lane = imm as u64 & mask;
+    let pattern = (0..64 / bits).fold(0u64, |p, i| p | lane << (i * bits));
+    let qd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let vreg = |size: u32| Opnd::VecReg {
+        num: qd,
+        size: size as u8,
+        q,
+    };
+    let modified = |m: &str, v: u64, shift: u32| {
+        (v >> 8 == 0)
+            .then(|| {
+                table::encode(
+                    m,
+                    &[
+                        vreg(esize.trailing_zeros()),
+                        Opnd::Imm(v as i64),
+                        Opnd::Lsl(shift),
+                    ],
+                )
+            })
+            .and_then(Result::ok)
+    };
+    let bytewise = pattern.to_le_bytes().iter().all(|&b| b == 0 || b == 0xFF);
+    let word = if bytewise {
+        table::encode("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
+    } else if esize == 1 {
+        table::encode("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
+    } else if esize <= 4 {
+        (0..bits).step_by(8).find_map(|s| {
+            let (v, n) = (lane >> s, !lane & mask);
+            (v << s == lane)
+                .then(|| modified("movi", v, s))
+                .flatten()
+                .or_else(|| {
+                    ((n >> s) << s == n)
+                        .then(|| modified("mvni", n >> s, s))
+                        .flatten()
+                })
+        })
+    } else {
+        None
+    };
+    match word {
+        Some(w) => emit(code, w),
+        None => {
+            super::encode::load_imm64(code, scratch.primary, lane);
+            emit(
+                code,
+                if esize == 8 && !q {
+                    super::encode::enc_fmov_x_to_d(qd, scratch.primary)
+                } else {
+                    super::encode::enc_dup_gen(qd, esize, q, scratch.primary)
+                },
+            );
+        }
     }
     if q {
         propagate_v128(code, frame, dst, qd, scratch.primary);

@@ -81,6 +81,10 @@ enum Key {
     ShiftOp(BinOp, ValueId, ValueId, BinOp, u8),
     BitField(ValueId, u8, u8, bool),
     Udiv128(ValueId, ValueId, ValueId),
+    // A splat by its lane width and vector width: of a value, or of a
+    // constant's lane bits.
+    VecSplat(ValueId, u8, u8),
+    VecConst(u64, u8, u8),
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -545,6 +549,17 @@ impl Gate<'_> {
 
 /// `sym` is the cross-unit symbol an address value binds to, `u32::MAX`
 /// for none.
+/// Bytes a lane of a splat of `kind` holds.
+fn lane_bytes(kind: crate::c5::ir::StoreKind) -> u8 {
+    use crate::c5::ir::StoreKind;
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        _ => 8,
+    }
+}
+
 fn key_of(
     inst: &Inst,
     vn: &[ValueId],
@@ -590,6 +605,14 @@ fn key_of(
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
         Inst::Neg(v) => Some(Key::Neg(r(*v))),
+        Inst::VecSplat { value, kind, bytes } => {
+            Some(Key::VecSplat(r(*value), lane_bytes(*kind), *bytes))
+        }
+        Inst::VecConst { imm, kind, bytes } => {
+            let width = lane_bytes(*kind);
+            let lane = *imm as u64 & (u64::MAX >> (64 - 8 * u32::from(width)));
+            Some(Key::VecConst(lane, width, *bytes))
+        }
         Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
         Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
         Inst::Fma {

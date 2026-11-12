@@ -53,6 +53,22 @@ __attribute__((noinline)) v16i s16i(int x) {
 }
 __attribute__((noinline)) v8l s8l(long long x) { return (v8l){x, x, x, x, x, x, x, x}; }
 
+/* Splats of constants, built from a variable so no initializer is one:
+ * zero, all ones, a byte, a shifted halfword and word, an inverted word,
+ * 0x00 / 0xff bytes in 64-bit lanes, and a constant none of those forms
+ * is, at 8, 16 and 32 bytes. */
+__attribute__((noinline)) v16c k_byte(void) { signed char c = 3; return (v16c){c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c}; }
+__attribute__((noinline)) v8us k_half(void) { unsigned short h = 0x1200; return (v8us){h, h, h, h, h, h, h, h}; }
+__attribute__((noinline)) v4i k_word(void) { int w = 0x120000; return (v4i){w, w, w, w}; }
+__attribute__((noinline)) v4i k_inv(void) { int w = (int)0xffffedff; return (v4i){w, w, w, w}; }
+__attribute__((noinline)) v2l k_bytes(void) { long long w = (long long)0xff00ff0000ff00ffULL; return (v2l){w, w}; }
+__attribute__((noinline)) v4i k_other(void) { int w = 0x12345; return (v4i){w, w, w, w}; }
+__attribute__((noinline)) v4i k_zero(void) { int w = 0; return (v4i){w, w, w, w}; }
+__attribute__((noinline)) v4i k_ones(void) { int w = -1; return (v4i){w, w, w, w}; }
+__attribute__((noinline)) v2i k_d8(void) { int w = 0x12345; return (v2i){w, w}; }
+__attribute__((noinline)) v8i k_y32(void) { int w = 0x12345; return (v8i){w, w, w, w, w, w, w, w}; }
+__attribute__((noinline)) v8i k_y32_ones(void) { int w = -1; return (v8i){w, w, w, w, w, w, w, w}; }
+
 /* A splat as an operand, and a lane read of one. */
 __attribute__((noinline)) v4i add_k(v4i v, int k) { return v + (v4i){k, k, k, k}; }
 __attribute__((noinline)) int lane_of(int x, int i) {
@@ -129,5 +145,28 @@ int main(void) {
         return 19;
     if (dlane_of(d) != d)
         return 20;
+
+    v16c kb = k_byte();
+    CHECK_LANES(v16c, signed char, kb, 3, 21);
+    v8us kh = k_half();
+    CHECK_LANES(v8us, unsigned short, kh, 0x1200, 22);
+    v4i kw = k_word();
+    CHECK_LANES(v4i, int, kw, 0x120000, 23);
+    v4i ki = k_inv();
+    CHECK_LANES(v4i, int, ki, (int)0xffffedff, 24);
+    v2l kp = k_bytes();
+    CHECK_LANES(v2l, long long, kp, (long long)0xff00ff0000ff00ffULL, 25);
+    v4i ko = k_other();
+    CHECK_LANES(v4i, int, ko, 0x12345, 26);
+    v4i kz = k_zero();
+    CHECK_LANES(v4i, int, kz, 0, 27);
+    v4i kn = k_ones();
+    CHECK_LANES(v4i, int, kn, -1, 28);
+    v2i kd = k_d8();
+    CHECK_LANES(v2i, int, kd, 0x12345, 29);
+    v8i ky = k_y32();
+    CHECK_LANES(v8i, int, ky, 0x12345, 30);
+    v8i kyo = k_y32_ones();
+    CHECK_LANES(v8i, int, kyo, -1, 31);
     return 0;
 }

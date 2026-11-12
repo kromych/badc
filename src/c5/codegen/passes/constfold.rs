@@ -174,6 +174,29 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     }
                     break;
                 }
+                // And of a constant splat, the constant read at the width.
+                Inst::VecConst {
+                    imm, kind: stored, ..
+                } => {
+                    let lane = imm as u64;
+                    let read = match kind {
+                        LoadKind::I8 => Some(lane as i8 as i64),
+                        LoadKind::U8 => Some(lane as u8 as i64),
+                        LoadKind::I16 => Some(lane as i16 as i64),
+                        LoadKind::U16 => Some(lane as u16 as i64),
+                        LoadKind::I32 => Some(lane as i32 as i64),
+                        LoadKind::U32 => Some(lane as u32 as i64),
+                        LoadKind::I64 => Some(imm),
+                        _ => None,
+                    };
+                    if store_width(stored) == width
+                        && let Some(k) = read
+                    {
+                        func.insts[i] = Inst::Imm(k);
+                        changed = true;
+                    }
+                    break;
+                }
                 Inst::Imm(0) if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
                     func.insts[i] = Inst::Imm(0);
                     changed = true;
@@ -342,6 +365,41 @@ fn select_arm(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
 /// leaving the instruction dead. The operand dominates each redirected
 /// use, since it dominates the instruction.
 /// Returns whether any operand actually changed.
+/// The operand a whole-vector operation with a zero or all-ones operand
+/// equals: `a + 0`, `a - 0`, `a | 0`, `a ^ 0` and `a & ~0` are `a`; `a & 0`
+/// is the zero and `a | ~0` the all-ones constant. A zero is the zero fill
+/// a promoted vector takes (`Imm(0)`) or a constant splat of zero.
+fn vector_identity(func: &FunctionSsa, i: usize) -> Option<ValueId> {
+    let Inst::VecBinop { op, lhs, rhs, .. } = func.insts[i] else {
+        return None;
+    };
+    let splat = |v: ValueId| match func.insts.get(v as usize) {
+        Some(Inst::Imm(0)) => Some(0u64),
+        Some(&Inst::VecConst { imm, kind, .. }) => {
+            let bits = 8 * u32::from(store_width(kind));
+            let mask = u64::MAX >> (64 - bits);
+            match imm as u64 & mask {
+                0 => Some(0),
+                m if m == mask => Some(u64::MAX),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let constant = |v: ValueId| matches!(func.insts.get(v as usize), Some(Inst::VecConst { .. }));
+    match (op, splat(lhs), splat(rhs)) {
+        (BinOp::Add | BinOp::Or | BinOp::Xor, _, Some(0)) | (BinOp::Sub, _, Some(0)) => Some(lhs),
+        (BinOp::Add | BinOp::Or | BinOp::Xor, Some(0), _) => Some(rhs),
+        (BinOp::And, _, Some(u64::MAX)) => Some(lhs),
+        (BinOp::And, Some(u64::MAX), _) => Some(rhs),
+        (BinOp::And, _, Some(0)) if constant(rhs) => Some(rhs),
+        (BinOp::And, Some(0), _) if constant(lhs) => Some(lhs),
+        (BinOp::Or, _, Some(u64::MAX)) => Some(rhs),
+        (BinOp::Or, Some(u64::MAX), _) => Some(lhs),
+        _ => None,
+    }
+}
+
 fn forward_identities(func: &mut FunctionSsa) -> bool {
     let n = func.insts.len();
     let redirect: Vec<Option<ValueId>> = (0..n)
@@ -349,6 +407,7 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
             forwarded_operand(func, i)
                 .or_else(|| double_negate_operand(func, i))
                 .or_else(|| select_arm(func, i))
+                .or_else(|| vector_identity(func, i))
         })
         .collect();
     let any = redirect.iter().any(Option::is_some);

@@ -1142,34 +1142,31 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	cmpl	%r8d, %ecx
                	jne	<addr>
-               	movq	$-0x1, %rcx
-               	vmovq	%rcx, %xmm2
-               	vpbroadcastq	%xmm2, %xmm2
-               	pxor	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
-               	vmovq	%xmm2, %rcx
-               	vpextrq	$0x1, %xmm2, %r9
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
+               	movapd	%xmm0, %xmm3
+               	pxor	%xmm2, %xmm3
+               	pand	%xmm1, %xmm3
+               	vmovq	%xmm3, %rcx
+               	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	cmpl	%edx, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
-               	vmovq	%xmm2, %rcx
-               	vpextrq	$0x1, %xmm2, %r9
+               	movapd	%xmm0, %xmm3
+               	pand	%xmm1, %xmm3
+               	vmovq	%xmm3, %rcx
+               	vpextrq	$0x1, %xmm3, %r9
                	orq	%rcx, %r9
                	xorl	%ecx, %ecx
                	testq	%r9, %r9
                	je	<addr>
-               	movq	$-0x1, %rcx
-               	vmovq	%rcx, %xmm2
-               	vpbroadcastq	%xmm2, %xmm2
-               	pxor	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
-               	vmovq	%xmm2, %rcx
-               	vpextrq	$0x1, %xmm2, %r9
+               	movapd	%xmm0, %xmm3
+               	pxor	%xmm2, %xmm3
+               	pand	%xmm1, %xmm3
+               	vmovq	%xmm3, %rcx
+               	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
                	sete	%cl
@@ -1185,27 +1182,24 @@ Disassembly of section .text:
                	cmoveq	%rdi, %r9
                	cmpl	%r9d, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
-               	vmovq	%xmm2, %rcx
-               	vpextrq	$0x1, %xmm2, %r9
+               	movapd	%xmm0, %xmm3
+               	pand	%xmm1, %xmm3
+               	vmovq	%xmm3, %rcx
+               	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
                	testq	%rcx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	cmpl	%r8d, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
-               	vmovq	%xmm2, %rcx
-               	vpextrq	$0x1, %xmm2, %r9
+               	movapd	%xmm0, %xmm3
+               	pand	%xmm1, %xmm3
+               	vmovq	%xmm3, %rcx
+               	vpextrq	$0x1, %xmm3, %r9
                	orq	%rcx, %r9
                	xorl	%ecx, %ecx
                	testq	%r9, %r9
                	je	<addr>
-               	movq	$-0x1, %rcx
-               	vmovq	%rcx, %xmm2
-               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm2, %xmm0
                	pand	%xmm1, %xmm0
                	vmovq	%xmm0, %rcx
@@ -1310,34 +1304,26 @@ Disassembly of section .text:
                	cmpl	$0xff, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	andq	%rax, %rcx
+               	andq	%rcx, %rax
                	movups	(%r12), %xmm0
-               	movapd	%xmm0, %xmm1
-               	pcmpeqd	%xmm0, %xmm1
-               	movq	$-0x1, %rax
-               	vmovq	%rax, %xmm2
-               	vpbroadcastq	%xmm2, %xmm2
-               	pxor	%xmm2, %xmm0
-               	pand	%xmm1, %xmm0
-               	vmovq	%xmm0, %rdx
-               	vpextrq	$0x1, %xmm0, %rsi
-               	orq	%rsi, %rdx
-               	testq	%rdx, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	cmpl	%ecx, %edx
+               	movapd	%xmm0, %xmm2
+               	pcmpeqd	%xmm0, %xmm2
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	pxor	%xmm1, %xmm0
+               	pand	%xmm2, %xmm0
+               	vmovq	%xmm0, %rcx
+               	vpextrq	$0x1, %xmm0, %rdx
+               	orq	%rdx, %rcx
+               	testq	%rcx, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	cmpl	%eax, %ecx
                	jne	<addr>
-               	vmovd	%eax, %xmm0
-               	vpbroadcastd	%xmm0, %xmm0
-               	vmovd	%eax, %xmm1
-               	vpbroadcastd	%xmm1, %xmm1
-               	vmovd	%eax, %xmm2
-               	vpbroadcastd	%xmm2, %xmm2
-               	pcmpeqd	%xmm2, %xmm1
-               	vmovq	%rax, %xmm2
-               	vpbroadcastq	%xmm2, %xmm2
-               	pxor	%xmm2, %xmm0
-               	pand	%xmm1, %xmm0
+               	vpcmpeqd	%xmm0, %xmm0, %xmm0
+               	movapd	%xmm0, %xmm2
+               	pcmpeqd	%xmm0, %xmm2
+               	pxor	%xmm1, %xmm0
+               	pand	%xmm2, %xmm0
                	vmovq	%xmm0, %rax
                	vpextrq	$0x1, %xmm0, %rcx
                	orq	%rcx, %rax

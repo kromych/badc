@@ -304,6 +304,7 @@ fn compute_high_observed_through(
                 }
             }
             Inst::VecExtract { vec, .. } => observe(&mut hi, &mut work, *vec),
+            Inst::VecConst { .. } => {}
             Inst::Select { cond, a, b, .. } => {
                 if !super::narrow::is_cmp32(&func.cmp32, i as ValueId) {
                     observe(&mut hi, &mut work, *cond);

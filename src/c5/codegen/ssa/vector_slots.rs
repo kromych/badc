@@ -283,6 +283,13 @@ fn same_value(func: &FunctionSsa, a: ValueId, b: ValueId, depth: u32) -> bool {
         }
 }
 
+fn kind_is_int(kind: StoreKind) -> bool {
+    matches!(
+        kind,
+        StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+    )
+}
+
 /// Each chain of lane inserts writing one value into every lane of a vector
 /// of at most `max` bytes, as one [`Inst::VecSplat`]; an insert of the
 /// chain nothing else reads becomes `Undef`.
@@ -333,7 +340,11 @@ pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
                 let Inst::VecInsert { mut vec, .. } = func.insts[i] else {
                     break;
                 };
-                func.insts[i] = Inst::VecSplat { value, kind, bytes };
+                // A constant's splat needs no register for the constant.
+                func.insts[i] = match func.insts[value as usize] {
+                    Inst::Imm(imm) if kind_is_int(kind) => Inst::VecConst { imm, kind, bytes },
+                    _ => Inst::VecSplat { value, kind, bytes },
+                };
                 while let Some(u) = uses.get_mut(vec as usize) {
                     *u -= 1;
                     let Inst::VecInsert { vec: next, .. } = func.insts[vec as usize] else {

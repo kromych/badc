@@ -1000,40 +1000,35 @@ Disassembly of section .text:
                	movapd	%xmm15, %xmm0
                	leaq	-0xd0(%rbp), %rdx
                	movups	%xmm0, -0xd0(%rbp)
-               	movq	$-0x1, %rdi
-               	vmovq	%rdi, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
+               	vpcmpeqd	%xmm0, %xmm0, %xmm0
                	movups	-0x80(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	pxor	%xmm0, %xmm1
                	leaq	-0xc0(%rbp), %rsi
-               	movups	%xmm0, -0xc0(%rbp)
-               	movups	-0x60(%rbp), %xmm0
+               	movups	%xmm1, -0xc0(%rbp)
+               	movups	-0x60(%rbp), %xmm1
                	movq	%rax, %xmm15
-               	psubq	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
-               	vmovq	%rdi, %xmm1
-               	vpbroadcastq	%xmm1, %xmm1
+               	psubq	%xmm1, %xmm15
+               	movapd	%xmm15, %xmm1
                	movups	-0xa0(%rbp), %xmm2
-               	pxor	%xmm2, %xmm1
-               	movups	%xmm1, -0xb0(%rbp)
+               	pxor	%xmm2, %xmm0
+               	movups	%xmm0, -0xb0(%rbp)
                	movl	(%rdx,%rax,4), %edi
                	movl	(%rcx,%rax,4), %r8d
                	negq	%r8
                	cmpl	%r8d, %edi
                	jne	<addr>
                	movslq	(%rsi,%rax,4), %rdi
-               	leaq	-0x80(%rbp), %r8
-               	movslq	(%r8,%rax,4), %r8
+               	movslq	(%rcx,%rax,4), %r8
                	xorq	$-0x1, %r8
                	cmpq	%r8, %rdi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	vmovq	%xmm0, %rax
+               	vmovq	%xmm1, %rax
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	vpextrq	$0x1, %xmm0, %rax
+               	vpextrq	$0x1, %xmm1, %rax
                	cmpq	$-0x5, %rax
                	je	<addr>
                	movl	$0xc, %eax

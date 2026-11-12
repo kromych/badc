@@ -379,22 +379,22 @@ fn ent_pc=677 n_params=3 variadic=false locals=1
     v15  Imm(65535)                                       -> x0
     v16  Imm(4294901760)                                  -> x0
     v17  Imm(4294967295)                                  -> x0
-    v18  Imm(-4294967296)                                 -> x1
-    v19  Imm(-1)                                          -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(4)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  Undef                                            -> x1
-    v26  Imm(0)                                           -> x1
-    v27  Imm(8)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  Undef                                            -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(12)                                          -> x1
-    v32  Imm(0)                                           -> x1
-    v33  VecSplat { value=v17, kind=I32, bytes=16 }       -> d1
+    v18  Imm(-4294967296)                                 -> x0
+    v19  Imm(-1)                                          -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(4)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Undef                                            -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(8)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Undef                                            -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(12)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    v33  VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -643,12 +643,12 @@ fn ent_pc=681 n_params=3 variadic=false locals=1
     v17  Imm(4294967295)                                  -> x0
     v18  Imm(-4294967296)                                 -> x0
     v19  Imm(-1)                                          -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(8)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  VecSplat { value=v19, kind=I64, bytes=16 }       -> d1
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(8)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
@@ -1013,22 +1013,22 @@ fn ent_pc=687 n_params=3 variadic=false locals=1
     v15  Imm(65535)                                       -> x0
     v16  Imm(4294901760)                                  -> x0
     v17  Imm(4294967295)                                  -> x0
-    v18  Imm(-4294967296)                                 -> x1
-    v19  Imm(-1)                                          -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(4)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  Undef                                            -> x1
-    v26  Imm(0)                                           -> x1
-    v27  Imm(8)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  Undef                                            -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(12)                                          -> x1
-    v32  Imm(0)                                           -> x1
-    v33  VecSplat { value=v17, kind=I32, bytes=16 }       -> d1
+    v18  Imm(-4294967296)                                 -> x0
+    v19  Imm(-1)                                          -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(4)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Undef                                            -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(8)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Undef                                            -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(12)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    v33  VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -1149,12 +1149,12 @@ fn ent_pc=689 n_params=3 variadic=false locals=1
     v17  Imm(4294967295)                                  -> x0
     v18  Imm(-4294967296)                                 -> x0
     v19  Imm(-1)                                          -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(8)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  VecSplat { value=v19, kind=I64, bytes=16 }       -> d1
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(8)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
@@ -1393,22 +1393,22 @@ fn ent_pc=693 n_params=3 variadic=false locals=1
     v15  Imm(65535)                                       -> x0
     v16  Imm(4294901760)                                  -> x0
     v17  Imm(4294967295)                                  -> x0
-    v18  Imm(-4294967296)                                 -> x1
-    v19  Imm(-1)                                          -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(4)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  Undef                                            -> x1
-    v26  Imm(0)                                           -> x1
-    v27  Imm(8)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  Undef                                            -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(12)                                          -> x1
-    v32  Imm(0)                                           -> x1
-    v33  VecSplat { value=v17, kind=I32, bytes=16 }       -> d1
+    v18  Imm(-4294967296)                                 -> x0
+    v19  Imm(-1)                                          -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(4)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Undef                                            -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(8)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Undef                                            -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(12)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    v33  VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -1657,12 +1657,12 @@ fn ent_pc=697 n_params=3 variadic=false locals=1
     v17  Imm(4294967295)                                  -> x0
     v18  Imm(-4294967296)                                 -> x0
     v19  Imm(-1)                                          -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(8)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  VecSplat { value=v19, kind=I64, bytes=16 }       -> d1
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(8)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
@@ -2205,22 +2205,22 @@ fn ent_pc=703 n_params=3 variadic=false locals=1
     v15  Imm(65535)                                       -> x0
     v16  Imm(4294901760)                                  -> x0
     v17  Imm(4294967295)                                  -> x0
-    v18  Imm(-4294967296)                                 -> x1
-    v19  Imm(-1)                                          -> x1
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(4)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  Undef                                            -> x1
-    v26  Imm(0)                                           -> x1
-    v27  Imm(8)                                           -> x1
-    v28  Imm(0)                                           -> x1
-    v29  Undef                                            -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(12)                                          -> x1
-    v32  Imm(0)                                           -> x1
-    v33  VecSplat { value=v17, kind=I32, bytes=16 }       -> d1
+    v18  Imm(-4294967296)                                 -> x0
+    v19  Imm(-1)                                          -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(4)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Undef                                            -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(8)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Undef                                            -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(12)                                          -> x0
+    v32  Imm(0)                                           -> x0
+    v33  VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -2430,12 +2430,12 @@ fn ent_pc=705 n_params=3 variadic=false locals=1
     v17  Imm(4294967295)                                  -> x0
     v18  Imm(-4294967296)                                 -> x0
     v19  Imm(-1)                                          -> x0
-    v20  Imm(0)                                           -> x1
-    v21  Undef                                            -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Imm(8)                                           -> x1
-    v24  Imm(0)                                           -> x1
-    v25  VecSplat { value=v19, kind=I64, bytes=16 }       -> d1
+    v20  Imm(0)                                           -> x0
+    v21  Undef                                            -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(8)                                           -> x0
+    v24  Imm(0)                                           -> x0
+    v25  VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
@@ -12415,20 +12415,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v5744 Imm(0)                                           -> x0
     v5745 Imm(0)                                           -> x0
     v5746 Imm(-1)                                          -> x0
-    v5747 Imm(0)                                           -> x2
-    v5748 Undef                                            -> x2
-    v5749 Imm(0)                                           -> x2
-    v5750 Imm(8)                                           -> x2
-    v5751 Imm(0)                                           -> x2
-    v5752 Undef                                            -> x2
-    v5753 Imm(0)                                           -> x2
-    v5754 Imm(16)                                          -> x2
-    v5755 Imm(0)                                           -> x2
-    v5756 Undef                                            -> x2
-    v5757 Imm(0)                                           -> x2
-    v5758 Imm(24)                                          -> x2
-    v5759 Imm(0)                                           -> x2
-    v5760 VecSplat { value=v5746, kind=I64, bytes=32 }     -> d1
+    v5747 Imm(0)                                           -> x0
+    v5748 Undef                                            -> x0
+    v5749 Imm(0)                                           -> x0
+    v5750 Imm(8)                                           -> x0
+    v5751 Imm(0)                                           -> x0
+    v5752 Undef                                            -> x0
+    v5753 Imm(0)                                           -> x0
+    v5754 Imm(16)                                          -> x0
+    v5755 Imm(0)                                           -> x0
+    v5756 Undef                                            -> x0
+    v5757 Imm(0)                                           -> x0
+    v5758 Imm(24)                                          -> x0
+    v5759 Imm(0)                                           -> x0
+    v5760 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v5761 Imm(0)                                           -> x0
     v5762 Imm(0)                                           -> x0
     v5763 Imm(0)                                           -> x0
@@ -12541,12 +12541,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v5587 Imm(0)                                           -> x0
     v5588 Imm(0)                                           -> x0
     v5589 Imm(-1)                                          -> x0
-    v5590 Imm(0)                                           -> x2
-    v5591 Undef                                            -> x2
-    v5592 Imm(0)                                           -> x2
-    v5593 Imm(8)                                           -> x2
-    v5594 Imm(0)                                           -> x2
-    v5595 VecSplat { value=v5589, kind=I64, bytes=16 }     -> d1
+    v5590 Imm(0)                                           -> x0
+    v5591 Undef                                            -> x0
+    v5592 Imm(0)                                           -> x0
+    v5593 Imm(8)                                           -> x0
+    v5594 Imm(0)                                           -> x0
+    v5595 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v5596 Imm(0)                                           -> x0
     v5597 Imm(0)                                           -> x0
     v5598 Imm(0)                                           -> x0
@@ -12658,36 +12658,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v5407 Imm(0)                                           -> x2
     v5408 Imm(0)                                           -> x2
     v5409 Imm(4294967295)                                  -> x2
-    v5410 Imm(0)                                           -> x6
-    v5411 Undef                                            -> x6
-    v5412 Imm(0)                                           -> x6
-    v5413 Imm(4)                                           -> x6
-    v5414 Imm(0)                                           -> x6
-    v5415 Undef                                            -> x6
-    v5416 Imm(0)                                           -> x6
-    v5417 Imm(8)                                           -> x6
-    v5418 Imm(0)                                           -> x6
-    v5419 Undef                                            -> x6
-    v5420 Imm(0)                                           -> x6
-    v5421 Imm(12)                                          -> x6
-    v5422 Imm(0)                                           -> x6
-    v5423 Undef                                            -> x6
-    v5424 Imm(0)                                           -> x6
-    v5425 Imm(16)                                          -> x6
-    v5426 Imm(0)                                           -> x6
-    v5427 Undef                                            -> x6
-    v5428 Imm(0)                                           -> x6
-    v5429 Imm(20)                                          -> x6
-    v5430 Imm(0)                                           -> x6
-    v5431 Undef                                            -> x6
-    v5432 Imm(0)                                           -> x6
-    v5433 Imm(24)                                          -> x6
-    v5434 Imm(0)                                           -> x6
-    v5435 Undef                                            -> x6
-    v5436 Imm(0)                                           -> x6
-    v5437 Imm(28)                                          -> x6
-    v5438 Imm(0)                                           -> x6
-    v5439 VecSplat { value=v5409, kind=I32, bytes=32 }     -> d0
+    v5410 Imm(0)                                           -> x2
+    v5411 Undef                                            -> x2
+    v5412 Imm(0)                                           -> x2
+    v5413 Imm(4)                                           -> x2
+    v5414 Imm(0)                                           -> x2
+    v5415 Undef                                            -> x2
+    v5416 Imm(0)                                           -> x2
+    v5417 Imm(8)                                           -> x2
+    v5418 Imm(0)                                           -> x2
+    v5419 Undef                                            -> x2
+    v5420 Imm(0)                                           -> x2
+    v5421 Imm(12)                                          -> x2
+    v5422 Imm(0)                                           -> x2
+    v5423 Undef                                            -> x2
+    v5424 Imm(0)                                           -> x2
+    v5425 Imm(16)                                          -> x2
+    v5426 Imm(0)                                           -> x2
+    v5427 Undef                                            -> x2
+    v5428 Imm(0)                                           -> x2
+    v5429 Imm(20)                                          -> x2
+    v5430 Imm(0)                                           -> x2
+    v5431 Undef                                            -> x2
+    v5432 Imm(0)                                           -> x2
+    v5433 Imm(24)                                          -> x2
+    v5434 Imm(0)                                           -> x2
+    v5435 Undef                                            -> x2
+    v5436 Imm(0)                                           -> x2
+    v5437 Imm(28)                                          -> x2
+    v5438 Imm(0)                                           -> x2
+    v5439 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v5440 Imm(0)                                           -> x2
     v5441 Imm(0)                                           -> x2
     v5442 Imm(0)                                           -> x7
@@ -12798,20 +12798,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v5245 Imm(0)                                           -> x0
     v5246 Imm(0)                                           -> x0
     v5247 Imm(4294967295)                                  -> x0
-    v5248 Imm(0)                                           -> x2
-    v5249 Undef                                            -> x2
-    v5250 Imm(0)                                           -> x2
-    v5251 Imm(4)                                           -> x2
-    v5252 Imm(0)                                           -> x2
-    v5253 Undef                                            -> x2
-    v5254 Imm(0)                                           -> x2
-    v5255 Imm(8)                                           -> x2
-    v5256 Imm(0)                                           -> x2
-    v5257 Undef                                            -> x2
-    v5258 Imm(0)                                           -> x2
-    v5259 Imm(12)                                          -> x2
-    v5260 Imm(0)                                           -> x2
-    v5261 VecSplat { value=v5247, kind=I32, bytes=16 }     -> d1
+    v5248 Imm(0)                                           -> x0
+    v5249 Undef                                            -> x0
+    v5250 Imm(0)                                           -> x0
+    v5251 Imm(4)                                           -> x0
+    v5252 Imm(0)                                           -> x0
+    v5253 Undef                                            -> x0
+    v5254 Imm(0)                                           -> x0
+    v5255 Imm(8)                                           -> x0
+    v5256 Imm(0)                                           -> x0
+    v5257 Undef                                            -> x0
+    v5258 Imm(0)                                           -> x0
+    v5259 Imm(12)                                          -> x0
+    v5260 Imm(0)                                           -> x0
+    v5261 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v5262 Imm(0)                                           -> x0
     v5263 Imm(0)                                           -> x0
     v5264 Imm(0)                                           -> x0
@@ -12924,20 +12924,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v5083 Imm(0)                                           -> x0
     v5084 Imm(0)                                           -> x0
     v5085 Imm(-1)                                          -> x0
-    v5086 Imm(0)                                           -> x2
-    v5087 Undef                                            -> x2
-    v5088 Imm(0)                                           -> x2
-    v5089 Imm(8)                                           -> x2
-    v5090 Imm(0)                                           -> x2
-    v5091 Undef                                            -> x2
-    v5092 Imm(0)                                           -> x2
-    v5093 Imm(16)                                          -> x2
-    v5094 Imm(0)                                           -> x2
-    v5095 Undef                                            -> x2
-    v5096 Imm(0)                                           -> x2
-    v5097 Imm(24)                                          -> x2
-    v5098 Imm(0)                                           -> x2
-    v5099 VecSplat { value=v5085, kind=I64, bytes=32 }     -> d1
+    v5086 Imm(0)                                           -> x0
+    v5087 Undef                                            -> x0
+    v5088 Imm(0)                                           -> x0
+    v5089 Imm(8)                                           -> x0
+    v5090 Imm(0)                                           -> x0
+    v5091 Undef                                            -> x0
+    v5092 Imm(0)                                           -> x0
+    v5093 Imm(16)                                          -> x0
+    v5094 Imm(0)                                           -> x0
+    v5095 Undef                                            -> x0
+    v5096 Imm(0)                                           -> x0
+    v5097 Imm(24)                                          -> x0
+    v5098 Imm(0)                                           -> x0
+    v5099 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v5100 Imm(0)                                           -> x0
     v5101 Imm(0)                                           -> x0
     v5102 Imm(0)                                           -> x0
@@ -13050,12 +13050,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v4938 Imm(0)                                           -> x0
     v4939 Imm(0)                                           -> x0
     v4940 Imm(-1)                                          -> x0
-    v4941 Imm(0)                                           -> x2
-    v4942 Undef                                            -> x2
-    v4943 Imm(0)                                           -> x2
-    v4944 Imm(8)                                           -> x2
-    v4945 Imm(0)                                           -> x2
-    v4946 VecSplat { value=v4940, kind=I64, bytes=16 }     -> d1
+    v4941 Imm(0)                                           -> x0
+    v4942 Undef                                            -> x0
+    v4943 Imm(0)                                           -> x0
+    v4944 Imm(8)                                           -> x0
+    v4945 Imm(0)                                           -> x0
+    v4946 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v4947 Imm(0)                                           -> x0
     v4948 Imm(0)                                           -> x0
     v4949 Imm(0)                                           -> x0
@@ -13167,36 +13167,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v4770 Imm(0)                                           -> x2
     v4771 Imm(0)                                           -> x2
     v4772 Imm(4294967295)                                  -> x2
-    v4773 Imm(0)                                           -> x6
-    v4774 Undef                                            -> x6
-    v4775 Imm(0)                                           -> x6
-    v4776 Imm(4)                                           -> x6
-    v4777 Imm(0)                                           -> x6
-    v4778 Undef                                            -> x6
-    v4779 Imm(0)                                           -> x6
-    v4780 Imm(8)                                           -> x6
-    v4781 Imm(0)                                           -> x6
-    v4782 Undef                                            -> x6
-    v4783 Imm(0)                                           -> x6
-    v4784 Imm(12)                                          -> x6
-    v4785 Imm(0)                                           -> x6
-    v4786 Undef                                            -> x6
-    v4787 Imm(0)                                           -> x6
-    v4788 Imm(16)                                          -> x6
-    v4789 Imm(0)                                           -> x6
-    v4790 Undef                                            -> x6
-    v4791 Imm(0)                                           -> x6
-    v4792 Imm(20)                                          -> x6
-    v4793 Imm(0)                                           -> x6
-    v4794 Undef                                            -> x6
-    v4795 Imm(0)                                           -> x6
-    v4796 Imm(24)                                          -> x6
-    v4797 Imm(0)                                           -> x6
-    v4798 Undef                                            -> x6
-    v4799 Imm(0)                                           -> x6
-    v4800 Imm(28)                                          -> x6
-    v4801 Imm(0)                                           -> x6
-    v4802 VecSplat { value=v4772, kind=I32, bytes=32 }     -> d0
+    v4773 Imm(0)                                           -> x2
+    v4774 Undef                                            -> x2
+    v4775 Imm(0)                                           -> x2
+    v4776 Imm(4)                                           -> x2
+    v4777 Imm(0)                                           -> x2
+    v4778 Undef                                            -> x2
+    v4779 Imm(0)                                           -> x2
+    v4780 Imm(8)                                           -> x2
+    v4781 Imm(0)                                           -> x2
+    v4782 Undef                                            -> x2
+    v4783 Imm(0)                                           -> x2
+    v4784 Imm(12)                                          -> x2
+    v4785 Imm(0)                                           -> x2
+    v4786 Undef                                            -> x2
+    v4787 Imm(0)                                           -> x2
+    v4788 Imm(16)                                          -> x2
+    v4789 Imm(0)                                           -> x2
+    v4790 Undef                                            -> x2
+    v4791 Imm(0)                                           -> x2
+    v4792 Imm(20)                                          -> x2
+    v4793 Imm(0)                                           -> x2
+    v4794 Undef                                            -> x2
+    v4795 Imm(0)                                           -> x2
+    v4796 Imm(24)                                          -> x2
+    v4797 Imm(0)                                           -> x2
+    v4798 Undef                                            -> x2
+    v4799 Imm(0)                                           -> x2
+    v4800 Imm(28)                                          -> x2
+    v4801 Imm(0)                                           -> x2
+    v4802 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v4803 Imm(0)                                           -> x2
     v4804 Imm(0)                                           -> x2
     v4805 Imm(0)                                           -> x7
@@ -13307,20 +13307,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v4620 Imm(0)                                           -> x0
     v4621 Imm(0)                                           -> x0
     v4622 Imm(4294967295)                                  -> x0
-    v4623 Imm(0)                                           -> x2
-    v4624 Undef                                            -> x2
-    v4625 Imm(0)                                           -> x2
-    v4626 Imm(4)                                           -> x2
-    v4627 Imm(0)                                           -> x2
-    v4628 Undef                                            -> x2
-    v4629 Imm(0)                                           -> x2
-    v4630 Imm(8)                                           -> x2
-    v4631 Imm(0)                                           -> x2
-    v4632 Undef                                            -> x2
-    v4633 Imm(0)                                           -> x2
-    v4634 Imm(12)                                          -> x2
-    v4635 Imm(0)                                           -> x2
-    v4636 VecSplat { value=v4622, kind=I32, bytes=16 }     -> d1
+    v4623 Imm(0)                                           -> x0
+    v4624 Undef                                            -> x0
+    v4625 Imm(0)                                           -> x0
+    v4626 Imm(4)                                           -> x0
+    v4627 Imm(0)                                           -> x0
+    v4628 Undef                                            -> x0
+    v4629 Imm(0)                                           -> x0
+    v4630 Imm(8)                                           -> x0
+    v4631 Imm(0)                                           -> x0
+    v4632 Undef                                            -> x0
+    v4633 Imm(0)                                           -> x0
+    v4634 Imm(12)                                          -> x0
+    v4635 Imm(0)                                           -> x0
+    v4636 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v4637 Imm(0)                                           -> x0
     v4638 Imm(0)                                           -> x0
     v4639 Imm(0)                                           -> x0
@@ -13484,20 +13484,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v4077 Imm(0)                                           -> x2
     v4078 Imm(0)                                           -> x2
     v4079 Imm(-1)                                          -> x2
-    v4080 Imm(0)                                           -> x6
-    v4081 Undef                                            -> x6
-    v4082 Imm(0)                                           -> x6
-    v4083 Imm(8)                                           -> x6
-    v4084 Imm(0)                                           -> x6
-    v4085 Undef                                            -> x6
-    v4086 Imm(0)                                           -> x6
-    v4087 Imm(16)                                          -> x6
-    v4088 Imm(0)                                           -> x6
-    v4089 Undef                                            -> x6
-    v4090 Imm(0)                                           -> x6
-    v4091 Imm(24)                                          -> x6
-    v4092 Imm(0)                                           -> x6
-    v4093 VecSplat { value=v4079, kind=I64, bytes=32 }     -> d0
+    v4080 Imm(0)                                           -> x2
+    v4081 Undef                                            -> x2
+    v4082 Imm(0)                                           -> x2
+    v4083 Imm(8)                                           -> x2
+    v4084 Imm(0)                                           -> x2
+    v4085 Undef                                            -> x2
+    v4086 Imm(0)                                           -> x2
+    v4087 Imm(16)                                          -> x2
+    v4088 Imm(0)                                           -> x2
+    v4089 Undef                                            -> x2
+    v4090 Imm(0)                                           -> x2
+    v4091 Imm(24)                                          -> x2
+    v4092 Imm(0)                                           -> x2
+    v4093 VecConst { imm=-1, kind=I64, bytes=32 }          -> d0
     v4094 Imm(0)                                           -> x2
     v4095 Imm(0)                                           -> x2
     v4096 Imm(0)                                           -> x7
@@ -13608,12 +13608,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v3934 Imm(0)                                           -> x0
     v3935 Imm(0)                                           -> x0
     v3936 Imm(-1)                                          -> x0
-    v3937 Imm(0)                                           -> x2
-    v3938 Undef                                            -> x2
-    v3939 Imm(0)                                           -> x2
-    v3940 Imm(8)                                           -> x2
-    v3941 Imm(0)                                           -> x2
-    v3942 VecSplat { value=v3936, kind=I64, bytes=16 }     -> d1
+    v3937 Imm(0)                                           -> x0
+    v3938 Undef                                            -> x0
+    v3939 Imm(0)                                           -> x0
+    v3940 Imm(8)                                           -> x0
+    v3941 Imm(0)                                           -> x0
+    v3942 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v3943 Imm(0)                                           -> x0
     v3944 Imm(0)                                           -> x0
     v3945 Imm(0)                                           -> x0
@@ -13725,20 +13725,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v3783 Imm(0)                                           -> x2
     v3784 Imm(0)                                           -> x2
     v3785 Imm(4294967295)                                  -> x2
-    v3786 Imm(0)                                           -> x6
-    v3787 Undef                                            -> x6
-    v3788 Imm(0)                                           -> x6
-    v3789 Imm(4)                                           -> x6
-    v3790 Imm(0)                                           -> x6
-    v3791 Undef                                            -> x6
-    v3792 Imm(0)                                           -> x6
-    v3793 Imm(8)                                           -> x6
-    v3794 Imm(0)                                           -> x6
-    v3795 Undef                                            -> x6
-    v3796 Imm(0)                                           -> x6
-    v3797 Imm(12)                                          -> x6
-    v3798 Imm(0)                                           -> x6
-    v3799 VecSplat { value=v3785, kind=I32, bytes=16 }     -> d0
+    v3786 Imm(0)                                           -> x2
+    v3787 Undef                                            -> x2
+    v3788 Imm(0)                                           -> x2
+    v3789 Imm(4)                                           -> x2
+    v3790 Imm(0)                                           -> x2
+    v3791 Undef                                            -> x2
+    v3792 Imm(0)                                           -> x2
+    v3793 Imm(8)                                           -> x2
+    v3794 Imm(0)                                           -> x2
+    v3795 Undef                                            -> x2
+    v3796 Imm(0)                                           -> x2
+    v3797 Imm(12)                                          -> x2
+    v3798 Imm(0)                                           -> x2
+    v3799 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d0
     v3800 Imm(0)                                           -> x2
     v3801 Imm(0)                                           -> x2
     v3802 Imm(0)                                           -> x7
@@ -13967,20 +13967,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v3483 Imm(0)                                           -> x0
     v3484 Imm(0)                                           -> x0
     v3485 Imm(-1)                                          -> x0
-    v3486 Imm(0)                                           -> x2
-    v3487 Undef                                            -> x2
-    v3488 Imm(0)                                           -> x2
-    v3489 Imm(8)                                           -> x2
-    v3490 Imm(0)                                           -> x2
-    v3491 Undef                                            -> x2
-    v3492 Imm(0)                                           -> x2
-    v3493 Imm(16)                                          -> x2
-    v3494 Imm(0)                                           -> x2
-    v3495 Undef                                            -> x2
-    v3496 Imm(0)                                           -> x2
-    v3497 Imm(24)                                          -> x2
-    v3498 Imm(0)                                           -> x2
-    v3499 VecSplat { value=v3485, kind=I64, bytes=32 }     -> d1
+    v3486 Imm(0)                                           -> x0
+    v3487 Undef                                            -> x0
+    v3488 Imm(0)                                           -> x0
+    v3489 Imm(8)                                           -> x0
+    v3490 Imm(0)                                           -> x0
+    v3491 Undef                                            -> x0
+    v3492 Imm(0)                                           -> x0
+    v3493 Imm(16)                                          -> x0
+    v3494 Imm(0)                                           -> x0
+    v3495 Undef                                            -> x0
+    v3496 Imm(0)                                           -> x0
+    v3497 Imm(24)                                          -> x0
+    v3498 Imm(0)                                           -> x0
+    v3499 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v3500 Imm(0)                                           -> x0
     v3501 Imm(0)                                           -> x0
     v3502 Imm(0)                                           -> x0
@@ -14093,12 +14093,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v3325 Imm(0)                                           -> x0
     v3326 Imm(0)                                           -> x0
     v3327 Imm(-1)                                          -> x0
-    v3328 Imm(0)                                           -> x2
-    v3329 Undef                                            -> x2
-    v3330 Imm(0)                                           -> x2
-    v3331 Imm(8)                                           -> x2
-    v3332 Imm(0)                                           -> x2
-    v3333 VecSplat { value=v3327, kind=I64, bytes=16 }     -> d1
+    v3328 Imm(0)                                           -> x0
+    v3329 Undef                                            -> x0
+    v3330 Imm(0)                                           -> x0
+    v3331 Imm(8)                                           -> x0
+    v3332 Imm(0)                                           -> x0
+    v3333 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v3334 Imm(0)                                           -> x0
     v3335 Imm(0)                                           -> x0
     v3336 Imm(0)                                           -> x0
@@ -14210,36 +14210,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v3145 Imm(0)                                           -> x2
     v3146 Imm(0)                                           -> x2
     v3147 Imm(4294967295)                                  -> x2
-    v3148 Imm(0)                                           -> x6
-    v3149 Undef                                            -> x6
-    v3150 Imm(0)                                           -> x6
-    v3151 Imm(4)                                           -> x6
-    v3152 Imm(0)                                           -> x6
-    v3153 Undef                                            -> x6
-    v3154 Imm(0)                                           -> x6
-    v3155 Imm(8)                                           -> x6
-    v3156 Imm(0)                                           -> x6
-    v3157 Undef                                            -> x6
-    v3158 Imm(0)                                           -> x6
-    v3159 Imm(12)                                          -> x6
-    v3160 Imm(0)                                           -> x6
-    v3161 Undef                                            -> x6
-    v3162 Imm(0)                                           -> x6
-    v3163 Imm(16)                                          -> x6
-    v3164 Imm(0)                                           -> x6
-    v3165 Undef                                            -> x6
-    v3166 Imm(0)                                           -> x6
-    v3167 Imm(20)                                          -> x6
-    v3168 Imm(0)                                           -> x6
-    v3169 Undef                                            -> x6
-    v3170 Imm(0)                                           -> x6
-    v3171 Imm(24)                                          -> x6
-    v3172 Imm(0)                                           -> x6
-    v3173 Undef                                            -> x6
-    v3174 Imm(0)                                           -> x6
-    v3175 Imm(28)                                          -> x6
-    v3176 Imm(0)                                           -> x6
-    v3177 VecSplat { value=v3147, kind=I32, bytes=32 }     -> d0
+    v3148 Imm(0)                                           -> x2
+    v3149 Undef                                            -> x2
+    v3150 Imm(0)                                           -> x2
+    v3151 Imm(4)                                           -> x2
+    v3152 Imm(0)                                           -> x2
+    v3153 Undef                                            -> x2
+    v3154 Imm(0)                                           -> x2
+    v3155 Imm(8)                                           -> x2
+    v3156 Imm(0)                                           -> x2
+    v3157 Undef                                            -> x2
+    v3158 Imm(0)                                           -> x2
+    v3159 Imm(12)                                          -> x2
+    v3160 Imm(0)                                           -> x2
+    v3161 Undef                                            -> x2
+    v3162 Imm(0)                                           -> x2
+    v3163 Imm(16)                                          -> x2
+    v3164 Imm(0)                                           -> x2
+    v3165 Undef                                            -> x2
+    v3166 Imm(0)                                           -> x2
+    v3167 Imm(20)                                          -> x2
+    v3168 Imm(0)                                           -> x2
+    v3169 Undef                                            -> x2
+    v3170 Imm(0)                                           -> x2
+    v3171 Imm(24)                                          -> x2
+    v3172 Imm(0)                                           -> x2
+    v3173 Undef                                            -> x2
+    v3174 Imm(0)                                           -> x2
+    v3175 Imm(28)                                          -> x2
+    v3176 Imm(0)                                           -> x2
+    v3177 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v3178 Imm(0)                                           -> x2
     v3179 Imm(0)                                           -> x2
     v3180 Imm(0)                                           -> x7
@@ -14350,20 +14350,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v2982 Imm(0)                                           -> x0
     v2983 Imm(0)                                           -> x0
     v2984 Imm(4294967295)                                  -> x0
-    v2985 Imm(0)                                           -> x2
-    v2986 Undef                                            -> x2
-    v2987 Imm(0)                                           -> x2
-    v2988 Imm(4)                                           -> x2
-    v2989 Imm(0)                                           -> x2
-    v2990 Undef                                            -> x2
-    v2991 Imm(0)                                           -> x2
-    v2992 Imm(8)                                           -> x2
-    v2993 Imm(0)                                           -> x2
-    v2994 Undef                                            -> x2
-    v2995 Imm(0)                                           -> x2
-    v2996 Imm(12)                                          -> x2
-    v2997 Imm(0)                                           -> x2
-    v2998 VecSplat { value=v2984, kind=I32, bytes=16 }     -> d1
+    v2985 Imm(0)                                           -> x0
+    v2986 Undef                                            -> x0
+    v2987 Imm(0)                                           -> x0
+    v2988 Imm(4)                                           -> x0
+    v2989 Imm(0)                                           -> x0
+    v2990 Undef                                            -> x0
+    v2991 Imm(0)                                           -> x0
+    v2992 Imm(8)                                           -> x0
+    v2993 Imm(0)                                           -> x0
+    v2994 Undef                                            -> x0
+    v2995 Imm(0)                                           -> x0
+    v2996 Imm(12)                                          -> x0
+    v2997 Imm(0)                                           -> x0
+    v2998 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v2999 Imm(0)                                           -> x0
     v3000 Imm(0)                                           -> x0
     v3001 Imm(0)                                           -> x0
@@ -14476,20 +14476,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v2819 Imm(0)                                           -> x0
     v2820 Imm(0)                                           -> x0
     v2821 Imm(-1)                                          -> x0
-    v2822 Imm(0)                                           -> x2
-    v2823 Undef                                            -> x2
-    v2824 Imm(0)                                           -> x2
-    v2825 Imm(8)                                           -> x2
-    v2826 Imm(0)                                           -> x2
-    v2827 Undef                                            -> x2
-    v2828 Imm(0)                                           -> x2
-    v2829 Imm(16)                                          -> x2
-    v2830 Imm(0)                                           -> x2
-    v2831 Undef                                            -> x2
-    v2832 Imm(0)                                           -> x2
-    v2833 Imm(24)                                          -> x2
-    v2834 Imm(0)                                           -> x2
-    v2835 VecSplat { value=v2821, kind=I64, bytes=32 }     -> d1
+    v2822 Imm(0)                                           -> x0
+    v2823 Undef                                            -> x0
+    v2824 Imm(0)                                           -> x0
+    v2825 Imm(8)                                           -> x0
+    v2826 Imm(0)                                           -> x0
+    v2827 Undef                                            -> x0
+    v2828 Imm(0)                                           -> x0
+    v2829 Imm(16)                                          -> x0
+    v2830 Imm(0)                                           -> x0
+    v2831 Undef                                            -> x0
+    v2832 Imm(0)                                           -> x0
+    v2833 Imm(24)                                          -> x0
+    v2834 Imm(0)                                           -> x0
+    v2835 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v2836 Imm(0)                                           -> x0
     v2837 Imm(0)                                           -> x0
     v2838 Imm(0)                                           -> x0
@@ -14602,12 +14602,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v2673 Imm(0)                                           -> x0
     v2674 Imm(0)                                           -> x0
     v2675 Imm(-1)                                          -> x0
-    v2676 Imm(0)                                           -> x2
-    v2677 Undef                                            -> x2
-    v2678 Imm(0)                                           -> x2
-    v2679 Imm(8)                                           -> x2
-    v2680 Imm(0)                                           -> x2
-    v2681 VecSplat { value=v2675, kind=I64, bytes=16 }     -> d1
+    v2676 Imm(0)                                           -> x0
+    v2677 Undef                                            -> x0
+    v2678 Imm(0)                                           -> x0
+    v2679 Imm(8)                                           -> x0
+    v2680 Imm(0)                                           -> x0
+    v2681 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v2682 Imm(0)                                           -> x0
     v2683 Imm(0)                                           -> x0
     v2684 Imm(0)                                           -> x0
@@ -14719,36 +14719,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v2505 Imm(0)                                           -> x2
     v2506 Imm(0)                                           -> x2
     v2507 Imm(4294967295)                                  -> x2
-    v2508 Imm(0)                                           -> x6
-    v2509 Undef                                            -> x6
-    v2510 Imm(0)                                           -> x6
-    v2511 Imm(4)                                           -> x6
-    v2512 Imm(0)                                           -> x6
-    v2513 Undef                                            -> x6
-    v2514 Imm(0)                                           -> x6
-    v2515 Imm(8)                                           -> x6
-    v2516 Imm(0)                                           -> x6
-    v2517 Undef                                            -> x6
-    v2518 Imm(0)                                           -> x6
-    v2519 Imm(12)                                          -> x6
-    v2520 Imm(0)                                           -> x6
-    v2521 Undef                                            -> x6
-    v2522 Imm(0)                                           -> x6
-    v2523 Imm(16)                                          -> x6
-    v2524 Imm(0)                                           -> x6
-    v2525 Undef                                            -> x6
-    v2526 Imm(0)                                           -> x6
-    v2527 Imm(20)                                          -> x6
-    v2528 Imm(0)                                           -> x6
-    v2529 Undef                                            -> x6
-    v2530 Imm(0)                                           -> x6
-    v2531 Imm(24)                                          -> x6
-    v2532 Imm(0)                                           -> x6
-    v2533 Undef                                            -> x6
-    v2534 Imm(0)                                           -> x6
-    v2535 Imm(28)                                          -> x6
-    v2536 Imm(0)                                           -> x6
-    v2537 VecSplat { value=v2507, kind=I32, bytes=32 }     -> d0
+    v2508 Imm(0)                                           -> x2
+    v2509 Undef                                            -> x2
+    v2510 Imm(0)                                           -> x2
+    v2511 Imm(4)                                           -> x2
+    v2512 Imm(0)                                           -> x2
+    v2513 Undef                                            -> x2
+    v2514 Imm(0)                                           -> x2
+    v2515 Imm(8)                                           -> x2
+    v2516 Imm(0)                                           -> x2
+    v2517 Undef                                            -> x2
+    v2518 Imm(0)                                           -> x2
+    v2519 Imm(12)                                          -> x2
+    v2520 Imm(0)                                           -> x2
+    v2521 Undef                                            -> x2
+    v2522 Imm(0)                                           -> x2
+    v2523 Imm(16)                                          -> x2
+    v2524 Imm(0)                                           -> x2
+    v2525 Undef                                            -> x2
+    v2526 Imm(0)                                           -> x2
+    v2527 Imm(20)                                          -> x2
+    v2528 Imm(0)                                           -> x2
+    v2529 Undef                                            -> x2
+    v2530 Imm(0)                                           -> x2
+    v2531 Imm(24)                                          -> x2
+    v2532 Imm(0)                                           -> x2
+    v2533 Undef                                            -> x2
+    v2534 Imm(0)                                           -> x2
+    v2535 Imm(28)                                          -> x2
+    v2536 Imm(0)                                           -> x2
+    v2537 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v2538 Imm(0)                                           -> x2
     v2539 Imm(0)                                           -> x2
     v2540 Imm(0)                                           -> x7
@@ -14859,20 +14859,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v2354 Imm(0)                                           -> x0
     v2355 Imm(0)                                           -> x0
     v2356 Imm(4294967295)                                  -> x0
-    v2357 Imm(0)                                           -> x2
-    v2358 Undef                                            -> x2
-    v2359 Imm(0)                                           -> x2
-    v2360 Imm(4)                                           -> x2
-    v2361 Imm(0)                                           -> x2
-    v2362 Undef                                            -> x2
-    v2363 Imm(0)                                           -> x2
-    v2364 Imm(8)                                           -> x2
-    v2365 Imm(0)                                           -> x2
-    v2366 Undef                                            -> x2
-    v2367 Imm(0)                                           -> x2
-    v2368 Imm(12)                                          -> x2
-    v2369 Imm(0)                                           -> x2
-    v2370 VecSplat { value=v2356, kind=I32, bytes=16 }     -> d1
+    v2357 Imm(0)                                           -> x0
+    v2358 Undef                                            -> x0
+    v2359 Imm(0)                                           -> x0
+    v2360 Imm(4)                                           -> x0
+    v2361 Imm(0)                                           -> x0
+    v2362 Undef                                            -> x0
+    v2363 Imm(0)                                           -> x0
+    v2364 Imm(8)                                           -> x0
+    v2365 Imm(0)                                           -> x0
+    v2366 Undef                                            -> x0
+    v2367 Imm(0)                                           -> x0
+    v2368 Imm(12)                                          -> x0
+    v2369 Imm(0)                                           -> x0
+    v2370 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v2371 Imm(0)                                           -> x0
     v2372 Imm(0)                                           -> x0
     v2373 Imm(0)                                           -> x0
@@ -15036,20 +15036,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v1808 Imm(0)                                           -> x2
     v1809 Imm(0)                                           -> x2
     v1810 Imm(-1)                                          -> x2
-    v1811 Imm(0)                                           -> x6
-    v1812 Undef                                            -> x6
-    v1813 Imm(0)                                           -> x6
-    v1814 Imm(8)                                           -> x6
-    v1815 Imm(0)                                           -> x6
-    v1816 Undef                                            -> x6
-    v1817 Imm(0)                                           -> x6
-    v1818 Imm(16)                                          -> x6
-    v1819 Imm(0)                                           -> x6
-    v1820 Undef                                            -> x6
-    v1821 Imm(0)                                           -> x6
-    v1822 Imm(24)                                          -> x6
-    v1823 Imm(0)                                           -> x6
-    v1824 VecSplat { value=v1810, kind=I64, bytes=32 }     -> d0
+    v1811 Imm(0)                                           -> x2
+    v1812 Undef                                            -> x2
+    v1813 Imm(0)                                           -> x2
+    v1814 Imm(8)                                           -> x2
+    v1815 Imm(0)                                           -> x2
+    v1816 Undef                                            -> x2
+    v1817 Imm(0)                                           -> x2
+    v1818 Imm(16)                                          -> x2
+    v1819 Imm(0)                                           -> x2
+    v1820 Undef                                            -> x2
+    v1821 Imm(0)                                           -> x2
+    v1822 Imm(24)                                          -> x2
+    v1823 Imm(0)                                           -> x2
+    v1824 VecConst { imm=-1, kind=I64, bytes=32 }          -> d0
     v1825 Imm(0)                                           -> x2
     v1826 Imm(0)                                           -> x2
     v1827 Imm(0)                                           -> x7
@@ -15160,12 +15160,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v1665 Imm(0)                                           -> x0
     v1666 Imm(0)                                           -> x0
     v1667 Imm(-1)                                          -> x0
-    v1668 Imm(0)                                           -> x2
-    v1669 Undef                                            -> x2
-    v1670 Imm(0)                                           -> x2
-    v1671 Imm(8)                                           -> x2
-    v1672 Imm(0)                                           -> x2
-    v1673 VecSplat { value=v1667, kind=I64, bytes=16 }     -> d1
+    v1668 Imm(0)                                           -> x0
+    v1669 Undef                                            -> x0
+    v1670 Imm(0)                                           -> x0
+    v1671 Imm(8)                                           -> x0
+    v1672 Imm(0)                                           -> x0
+    v1673 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v1674 Imm(0)                                           -> x0
     v1675 Imm(0)                                           -> x0
     v1676 Imm(0)                                           -> x0
@@ -15277,20 +15277,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v1513 Imm(0)                                           -> x2
     v1514 Imm(0)                                           -> x2
     v1515 Imm(4294967295)                                  -> x2
-    v1516 Imm(0)                                           -> x6
-    v1517 Undef                                            -> x6
-    v1518 Imm(0)                                           -> x6
-    v1519 Imm(4)                                           -> x6
-    v1520 Imm(0)                                           -> x6
-    v1521 Undef                                            -> x6
-    v1522 Imm(0)                                           -> x6
-    v1523 Imm(8)                                           -> x6
-    v1524 Imm(0)                                           -> x6
-    v1525 Undef                                            -> x6
-    v1526 Imm(0)                                           -> x6
-    v1527 Imm(12)                                          -> x6
-    v1528 Imm(0)                                           -> x6
-    v1529 VecSplat { value=v1515, kind=I32, bytes=16 }     -> d0
+    v1516 Imm(0)                                           -> x2
+    v1517 Undef                                            -> x2
+    v1518 Imm(0)                                           -> x2
+    v1519 Imm(4)                                           -> x2
+    v1520 Imm(0)                                           -> x2
+    v1521 Undef                                            -> x2
+    v1522 Imm(0)                                           -> x2
+    v1523 Imm(8)                                           -> x2
+    v1524 Imm(0)                                           -> x2
+    v1525 Undef                                            -> x2
+    v1526 Imm(0)                                           -> x2
+    v1527 Imm(12)                                          -> x2
+    v1528 Imm(0)                                           -> x2
+    v1529 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d0
     v1530 Imm(0)                                           -> x2
     v1531 Imm(0)                                           -> x2
     v1532 Imm(0)                                           -> x7
@@ -15519,20 +15519,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v1212 Imm(0)                                           -> x0
     v1213 Imm(0)                                           -> x0
     v1214 Imm(-1)                                          -> x0
-    v1215 Imm(0)                                           -> x2
-    v1216 Undef                                            -> x2
-    v1217 Imm(0)                                           -> x2
-    v1218 Imm(8)                                           -> x2
-    v1219 Imm(0)                                           -> x2
-    v1220 Undef                                            -> x2
-    v1221 Imm(0)                                           -> x2
-    v1222 Imm(16)                                          -> x2
-    v1223 Imm(0)                                           -> x2
-    v1224 Undef                                            -> x2
-    v1225 Imm(0)                                           -> x2
-    v1226 Imm(24)                                          -> x2
-    v1227 Imm(0)                                           -> x2
-    v1228 VecSplat { value=v1214, kind=I64, bytes=32 }     -> d1
+    v1215 Imm(0)                                           -> x0
+    v1216 Undef                                            -> x0
+    v1217 Imm(0)                                           -> x0
+    v1218 Imm(8)                                           -> x0
+    v1219 Imm(0)                                           -> x0
+    v1220 Undef                                            -> x0
+    v1221 Imm(0)                                           -> x0
+    v1222 Imm(16)                                          -> x0
+    v1223 Imm(0)                                           -> x0
+    v1224 Undef                                            -> x0
+    v1225 Imm(0)                                           -> x0
+    v1226 Imm(24)                                          -> x0
+    v1227 Imm(0)                                           -> x0
+    v1228 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v1229 Imm(0)                                           -> x0
     v1230 Imm(0)                                           -> x0
     v1231 Imm(0)                                           -> x0
@@ -15645,12 +15645,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v1054 Imm(0)                                           -> x0
     v1055 Imm(0)                                           -> x0
     v1056 Imm(-1)                                          -> x0
-    v1057 Imm(0)                                           -> x2
-    v1058 Undef                                            -> x2
-    v1059 Imm(0)                                           -> x2
-    v1060 Imm(8)                                           -> x2
-    v1061 Imm(0)                                           -> x2
-    v1062 VecSplat { value=v1056, kind=I64, bytes=16 }     -> d1
+    v1057 Imm(0)                                           -> x0
+    v1058 Undef                                            -> x0
+    v1059 Imm(0)                                           -> x0
+    v1060 Imm(8)                                           -> x0
+    v1061 Imm(0)                                           -> x0
+    v1062 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v1063 Imm(0)                                           -> x0
     v1064 Imm(0)                                           -> x0
     v1065 Imm(0)                                           -> x0
@@ -15762,36 +15762,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v873 Imm(0)                                           -> x2
     v874 Imm(0)                                           -> x2
     v875 Imm(4294967295)                                  -> x2
-    v876 Imm(0)                                           -> x6
-    v877 Undef                                            -> x6
-    v878 Imm(0)                                           -> x6
-    v879 Imm(4)                                           -> x6
-    v880 Imm(0)                                           -> x6
-    v881 Undef                                            -> x6
-    v882 Imm(0)                                           -> x6
-    v883 Imm(8)                                           -> x6
-    v884 Imm(0)                                           -> x6
-    v885 Undef                                            -> x6
-    v886 Imm(0)                                           -> x6
-    v887 Imm(12)                                          -> x6
-    v888 Imm(0)                                           -> x6
-    v889 Undef                                            -> x6
-    v890 Imm(0)                                           -> x6
-    v891 Imm(16)                                          -> x6
-    v892 Imm(0)                                           -> x6
-    v893 Undef                                            -> x6
-    v894 Imm(0)                                           -> x6
-    v895 Imm(20)                                          -> x6
-    v896 Imm(0)                                           -> x6
-    v897 Undef                                            -> x6
-    v898 Imm(0)                                           -> x6
-    v899 Imm(24)                                          -> x6
-    v900 Imm(0)                                           -> x6
-    v901 Undef                                            -> x6
-    v902 Imm(0)                                           -> x6
-    v903 Imm(28)                                          -> x6
-    v904 Imm(0)                                           -> x6
-    v905 VecSplat { value=v875, kind=I32, bytes=32 }      -> d0
+    v876 Imm(0)                                           -> x2
+    v877 Undef                                            -> x2
+    v878 Imm(0)                                           -> x2
+    v879 Imm(4)                                           -> x2
+    v880 Imm(0)                                           -> x2
+    v881 Undef                                            -> x2
+    v882 Imm(0)                                           -> x2
+    v883 Imm(8)                                           -> x2
+    v884 Imm(0)                                           -> x2
+    v885 Undef                                            -> x2
+    v886 Imm(0)                                           -> x2
+    v887 Imm(12)                                          -> x2
+    v888 Imm(0)                                           -> x2
+    v889 Undef                                            -> x2
+    v890 Imm(0)                                           -> x2
+    v891 Imm(16)                                          -> x2
+    v892 Imm(0)                                           -> x2
+    v893 Undef                                            -> x2
+    v894 Imm(0)                                           -> x2
+    v895 Imm(20)                                          -> x2
+    v896 Imm(0)                                           -> x2
+    v897 Undef                                            -> x2
+    v898 Imm(0)                                           -> x2
+    v899 Imm(24)                                          -> x2
+    v900 Imm(0)                                           -> x2
+    v901 Undef                                            -> x2
+    v902 Imm(0)                                           -> x2
+    v903 Imm(28)                                          -> x2
+    v904 Imm(0)                                           -> x2
+    v905 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v906 Imm(0)                                           -> x2
     v907 Imm(0)                                           -> x2
     v908 Imm(0)                                           -> x7
@@ -15902,20 +15902,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v710 Imm(0)                                           -> x0
     v711 Imm(0)                                           -> x0
     v712 Imm(4294967295)                                  -> x0
-    v713 Imm(0)                                           -> x2
-    v714 Undef                                            -> x2
-    v715 Imm(0)                                           -> x2
-    v716 Imm(4)                                           -> x2
-    v717 Imm(0)                                           -> x2
-    v718 Undef                                            -> x2
-    v719 Imm(0)                                           -> x2
-    v720 Imm(8)                                           -> x2
-    v721 Imm(0)                                           -> x2
-    v722 Undef                                            -> x2
-    v723 Imm(0)                                           -> x2
-    v724 Imm(12)                                          -> x2
-    v725 Imm(0)                                           -> x2
-    v726 VecSplat { value=v712, kind=I32, bytes=16 }      -> d1
+    v713 Imm(0)                                           -> x0
+    v714 Undef                                            -> x0
+    v715 Imm(0)                                           -> x0
+    v716 Imm(4)                                           -> x0
+    v717 Imm(0)                                           -> x0
+    v718 Undef                                            -> x0
+    v719 Imm(0)                                           -> x0
+    v720 Imm(8)                                           -> x0
+    v721 Imm(0)                                           -> x0
+    v722 Undef                                            -> x0
+    v723 Imm(0)                                           -> x0
+    v724 Imm(12)                                          -> x0
+    v725 Imm(0)                                           -> x0
+    v726 VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v727 Imm(0)                                           -> x0
     v728 Imm(0)                                           -> x0
     v729 Imm(0)                                           -> x0
@@ -16028,20 +16028,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v547 Imm(0)                                           -> x0
     v548 Imm(0)                                           -> x0
     v549 Imm(-1)                                          -> x0
-    v550 Imm(0)                                           -> x2
-    v551 Undef                                            -> x2
-    v552 Imm(0)                                           -> x2
-    v553 Imm(8)                                           -> x2
-    v554 Imm(0)                                           -> x2
-    v555 Undef                                            -> x2
-    v556 Imm(0)                                           -> x2
-    v557 Imm(16)                                          -> x2
-    v558 Imm(0)                                           -> x2
-    v559 Undef                                            -> x2
-    v560 Imm(0)                                           -> x2
-    v561 Imm(24)                                          -> x2
-    v562 Imm(0)                                           -> x2
-    v563 VecSplat { value=v549, kind=I64, bytes=32 }      -> d1
+    v550 Imm(0)                                           -> x0
+    v551 Undef                                            -> x0
+    v552 Imm(0)                                           -> x0
+    v553 Imm(8)                                           -> x0
+    v554 Imm(0)                                           -> x0
+    v555 Undef                                            -> x0
+    v556 Imm(0)                                           -> x0
+    v557 Imm(16)                                          -> x0
+    v558 Imm(0)                                           -> x0
+    v559 Undef                                            -> x0
+    v560 Imm(0)                                           -> x0
+    v561 Imm(24)                                          -> x0
+    v562 Imm(0)                                           -> x0
+    v563 VecConst { imm=-1, kind=I64, bytes=32 }          -> d1
     v564 Imm(0)                                           -> x0
     v565 Imm(0)                                           -> x0
     v566 Imm(0)                                           -> x0
@@ -16154,12 +16154,12 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v401 Imm(0)                                           -> x0
     v402 Imm(0)                                           -> x0
     v403 Imm(-1)                                          -> x0
-    v404 Imm(0)                                           -> x2
-    v405 Undef                                            -> x2
-    v406 Imm(0)                                           -> x2
-    v407 Imm(8)                                           -> x2
-    v408 Imm(0)                                           -> x2
-    v409 VecSplat { value=v403, kind=I64, bytes=16 }      -> d1
+    v404 Imm(0)                                           -> x0
+    v405 Undef                                            -> x0
+    v406 Imm(0)                                           -> x0
+    v407 Imm(8)                                           -> x0
+    v408 Imm(0)                                           -> x0
+    v409 VecConst { imm=-1, kind=I64, bytes=16 }          -> d1
     v410 Imm(0)                                           -> x0
     v411 Imm(0)                                           -> x0
     v412 Imm(0)                                           -> x0
@@ -16271,36 +16271,36 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v232 Imm(0)                                           -> x2
     v233 Imm(0)                                           -> x2
     v234 Imm(4294967295)                                  -> x2
-    v235 Imm(0)                                           -> x6
-    v236 Undef                                            -> x6
-    v237 Imm(0)                                           -> x6
-    v238 Imm(4)                                           -> x6
-    v239 Imm(0)                                           -> x6
-    v240 Undef                                            -> x6
-    v241 Imm(0)                                           -> x6
-    v242 Imm(8)                                           -> x6
-    v243 Imm(0)                                           -> x6
-    v244 Undef                                            -> x6
-    v245 Imm(0)                                           -> x6
-    v246 Imm(12)                                          -> x6
-    v247 Imm(0)                                           -> x6
-    v248 Undef                                            -> x6
-    v249 Imm(0)                                           -> x6
-    v250 Imm(16)                                          -> x6
-    v251 Imm(0)                                           -> x6
-    v252 Undef                                            -> x6
-    v253 Imm(0)                                           -> x6
-    v254 Imm(20)                                          -> x6
-    v255 Imm(0)                                           -> x6
-    v256 Undef                                            -> x6
-    v257 Imm(0)                                           -> x6
-    v258 Imm(24)                                          -> x6
-    v259 Imm(0)                                           -> x6
-    v260 Undef                                            -> x6
-    v261 Imm(0)                                           -> x6
-    v262 Imm(28)                                          -> x6
-    v263 Imm(0)                                           -> x6
-    v264 VecSplat { value=v234, kind=I32, bytes=32 }      -> d0
+    v235 Imm(0)                                           -> x2
+    v236 Undef                                            -> x2
+    v237 Imm(0)                                           -> x2
+    v238 Imm(4)                                           -> x2
+    v239 Imm(0)                                           -> x2
+    v240 Undef                                            -> x2
+    v241 Imm(0)                                           -> x2
+    v242 Imm(8)                                           -> x2
+    v243 Imm(0)                                           -> x2
+    v244 Undef                                            -> x2
+    v245 Imm(0)                                           -> x2
+    v246 Imm(12)                                          -> x2
+    v247 Imm(0)                                           -> x2
+    v248 Undef                                            -> x2
+    v249 Imm(0)                                           -> x2
+    v250 Imm(16)                                          -> x2
+    v251 Imm(0)                                           -> x2
+    v252 Undef                                            -> x2
+    v253 Imm(0)                                           -> x2
+    v254 Imm(20)                                          -> x2
+    v255 Imm(0)                                           -> x2
+    v256 Undef                                            -> x2
+    v257 Imm(0)                                           -> x2
+    v258 Imm(24)                                          -> x2
+    v259 Imm(0)                                           -> x2
+    v260 Undef                                            -> x2
+    v261 Imm(0)                                           -> x2
+    v262 Imm(28)                                          -> x2
+    v263 Imm(0)                                           -> x2
+    v264 VecConst { imm=4294967295, kind=I32, bytes=32 }  -> d0
     v265 Imm(0)                                           -> x2
     v266 Imm(0)                                           -> x2
     v267 Imm(0)                                           -> x7
@@ -16412,20 +16412,20 @@ fn ent_pc=1364 n_params=1 variadic=false locals=28
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  Imm(4294967295)                                  -> x0
-    v83  Imm(0)                                           -> x2
-    v84  Undef                                            -> x2
-    v85  Imm(0)                                           -> x2
-    v86  Imm(4)                                           -> x2
-    v87  Imm(0)                                           -> x2
-    v88  Undef                                            -> x2
-    v89  Imm(0)                                           -> x2
-    v90  Imm(8)                                           -> x2
-    v91  Imm(0)                                           -> x2
-    v92  Undef                                            -> x2
-    v93  Imm(0)                                           -> x2
-    v94  Imm(12)                                          -> x2
-    v95  Imm(0)                                           -> x2
-    v96  VecSplat { value=v82, kind=I32, bytes=16 }       -> d1
+    v83  Imm(0)                                           -> x0
+    v84  Undef                                            -> x0
+    v85  Imm(0)                                           -> x0
+    v86  Imm(4)                                           -> x0
+    v87  Imm(0)                                           -> x0
+    v88  Undef                                            -> x0
+    v89  Imm(0)                                           -> x0
+    v90  Imm(8)                                           -> x0
+    v91  Imm(0)                                           -> x0
+    v92  Undef                                            -> x0
+    v93  Imm(0)                                           -> x0
+    v94  Imm(12)                                          -> x0
+    v95  Imm(0)                                           -> x0
+    v96  VecConst { imm=4294967295, kind=I32, bytes=16 }  -> d1
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
     v99  Imm(0)                                           -> x0
@@ -20039,11 +20039,11 @@ fn ent_pc=1368 n_params=0 variadic=false locals=10
     v154 Imm(0)                                           -> x0
     v155 Imm(0)                                           -> x0
     v156 Imm(-1)                                          -> x0
-    v157 Undef                                            -> x6
-    v158 Undef                                            -> x6
-    v159 Undef                                            -> x6
-    v160 Undef                                            -> x6
-    v161 VecSplat { value=v156, kind=I64, bytes=32 }      -> d2
+    v157 Undef                                            -> x0
+    v158 Undef                                            -> x0
+    v159 Undef                                            -> x0
+    v160 Undef                                            -> x0
+    v161 VecConst { imm=-1, kind=I64, bytes=32 }          -> d2
     v162 Imm(0)                                           -> x0
     v163 VecBinop { op=Xor, lane=I64, bytes=32, lhs=v126, rhs=v161 } -> d2
     v164 Imm(0)                                           -> x0
@@ -20104,11 +20104,11 @@ fn ent_pc=1368 n_params=0 variadic=false locals=10
     v1421 Imm(0)                                           -> x0
     v1422 Imm(0)                                           -> x0
     v1423 Imm(-1)                                          -> x0
-    v1424 Undef                                            -> x6
-    v1425 Undef                                            -> x6
-    v1426 Undef                                            -> x6
-    v1427 Undef                                            -> x6
-    v1428 VecSplat { value=v1423, kind=I64, bytes=32 }     -> d2
+    v1424 Undef                                            -> x0
+    v1425 Undef                                            -> x0
+    v1426 Undef                                            -> x0
+    v1427 Undef                                            -> x0
+    v1428 VecConst { imm=-1, kind=I64, bytes=32 }          -> d2
     v1429 Imm(0)                                           -> x0
     v1430 VecBinop { op=Xor, lane=I64, bytes=32, lhs=v126, rhs=v1428 } -> d0
     v1431 Imm(0)                                           -> x0

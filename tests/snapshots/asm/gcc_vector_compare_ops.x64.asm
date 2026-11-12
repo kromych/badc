@@ -3625,9 +3625,7 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm2
                	pcmpgtd	%xmm0, %xmm2
                	pand	%xmm2, %xmm0
-               	movq	$-0x1, %rax
-               	vmovq	%rax, %xmm3
-               	vpbroadcastq	%xmm3, %xmm3
+               	vpcmpeqd	%xmm3, %xmm3, %xmm3
                	pxor	%xmm3, %xmm2
                	pand	%xmm2, %xmm1
                	por	%xmm1, %xmm0

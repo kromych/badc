@@ -2607,6 +2607,62 @@ pub(super) fn emit_vec_extract(
     Ok(())
 }
 
+/// `Inst::VecConst`: `vpxor` for zero and `vpcmpeqd` for all ones, which
+/// read no register; another lane is built in a general register and
+/// broadcast. An 8-byte vector's upper half is cleared by `vmovq`.
+pub(super) fn emit_vec_const(
+    code: &mut Vec<u8>,
+    (imm, kind, bytes): (i64, StoreKind, u8),
+    dst: Place,
+    frame: Frame,
+) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let rd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let full = bytes.max(16);
+    let (bits, mnem) = match kind {
+        StoreKind::I64 => (64, "vpbroadcastq"),
+        StoreKind::I32 => (32, "vpbroadcastd"),
+        StoreKind::I16 => (16, "vpbroadcastw"),
+        StoreKind::I8 => (8, "vpbroadcastb"),
+        _ => return fail("VecConst: not an integer lane kind"),
+    };
+    let mask = u64::MAX >> (64 - bits);
+    let lane = imm as u64 & mask;
+    let r = wide_reg(16, rd);
+    if lane == 0 {
+        encode_wide(code, "vpxor", &[r, r, r])?;
+    } else if lane == mask {
+        let w = wide_reg(full, rd);
+        encode_wide(code, "vpcmpeqd", &[w, w, w])?;
+    } else {
+        super::encode::emit_mov_r_imm64(code, SCRATCH_R11, lane as i64);
+        let (mov, size) = if bits == 64 {
+            ("vmovq", AsmRegSize::Quad)
+        } else {
+            ("vmovd", AsmRegSize::Long)
+        };
+        let g = Concrete::Reg {
+            reg: SCRATCH_R11.0,
+            size,
+        };
+        encode_wide(code, mov, &[g, r])?;
+        encode_wide(code, mnem, &[r, wide_reg(full, rd)])?;
+    }
+    if bytes == 8 {
+        encode_wide(code, "vmovq", &[r, r])?;
+        super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
+    } else if bytes > 16 {
+        mirror_wide_dst(code, VecWidth::of_bytes(bytes), dst, Reg(rd), frame);
+    } else {
+        mirror_v128_dst(code, dst, Reg(rd), frame);
+    }
+    Ok(())
+}
+
 /// `Inst::VecSplat`: `vpbroadcast*` of a general register moved in by
 /// `vmovd` / `vmovq`, `vbroadcastss` of a float, `vmovddup` or
 /// `vbroadcastsd` of a double; an 8-byte vector's upper half cleared by

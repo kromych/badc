@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movabsq	$0x700000005, %rax      # imm = 0x700000005
-               	vmovq	%rax, %xmm0
+               	movabsq	$0x700000005, %r11      # imm = 0x700000005
+               	vmovq	%r11, %xmm0
                	vpbroadcastq	%xmm0, %xmm0
                	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
                	vmovd	%xmm0, %eax

@@ -5784,51 +5784,51 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1487 Imm(0)                                           -> x1
     v1488 Imm(0)                                           -> x1
     v1489 VecInsert { vec=v1483, value=v1486, off=0, kind=F32, bytes=16 } -> d0
-    v1490 Imm(0)                                           -> x1
-    v1491 LocalAddr(-3)                                    -> x1
-    v1492 BinopI { op=add, lhs=v1473, rhs_imm=4 }          -> x1
+    v1490 Imm(0)                                           -> x0
+    v1491 LocalAddr(-3)                                    -> x0
+    v1492 BinopI { op=add, lhs=v1473, rhs_imm=4 }          -> x0
     v1493 LoadLocal { off=-3, disp=4, kind=F32, volatile } -> d1 [f32]
-    v1494 Imm(0)                                           -> x1
-    v1495 Imm(4)                                           -> x1
-    v1496 Imm(0)                                           -> x1
+    v1494 Imm(0)                                           -> x0
+    v1495 Imm(4)                                           -> x0
+    v1496 Imm(0)                                           -> x0
     v1497 VecInsert { vec=v1489, value=v1493, off=4, kind=F32, bytes=16 } -> d0
-    v1498 Imm(0)                                           -> x1
-    v1499 LocalAddr(-3)                                    -> x1
-    v1500 BinopI { op=add, lhs=v1499, rhs_imm=8 }          -> x1
+    v1498 Imm(0)                                           -> x0
+    v1499 LocalAddr(-3)                                    -> x0
+    v1500 BinopI { op=add, lhs=v1499, rhs_imm=8 }          -> x0
     v1501 LoadLocal { off=-3, disp=8, kind=F32, volatile } -> d1 [f32]
-    v1502 Imm(0)                                           -> x1
-    v1503 Imm(8)                                           -> x1
-    v1504 Imm(0)                                           -> x1
+    v1502 Imm(0)                                           -> x0
+    v1503 Imm(8)                                           -> x0
+    v1504 Imm(0)                                           -> x0
     v1505 VecInsert { vec=v1497, value=v1501, off=8, kind=F32, bytes=16 } -> d0
-    v1506 Imm(0)                                           -> x1
-    v1507 LocalAddr(-3)                                    -> x1
-    v1508 BinopI { op=add, lhs=v1499, rhs_imm=12 }         -> x1
+    v1506 Imm(0)                                           -> x0
+    v1507 LocalAddr(-3)                                    -> x0
+    v1508 BinopI { op=add, lhs=v1499, rhs_imm=12 }         -> x0
     v1509 LoadLocal { off=-3, disp=12, kind=F32, volatile } -> d1 [f32]
-    v1510 Imm(0)                                           -> x1
-    v1511 Imm(12)                                          -> x1
-    v1512 Imm(0)                                           -> x1
+    v1510 Imm(0)                                           -> x0
+    v1511 Imm(12)                                          -> x0
+    v1512 Imm(0)                                           -> x0
     v1513 VecInsert { vec=v1505, value=v1509, off=12, kind=F32, bytes=16 } -> d0
-    v1514 Imm(0)                                           -> x1
-    v1515 Imm(0)                                           -> x1
+    v1514 Imm(0)                                           -> x0
+    v1515 Imm(0)                                           -> x0
     v1516 LifetimeEnd(-3)                                  -> -
-    v1517 Imm(0)                                           -> x1
-    v1518 Imm(0)                                           -> x1
-    v1519 Imm(0)                                           -> x1
-    v1520 Imm(0)                                           -> x1
-    v1521 Imm(0)                                           -> x1
-    v1522 Imm(0)                                           -> x1
-    v1523 Imm(0)                                           -> x1
-    v1524 Imm(0)                                           -> x1
-    v1525 Imm(0)                                           -> x1
+    v1517 Imm(0)                                           -> x0
+    v1518 Imm(0)                                           -> x0
+    v1519 Imm(0)                                           -> x0
+    v1520 Imm(0)                                           -> x0
+    v1521 Imm(0)                                           -> x0
+    v1522 Imm(0)                                           -> x0
+    v1523 Imm(0)                                           -> x0
+    v1524 Imm(0)                                           -> x0
+    v1525 Imm(0)                                           -> x0
     v1526 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v1513] } -> d0
-    v1527 Imm(0)                                           -> x1
-    v1528 Imm(0)                                           -> x1
-    v1529 Imm(0)                                           -> x1
-    v1530 Imm(0)                                           -> x1
-    v1531 Imm(0)                                           -> x1
-    v1532 Imm(0)                                           -> x1
-    v1533 Undef                                            -> x1
-    v1534 VecSplat { value=v1483, kind=I64, bytes=8 }      -> d1
+    v1527 Imm(0)                                           -> x0
+    v1528 Imm(0)                                           -> x0
+    v1529 Imm(0)                                           -> x0
+    v1530 Imm(0)                                           -> x0
+    v1531 Imm(0)                                           -> x0
+    v1532 Imm(0)                                           -> x0
+    v1533 Undef                                            -> x0
+    v1534 VecConst { imm=0, kind=I64, bytes=8 }            -> d1
     v1535 Imm(0)                                           -> x0
     v1536 Imm(0)                                           -> x0
     v1537 Imm(0)                                           -> x0
@@ -7498,7 +7498,7 @@ fn ent_pc=447 n_params=0 variadic=false locals=11
     v181 Imm(0)                                           -> x0
     v182 Imm(8)                                           -> x0
     v183 Imm(0)                                           -> x0
-    v184 VecSplat { value=v164, kind=I64, bytes=16 }      -> d0
+    v184 VecConst { imm=7, kind=I64, bytes=16 }           -> d0
     v185 Imm(0)                                           -> x0
     v186 Imm(0)                                           -> x0
     v187 LifetimeEnd(-4)                                  -> -
@@ -7513,14 +7513,14 @@ fn ent_pc=447 n_params=0 variadic=false locals=11
     v196 Imm(0)                                           -> x0
     v197 Imm(0)                                           -> x0
     v198 Imm(0)                                           -> x0
-    v199 Copy { value=v164, fp=false }                    -> x0
+    v199 Imm(7)                                           -> x0
     v200 Imm(1)                                           -> x0
     v201 Imm(0)                                           -> x0
     v202 Imm(0)                                           -> x0
     v203 Imm(8)                                           -> x0
     v204 Imm(8)                                           -> x0
     v205 Imm(0)                                           -> x0
-    v206 Copy { value=v164, fp=false }                    -> x0
+    v206 Imm(7)                                           -> x0
     v207 Imm(1)                                           -> x0
     v208 Imm(1)                                           -> x0
     v209 Imm(0)                                           -> x0

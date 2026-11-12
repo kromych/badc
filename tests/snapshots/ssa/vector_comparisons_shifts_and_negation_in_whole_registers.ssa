@@ -3464,46 +3464,46 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v3647 StoreLocal { off=-399, value=v3642, kind=V128 }  -> -
     v3648 LocalAddr(-368)                                  -> x6
     v3649 Imm(0)                                           -> x6
-    v3650 Imm(-1)                                          -> x7
+    v3650 Imm(-1)                                          -> x6
     v3651 Undef                                            -> x6
     v3652 Undef                                            -> x6
     v3653 Imm(0)                                           -> x6
     v3654 Imm(8)                                           -> x6
     v3655 Imm(0)                                           -> x6
-    v3656 VecSplat { value=v3650, kind=I64, bytes=16 }     -> d0
+    v3656 VecConst { imm=-1, kind=I64, bytes=16 }          -> d0
     v3657 Imm(0)                                           -> x6
     v3658 Imm(0)                                           -> x6
     v3659 LoadLocal { off=-368, kind=V128 }                -> d1
-    v3660 VecBinop { op=Xor, lane=I32, bytes=16, lhs=v3659, rhs=v3656 } -> d0
+    v3660 VecBinop { op=Xor, lane=I32, bytes=16, lhs=v3659, rhs=v3656 } -> d1
     v3661 Imm(0)                                           -> x6
     v3662 Imm(0)                                           -> x6
     v3663 LocalAddr(-400)                                  -> x6
-    v3664 Imm(0)                                           -> x8
+    v3664 Imm(0)                                           -> x7
     v3665 StoreLocal { off=-400, value=v3660, kind=V128 }  -> -
-    v3666 LocalAddr(-382)                                  -> x8
-    v3667 Imm(0)                                           -> x8
-    v3668 Imm(0)                                           -> x8
-    v3669 Imm(0)                                           -> x8
-    v3670 Imm(0)                                           -> x8
-    v3671 LoadLocal { off=-382, kind=V128 }                -> d0
-    v3672 VecBinop { op=Sub, lane=I64, bytes=16, lhs=v3638, rhs=v3671 } -> d0
-    v3673 Imm(0)                                           -> x8
-    v3674 Imm(0)                                           -> x8
-    v3675 Imm(0)                                           -> x8
-    v3676 Imm(0)                                           -> x8
-    v3677 Imm(0)                                           -> x8
-    v3678 LocalAddr(-361)                                  -> x8
-    v3679 Imm(0)                                           -> x8
-    v3680 Undef                                            -> x8
-    v3681 Undef                                            -> x8
-    v3682 Imm(0)                                           -> x8
-    v3683 Imm(8)                                           -> x8
-    v3684 Imm(0)                                           -> x8
-    v3685 VecSplat { value=v3650, kind=I64, bytes=16 }     -> d1
+    v3666 LocalAddr(-382)                                  -> x7
+    v3667 Imm(0)                                           -> x7
+    v3668 Imm(0)                                           -> x7
+    v3669 Imm(0)                                           -> x7
+    v3670 Imm(0)                                           -> x7
+    v3671 LoadLocal { off=-382, kind=V128 }                -> d1
+    v3672 VecBinop { op=Sub, lane=I64, bytes=16, lhs=v3638, rhs=v3671 } -> d1
+    v3673 Imm(0)                                           -> x7
+    v3674 Imm(0)                                           -> x7
+    v3675 Imm(0)                                           -> x7
+    v3676 Imm(0)                                           -> x7
+    v3677 Imm(0)                                           -> x7
+    v3678 LocalAddr(-361)                                  -> x7
+    v3679 Imm(0)                                           -> x7
+    v3680 Undef                                            -> x7
+    v3681 Undef                                            -> x7
+    v3682 Imm(0)                                           -> x7
+    v3683 Imm(8)                                           -> x7
+    v3684 Imm(0)                                           -> x7
+    v3685 VecConst { imm=-1, kind=I64, bytes=16 }          -> d2
     v3686 Imm(0)                                           -> x7
     v3687 Imm(0)                                           -> x7
     v3688 LoadLocal { off=-361, kind=V128 }                -> d2
-    v3689 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v3688, rhs=v3685 } -> d1
+    v3689 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v3688, rhs=v3656 } -> d0
     v3690 Imm(0)                                           -> x7
     v3691 Imm(0)                                           -> x7
     v3692 LocalAddr(-401)                                  -> x7
@@ -3538,10 +3538,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v3770 Binop { op=add, lhs=v3663, rhs=v3769 }           -> x7
     v3771 LoadIndexed { base=v3663, index=v3738, scale=4, kind=I32 } -> x7
     v3772 LocalAddr(-368)                                  -> x8
-    v3773 Extend { value=v3738, kind=I32 }                 -> x9
-    v3774 BinopI { op=shl, lhs=v3738, rhs_imm=2 }          -> x9
-    v3775 Binop { op=add, lhs=v3772, rhs=v3774 }           -> x9
-    v3776 LoadIndexed { base=v3772, index=v3738, scale=4, kind=I32 } -> x8
+    v3773 Extend { value=v3738, kind=I32 }                 -> x8
+    v3774 BinopI { op=shl, lhs=v3738, rhs_imm=2 }          -> x8
+    v3775 Binop { op=add, lhs=v3636, rhs=v3774 }           -> x8
+    v3776 LoadIndexed { base=v3636, index=v3738, scale=4, kind=I32 } -> x8
     v3777 BinopI { op=xor, lhs=v3776, rhs_imm=-1 }         -> x8
     v3778 Binop { op=ne, lhs=v3771, rhs=v3777 }            -> x7
     v3779 Imm(0)                                           -> x8

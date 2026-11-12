@@ -381,6 +381,10 @@ fn fmt_inst(inst: &Inst) -> String {
             "VecSplat {{ value=v{value}, kind={}, bytes={bytes} }}",
             fmt_store_kind(*kind)
         ),
+        VecConst { imm, kind, bytes } => format!(
+            "VecConst {{ imm={imm}, kind={}, bytes={bytes} }}",
+            fmt_store_kind(*kind)
+        ),
         VecExtract {
             vec,
             off,

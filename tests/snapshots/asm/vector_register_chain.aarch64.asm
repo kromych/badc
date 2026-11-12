@@ -56,8 +56,7 @@ Disassembly of section .text:
                	mov	x21, x2
                	mov	x24, x4
                	mov	x23, x3
-               	mov	x0, #0x1d               // =29
-               	dup	v16.16b, w0
+               	movi	v16.16b, #0x1d
                	str	q16, [sp, #0x30]
                	mov	x20, #0x0               // =0
                	mov	x22, x20

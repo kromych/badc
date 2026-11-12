@@ -40,11 +40,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xcdef             // =52719
-               	movk	x0, #0x89ab, lsl #16
-               	movk	x0, #0x4567, lsl #32
-               	movk	x0, #0x123, lsl #48
-               	dup	v0.2d, x0
+               	mov	x16, #0xcdef            // =52719
+               	movk	x16, #0x89ab, lsl #16
+               	movk	x16, #0x4567, lsl #32
+               	movk	x16, #0x123, lsl #48
+               	dup	v0.2d, x16
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	q1, [x0]

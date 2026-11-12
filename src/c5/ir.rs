@@ -619,6 +619,15 @@ pub(crate) enum Inst {
         kind: StoreKind,
         bytes: u8,
     },
+    /// The `bytes`-byte vector with every lane `imm` stored as the integer
+    /// `kind`: a splat of a constant, which needs no general register --
+    /// `pxor` / `movi #0` for zero, `pcmpeqd` / `movi` of 0xff bytes for
+    /// all ones.
+    VecConst {
+        imm: i64,
+        kind: StoreKind,
+        bytes: u8,
+    },
     /// `a` when `cond` is nonzero, else `b`, both computed, of an integer
     /// kind, `F32` or `F64`: `csel`, `fcsel` or `cmov`.
     Select {
@@ -798,6 +807,7 @@ impl Inst {
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
                 | Inst::VecSplat { .. }
+                | Inst::VecConst { .. }
                 | Inst::VecExtract { .. }
                 | Inst::Select { .. }
         )
@@ -907,6 +917,7 @@ impl Inst {
             Inst::VecBinop { .. } => "VecBinop",
             Inst::VecInsert { .. } => "VecInsert",
             Inst::VecSplat { .. } => "VecSplat",
+            Inst::VecConst { .. } => "VecConst",
             Inst::VecExtract { .. } => "VecExtract",
             Inst::Select { .. } => "Select",
             Inst::InlineAsm { .. } => "InlineAsm",
@@ -983,6 +994,7 @@ impl Inst {
             }
             Inst::VecExtract { vec, .. } => f(*vec),
             Inst::VecSplat { value, .. } => f(*value),
+            Inst::VecConst { .. } => {}
             Inst::Select { cond, a, b, .. } => {
                 f(*cond);
                 f(*a);
@@ -1119,6 +1131,7 @@ impl Inst {
             }
             Inst::VecExtract { vec, .. } => f(vec),
             Inst::VecSplat { value, .. } => f(value),
+            Inst::VecConst { .. } => {}
             Inst::Select { cond, a, b, .. } => {
                 f(cond);
                 f(a);
@@ -3082,6 +3095,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
             | Inst::VecExtract { .. }
             | Inst::Select { .. }
             | Inst::InlineAsm { .. }

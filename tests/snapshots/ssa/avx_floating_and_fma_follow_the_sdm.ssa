@@ -14554,7 +14554,7 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12653 Imm(0)                                           -> x0
     v12654 Imm(0)                                           -> x0
     v12655 Imm(0)                                           -> x0
-    v12656 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v12644] } -> d2
+    v12656 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v12644] } -> d3
     v12657 Imm(0)                                           -> x0
     v12658 Imm(0)                                           -> x0
     v12659 LifetimeEnd(0)                                   -> -
@@ -14569,7 +14569,7 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12668 Imm(0)                                           -> x0
     v12669 Imm(0)                                           -> x0
     v12670 Imm(0)                                           -> x0
-    v12671 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v12647] } -> d3
+    v12671 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(0), args=[v12647] } -> d4
     v12672 Imm(0)                                           -> x0
     v12673 Imm(0)                                           -> x0
     v12674 LifetimeEnd(0)                                   -> -
@@ -14578,34 +14578,34 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12677 Imm(0)                                           -> x0
     v12678 Imm(0)                                           -> x0
     v12679 Imm(-1)                                          -> x0
-    v12680 Undef                                            -> x1
-    v12681 Undef                                            -> x1
-    v12682 VecSplat { value=v12679, kind=I64, bytes=16 }    -> d4
-    v12683 Imm(0)                                           -> x1
-    v12684 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12656, rhs=v12682 } -> d2
-    v12685 Imm(0)                                           -> x1
-    v12686 VecBinop { op=And, lane=I64, bytes=16, lhs=v12684, rhs=v12671 } -> d2
-    v12687 Imm(0)                                           -> x1
-    v12688 Imm(0)                                           -> x1
-    v12689 Imm(0)                                           -> x1
-    v12690 Imm(0)                                           -> x1
-    v12691 Imm(0)                                           -> x1
-    v12692 Imm(0)                                           -> x1
+    v12680 Undef                                            -> x0
+    v12681 Undef                                            -> x0
+    v12682 VecConst { imm=-1, kind=I64, bytes=16 }          -> d2
+    v12683 Imm(0)                                           -> x0
+    v12684 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12656, rhs=v12682 } -> d3
+    v12685 Imm(0)                                           -> x0
+    v12686 VecBinop { op=And, lane=I64, bytes=16, lhs=v12684, rhs=v12671 } -> d3
+    v12687 Imm(0)                                           -> x0
+    v12688 Imm(0)                                           -> x0
+    v12689 Imm(0)                                           -> x0
+    v12690 Imm(0)                                           -> x0
+    v12691 Imm(0)                                           -> x0
+    v12692 Imm(0)                                           -> x0
     v12693 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v12644] } -> d0
-    v12694 Imm(0)                                           -> x1
-    v12695 Imm(0)                                           -> x1
-    v12696 Imm(0)                                           -> x1
-    v12697 Imm(0)                                           -> x1
-    v12698 Imm(0)                                           -> x1
+    v12694 Imm(0)                                           -> x0
+    v12695 Imm(0)                                           -> x0
+    v12696 Imm(0)                                           -> x0
+    v12697 Imm(0)                                           -> x0
+    v12698 Imm(0)                                           -> x0
     v12699 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v12647] } -> d1
-    v12700 Imm(0)                                           -> x1
-    v12701 Imm(0)                                           -> x1
-    v12702 Imm(-1)                                          -> x1
-    v12703 Undef                                            -> x1
-    v12704 Undef                                            -> x1
-    v12705 VecSplat { value=v12679, kind=I64, bytes=16 }    -> d3
+    v12700 Imm(0)                                           -> x0
+    v12701 Imm(0)                                           -> x0
+    v12702 Imm(-1)                                          -> x0
+    v12703 Undef                                            -> x0
+    v12704 Undef                                            -> x0
+    v12705 VecConst { imm=-1, kind=I64, bytes=16 }          -> d4
     v12706 Imm(0)                                           -> x0
-    v12707 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12693, rhs=v12705 } -> d0
+    v12707 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12693, rhs=v12682 } -> d0
     v12708 Imm(0)                                           -> x0
     v12709 VecBinop { op=And, lane=I64, bytes=16, lhs=v12707, rhs=v12699 } -> d0
     v12710 Imm(0)                                           -> x0

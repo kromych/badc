@@ -559,11 +559,51 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
 /// execution). Returns true when any load folded. Runs inside the branch
 /// fold's fixed point so a load whose address becomes constant only
 /// after a phi collapses still folds.
+/// `0` or `-1` when the `bytes` of const data at `off` are all zero or all
+/// one bits.
+fn uniform_fill(cd: &ConstData<'_>, off: i64, bytes: i64) -> Option<i64> {
+    let mut fill = None;
+    for k in (0..bytes).step_by(8) {
+        let ConstValue::Bytes(b) = cd.read(off + k, 8)? else {
+            return None;
+        };
+        let word = i64::from_le_bytes(b);
+        if (word != 0 && word != -1) || fill.is_some_and(|f| f != word) {
+            return None;
+        }
+        fill = Some(word);
+    }
+    fill
+}
+
 pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     let ext = extern_imm_data(func);
+    let mut changed_vectors = false;
     let mut folds: Vec<(ValueId, Folded)> = Vec::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
         let (addr, disp, kind) = match func.insts[i as usize] {
+            // A whole vector of zero or all-one bytes is a constant splat,
+            // which the targets form without the load.
+            Inst::Load {
+                addr,
+                disp,
+                kind: kind @ (LoadKind::V128 | LoadKind::V256),
+                volatile: false,
+                ..
+            } => {
+                let bytes: u8 = if kind == LoadKind::V128 { 16 } else { 32 };
+                if let Some(off) = data_addr(func, &ext, addr, i64::from(disp))
+                    && let Some(fill) = uniform_fill(cd, off, i64::from(bytes))
+                {
+                    func.insts[i as usize] = Inst::VecConst {
+                        imm: fill,
+                        kind: crate::c5::ir::StoreKind::I64,
+                        bytes,
+                    };
+                    changed_vectors = true;
+                }
+                continue;
+            }
             Inst::Load {
                 addr,
                 disp,
@@ -594,7 +634,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         };
         folds.push((i, Folded::of(value, kind)));
     }
-    apply(func, &mut folds)
+    apply(func, &mut folds) | changed_vectors
 }
 
 /// Resolve `v` to a frame byte coordinate: `LocalAddr(slot)` addresses
@@ -914,6 +954,7 @@ fn walk_block(
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
             | Inst::VecExtract { .. }
             | Inst::SimdVal { .. }
             | Inst::Phi { .. } => {}

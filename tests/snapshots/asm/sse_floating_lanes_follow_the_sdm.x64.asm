@@ -3776,24 +3776,24 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x61c8864680b583eb, %rsi # imm = 0x9E3779B97F4A7C15
                	xorl	%eax, %eax
-               	movl	$0x3f800000, %ecx       # imm = 0x3F800000
-               	movq	<rip>, %rdx # <addr>
-               	movq	%rdx, %rdi
+               	movl	$0x3f800000, %edx       # imm = 0x3F800000
+               	movq	<rip>, %rcx # <addr>
+               	movq	%rcx, %rdi
                	shrq	$0xc, %rdi
-               	xorq	%rdi, %rdx
-               	movq	%rdx, <rip> # <addr>
-               	movq	%rdx, %rdi
+               	xorq	%rdi, %rcx
+               	movq	%rcx, <rip> # <addr>
+               	movq	%rcx, %rdi
                	shlq	$0x19, %rdi
-               	xorq	%rdi, %rdx
-               	movq	%rdx, <rip> # <addr>
-               	movq	%rdx, %rdi
+               	xorq	%rdi, %rcx
+               	movq	%rcx, <rip> # <addr>
+               	movq	%rcx, %rdi
                	shrq	$0x1b, %rdi
-               	xorq	%rdi, %rdx
-               	movq	%rdx, <rip> # <addr>
-               	imulq	%rsi, %rdx
-               	shrq	$0x29, %rdx
+               	xorq	%rdi, %rcx
+               	movq	%rcx, <rip> # <addr>
+               	imulq	%rsi, %rcx
+               	shrq	$0x29, %rcx
                	xorps	%xmm0, %xmm0
-               	movq	%rdx, %r10
+               	movq	%rcx, %r10
                	testq	%r10, %r10
                	js	<addr>
                	cvtsi2ss	%r10, %xmm0
@@ -3804,23 +3804,21 @@ Disassembly of section .text:
                	orq	%r10, %r11
                	cvtsi2ss	%r11, %xmm0
                	addss	%xmm0, %xmm0
-               	movl	$0x49800000, %edx       # imm = 0x49800000
-               	movq	%rdx, %xmm15
+               	movl	$0x49800000, %ecx       # imm = 0x49800000
+               	movq	%rcx, %xmm15
                	divss	%xmm15, %xmm0
-               	movq	%rcx, %xmm14
+               	movq	%rdx, %xmm14
                	vaddss	%xmm0, %xmm14, %xmm0
                	vbroadcastss	%xmm0, %xmm1
-               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm15
                	vbroadcastss	%xmm15, %xmm2
-               	divps	%xmm1, %xmm2
-               	vbroadcastss	%xmm0, %xmm1
-               	movq	%rcx, %xmm15
-               	vbroadcastss	%xmm15, %xmm3
+               	movapd	%xmm2, %xmm3
+               	divps	%xmm1, %xmm3
                	sqrtps	%xmm1, %xmm1
-               	movapd	%xmm3, %xmm15
+               	movapd	%xmm2, %xmm15
                	divps	%xmm1, %xmm15
                	movapd	%xmm15, %xmm1
-               	vpermilps	$0x0, %xmm2, %xmm2 # xmm2 = xmm2[0,0,0,0]
+               	vpermilps	$0x0, %xmm3, %xmm2 # xmm2 = xmm3[0,0,0,0]
                	cvtss2sd	%xmm0, %xmm0
                	cvtss2sd	%xmm2, %xmm2
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000

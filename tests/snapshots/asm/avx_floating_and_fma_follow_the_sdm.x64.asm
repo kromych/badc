@@ -5782,20 +5782,16 @@ Disassembly of section .text:
                	movq	%rax, <rip> # <addr>
                	vmovups	0x40(%rsp), %ymm0
                	vmovups	0x60(%rsp), %ymm1
-               	vmovdqa	%xmm0, %xmm2
-               	vmovdqa	%xmm1, %xmm3
-               	movq	$-0x1, %rax
-               	vmovq	%rax, %xmm4
-               	vpbroadcastq	%xmm4, %xmm4
-               	pxor	%xmm4, %xmm2
-               	pand	%xmm3, %xmm2
+               	vmovdqa	%xmm0, %xmm3
+               	vmovdqa	%xmm1, %xmm4
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
+               	pxor	%xmm2, %xmm3
+               	pand	%xmm4, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vmovq	%rax, %xmm3
-               	vpbroadcastq	%xmm3, %xmm3
-               	pxor	%xmm3, %xmm0
+               	pxor	%xmm2, %xmm0
                	pand	%xmm1, %xmm0
-               	vmovdqa	%xmm2, %xmm1
+               	vmovdqa	%xmm3, %xmm1
                	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
                	leaq	0x80(%rsp), %rsi
                	vmovups	%ymm0, 0x80(%rsp)

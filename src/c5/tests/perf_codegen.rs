@@ -3159,6 +3159,50 @@ void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
     m.finish();
 }
 
+/// A vector with a zero or all-ones operand is its other operand, and a
+/// constant in every lane takes no general register: `movi` / `mvni` where
+/// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`
+/// for all ones, as with gcc 16. Each was the operation on a vector built
+/// through a general register.
+#[test]
+fn constant_vectors_and_their_identities() {
+    const SRC: &str = "typedef int v4 __attribute__((vector_size(16)));\n\
+typedef unsigned char u8 __attribute__((vector_size(16)));\n\
+typedef unsigned short u16 __attribute__((vector_size(16)));\n\
+typedef unsigned u32 __attribute__((vector_size(16)));\n\
+typedef unsigned long long u64 __attribute__((vector_size(16)));\n\
+v4 z(v4 a) { return a + (v4){0}; }\n\
+v4 andall(v4 a) { return a & (v4){-1, -1, -1, -1}; }\n\
+v4 cpl(v4 a) { return ~a; }\n\
+u8 b3(void) { unsigned char k = 3; return (u8){k, k, k, k, k, k, k, k, k, k, k, k, k, k, k, k}; }\n\
+u16 h(void) { unsigned short k = 0x1200; return (u16){k, k, k, k, k, k, k, k}; }\n\
+u32 s16(void) { unsigned k = 0x120000; return (u32){k, k, k, k}; }\n\
+u32 inv(void) { unsigned k = 0xffffedff; return (u32){k, k, k, k}; }\n\
+u64 pat(void) { unsigned long long k = 0xff00ff0000ff00ffULL; return (u64){k, k}; }\n\
+u32 zero(unsigned x) { return (u32){x - x, x - x, x - x, x - x}; }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("z", &[RET][..]),
+        ("andall", &[RET]),
+        ("cpl", &[0x6E20_5800, RET]),
+        ("b3", &[0x4F00_E460, RET]),
+        ("h", &[0x4F00_A640, RET]),
+        ("s16", &[0x4F00_4640, RET]),
+        ("inv", &[0x6F00_2640, RET]),
+        ("pat", &[0x6F05_E4A0, RET]),
+        ("zero", &[0x6F00_E400, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+    }
+    for (name, n) in [("z", 1), ("andall", 1), ("cpl", 3), ("zero", 2)] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == n, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A GNU vector of one value in every lane is a broadcast of it, as with
 /// gcc 16: `dup` from a general register or from an FP register's lane 0
 /// and `ret` on AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one
@@ -3355,11 +3399,11 @@ int none(const v4l *a, const v4l *b) {\n\
 }\n";
     let count = |f: &[X64Insn], op: u16| f.iter().filter(|i| i.op == op).count();
     let mut m = Misses::default();
-    // `~` takes a vector of all-ones lanes, one `vpbroadcastq`; the reads
-    // take the high half out once each and read the low one in place.
+    // `~` takes a vector of all-ones lanes, one `vpcmpeqd`; the reads take
+    // the high half out once each and read the low one in place.
     let none = x64(SRC, "none");
     m.expect(
-        count(&none, 0x3A38) == 0 && count(&none, 0x3859) == 1 && count(&none, 0x3A39) == 2,
+        count(&none, 0x3A38) == 0 && count(&none, 0x0F76) == 1 && count(&none, 0x3A39) == 2,
         || format!("x86-64 none: {none:x?}"),
     );
     // `vextracti128` is 0F3A 39, `vinserti128` 0F3A 38.

@@ -1226,6 +1226,7 @@ fn is_inline_candidate(
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
             | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
             | Inst::VecExtract { .. }
             | Inst::Select { .. }
             | Inst::AsmOut { .. } => {}
@@ -2250,6 +2251,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecSplat { .. }
+        | Inst::VecConst { .. }
         | Inst::VecExtract { .. }
         | Inst::Select { .. }
         | Inst::AllocaInit(_)

@@ -598,9 +598,7 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x14, %r8d
                	jl	<addr>
-               	movq	$-0x1, %rax
-               	vmovd	%eax, %xmm0
-               	vpbroadcastd	%xmm0, %xmm0
+               	vpcmpeqd	%xmm0, %xmm0, %xmm0
                	pcmpeqd	%xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF

@@ -2384,27 +2384,27 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2075 Imm(0)                                           -> x0
     v2076 Imm(-1)                                          -> x0
     v2077 Imm(-1)                                          -> x0
-    v2078 Imm(0)                                           -> x1
-    v2079 Imm(0)                                           -> x1
-    v2080 Imm(0)                                           -> x1
-    v2081 Imm(0)                                           -> x1
-    v2082 Imm(0)                                           -> x1
-    v2083 Undef                                            -> x1
-    v2084 Imm(0)                                           -> x1
-    v2085 Imm(0)                                           -> x1
-    v2086 Imm(4)                                           -> x1
-    v2087 Imm(0)                                           -> x1
-    v2088 Undef                                            -> x1
-    v2089 Imm(0)                                           -> x1
-    v2090 Imm(0)                                           -> x1
-    v2091 Imm(8)                                           -> x1
-    v2092 Imm(0)                                           -> x1
-    v2093 Undef                                            -> x1
-    v2094 Imm(0)                                           -> x1
-    v2095 Imm(0)                                           -> x1
-    v2096 Imm(12)                                          -> x1
-    v2097 Imm(0)                                           -> x1
-    v2098 VecSplat { value=v2077, kind=I32, bytes=16 }     -> d0
+    v2078 Imm(0)                                           -> x0
+    v2079 Imm(0)                                           -> x0
+    v2080 Imm(0)                                           -> x0
+    v2081 Imm(0)                                           -> x0
+    v2082 Imm(0)                                           -> x0
+    v2083 Undef                                            -> x0
+    v2084 Imm(0)                                           -> x0
+    v2085 Imm(0)                                           -> x0
+    v2086 Imm(4)                                           -> x0
+    v2087 Imm(0)                                           -> x0
+    v2088 Undef                                            -> x0
+    v2089 Imm(0)                                           -> x0
+    v2090 Imm(0)                                           -> x0
+    v2091 Imm(8)                                           -> x0
+    v2092 Imm(0)                                           -> x0
+    v2093 Undef                                            -> x0
+    v2094 Imm(0)                                           -> x0
+    v2095 Imm(0)                                           -> x0
+    v2096 Imm(12)                                          -> x0
+    v2097 Imm(0)                                           -> x0
+    v2098 VecConst { imm=-1, kind=I32, bytes=16 }          -> d0
     v2099 Imm(0)                                           -> x0
     v2100 Imm(0)                                           -> x0
     v2101 Imm(0)                                           -> x0

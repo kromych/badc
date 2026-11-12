@@ -743,8 +743,8 @@ Disassembly of section .text:
                	movl	$0x24, %eax
                	leave
                	retq
-               	movl	$0x1234, %edx           # imm = 0x1234
-               	vmovd	%edx, %xmm0
+               	movl	$0x1234, %r11d          # imm = 0x1234
+               	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
                	vmovd	%xmm0, %eax
                	cmpq	$0x12341234, %rax       # imm = 0x12341234
@@ -755,221 +755,215 @@ Disassembly of section .text:
                	movl	$0x27, %eax
                	leave
                	retq
-               	movl	$0x5a, %eax
-               	vmovd	%eax, %xmm0
-               	vpbroadcastb	%xmm0, %xmm0
-               	vmovd	%xmm0, %eax
+               	movl	$0x5a, %r11d
+               	vmovd	%r11d, %xmm1
+               	vpbroadcastb	%xmm1, %xmm1
+               	vmovd	%xmm1, %eax
                	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
                	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
+               	vpextrd	$0x3, %xmm1, %eax
                	cmpq	$0x5a5a5a5a, %rax       # imm = 0x5A5A5A5A
                	je	<addr>
                	movl	$0x28, %eax
                	leave
                	retq
-               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
-               	vmovq	%rax, %xmm0
-               	vpbroadcastq	%xmm0, %xmm0
-               	vmovd	%xmm0, %eax
+               	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
+               	vmovq	%r11, %xmm1
+               	vpbroadcastq	%xmm1, %xmm1
+               	vmovd	%xmm1, %eax
                	movl	$0x89abcdef, %r11d      # imm = 0x89ABCDEF
                	cmpq	%r11, %rax
                	jne	<addr>
-               	vpextrd	$0x1, %xmm0, %eax
+               	vpextrd	$0x1, %xmm1, %eax
                	cmpq	$0x1234567, %rax        # imm = 0x1234567
                	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
+               	vpextrd	$0x3, %xmm1, %eax
                	cmpq	$0x1234567, %rax        # imm = 0x1234567
                	je	<addr>
                	movl	$0x29, %eax
                	leave
                	retq
-               	movq	$-0x1, %rsi
-               	vmovd	%esi, %xmm1
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
+               	movl	$0x1, %r11d
+               	vmovd	%r11d, %xmm1
                	vpbroadcastb	%xmm1, %xmm1
-               	movl	$0x1, %eax
-               	vmovd	%eax, %xmm0
-               	vpbroadcastb	%xmm0, %xmm0
-               	paddb	%xmm0, %xmm1
-               	vmovd	%xmm1, %ecx
-               	testq	%rcx, %rcx
+               	paddb	%xmm1, %xmm2
+               	vmovd	%xmm2, %eax
+               	testq	%rax, %rax
                	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %ecx
-               	testq	%rcx, %rcx
+               	vpextrd	$0x3, %xmm2, %eax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2a, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm15
-               	psubb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
-               	vmovd	%xmm0, %edi
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
+               	psubb	%xmm1, %xmm15
+               	movapd	%xmm15, %xmm1
+               	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdi
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x2b, %eax
                	leave
                	retq
-               	vmovd	%esi, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	vmovd	%eax, %xmm1
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
+               	movl	$0x1, %r11d
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	paddw	%xmm1, %xmm0
-               	vmovd	%xmm0, %esi
-               	testq	%rsi, %rsi
+               	paddw	%xmm1, %xmm2
+               	vmovd	%xmm2, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2c, %eax
                	leave
                	retq
-               	vmovd	%eax, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	movq	%rcx, %xmm15
-               	psubw	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
-               	vmovd	%xmm0, %eax
+               	movq	%rax, %xmm15
+               	psubw	%xmm1, %xmm15
+               	movapd	%xmm15, %xmm1
+               	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x2d, %eax
                	leave
                	retq
-               	movl	$0x5, %eax
-               	vmovd	%eax, %xmm0
-               	vpbroadcastd	%xmm0, %xmm0
-               	movl	$0x7, %eax
-               	vmovd	%eax, %xmm1
+               	movl	$0x5, %r11d
+               	vmovd	%r11d, %xmm1
                	vpbroadcastd	%xmm1, %xmm1
-               	psubd	%xmm1, %xmm0
-               	vmovd	%xmm0, %eax
+               	movl	$0x7, %r11d
+               	vmovd	%r11d, %xmm2
+               	vpbroadcastd	%xmm2, %xmm2
+               	psubd	%xmm2, %xmm1
+               	vmovd	%xmm1, %ecx
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x2e, %eax
                	leave
                	retq
-               	vmovd	%edx, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	movl	$0x3, %eax
-               	vmovd	%eax, %xmm1
+               	movl	$0x3, %r11d
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
                	pmullw	%xmm1, %xmm0
-               	vmovd	%xmm0, %eax
-               	cmpq	$0x369c369c, %rax       # imm = 0x369C369C
+               	vmovd	%xmm0, %ecx
+               	cmpq	$0x369c369c, %rcx       # imm = 0x369C369C
                	je	<addr>
                	movl	$0x2f, %eax
                	leave
                	retq
-               	movq	$-0x1000, %rax          # imm = 0xF000
-               	vmovd	%eax, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	movl	$0x10, %eax
-               	vmovd	%eax, %xmm1
+               	movl	$0xf000, %r11d          # imm = 0xF000
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	pmulhw	%xmm1, %xmm0
-               	vmovd	%xmm0, %edx
+               	movl	$0x10, %r11d
+               	vmovd	%r11d, %xmm0
+               	vpbroadcastw	%xmm0, %xmm0
+               	pmulhw	%xmm0, %xmm1
+               	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x30, %eax
                	leave
                	retq
-               	movl	$0x1000, %edx           # imm = 0x1000
-               	vmovd	%edx, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	vmovd	%eax, %xmm1
+               	movl	$0x1000, %r11d          # imm = 0x1000
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
                	pmulhw	%xmm1, %xmm0
-               	vmovd	%xmm0, %eax
-               	cmpq	$0x10001, %rax          # imm = 0x10001
+               	vmovd	%xmm0, %ecx
+               	cmpq	$0x10001, %rcx          # imm = 0x10001
                	je	<addr>
                	movl	$0x31, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm0
-               	movq	$-0x2, %rax
-               	vmovd	%eax, %xmm1
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm0
+               	movl	$0xfffe, %r11d          # imm = 0xFFFE
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
                	pmaddwd	%xmm1, %xmm0
-               	vmovd	%xmm0, %eax
+               	vmovd	%xmm0, %ecx
                	movl	$0xfffffffa, %r11d      # imm = 0xFFFFFFFA
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	jne	<addr>
-               	vpextrd	$0x3, %xmm0, %eax
+               	vpextrd	$0x3, %xmm0, %ecx
                	movl	$0xffffffe2, %r11d      # imm = 0xFFFFFFE2
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x32, %eax
                	leave
                	retq
-               	movl	$0x12c, %eax            # imm = 0x12C
-               	vmovd	%eax, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
-               	movq	$-0x12c, %rdx           # imm = 0xFED4
-               	vmovd	%edx, %xmm1
+               	movl	$0x12c, %r11d           # imm = 0x12C
+               	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	packsswb	%xmm1, %xmm0
-               	vpextrb	$0x0, %xmm0, %edx
-               	cmpl	$0x7f, %edx
+               	movl	$0xfed4, %r11d          # imm = 0xFED4
+               	vmovd	%r11d, %xmm0
+               	vpbroadcastw	%xmm0, %xmm0
+               	movapd	%xmm1, %xmm15
+               	packsswb	%xmm0, %xmm15
+               	movapd	%xmm15, %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
+               	cmpl	$0x7f, %ecx
                	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %edx
-               	cmpl	$0x7f, %edx
+               	vpextrb	$0x7, %xmm0, %ecx
+               	cmpl	$0x7f, %ecx
                	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %edx
-               	cmpl	$0x80, %edx
+               	vpextrb	$0x8, %xmm0, %ecx
+               	cmpl	$0x80, %ecx
                	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %edx
-               	cmpl	$0x80, %edx
+               	vpextrb	$0xf, %xmm0, %ecx
+               	cmpl	$0x80, %ecx
                	je	<addr>
                	movl	$0x33, %eax
                	leave
                	retq
-               	vmovd	%eax, %xmm0
+               	movl	$0xfffb, %r11d          # imm = 0xFFFB
+               	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
-               	movq	$-0x5, %rax
-               	vmovd	%eax, %xmm1
-               	vpbroadcastw	%xmm1, %xmm1
-               	packuswb	%xmm1, %xmm0
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0xff, %eax
+               	movapd	%xmm1, %xmm15
+               	packuswb	%xmm0, %xmm15
+               	movapd	%xmm15, %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
-               	vpextrb	$0x7, %xmm0, %eax
-               	cmpl	$0xff, %eax
+               	vpextrb	$0x7, %xmm0, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %eax
-               	testq	%rax, %rax
+               	vpextrb	$0x8, %xmm0, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	vpextrb	$0xf, %xmm0, %eax
-               	testq	%rax, %rax
+               	vpextrb	$0xf, %xmm0, %ecx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x34, %eax
                	leave
                	retq
-               	movl	$0x11170, %eax          # imm = 0x11170
-               	vmovd	%eax, %xmm0
+               	movl	$0x11170, %r11d         # imm = 0x11170
+               	vmovd	%r11d, %xmm0
                	vpbroadcastd	%xmm0, %xmm0
-               	movq	$-0x11170, %rax         # imm = 0xFFFEEE90
-               	vmovd	%eax, %xmm1
+               	movl	$0xfffeee90, %r11d      # imm = 0xFFFEEE90
+               	vmovd	%r11d, %xmm1
                	vpbroadcastd	%xmm1, %xmm1
                	packssdw	%xmm1, %xmm0
-               	vpextrb	$0x0, %xmm0, %eax
-               	cmpl	$0xff, %eax
+               	vpextrb	$0x0, %xmm0, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
-               	vpextrb	$0x1, %xmm0, %eax
-               	cmpl	$0x7f, %eax
+               	vpextrb	$0x1, %xmm0, %ecx
+               	cmpl	$0x7f, %ecx
                	jne	<addr>
-               	vpextrb	$0x8, %xmm0, %eax
-               	testq	%rax, %rax
+               	vpextrb	$0x8, %xmm0, %ecx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	vpextrb	$0x9, %xmm0, %eax
-               	cmpl	$0x80, %eax
+               	vpextrb	$0x9, %xmm0, %ecx
+               	cmpl	$0x80, %ecx
                	je	<addr>
                	movl	$0x35, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm1
-               	movq	%rcx, %xmm14
+               	leaq	<rip>, %rcx # <addr>
+               	movups	(%rcx), %xmm1
+               	movq	%rax, %xmm14
                	movapd	%xmm1, %xmm0
                	punpcklbw	%xmm14, %xmm0   # xmm0 = xmm0[0],xmm14[0],xmm0[1],xmm14[1],xmm0[2],xmm14[2],xmm0[3],xmm14[3],xmm0[4],xmm14[4],xmm0[5],xmm14[5],xmm0[6],xmm14[6],xmm0[7],xmm14[7]
                	vpextrb	$0x0, %xmm0, %eax
@@ -1103,28 +1097,28 @@ Disassembly of section .text:
                	movl	$0x3c, %eax
                	leave
                	retq
-               	movq	$-0x10, %rax
-               	vmovd	%eax, %xmm0
+               	movl	$0xfff0, %r11d          # imm = 0xFFF0
+               	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
-               	psraw	$0x2, %xmm0
-               	vmovd	%xmm0, %ecx
+               	movapd	%xmm0, %xmm1
+               	psraw	$0x2, %xmm1
+               	vmovd	%xmm1, %eax
                	movl	$0xfffcfffc, %r11d      # imm = 0xFFFCFFFC
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3d, %eax
                	leave
                	retq
-               	vmovd	%eax, %xmm0
-               	vpbroadcastw	%xmm0, %xmm0
                	psraw	$0x20, %xmm0
-               	vmovd	%xmm0, %ecx
+               	vmovd	%xmm0, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3e, %eax
                	leave
                	retq
-               	vmovd	%eax, %xmm0
+               	movl	$0xfffffff0, %r11d      # imm = 0xFFFFFFF0
+               	vmovd	%r11d, %xmm0
                	vpbroadcastd	%xmm0, %xmm0
                	psrad	$0x2, %xmm0
                	vmovd	%xmm0, %eax
@@ -1134,11 +1128,11 @@ Disassembly of section .text:
                	movl	$0x3f, %eax
                	leave
                	retq
-               	movl	$0x3, %edx
-               	movq	$-0x40, %rax
-               	vmovd	%eax, %xmm0
+               	movl	$0x3, %ecx
+               	movl	$0xffffffc0, %r11d      # imm = 0xFFFFFFC0
+               	vmovd	%r11d, %xmm0
                	vpbroadcastd	%xmm0, %xmm0
-               	movq	%rdx, %xmm14
+               	movq	%rcx, %xmm14
                	psrad	%xmm14, %xmm0
                	vmovd	%xmm0, %eax
                	movl	$0xfffffff8, %r11d      # imm = 0xFFFFFFF8
@@ -1181,8 +1175,8 @@ Disassembly of section .text:
                	movl	$0x42, %eax
                	leave
                	retq
-               	movq	$-0x80, %rax
-               	vmovd	%eax, %xmm2
+               	movl	$0x80, %r11d
+               	vmovd	%r11d, %xmm2
                	vpbroadcastb	%xmm2, %xmm2
                	pmovmskb	%xmm2, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
@@ -1190,118 +1184,119 @@ Disassembly of section .text:
                	movl	$0x43, %eax
                	leave
                	retq
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm14
-               	pmovmskb	%xmm14, %eax
-               	testl	%eax, %eax
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm14
+               	pmovmskb	%xmm14, %edx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x44, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rax), %xmm2
-               	pmovmskb	%xmm2, %eax
-               	cmpl	$0x8001, %eax           # imm = 0x8001
+               	leaq	<rip>, %rdx # <addr>
+               	movups	(%rdx), %xmm2
+               	pmovmskb	%xmm2, %edx
+               	cmpl	$0x8001, %edx           # imm = 0x8001
                	je	<addr>
                	movl	$0x45, %eax
                	leave
                	retq
-               	movl	$0xf, %eax
-               	vmovd	%eax, %xmm2
+               	movl	$0xf, %r11d
+               	vmovd	%r11d, %xmm2
                	vpbroadcastb	%xmm2, %xmm2
-               	movl	$0x33, %eax
-               	vmovd	%eax, %xmm3
+               	movl	$0x33, %r11d
+               	vmovd	%r11d, %xmm3
                	vpbroadcastb	%xmm3, %xmm3
                	pandn	%xmm3, %xmm2
-               	vmovd	%xmm2, %eax
-               	cmpq	$0x30303030, %rax       # imm = 0x30303030
+               	vmovd	%xmm2, %edx
+               	cmpq	$0x30303030, %rdx       # imm = 0x30303030
                	je	<addr>
                	movl	$0x46, %eax
                	leave
                	retq
                	movapd	%xmm0, %xmm2
                	pcmpeqb	%xmm0, %xmm2
-               	vmovd	%xmm2, %eax
+               	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rdx
                	jne	<addr>
-               	vpextrd	$0x3, %xmm2, %eax
+               	vpextrd	$0x3, %xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x47, %eax
                	leave
                	retq
-               	movl	$0x7, %eax
-               	vmovd	%eax, %xmm2
+               	movl	$0x7, %r11d
+               	vmovd	%r11d, %xmm2
                	vpbroadcastw	%xmm2, %xmm2
-               	movl	$0x8, %esi
-               	vmovd	%esi, %xmm3
+               	movl	$0x8, %r11d
+               	vmovd	%r11d, %xmm3
                	vpbroadcastw	%xmm3, %xmm3
                	pcmpeqw	%xmm3, %xmm2
-               	vmovd	%xmm2, %edi
-               	testq	%rdi, %rdi
+               	vmovd	%xmm2, %edx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x48, %eax
                	leave
                	retq
-               	vmovd	%eax, %xmm2
+               	movl	$0x7, %r11d
+               	vmovd	%r11d, %xmm2
                	vpbroadcastd	%xmm2, %xmm2
-               	vmovd	%eax, %xmm3
-               	vpbroadcastd	%xmm3, %xmm3
-               	pcmpeqd	%xmm3, %xmm2
-               	vmovd	%xmm2, %edi
+               	movapd	%xmm2, %xmm15
+               	pcmpeqd	%xmm2, %xmm15
+               	movapd	%xmm15, %xmm2
+               	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdi
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x49, %eax
                	leave
                	retq
-               	movq	$-0x1, %rdi
-               	vmovd	%edi, %xmm2
-               	vpbroadcastw	%xmm2, %xmm2
-               	movq	$-0x2, %r8
-               	vmovd	%r8d, %xmm3
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
+               	movl	$0xfffe, %r11d          # imm = 0xFFFE
+               	vmovd	%r11d, %xmm3
                	vpbroadcastw	%xmm3, %xmm3
                	pcmpgtw	%xmm3, %xmm2
-               	vmovd	%xmm2, %r9d
+               	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %r9
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x4a, %eax
                	leave
                	retq
-               	vmovd	%r8d, %xmm2
+               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
+               	vmovd	%r11d, %xmm2
                	vpbroadcastd	%xmm2, %xmm2
-               	vmovd	%edi, %xmm3
-               	vpbroadcastd	%xmm3, %xmm3
+               	vpcmpeqd	%xmm3, %xmm3, %xmm3
                	movapd	%xmm3, %xmm15
                	pcmpgtd	%xmm2, %xmm15
                	movapd	%xmm15, %xmm2
-               	vmovd	%xmm2, %edi
+               	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rdi
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x4b, %eax
                	leave
                	retq
-               	movl	$0x1, %edi
-               	vpinsrb	$0x0, %edi, %xmm1, %xmm1
-               	movl	$0x2, %edi
-               	vpinsrb	$0x1, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x2, %edx, %xmm1, %xmm1
-               	movl	$0x4, %edx
-               	vpinsrb	$0x3, %edx, %xmm1, %xmm1
-               	movl	$0x5, %edx
-               	vpinsrb	$0x4, %edx, %xmm1, %xmm1
-               	movl	$0x6, %edx
-               	vpinsrb	$0x5, %edx, %xmm1, %xmm1
-               	vpinsrb	$0x6, %eax, %xmm1, %xmm1
-               	vpinsrb	$0x7, %esi, %xmm1, %xmm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm1
+               	movl	$0x1, %edx
+               	vpinsrb	$0x0, %edx, %xmm1, %xmm1
+               	movl	$0x2, %edx
+               	vpinsrb	$0x1, %edx, %xmm1, %xmm1
+               	vpinsrb	$0x2, %ecx, %xmm1, %xmm1
+               	movl	$0x4, %ecx
+               	vpinsrb	$0x3, %ecx, %xmm1, %xmm1
+               	movl	$0x5, %ecx
+               	vpinsrb	$0x4, %ecx, %xmm1, %xmm1
+               	movl	$0x6, %ecx
+               	vpinsrb	$0x5, %ecx, %xmm1, %xmm1
+               	movl	$0x7, %ecx
+               	vpinsrb	$0x6, %ecx, %xmm1, %xmm1
+               	movl	$0x8, %ecx
+               	vpinsrb	$0x7, %ecx, %xmm1, %xmm1
+               	vmovq	%xmm1, %rcx
+               	vmovq	%rcx, %xmm1
                	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
+               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
                	vmovd	%xmm1, %eax
                	cmpq	$0x4030201, %rax        # imm = 0x4030201
                	jne	<addr>
@@ -1317,8 +1312,8 @@ Disassembly of section .text:
                	movl	$0x4c, %eax
                	leave
                	retq
-               	movabsq	$-0x1111111111111112, %rax # imm = 0xEEEEEEEEEEEEEEEE
-               	vmovq	%rax, %xmm1
+               	movabsq	$-0x1111111111111112, %r11 # imm = 0xEEEEEEEEEEEEEEEE
+               	vmovq	%r11, %xmm1
                	vpbroadcastq	%xmm1, %xmm1
                	movabsq	$0x200000001, %rax      # imm = 0x200000001
                	movapd	%xmm1, %xmm2

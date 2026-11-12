@@ -194,8 +194,8 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	leaq	-0x20(%rbp), %rdx
-               	movq	$-0x2, %rax
-               	vmovd	%eax, %xmm0
+               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
+               	vmovd	%r11d, %xmm0
                	vpbroadcastd	%xmm0, %ymm0
                	vmovups	%ymm0, -0x20(%rbp)
                	xorl	%eax, %eax

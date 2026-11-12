@@ -38,17 +38,17 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x17]
                	mov	x0, #0xa                // =10
                	sturb	w0, [x29, #-0x16]
-               	mov	x1, #0xb                // =11
-               	sturb	w1, [x29, #-0x15]
-               	mov	x1, #0xc                // =12
-               	sturb	w1, [x29, #-0x14]
-               	mov	x1, #0xd                // =13
-               	sturb	w1, [x29, #-0x13]
-               	mov	x1, #0xe                // =14
-               	sturb	w1, [x29, #-0x12]
-               	mov	x1, #0xf                // =15
-               	sturb	w1, [x29, #-0x11]
-               	dup	v0.16b, w0
+               	mov	x0, #0xb                // =11
+               	sturb	w0, [x29, #-0x15]
+               	mov	x0, #0xc                // =12
+               	sturb	w0, [x29, #-0x14]
+               	mov	x0, #0xd                // =13
+               	sturb	w0, [x29, #-0x13]
+               	mov	x0, #0xe                // =14
+               	sturb	w0, [x29, #-0x12]
+               	mov	x0, #0xf                // =15
+               	sturb	w0, [x29, #-0x11]
+               	movi	v0.16b, #0xa
                	sub	x1, x29, #0x10
                	sub	x2, x29, #0x20
                	ldur	q1, [x29, #-0x20]

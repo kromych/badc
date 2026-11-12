@@ -6,12 +6,12 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(30064771077)                                 -> x0
     v2   Imm(30064771077)                                 -> x0
-    v3   Imm(0)                                           -> x1
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
-    v6   Imm(0)                                           -> x1
-    v7   Undef                                            -> x1
-    v8   VecSplat { value=v2, kind=I64, bytes=8 }         -> d0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Undef                                            -> x0
+    v8   VecConst { imm=30064771077, kind=I64, bytes=8 }  -> d0
     v9   Imm(0)                                           -> x0
     v10  LifetimeEnd(0)                                   -> -
     v11  Imm(0)                                           -> x0

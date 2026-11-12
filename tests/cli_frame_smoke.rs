@@ -1106,9 +1106,9 @@ fn assert_vectors_in_registers(body: &str, report: &str) {
 
 /// NEON intrinsic chains at -O: the loop's vectors live in SIMD registers,
 /// the two live across the call spill whole, the wrapper bodies inline
-/// away, and the constant broadcast is one, each lane's conversion of its
-/// constant being one value. A vector whose address reaches a call stays an
-/// object.
+/// away, and the constant broadcast is one constant vector, each lane's
+/// conversion of its constant being one value. A vector whose address
+/// reaches a call stays an object.
 #[test]
 fn neon_vectors_live_in_registers_at_opt() {
     let stderr = dump_opt(
@@ -1142,7 +1142,7 @@ fn neon_vectors_live_in_registers_at_opt() {
     let (body, report) = function_dump(&stderr, "gen");
     assert_vectors_in_registers(body, report);
     assert!(
-        body.contains("VecSplat") && !body.contains("VecInsert"),
+        body.contains("VecConst") && !body.contains("VecInsert"),
         "the broadcast is lane by lane:\n{body}"
     );
     assert!(report.contains("in spill slots"), "{report}");

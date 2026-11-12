@@ -261,6 +261,103 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
+<k_byte>:
+               	movi	v0.16b, #0x3
+               	ret
+
+<k_half>:
+               	movi	v0.8h, #0x12, lsl #8
+               	ret
+
+<k_word>:
+               	movi	v0.4s, #0x12, lsl #16
+               	ret
+
+<k_inv>:
+               	mvni	v0.4s, #0x12, lsl #8
+               	ret
+
+<k_bytes>:
+               	movi	v0.2d, #0xff00ff0000ff00ff
+               	ret
+
+<k_other>:
+               	mov	x16, #0x2345            // =9029
+               	movk	x16, #0x1, lsl #16
+               	dup	v0.4s, w16
+               	ret
+
+<k_zero>:
+               	movi	v0.2d, #0000000000000000
+               	ret
+
+<k_ones>:
+               	movi	v0.2d, #0xffffffffffffffff
+               	ret
+
+<k_d8>:
+               	mov	x16, #0x2345            // =9029
+               	movk	x16, #0x1, lsl #16
+               	dup	v0.2s, w16
+               	ret
+
+<k_y32>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
+               	stur	x8, [x29, #-0x8]
+               	mov	x1, #0x2345             // =9029
+               	movk	x1, #0x1, lsl #16
+               	sub	x0, x29, #0x30
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stur	w1, [x29, #-0x30]
+               	stur	w1, [x29, #-0x2c]
+               	stur	w1, [x29, #-0x28]
+               	stur	w1, [x29, #-0x24]
+               	stur	w1, [x29, #-0x20]
+               	stur	w1, [x29, #-0x1c]
+               	stur	w1, [x29, #-0x18]
+               	stur	w1, [x29, #-0x14]
+               	mov	x16, x0
+               	ldur	x17, [x29, #-0x8]
+               	ldp	x0, x1, [x16]
+               	stp	x0, x1, [x17]
+               	ldp	x0, x1, [x16, #0x10]
+               	stp	x0, x1, [x17, #0x10]
+               	mov	x0, x17
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
+<k_y32_ones>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
+               	stur	x8, [x29, #-0x8]
+               	mov	x1, #-0x1               // =-1
+               	sub	x0, x29, #0x30
+               	stp	xzr, xzr, [x0]
+               	stp	xzr, xzr, [x0, #0x10]
+               	stur	w1, [x29, #-0x30]
+               	stur	w1, [x29, #-0x2c]
+               	stur	w1, [x29, #-0x28]
+               	stur	w1, [x29, #-0x24]
+               	stur	w1, [x29, #-0x20]
+               	stur	w1, [x29, #-0x1c]
+               	stur	w1, [x29, #-0x18]
+               	stur	w1, [x29, #-0x14]
+               	mov	x16, x0
+               	ldur	x17, [x29, #-0x8]
+               	ldp	x0, x1, [x16]
+               	stp	x0, x1, [x17]
+               	ldp	x0, x1, [x16, #0x10]
+               	stp	x0, x1, [x17, #0x10]
+               	mov	x0, x17
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
 <add_k>:
                	dup	v1.4s, w0
                	add	v0.4s, v0.4s, v1.4s
@@ -787,7 +884,280 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0xd0
                	ret
+               	bl	<addr>
+               	smov	x0, v0.b[0]
+               	cmp	x0, #0x3
+               	b.eq	<addr>
+               	mov	x0, #0x15               // =21
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	smov	x0, v0.b[1]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[2]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[3]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[4]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[5]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[6]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[7]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[8]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[9]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[10]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[11]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[12]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[13]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[14]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	smov	x0, v0.b[15]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
+               	bl	<addr>
+               	umov	w0, v0.h[0]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x16               // =22
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	umov	w0, v0.h[1]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[2]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[3]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[4]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[5]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[6]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	umov	w0, v0.h[7]
+               	mov	x17, #0x1200            // =4608
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	bl	<addr>
+               	smov	x0, v0.s[0]
+               	mov	x17, #0x120000          // =1179648
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x17               // =23
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	smov	x0, v0.s[1]
+               	mov	x17, #0x120000          // =1179648
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	smov	x0, v0.s[2]
+               	mov	x17, #0x120000          // =1179648
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	smov	x0, v0.s[3]
+               	mov	x17, #0x120000          // =1179648
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	bl	<addr>
+               	smov	x0, v0.s[0]
+               	mov	x17, #-0x1201           // =-4609
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x18               // =24
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	smov	x0, v0.s[1]
+               	mov	x17, #-0x1201           // =-4609
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	smov	x0, v0.s[2]
+               	mov	x17, #-0x1201           // =-4609
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	smov	x0, v0.s[3]
+               	mov	x17, #-0x1201           // =-4609
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	bl	<addr>
+               	mov	x0, v0.d[0]
+               	mov	x17, #0xff              // =255
+               	movk	x17, #0xff, lsl #16
+               	movk	x17, #0xff00, lsl #32
+               	movk	x17, #0xff00, lsl #48
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x19               // =25
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, v0.d[1]
+               	mov	x17, #0xff              // =255
+               	movk	x17, #0xff, lsl #16
+               	movk	x17, #0xff00, lsl #32
+               	movk	x17, #0xff00, lsl #48
+               	cmp	x0, x17
+               	b.ne	<addr>
+               	bl	<addr>
+               	sub	x1, x29, #0x30
+               	stur	q0, [x29, #-0x30]
                	mov	x0, #0x0                // =0
+               	mov	x2, #0x2345             // =9029
+               	movk	x2, #0x1, lsl #16
+               	ldrsw	x3, [x1, x0, lsl #2]
+               	cmp	w3, w2
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
+               	b.lo	<addr>
+               	bl	<addr>
+               	sub	x1, x29, #0x30
+               	stur	q0, [x29, #-0x30]
+               	mov	x0, #0x0                // =0
+               	ldrsw	x2, [x1, x0, lsl #2]
+               	cbnz	w2, <addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
+               	b.lo	<addr>
+               	bl	<addr>
+               	sub	x1, x29, #0x30
+               	stur	q0, [x29, #-0x30]
+               	mov	x0, #0x0                // =0
+               	mov	x2, #-0x1               // =-1
+               	ldrsw	x3, [x1, x0, lsl #2]
+               	cmp	w3, w2
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
+               	b.lo	<addr>
+               	bl	<addr>
+               	sub	x1, x29, #0x28
+               	stur	d0, [x29, #-0x28]
+               	mov	x0, #0x0                // =0
+               	mov	x2, #0x2345             // =9029
+               	movk	x2, #0x1, lsl #16
+               	ldrsw	x3, [x1, x0, lsl #2]
+               	cmp	w3, w2
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x2
+               	b.lo	<addr>
+               	sub	x8, x29, #0x80
+               	bl	<addr>
+               	sub	x1, x29, #0x80
+               	sub	x0, x29, #0xa0
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
+               	sub	x1, x29, #0x40
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x1, #0x10]
+               	mov	x0, #0x0                // =0
+               	mov	x2, #0x2345             // =9029
+               	movk	x2, #0x1, lsl #16
+               	ldrsw	x3, [x1, x0, lsl #2]
+               	cmp	w3, w2
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
+               	b.lo	<addr>
+               	sub	x8, x29, #0x80
+               	bl	<addr>
+               	sub	x1, x29, #0x80
+               	sub	x0, x29, #0xa0
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
+               	sub	x1, x29, #0x40
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	ldp	x16, x17, [x0, #0x10]
+               	stp	x16, x17, [x1, #0x10]
+               	mov	x0, #0x0                // =0
+               	mov	x2, #-0x1               // =-1
+               	ldrsw	x3, [x1, x0, lsl #2]
+               	cmp	w3, w2
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
+               	b.lo	<addr>
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1f               // =31
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1e               // =30
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1d               // =29
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1c               // =28
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1b               // =27
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x1a               // =26
                	ldp	x29, x30, [sp, #0xc0]
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0xd0

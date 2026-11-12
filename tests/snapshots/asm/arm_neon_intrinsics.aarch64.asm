@@ -112,8 +112,7 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x31]
                	mov	x0, #0xe2               // =226
                	sturb	w0, [x29, #-0x21]
-               	mov	x4, #0x1d               // =29
-               	dup	v2.16b, w4
+               	movi	v2.16b, #0x1d
                	ldur	q0, [x29, #-0x50]
                	ldur	q1, [x29, #-0x40]
                	eor	v3.16b, v0.16b, v1.16b
@@ -126,29 +125,30 @@ Disassembly of section .text:
                	stur	q3, [x29, #-0x20]
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x2, x0]
-               	ldrb	w5, [x1, x0]
-               	sub	x6, x29, #0x40
-               	ldrb	w6, [x6, x0]
-               	eor	x5, x5, x6
-               	cmp	w3, w5
+               	ldrb	w4, [x1, x0]
+               	sub	x5, x29, #0x40
+               	ldrb	w5, [x5, x0]
+               	eor	x4, x4, x5
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x5, x29, #0x20
+               	sub	x4, x29, #0x20
                	stur	q0, [x29, #-0x20]
                	mov	x2, #0x0                // =0
                	mov	x0, x2
-               	ldrb	w6, [x5, x0]
+               	ldrb	w5, [x4, x0]
                	ldrb	w3, [x1, x0]
+               	mov	x6, #0x1d               // =29
                	tst	x3, #0x80
-               	csel	x7, x4, x2, ne
-               	eor	x3, x7, x3, lsl #1
+               	csel	x6, x6, x2, ne
+               	eor	x3, x6, x3, lsl #1
                	and	x3, x3, #0xff
-               	sub	x7, x29, #0x40
-               	ldrb	w7, [x7, x0]
-               	eor	x3, x3, x7
-               	cmp	w6, w3
+               	sub	x6, x29, #0x40
+               	ldrb	w6, [x6, x0]
+               	eor	x3, x3, x6
+               	cmp	w5, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -188,8 +188,7 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0x10]
                	sub	x1, x29, #0x30
                	ldur	q1, [x29, #-0x30]
-               	mov	x0, #0xf                // =15
-               	dup	v2.16b, w0
+               	movi	v2.16b, #0xf
                	and	v1.16b, v1.16b, v2.16b
                	tbl	v0.16b, { v0.16b }, v1.16b
                	sub	x2, x29, #0x20

@@ -8166,163 +8166,163 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v368 Imm(0)                                           -> x0
     terminator Jmp(b109)   (exit_acc=v368)
   block 104  start_pc=0
-    v1173 Imm(1065353216)                                  -> x1 [f32]
-    v1174 ImmData(160)                                     -> x2
-    v1175 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x2
+    v1173 Imm(1065353216)                                  -> x2 [f32]
+    v1174 ImmData(160)                                     -> x1
+    v1175 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x1
     v1176 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
     v1177 BinopI { op=shru, lhs=v1175, rhs_imm=12 }        -> x7
-    v1178 Binop { op=xor, lhs=v1175, rhs=v1177 }           -> x2
+    v1178 Binop { op=xor, lhs=v1175, rhs=v1177 }           -> x1
     v1179 Store { addr=v1174, disp=0, value=v1178, kind=I64 pc_rel } -> -
     v1180 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
     v1181 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
     v1182 BinopI { op=shl, lhs=v1178, rhs_imm=25 }         -> x7
-    v1183 Binop { op=xor, lhs=v1178, rhs=v1182 }           -> x2
+    v1183 Binop { op=xor, lhs=v1178, rhs=v1182 }           -> x1
     v1184 Store { addr=v1174, disp=0, value=v1183, kind=I64 pc_rel } -> -
     v1185 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
     v1186 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
     v1187 BinopI { op=shru, lhs=v1183, rhs_imm=27 }        -> x7
-    v1188 Binop { op=xor, lhs=v1183, rhs=v1187 }           -> x2
+    v1188 Binop { op=xor, lhs=v1183, rhs=v1187 }           -> x1
     v1189 Store { addr=v1174, disp=0, value=v1188, kind=I64 pc_rel } -> -
     v1190 Load { addr=v1174, disp=0, kind=I64 pc_rel }     -> x7
-    v1191 Binop { op=mul, lhs=v1188, rhs=v367 }            -> x2
-    v1192 BinopI { op=shru, lhs=v1191, rhs_imm=41 }        -> x2
+    v1191 Binop { op=mul, lhs=v1188, rhs=v367 }            -> x1
+    v1192 BinopI { op=shru, lhs=v1191, rhs_imm=41 }        -> x1
     v1193 FpCast { kind=UIntToFp, value=v1192 }            -> d0 [f32]
-    v1194 Imm(1233125376)                                  -> x2 [f32]
+    v1194 Imm(1233125376)                                  -> x1 [f32]
     v1195 Binop { op=fdiv, lhs=v1193, rhs=v1194 }          -> d0 [f32]
     v1196 Binop { op=fadd, lhs=v1173, rhs=v1195 }          -> d0 [f32]
-    v1197 Imm(0)                                           -> x2
-    v1198 Imm(0)                                           -> x2
-    v1199 Imm(0)                                           -> x2
-    v1200 Imm(0)                                           -> x2
-    v1201 Imm(0)                                           -> x2
-    v1202 Imm(0)                                           -> x2
-    v1203 Undef                                            -> x2
-    v1204 Imm(0)                                           -> x2
-    v1205 Imm(0)                                           -> x2
-    v1206 Imm(4)                                           -> x2
-    v1207 Imm(0)                                           -> x2
-    v1208 Undef                                            -> x2
-    v1209 Imm(0)                                           -> x2
-    v1210 Imm(0)                                           -> x2
-    v1211 Imm(8)                                           -> x2
-    v1212 Imm(0)                                           -> x2
-    v1213 Undef                                            -> x2
-    v1214 Imm(0)                                           -> x2
-    v1215 Imm(0)                                           -> x2
-    v1216 Imm(12)                                          -> x2
-    v1217 Imm(0)                                           -> x2
+    v1197 Imm(0)                                           -> x1
+    v1198 Imm(0)                                           -> x1
+    v1199 Imm(0)                                           -> x1
+    v1200 Imm(0)                                           -> x1
+    v1201 Imm(0)                                           -> x1
+    v1202 Imm(0)                                           -> x1
+    v1203 Undef                                            -> x1
+    v1204 Imm(0)                                           -> x1
+    v1205 Imm(0)                                           -> x1
+    v1206 Imm(4)                                           -> x1
+    v1207 Imm(0)                                           -> x1
+    v1208 Undef                                            -> x1
+    v1209 Imm(0)                                           -> x1
+    v1210 Imm(0)                                           -> x1
+    v1211 Imm(8)                                           -> x1
+    v1212 Imm(0)                                           -> x1
+    v1213 Undef                                            -> x1
+    v1214 Imm(0)                                           -> x1
+    v1215 Imm(0)                                           -> x1
+    v1216 Imm(12)                                          -> x1
+    v1217 Imm(0)                                           -> x1
     v1218 VecSplat { value=v1196, kind=F32, bytes=16 }     -> d1
-    v1219 Imm(0)                                           -> x2
-    v1220 Imm(0)                                           -> x2
-    v1221 Imm(0)                                           -> x2
-    v1222 Imm(0)                                           -> x2
-    v1223 Imm(0)                                           -> x2
-    v1224 Imm(1065353216)                                  -> x2 [f32]
-    v1225 Imm(0)                                           -> x2
-    v1226 Imm(0)                                           -> x2
-    v1227 Imm(0)                                           -> x2
-    v1228 Imm(0)                                           -> x2
-    v1229 Imm(0)                                           -> x2
-    v1230 Undef                                            -> x2
-    v1231 Imm(0)                                           -> x2
-    v1232 Imm(0)                                           -> x2
-    v1233 Imm(4)                                           -> x2
-    v1234 Imm(0)                                           -> x2
-    v1235 Undef                                            -> x2
-    v1236 Imm(0)                                           -> x2
-    v1237 Imm(0)                                           -> x2
-    v1238 Imm(8)                                           -> x2
-    v1239 Imm(0)                                           -> x2
-    v1240 Undef                                            -> x2
-    v1241 Imm(0)                                           -> x2
-    v1242 Imm(0)                                           -> x2
-    v1243 Imm(12)                                          -> x2
-    v1244 Imm(0)                                           -> x2
+    v1219 Imm(0)                                           -> x1
+    v1220 Imm(0)                                           -> x1
+    v1221 Imm(0)                                           -> x1
+    v1222 Imm(0)                                           -> x1
+    v1223 Imm(0)                                           -> x1
+    v1224 Imm(1065353216)                                  -> x1 [f32]
+    v1225 Imm(0)                                           -> x1
+    v1226 Imm(0)                                           -> x1
+    v1227 Imm(0)                                           -> x1
+    v1228 Imm(0)                                           -> x1
+    v1229 Imm(0)                                           -> x1
+    v1230 Undef                                            -> x1
+    v1231 Imm(0)                                           -> x1
+    v1232 Imm(0)                                           -> x1
+    v1233 Imm(4)                                           -> x1
+    v1234 Imm(0)                                           -> x1
+    v1235 Undef                                            -> x1
+    v1236 Imm(0)                                           -> x1
+    v1237 Imm(0)                                           -> x1
+    v1238 Imm(8)                                           -> x1
+    v1239 Imm(0)                                           -> x1
+    v1240 Undef                                            -> x1
+    v1241 Imm(0)                                           -> x1
+    v1242 Imm(0)                                           -> x1
+    v1243 Imm(12)                                          -> x1
+    v1244 Imm(0)                                           -> x1
     v1245 VecSplat { value=v1173, kind=F32, bytes=16 }     -> d2
-    v1246 Imm(0)                                           -> x2
-    v1247 Imm(0)                                           -> x2
-    v1248 Imm(0)                                           -> x2
-    v1249 Imm(0)                                           -> x2
-    v1250 Imm(0)                                           -> x2
-    v1251 Imm(0)                                           -> x2
-    v1252 SimdVal { op=__builtin_ia32_divps, imm=None, args=[v1245, v1218] } -> d2
-    v1253 Imm(0)                                           -> x2
-    v1254 Imm(0)                                           -> x2
+    v1246 Imm(0)                                           -> x1
+    v1247 Imm(0)                                           -> x1
+    v1248 Imm(0)                                           -> x1
+    v1249 Imm(0)                                           -> x1
+    v1250 Imm(0)                                           -> x1
+    v1251 Imm(0)                                           -> x1
+    v1252 SimdVal { op=__builtin_ia32_divps, imm=None, args=[v1245, v1218] } -> d3
+    v1253 Imm(0)                                           -> x1
+    v1254 Imm(0)                                           -> x1
     v1255 LifetimeEnd(0)                                   -> -
-    v1256 Imm(0)                                           -> x2
-    v1257 Imm(0)                                           -> x2
-    v1258 Imm(0)                                           -> x2
-    v1259 Imm(0)                                           -> x2
-    v1260 Imm(0)                                           -> x2
-    v1261 Imm(0)                                           -> x2
-    v1262 Imm(0)                                           -> x2
-    v1263 Imm(0)                                           -> x2
-    v1264 Imm(0)                                           -> x2
-    v1265 Imm(0)                                           -> x2
+    v1256 Imm(0)                                           -> x1
+    v1257 Imm(0)                                           -> x1
+    v1258 Imm(0)                                           -> x1
+    v1259 Imm(0)                                           -> x1
+    v1260 Imm(0)                                           -> x1
+    v1261 Imm(0)                                           -> x1
+    v1262 Imm(0)                                           -> x1
+    v1263 Imm(0)                                           -> x1
+    v1264 Imm(0)                                           -> x1
+    v1265 Imm(0)                                           -> x1
     v1266 LifetimeEnd(0)                                   -> -
     v1267 LifetimeEnd(0)                                   -> -
     v1268 LifetimeEnd(0)                                   -> -
-    v1269 Imm(0)                                           -> x2
-    v1270 Imm(0)                                           -> x2
-    v1271 Imm(0)                                           -> x2
-    v1272 Imm(0)                                           -> x2
-    v1273 Imm(0)                                           -> x2
-    v1274 Imm(0)                                           -> x2
-    v1275 Undef                                            -> x2
-    v1276 Imm(0)                                           -> x2
-    v1277 Imm(0)                                           -> x2
-    v1278 Imm(4)                                           -> x2
-    v1279 Imm(0)                                           -> x2
-    v1280 Undef                                            -> x2
-    v1281 Imm(0)                                           -> x2
-    v1282 Imm(0)                                           -> x2
-    v1283 Imm(8)                                           -> x2
-    v1284 Imm(0)                                           -> x2
-    v1285 Undef                                            -> x2
-    v1286 Imm(0)                                           -> x2
-    v1287 Imm(0)                                           -> x2
-    v1288 Imm(12)                                          -> x2
-    v1289 Imm(0)                                           -> x2
-    v1290 VecSplat { value=v1196, kind=F32, bytes=16 }     -> d1
-    v1291 Imm(0)                                           -> x2
-    v1292 Imm(0)                                           -> x2
-    v1293 Imm(0)                                           -> x2
-    v1294 Imm(0)                                           -> x2
-    v1295 Imm(0)                                           -> x2
-    v1296 Imm(1065353216)                                  -> x2 [f32]
-    v1297 Imm(0)                                           -> x2
-    v1298 Imm(0)                                           -> x2
-    v1299 Imm(0)                                           -> x2
-    v1300 Imm(0)                                           -> x2
-    v1301 Imm(0)                                           -> x2
-    v1302 Undef                                            -> x2
-    v1303 Imm(0)                                           -> x2
-    v1304 Imm(0)                                           -> x2
-    v1305 Imm(4)                                           -> x2
-    v1306 Imm(0)                                           -> x2
-    v1307 Undef                                            -> x2
-    v1308 Imm(0)                                           -> x2
-    v1309 Imm(0)                                           -> x2
-    v1310 Imm(8)                                           -> x2
-    v1311 Imm(0)                                           -> x2
-    v1312 Undef                                            -> x2
-    v1313 Imm(0)                                           -> x2
-    v1314 Imm(0)                                           -> x2
-    v1315 Imm(12)                                          -> x2
-    v1316 Imm(0)                                           -> x2
-    v1317 VecSplat { value=v1173, kind=F32, bytes=16 }     -> d3
+    v1269 Imm(0)                                           -> x1
+    v1270 Imm(0)                                           -> x1
+    v1271 Imm(0)                                           -> x1
+    v1272 Imm(0)                                           -> x1
+    v1273 Imm(0)                                           -> x1
+    v1274 Imm(0)                                           -> x1
+    v1275 Undef                                            -> x1
+    v1276 Imm(0)                                           -> x1
+    v1277 Imm(0)                                           -> x1
+    v1278 Imm(4)                                           -> x1
+    v1279 Imm(0)                                           -> x1
+    v1280 Undef                                            -> x1
+    v1281 Imm(0)                                           -> x1
+    v1282 Imm(0)                                           -> x1
+    v1283 Imm(8)                                           -> x1
+    v1284 Imm(0)                                           -> x1
+    v1285 Undef                                            -> x1
+    v1286 Imm(0)                                           -> x1
+    v1287 Imm(0)                                           -> x1
+    v1288 Imm(12)                                          -> x1
+    v1289 Imm(0)                                           -> x1
+    v1290 VecSplat { value=v1196, kind=F32, bytes=16 }     -> d4
+    v1291 Imm(0)                                           -> x1
+    v1292 Imm(0)                                           -> x1
+    v1293 Imm(0)                                           -> x1
+    v1294 Imm(0)                                           -> x1
+    v1295 Imm(0)                                           -> x1
+    v1296 Imm(1065353216)                                  -> x1 [f32]
+    v1297 Imm(0)                                           -> x1
+    v1298 Imm(0)                                           -> x1
+    v1299 Imm(0)                                           -> x1
+    v1300 Imm(0)                                           -> x1
+    v1301 Imm(0)                                           -> x1
+    v1302 Undef                                            -> x1
+    v1303 Imm(0)                                           -> x1
+    v1304 Imm(0)                                           -> x1
+    v1305 Imm(4)                                           -> x1
+    v1306 Imm(0)                                           -> x1
+    v1307 Undef                                            -> x1
+    v1308 Imm(0)                                           -> x1
+    v1309 Imm(0)                                           -> x1
+    v1310 Imm(8)                                           -> x1
+    v1311 Imm(0)                                           -> x1
+    v1312 Undef                                            -> x1
+    v1313 Imm(0)                                           -> x1
+    v1314 Imm(0)                                           -> x1
+    v1315 Imm(12)                                          -> x1
+    v1316 Imm(0)                                           -> x1
+    v1317 VecSplat { value=v1173, kind=F32, bytes=16 }     -> d4
     v1318 Imm(0)                                           -> x1
     v1319 Imm(0)                                           -> x1
     v1320 Imm(0)                                           -> x1
     v1321 Imm(0)                                           -> x1
     v1322 Imm(0)                                           -> x1
-    v1323 SimdVal { op=__builtin_ia32_sqrtps, imm=None, args=[v1290] } -> d1
+    v1323 SimdVal { op=__builtin_ia32_sqrtps, imm=None, args=[v1218] } -> d1
     v1324 Imm(0)                                           -> x1
     v1325 Imm(0)                                           -> x1
     v1326 Imm(0)                                           -> x1
     v1327 Imm(0)                                           -> x1
     v1328 Imm(0)                                           -> x1
-    v1329 SimdVal { op=__builtin_ia32_divps, imm=None, args=[v1317, v1323] } -> d1
+    v1329 SimdVal { op=__builtin_ia32_divps, imm=None, args=[v1245, v1323] } -> d1
     v1330 Imm(0)                                           -> x1
     v1331 Imm(0)                                           -> x1
     v1332 LifetimeEnd(0)                                   -> -

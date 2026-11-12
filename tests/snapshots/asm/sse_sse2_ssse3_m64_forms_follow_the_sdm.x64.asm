@@ -1766,8 +1766,7 @@ Disassembly of section .text:
                	vmovd	%xmm1, %r11d
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	cvtps2dq	%xmm0, %xmm0
-               	vmovq	%rax, %xmm1
-               	vpbroadcastq	%xmm1, %xmm1
+               	vpxor	%xmm1, %xmm1, %xmm1
                	vmovq	%xmm1, %xmm1            # xmm1 = xmm1[0],zero
                	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx

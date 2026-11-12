@@ -518,6 +518,9 @@ pub(super) fn emit_inst(
         Inst::VecSplat { value, kind, bytes } => {
             emit_vec_splat(code, (*value, *kind, *bytes), dst, alloc, frame)
         }
+        Inst::VecConst { imm, kind, bytes } => {
+            emit_vec_const(code, (*imm, *kind, *bytes), dst, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Select { cond, a, b, kind } => {

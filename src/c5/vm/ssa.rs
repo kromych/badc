@@ -1766,6 +1766,7 @@ fn run_inst<H: Host>(
         Inst::SimdVal { .. } => "SimdVal",
         Inst::VecInsert { .. } => "VecInsert",
         Inst::VecSplat { .. } => "VecSplat",
+        Inst::VecConst { .. } => "VecConst",
         Inst::VecExtract { .. } => "VecExtract",
         Inst::VecBinop {
             op,

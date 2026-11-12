@@ -12746,7 +12746,9 @@ fn a_splat_keeps_a_template_copy_known() {
     let target = crate::Target::LinuxX64;
     let (body, insts) = optimized_function_full_pool(SRC, "f", target);
     assert!(
-        insts.iter().any(|(_, i)| i.starts_with("VecSplat"))
+        insts
+            .iter()
+            .any(|(_, i)| i.starts_with("VecSplat") || i.starts_with("VecConst"))
             && !insts
                 .iter()
                 .any(|(_, i)| i.starts_with("LoadLocal") && i.contains("U8")),

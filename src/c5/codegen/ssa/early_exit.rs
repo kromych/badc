@@ -100,6 +100,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
         | Inst::VecSplat { .. }
+        | Inst::VecConst { .. }
         | Inst::VecExtract { .. }
         | Inst::Select { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {

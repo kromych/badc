@@ -86,25 +86,25 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
     v29  Binop { op=add, lhs=v1, rhs=v28 }                -> x8
     v30  LoadIndexed { base=v1, index=v27, scale=4, kind=I32 } -> x8
     v31  Imm(0)                                           -> x9
-    v32  BinopI { op=gt, lhs=v30, rhs_imm=4 }             -> x8
+    v32  BinopI { op=gt, lhs=v30, rhs_imm=4 }             -> x9
     terminator Bz { cond=v32, target=b7, fall=b5 }   (exit_acc=v32)
   block 7  start_pc=0
-    v36  Extend { value=v14, kind=I32 }                   -> x8
-    v37  Extend { value=v25, kind=I32 }                   -> x8
-    v38  Binop { op=le, lhs=v14, rhs=v25 }                -> x8
+    v36  Extend { value=v14, kind=I32 }                   -> x9
+    v37  Extend { value=v25, kind=I32 }                   -> x9
+    v38  Binop { op=le, lhs=v14, rhs=v25 }                -> x9
     terminator Bz { cond=v38, target=b9, fall=b8 }   (exit_acc=v38)
   block 8  start_pc=0
-    v39  Imm(0)                                           -> x8
-    v40  Extend { value=v14, kind=I32 }                   -> x8
-    v41  BinopI { op=shl, lhs=v16, rhs_imm=2 }            -> x8
-    v42  Binop { op=add, lhs=v1, rhs=v41 }                -> x8
-    v43  LoadIndexed { base=v1, index=v16, scale=4, kind=I32 } -> x8
-    v44  Imm(0)                                           -> x9
-    v45  Extend { value=v25, kind=I32 }                   -> x9
-    v46  BinopI { op=shl, lhs=v27, rhs_imm=2 }            -> x9
-    v47  Binop { op=add, lhs=v1, rhs=v46 }                -> x9
-    v48  LoadIndexed { base=v1, index=v27, scale=4, kind=I32 } -> x9
-    v49  StoreIndexed { base=v1, index=v16, scale=4, value=v48, kind=I32 } -> -
+    v39  Imm(0)                                           -> x9
+    v40  Extend { value=v14, kind=I32 }                   -> x9
+    v41  BinopI { op=shl, lhs=v16, rhs_imm=2 }            -> x9
+    v42  Binop { op=add, lhs=v1, rhs=v41 }                -> x9
+    v43  LoadIndexed { base=v1, index=v16, scale=4, kind=I32 } -> x9
+    v44  Imm(0)                                           -> x3
+    v45  Extend { value=v25, kind=I32 }                   -> x3
+    v46  BinopI { op=shl, lhs=v27, rhs_imm=2 }            -> x3
+    v47  Binop { op=add, lhs=v1, rhs=v46 }                -> x3
+    v48  LoadIndexed { base=v1, index=v27, scale=4, kind=I32 } -> x3
+    v49  StoreIndexed { base=v1, index=v16, scale=4, value=v30, kind=I32 } -> -
     v50  Imm(0)                                           -> x2
     v51  Extend { value=v25, kind=I32 }                   -> x2
     v52  BinopI { op=shl, lhs=v27, rhs_imm=2 }            -> x2

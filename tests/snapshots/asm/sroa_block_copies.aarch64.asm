@@ -525,10 +525,9 @@ Disassembly of section .text:
                	and	x1, x0, #0x7
                	cmp	w1, #0x5
                	b.ne	<addr>
-               	ubfx	x0, x0, #3, #5
-               	cmp	w0, #0x11
+               	ubfx	x1, x0, #3, #5
+               	cmp	w1, #0x11
                	b.ne	<addr>
-               	ldr	w0, [sp, #0x38]
                	ubfx	x0, x0, #8, #12
                	and	x1, x20, #0xfff
                	cmp	w0, w1

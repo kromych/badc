@@ -92,9 +92,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v86  Imm(0)                                           -> x9
     v87  Imm(0)                                           -> x9
     v88  Load { addr=v1, disp=0, kind=U16 pc_rel }        -> x9
-    v89  BinopI { op=ne, lhs=v88, rhs_imm=1 }             -> x9
+    v89  BinopI { op=ne, lhs=v3, rhs_imm=1 }              -> x9
     v90  BinopI { op=and, lhs=v89, rhs_imm=4294967295 }   -> x3
-    v91  BinopI { op=eq, lhs=v88, rhs_imm=1 }             -> x3
+    v91  BinopI { op=eq, lhs=v3, rhs_imm=1 }              -> x3
     terminator Bnz { cond=v89, target=b9, fall=b1 }   (exit_acc=v91)
   block 1  start_pc=0
     v161 BinopI { op=add, lhs=v1, rhs_imm=2 }             -> x9

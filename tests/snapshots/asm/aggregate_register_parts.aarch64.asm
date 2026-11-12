@@ -978,10 +978,9 @@ Disassembly of section .text:
                	add	x1, x1, #0x4
                	cmp	x0, x1
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x38]
-               	cmp	x0, #0x3
+               	ldur	x1, [x29, #-0x38]
+               	cmp	x1, #0x3
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x40]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x1
                	b.eq	<addr>

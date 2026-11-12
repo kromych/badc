@@ -444,20 +444,20 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x110
                	ret
                	ldur	w0, [x29, #-0x30]
-               	ldur	w1, [x29, #-0x20]
-               	cmp	w0, w1
+               	ldur	w1, [x29, #-0x2c]
+               	ldur	w2, [x29, #-0x28]
+               	ldur	w3, [x29, #-0x24]
+               	ldur	w4, [x29, #-0x20]
+               	cmp	w0, w4
                	b.ne	<addr>
-               	ldur	w0, [x29, #-0x2c]
-               	ldur	w1, [x29, #-0x1c]
-               	cmp	w0, w1
+               	ldur	w0, [x29, #-0x1c]
+               	cmp	w1, w0
                	b.ne	<addr>
-               	ldur	w0, [x29, #-0x28]
-               	ldur	w1, [x29, #-0x18]
-               	cmp	w0, w1
+               	ldur	w0, [x29, #-0x18]
+               	cmp	w2, w0
                	b.ne	<addr>
-               	ldur	w0, [x29, #-0x24]
-               	ldur	w1, [x29, #-0x14]
-               	cmp	w0, w1
+               	ldur	w0, [x29, #-0x14]
+               	cmp	w3, w0
                	b.ne	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp, #0x100]

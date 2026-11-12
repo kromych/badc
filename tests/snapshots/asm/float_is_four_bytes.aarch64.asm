@@ -78,11 +78,10 @@ Disassembly of section .text:
                	ldr	w16, [x2]
                	str	w16, [x1]
                	ldur	w1, [x29, #-0x8]
-               	eor	x1, x1, #0x3f800000
-               	cbz	w1, <addr>
+               	eor	x2, x1, #0x3f800000
+               	cbz	w2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldur	w1, [x29, #-0x8]
                	bl	<addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x10

@@ -3017,56 +3017,56 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v562 BinopI { op=add, lhs=v504, rhs_imm=8 }           -> x1
     v563 Load { addr=v504, disp=8, kind=U8 }              -> x1
     v564 Imm(0)                                           -> x2
-    v565 VecInsert { vec=v558, value=v563, off=8, kind=I8, bytes=16 } -> d0
+    v565 VecInsert { vec=v558, value=v563, off=8, kind=I8, bytes=16 } -> d1
     v566 Imm(0)                                           -> x1
     v567 Imm(0)                                           -> x1
     v568 Imm(9)                                           -> x1
     v569 BinopI { op=add, lhs=v504, rhs_imm=9 }           -> x1
     v570 Load { addr=v504, disp=9, kind=U8 }              -> x1
     v571 Imm(0)                                           -> x2
-    v572 VecInsert { vec=v565, value=v570, off=9, kind=I8, bytes=16 } -> d0
+    v572 VecInsert { vec=v565, value=v570, off=9, kind=I8, bytes=16 } -> d1
     v573 Imm(0)                                           -> x1
     v574 Imm(0)                                           -> x1
     v575 Imm(10)                                          -> x1
     v576 BinopI { op=add, lhs=v504, rhs_imm=10 }          -> x1
     v577 Load { addr=v504, disp=10, kind=U8 }             -> x1
     v578 Imm(0)                                           -> x2
-    v579 VecInsert { vec=v572, value=v577, off=10, kind=I8, bytes=16 } -> d0
+    v579 VecInsert { vec=v572, value=v577, off=10, kind=I8, bytes=16 } -> d1
     v580 Imm(0)                                           -> x1
     v581 Imm(0)                                           -> x1
     v582 Imm(11)                                          -> x1
     v583 BinopI { op=add, lhs=v504, rhs_imm=11 }          -> x1
     v584 Load { addr=v504, disp=11, kind=U8 }             -> x1
     v585 Imm(0)                                           -> x2
-    v586 VecInsert { vec=v579, value=v584, off=11, kind=I8, bytes=16 } -> d0
+    v586 VecInsert { vec=v579, value=v584, off=11, kind=I8, bytes=16 } -> d1
     v587 Imm(0)                                           -> x1
     v588 Imm(0)                                           -> x1
     v589 Imm(12)                                          -> x1
     v590 BinopI { op=add, lhs=v504, rhs_imm=12 }          -> x1
     v591 Load { addr=v504, disp=12, kind=U8 }             -> x1
     v592 Imm(0)                                           -> x2
-    v593 VecInsert { vec=v586, value=v591, off=12, kind=I8, bytes=16 } -> d0
+    v593 VecInsert { vec=v586, value=v591, off=12, kind=I8, bytes=16 } -> d1
     v594 Imm(0)                                           -> x1
     v595 Imm(0)                                           -> x1
     v596 Imm(13)                                          -> x1
     v597 BinopI { op=add, lhs=v504, rhs_imm=13 }          -> x1
     v598 Load { addr=v504, disp=13, kind=U8 }             -> x1
     v599 Imm(0)                                           -> x2
-    v600 VecInsert { vec=v593, value=v598, off=13, kind=I8, bytes=16 } -> d0
+    v600 VecInsert { vec=v593, value=v598, off=13, kind=I8, bytes=16 } -> d1
     v601 Imm(0)                                           -> x1
     v602 Imm(0)                                           -> x1
     v603 Imm(14)                                          -> x1
     v604 BinopI { op=add, lhs=v504, rhs_imm=14 }          -> x1
     v605 Load { addr=v504, disp=14, kind=U8 }             -> x1
     v606 Imm(0)                                           -> x2
-    v607 VecInsert { vec=v600, value=v605, off=14, kind=I8, bytes=16 } -> d0
+    v607 VecInsert { vec=v600, value=v605, off=14, kind=I8, bytes=16 } -> d1
     v608 Imm(0)                                           -> x1
     v609 Imm(0)                                           -> x1
     v610 Imm(15)                                          -> x1
     v611 BinopI { op=add, lhs=v504, rhs_imm=15 }          -> x1
     v612 Load { addr=v504, disp=15, kind=U8 }             -> x0
     v613 Imm(0)                                           -> x1
-    v614 VecInsert { vec=v607, value=v612, off=15, kind=I8, bytes=16 } -> d0
+    v614 VecInsert { vec=v607, value=v612, off=15, kind=I8, bytes=16 } -> d1
     v615 Imm(0)                                           -> x0
     v616 Imm(0)                                           -> x0
     v617 Imm(0)                                           -> x0
@@ -3096,9 +3096,9 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v641 Imm(0)                                           -> x3
     v642 LoadLocal { off=-101, disp=56, kind=I64 }        -> x3
     v643 Imm(0)                                           -> x13
-    v644 LoadLocal { off=-101, disp=64, kind=I64 }        -> x13
+    v644 VecExtract { vec=v558, off=0, kind=I64, bytes=16 } -> x13
     v645 Imm(0)                                           -> [spill 0]
-    v646 LoadLocal { off=-101, disp=72, kind=I64 }        -> [spill 0]
+    v646 VecExtract { vec=v614, off=8, kind=I64, bytes=16 } -> [spill 0]
     v647 Imm(0)                                           -> [spill 1]
     v648 Imm(0)                                           -> [spill 1]
     v649 LocalAddr(-98)                                   -> [spill 1]

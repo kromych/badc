@@ -99,11 +99,11 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	xorq	$-0x1, %rcx
-               	movl	<rip>, %edx # <addr>
-               	cmpl	%edx, %ecx
+               	movq	%rcx, %rdx
+               	xorq	$-0x1, %rdx
+               	movl	<rip>, %esi # <addr>
+               	cmpl	%esi, %edx
                	ja	<addr>
-               	movzbq	-0x8(%rbp), %rcx
                	xorq	$-0x1, %rcx
                	sarq	%rcx
                	cmpq	$-0x1, %rcx

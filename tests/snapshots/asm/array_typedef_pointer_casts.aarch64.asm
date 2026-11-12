@@ -17,36 +17,34 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	add	x0, x2, #0xc
+               	adrp	x3, <page>
+               	ldr	x4, [x3, #0x28]
+               	cmp	x4, x0
+               	b.ne	<addr>
                	adrp	x1, <page>
-               	ldr	x3, [x1, #0x28]
-               	cmp	x3, x0
+               	ldr	x1, [x1, <lo12>]
+               	cmp	x1, x0
                	b.ne	<addr>
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
-               	cmp	x3, x0
-               	b.ne	<addr>
-               	adrp	x3, <page>
-               	ldr	x4, [x3, #0x38]
-               	ldr	x5, [x4, #0x8]
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
+               	ldr	x5, [x1, #0x8]
                	cmp	x5, x0
                	b.ne	<addr>
-               	ldr	x0, [x4]
+               	ldr	x0, [x1]
                	cmp	x0, x2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	x0, [x1, #0x28]
-               	ldrsw	x0, [x0, #0x8]
+               	ldrsw	x0, [x4, #0x8]
                	cmp	w0, #0x6
                	b.ne	<addr>
-               	ldr	x0, [x3, #0x38]
-               	ldr	x0, [x0]
+               	ldr	x0, [x1]
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x0, [x1, #0x28]
+               	ldr	x0, [x3, #0x28]
                	add	x1, x0, #0xc
                	sub	x0, x1, x0
                	mov	x1, #0x0                // =0

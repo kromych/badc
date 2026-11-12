@@ -71,13 +71,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x80]
+               	ldur	x0, [x29, #-0x40]
                	rev	x0, x0
-               	ldur	x1, [x29, #-0x40]
-               	rev	x1, x1
-               	ldur	w2, [x29, #-0x40]
-               	add	x1, x1, x2
-               	eor	x0, x0, x1
+               	ldur	w1, [x29, #-0x40]
+               	add	x0, x0, x1
+               	mov	x17, #0x708             // =1800
+               	movk	x17, #0x506, lsl #16
+               	movk	x17, #0x304, lsl #32
+               	movk	x17, #0x102, lsl #48
+               	eor	x0, x0, x17
                	rev	x0, x0
                	stur	x0, [x29, #-0x80]
                	ldur	x0, [x29, #-0x78]

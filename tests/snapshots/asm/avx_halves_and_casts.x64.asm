@@ -394,23 +394,23 @@ Disassembly of section .text:
                	vmovdqa	%xmm1, %xmm1
                	vinserti128	$0x1, %xmm2, %ymm1, %ymm1
                	vmovups	%ymm1, -0x90(%rbp)
-               	vpermilps	$0x0, %xmm1, %xmm2 # xmm2 = xmm1[0,0,0,0]
-               	movss	-0x30(%rbp), %xmm1
-               	addss	%xmm1, %xmm1
-               	ucomiss	%xmm1, %xmm2
+               	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
+               	movss	-0x30(%rbp), %xmm2
+               	addss	%xmm2, %xmm2
+               	ucomiss	%xmm2, %xmm3
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
                	vzeroupper
                	leave
                	retq
-               	movss	-0x8c(%rbp), %xmm2
-               	movss	-0x2c(%rbp), %xmm1
-               	addss	%xmm1, %xmm1
-               	ucomiss	%xmm1, %xmm2
+               	vpermilps	$0x1, %xmm1, %xmm3 # xmm3 = xmm1[1,0,0,0]
+               	movss	-0x2c(%rbp), %xmm2
+               	addss	%xmm2, %xmm2
+               	ucomiss	%xmm2, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	movss	-0x88(%rbp), %xmm2
+               	vpermilps	$0x2, %xmm1, %xmm2 # xmm2 = xmm1[2,0,0,0]
                	movss	-0x28(%rbp), %xmm1
                	addss	%xmm1, %xmm1
                	ucomiss	%xmm1, %xmm2
@@ -489,19 +489,21 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
+               	vpermilpd	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0]
                	movabsq	$-0x3ffc000000000000, %rax # imm = 0xC004000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x60(%rbp), %xmm0
+               	vextracti128	$0x1, %ymm0, %xmm15
+               	vpermilpd	$0x0, %xmm15, %xmm1 # xmm1 = xmm15[0,0]
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x58(%rbp), %xmm0
+               	vextracti128	$0x1, %ymm0, %xmm15
+               	vpermilpd	$0x1, %xmm15, %xmm0 # xmm0 = xmm15[1,0]
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

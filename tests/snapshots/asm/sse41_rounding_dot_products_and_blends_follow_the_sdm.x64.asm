@@ -4663,7 +4663,6 @@ Disassembly of section .text:
                	movabsq	$0x2545f4914f6cdd1d, %rbx # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %rbx
                	shrq	$0x7, %rbx
-               	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
@@ -4694,7 +4693,6 @@ Disassembly of section .text:
                	movabsq	$0x2545f4914f6cdd1d, %r14 # imm = 0x2545F4914F6CDD1D
                	imulq	%rax, %r14
                	shrq	$0x7, %r14
-               	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
                	xorq	%rcx, %rax
@@ -5480,11 +5478,11 @@ Disassembly of section .text:
                	movl	-0x4c(%rbp), %edx
                	cmpl	%edx, %eax
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	vpextrd	$0x2, %xmm0, %eax
                	movl	-0x38(%rbp), %edx
                	cmpl	%edx, %eax
                	jne	<addr>
-               	movl	-0x4(%rbp), %eax
+               	vpextrd	$0x3, %xmm0, %eax
                	movl	-0x34(%rbp), %edx
                	cmpl	%edx, %eax
                	je	<addr>

@@ -17,26 +17,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x420
-               	mov	x2, #0xcdef             // =52719
-               	movk	x2, #0x89ab, lsl #16
-               	movk	x2, #0x4567, lsl #32
-               	movk	x2, #0x123, lsl #48
-               	mov	x1, #0x3210             // =12816
-               	movk	x1, #0x7654, lsl #16
-               	movk	x1, #0xba98, lsl #32
-               	movk	x1, #0xfedc, lsl #48
+               	mov	x1, #0xcdef             // =52719
+               	movk	x1, #0x89ab, lsl #16
+               	movk	x1, #0x4567, lsl #32
+               	movk	x1, #0x123, lsl #48
+               	mov	x2, #0x3210             // =12816
+               	movk	x2, #0x7654, lsl #16
+               	movk	x2, #0xba98, lsl #32
+               	movk	x2, #0xfedc, lsl #48
                	mov	x3, #0xbeef             // =48879
                	movk	x3, #0xdead, lsl #16
                	mov	x4, #0x5a               // =90
-               	str	x2, [sp, #0x8]
-               	str	x1, [sp, #0x10]
+               	str	x1, [sp, #0x8]
+               	str	x2, [sp, #0x10]
                	str	w3, [sp, #0x18]
                	strb	w4, [sp, #0x1c]
                	strb	wzr, [sp, #0x1d]
                	strh	wzr, [sp, #0x1e]
-               	ldr	x0, [sp, #0x10]
-               	cmp	x0, x1
-               	b.ne	<addr>
                	ldr	w0, [sp, #0x18]
                	mov	x17, #0xbeef            // =48879
                	movk	x17, #0xdead, lsl #16

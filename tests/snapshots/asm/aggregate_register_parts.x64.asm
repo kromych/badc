@@ -979,10 +979,9 @@ Disassembly of section .text:
                	addq	$0x4, %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	movq	-0x38(%rbp), %rax
-               	cmpq	$0x3, %rax
+               	movq	-0x38(%rbp), %rcx
+               	cmpq	$0x3, %rcx
                	jne	<addr>
-               	movq	-0x40(%rbp), %rax
                	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>

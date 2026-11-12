@@ -560,20 +560,20 @@ Disassembly of section .text:
                	ldrb	w1, [x21, #0x3]
                	add	x0, x0, x1
                	stur	w0, [x29, #-0x20]
-               	ldur	x0, [x29, #-0x18]
-               	ldur	x1, [x29, #-0x28]
-               	sub	x0, x0, x1
-               	stur	x0, [x29, #-0x18]
+               	ldur	x1, [x29, #-0x18]
+               	ldur	x0, [x29, #-0x28]
+               	sub	x1, x1, x0
+               	stur	x1, [x29, #-0x18]
                	ldur	d1, [x29, #-0x10]
                	fmov	d0, #2.00000000
                	fadd	d1, d1, d0
                	stur	d1, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x20]
-               	add	x1, x20, x20, lsl #1
-               	add	x2, x20, #0x3
-               	and	x2, x2, #0xff
-               	add	x1, x1, x2
-               	cmp	w0, w1
+               	ldursw	x1, [x29, #-0x20]
+               	add	x2, x20, x20, lsl #1
+               	add	x3, x20, #0x3
+               	and	x3, x3, #0xff
+               	add	x2, x2, x3
+               	cmp	w1, w2
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x20, x21, [x19]
@@ -581,11 +581,10 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x18]
-               	lsl	x1, x20, #40
-               	ldur	x2, [x29, #-0x28]
-               	sub	x1, x1, x2
-               	cmp	x0, x1
+               	ldur	x1, [x29, #-0x18]
+               	lsl	x2, x20, #40
+               	sub	x0, x2, x0
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x20, x21, [x19]

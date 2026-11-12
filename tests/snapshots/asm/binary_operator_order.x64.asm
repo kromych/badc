@@ -27,30 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x0, <rip> # <addr>
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	cmpl	$0x1, %ecx
-               	jne	<addr>
-               	cmpl	$0x1, %eax
-               	je	<addr>
-               	movl	$0x13, %eax
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
-               	testl	%eax, %eax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	cmpl	$0x1, %ecx
-               	jne	<addr>
-               	cmpl	$0x2, %eax
-               	je	<addr>
-               	movl	$0x14, %eax
-               	retq
+               	movl	$0x1, <rip> # <addr>
+               	movl	$0x2, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
                	movl	$0x1, <rip> # <addr>
                	movl	$0x2, <rip> # <addr>

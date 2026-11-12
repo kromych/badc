@@ -17,16 +17,15 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	adrp	x0, <page>
-               	ldr	x2, [x0, #0x10]
-               	cmp	x2, x1
+               	cmp	x1, x0
                	b.ne	<addr>
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	ldr	x1, [x0, #0x10]
-               	cmp	x2, x1
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]

@@ -172,12 +172,6 @@ Disassembly of section .text:
                	movl	$0x5, -0x50(%rbp)
                	movups	%xmm1, -0x40(%rbp)
                	movl	$0x6, -0x30(%rbp)
-               	movl	-0x50(%rbp), %eax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x15, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rax # <addr>
                	addq	$0x10, %rax
                	movzbq	(%rax), %rax

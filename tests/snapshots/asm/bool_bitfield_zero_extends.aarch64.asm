@@ -50,16 +50,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x2, #0x40               // =64
-               	and	x0, x0, #0x1
-               	sub	x0, x2, x0, lsl #3
-               	cmp	w0, #0x38
+               	and	x3, x0, #0x1
+               	sub	x2, x2, x3, lsl #3
+               	cmp	w2, #0x38
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w0, [x29, #-0x7]
                	tbz	w0, #0x0, <addr>
+               	ldurb	w0, [x29, #-0x7]
                	ubfx	x0, x0, #1, #1
                	cbnz	w0, <addr>
                	mov	w0, w1

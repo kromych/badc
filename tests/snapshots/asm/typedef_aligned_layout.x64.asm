@@ -121,9 +121,6 @@ Disassembly of section .text:
                	vaddsd	%xmm0, %xmm14, %xmm0
                	cvttsd2si	%xmm0, %rax
                	subq	$0x6, %rax
-               	movl	-0x8(%rbp), %ecx
-               	decq	%rcx
-               	addq	%rcx, %rax
                	leave
                	retq
 

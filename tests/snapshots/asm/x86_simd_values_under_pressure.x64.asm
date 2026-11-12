@@ -202,23 +202,23 @@ Disassembly of section .text:
                	movl	0x8(%rcx), %esi
                	addq	%rsi, %rdx
                	movl	%edx, -0x138(%rbp)
-               	movl	-0x134(%rbp), %edx
+               	movl	-0x138(%rbp), %edx
+               	movl	-0x134(%rbp), %esi
                	movl	0xc(%rcx), %ecx
-               	addq	%rdx, %rcx
+               	addq	%rsi, %rcx
                	movl	%ecx, -0x134(%rbp)
                	addq	$0x10, %rax
                	movl	(%rax), %ecx
-               	leaq	-0x140(%rbp), %rdx
-               	movl	-0x140(%rbp), %esi
-               	xorq	%rsi, %rcx
+               	leaq	-0x140(%rbp), %rsi
+               	movl	-0x140(%rbp), %edi
+               	xorq	%rdi, %rcx
                	movl	%ecx, (%rax)
-               	leaq	0x10(%rdx), %rax
+               	leaq	0x10(%rsi), %rax
                	movl	0x4(%rax), %ecx
-               	movl	-0x13c(%rbp), %edx
-               	xorq	%rdx, %rcx
+               	movl	-0x13c(%rbp), %esi
+               	xorq	%rsi, %rcx
                	movl	%ecx, 0x4(%rax)
                	movl	0x8(%rax), %ecx
-               	movl	-0x138(%rbp), %edx
                	xorq	%rdx, %rcx
                	movl	%ecx, 0x8(%rax)
                	leaq	-0x140(%rbp), %rcx
@@ -384,15 +384,13 @@ Disassembly of section .text:
                	movl	%eax, -0xac(%rbp)
                	xorl	%eax, %eax
                	leaq	0xa0(%rcx), %rsi
-               	leaq	-0x140(%rbp), %rcx
-               	leaq	0xa0(%rcx), %rdx
-               	movl	(%rdx,%rax,4), %edi
-               	addq	$0x90, %rcx
+               	leaq	-0x140(%rbp), %rdx
+               	leaq	0xa0(%rdx), %rcx
                	movl	(%rcx,%rax,4), %ecx
-               	cmpl	%ecx, %edi
-               	jbe	<addr>
-               	movl	(%rdx,%rax,4), %ecx
-               	jmp	<addr>
+               	addq	$0x90, %rdx
+               	movl	(%rdx,%rax,4), %edx
+               	cmpl	%edx, %ecx
+               	ja	<addr>
                	leaq	-0x140(%rbp), %rcx
                	addq	$0x90, %rcx
                	movl	(%rcx,%rax,4), %ecx

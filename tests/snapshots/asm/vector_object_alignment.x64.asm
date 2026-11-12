@@ -281,8 +281,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
+               	addq	$0xd, %rax
                	cmpl	$0x27, %eax
                	je	<addr>
                	movl	$0x15, %eax

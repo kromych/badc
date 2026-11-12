@@ -193,16 +193,15 @@ Disassembly of section .text:
                	stp	x16, x17, [x1, #0x10]
                	stur	d0, [x29, #-0x38]
                	sub	x0, x29, #0x30
-               	ldur	d0, [x29, #-0x50]
-               	fmul	d0, d0, d0
-               	stur	d0, [x29, #-0x30]
-               	ldur	d0, [x29, #-0x48]
-               	fmul	d0, d0, d0
-               	stur	d0, [x29, #-0x28]
-               	ldur	d0, [x29, #-0x40]
-               	fmul	d0, d0, d0
-               	stur	d0, [x29, #-0x20]
-               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x50]
+               	fmul	d1, d1, d1
+               	stur	d1, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x48]
+               	fmul	d1, d1, d1
+               	stur	d1, [x29, #-0x28]
+               	ldur	d1, [x29, #-0x40]
+               	fmul	d1, d1, d1
+               	stur	d1, [x29, #-0x20]
                	fmul	d0, d0, d0
                	stur	d0, [x29, #-0x18]
                	mov	x16, x0

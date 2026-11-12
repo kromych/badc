@@ -25,14 +25,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x50]
                	ldur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x8]
-               	ldur	x1, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x4568            // =17768
                	movk	x17, #0x123, lsl #16
-               	add	x1, x1, x17
-               	str	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	x1, [x0, #0x38]
+               	add	x0, x0, x17
+               	str	x0, [x1]
+               	add	x2, x0, #0x1
+               	str	x2, [x1, #0x38]
                	ldur	x1, [x29, #-0x50]
                	mov	x17, #0x4567            // =17767
                	movk	x17, #0x123, lsl #16
@@ -47,19 +47,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0]
                	mov	x17, #0x4567            // =17767
                	movk	x17, #0x123, lsl #16
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0x38]
                	mov	x17, #0x4568            // =17768
                	movk	x17, #0x123, lsl #16
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x50

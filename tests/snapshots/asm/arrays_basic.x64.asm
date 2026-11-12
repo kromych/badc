@@ -52,28 +52,9 @@ Disassembly of section .text:
                	movl	$0x14, <rip> # <addr>
                	movl	$0x1e, <rip> # <addr>
                	movl	$0x28, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rcx
-               	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rcx
-               	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rcx
-               	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rcx
-               	cmpl	$0x64, %ecx
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
                	movb	$0x68, <rip> # <addr>
                	movb	$0x69, <rip> # <addr>
                	movb	$0x0, <rip> # <addr>
-               	cmpb	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movl	$0x8, %eax
-               	leave
-               	retq
                	leaq	-0x18(%rbp), %rax
                	addq	$0x8, %rax
                	movl	(%rax), %ecx

@@ -94,7 +94,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	cmp	w0, #0x1
                	b.ne	<addr>
-               	ldursw	x4, [x29, #-0x8]
+               	mov	x4, x0
                	ldrsw	x3, [x1, #0x120]
                	add	x5, x3, #0x1
                	str	w5, [x1, #0x120]

@@ -412,15 +412,14 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	vmovups	(%r10), %ymm1
                	callq	<addr>
-               	movsd	0x180(%rsp), %xmm1
-               	movsd	0x1a0(%rsp), %xmm2
-               	vsubsd	%xmm2, %xmm1, %xmm3
-               	addsd	%xmm2, %xmm1
-               	vmulsd	%xmm1, %xmm3, %xmm1
-               	vpermilpd	$0x0, %xmm0, %xmm2 # xmm2 = xmm0[0,0]
-               	movsd	0x1a0(%rsp), %xmm3
-               	divsd	%xmm3, %xmm1
-               	ucomisd	%xmm1, %xmm2
+               	movsd	0x180(%rsp), %xmm2
+               	movsd	0x1a0(%rsp), %xmm1
+               	vsubsd	%xmm1, %xmm2, %xmm3
+               	addsd	%xmm1, %xmm2
+               	vmulsd	%xmm2, %xmm3, %xmm2
+               	vpermilpd	$0x0, %xmm0, %xmm3 # xmm3 = xmm0[0,0]
+               	divsd	%xmm1, %xmm2
+               	ucomisd	%xmm2, %xmm3
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax
@@ -430,39 +429,36 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	movsd	0x188(%rsp), %xmm1
-               	movsd	0x1a8(%rsp), %xmm2
-               	vsubsd	%xmm2, %xmm1, %xmm3
-               	addsd	%xmm2, %xmm1
-               	vmulsd	%xmm1, %xmm3, %xmm1
-               	vpermilpd	$0x1, %xmm0, %xmm2 # xmm2 = xmm0[1,0]
-               	movsd	0x1a8(%rsp), %xmm3
-               	divsd	%xmm3, %xmm1
-               	ucomisd	%xmm1, %xmm2
+               	movsd	0x188(%rsp), %xmm2
+               	movsd	0x1a8(%rsp), %xmm1
+               	vsubsd	%xmm1, %xmm2, %xmm3
+               	addsd	%xmm1, %xmm2
+               	vmulsd	%xmm2, %xmm3, %xmm2
+               	vpermilpd	$0x1, %xmm0, %xmm3 # xmm3 = xmm0[1,0]
+               	divsd	%xmm1, %xmm2
+               	ucomisd	%xmm2, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	movsd	0x190(%rsp), %xmm1
-               	movsd	0x1b0(%rsp), %xmm2
-               	vsubsd	%xmm2, %xmm1, %xmm3
-               	addsd	%xmm2, %xmm1
-               	vmulsd	%xmm1, %xmm3, %xmm1
-               	vextracti128	$0x1, %ymm0, %xmm2
-               	vpermilpd	$0x0, %xmm2, %xmm2 # xmm2 = xmm2[0,0]
-               	movsd	0x1b0(%rsp), %xmm3
-               	divsd	%xmm3, %xmm1
-               	ucomisd	%xmm1, %xmm2
+               	movsd	0x190(%rsp), %xmm2
+               	movsd	0x1b0(%rsp), %xmm1
+               	vsubsd	%xmm1, %xmm2, %xmm3
+               	addsd	%xmm1, %xmm2
+               	vmulsd	%xmm2, %xmm3, %xmm2
+               	vextracti128	$0x1, %ymm0, %xmm3
+               	vpermilpd	$0x0, %xmm3, %xmm3 # xmm3 = xmm3[0,0]
+               	divsd	%xmm1, %xmm2
+               	ucomisd	%xmm2, %xmm3
                	jp	<addr>
                	jne	<addr>
-               	movsd	0x198(%rsp), %xmm1
-               	movsd	0x1b8(%rsp), %xmm2
-               	vsubsd	%xmm2, %xmm1, %xmm3
-               	addsd	%xmm2, %xmm1
-               	vmulsd	%xmm1, %xmm3, %xmm1
+               	movsd	0x198(%rsp), %xmm2
+               	movsd	0x1b8(%rsp), %xmm1
+               	vsubsd	%xmm1, %xmm2, %xmm3
+               	addsd	%xmm1, %xmm2
+               	vmulsd	%xmm2, %xmm3, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm0
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
-               	movsd	0x1b8(%rsp), %xmm2
-               	divsd	%xmm2, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	divsd	%xmm1, %xmm2
+               	ucomisd	%xmm2, %xmm0
                	jp	<addr>
                	jne	<addr>
                	xorl	%eax, %eax

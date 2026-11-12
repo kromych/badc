@@ -541,18 +541,19 @@ Disassembly of section .text:
                	andq	$0x7, %rdx
                	cmpl	$0x5, %edx
                	jne	<addr>
-               	sarq	$0x3, %rcx
-               	andq	$0x1f, %rcx
-               	cmpl	$0x5, %ecx
+               	movq	%rcx, %rdx
+               	sarq	$0x3, %rdx
+               	andq	$0x1f, %rdx
+               	cmpl	$0x5, %edx
                	jne	<addr>
-               	movl	-0x30(%rbp), %ecx
                	movq	%rcx, %rdx
                	sarq	$0x8, %rdx
                	andq	$0xff, %rdx
                	cmpl	$0xc8, %edx
                	jne	<addr>
-               	sarq	$0x10, %rcx
-               	cmpl	$0x9daa, %ecx           # imm = 0x9DAA
+               	movq	%rcx, %rdx
+               	sarq	$0x10, %rdx
+               	cmpl	$0x9daa, %edx           # imm = 0x9DAA
                	je	<addr>
                	movl	$0x1a, %eax
                	popq	%rbx
@@ -560,9 +561,9 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movl	-0x30(%rbp), %ecx
                	movq	%rcx, %rdx
                	andq	$0x7, %rdx
+               	movl	-0x30(%rbp), %ecx
                	movq	%rcx, %rsi
                	sarq	$0x3, %rsi
                	andq	$0x1f, %rsi

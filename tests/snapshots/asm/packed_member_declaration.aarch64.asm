@@ -70,11 +70,10 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldur	w1, [x29, #-0x5]
-               	sbfx	x1, x1, #4, #20
+               	sbfx	x2, x1, #4, #20
                	mov	x17, #0x7ffff           // =524287
-               	cmp	w1, w17
+               	cmp	w2, w17
                	b.ne	<addr>
-               	ldur	w1, [x29, #-0x5]
                	and	x1, x1, #0xffffffffff00000f
                	orr	x1, x1, #0xfffff0
                	stur	w1, [x29, #-0x5]

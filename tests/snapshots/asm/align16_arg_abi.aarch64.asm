@@ -312,25 +312,11 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x20]
                	stur	x1, [x29, #-0x18]
                	ldur	x0, [x29, #-0x30]
-               	ldur	x1, [x29, #-0x28]
-               	mov	x17, #0x3e8             // =1000
-               	mul	x1, x1, x17
-               	add	x0, x1, x0
+               	mov	x17, #0x1388            // =5000
+               	add	x0, x0, x17
                	mov	x17, #0x1393            // =5011
                	cmp	x0, x17
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x20]
-               	ldur	x1, [x29, #-0x18]
-               	mov	x17, #0x3e8             // =1000
-               	mul	x1, x1, x17
-               	add	x0, x1, x0
-               	mov	x17, #-0x7a8            // =-1960
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x4, #0x3                // =3
@@ -752,6 +738,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x60
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret

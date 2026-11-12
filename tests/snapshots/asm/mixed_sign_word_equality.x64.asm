@@ -49,9 +49,9 @@ Disassembly of section .text:
                	cmpl	$0x51, %r12d
                	sete	%sil
                	movzbq	%sil, %rsi
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx,%rbx,4), %edx
-               	cmpl	$0x51, %edx
+               	leaq	<rip>, %rdx # <addr>
+               	movl	(%rdx,%rbx,4), %ecx
+               	cmpl	$0x51, %ecx
                	sete	%dil
                	movzbq	%dil, %rdi
                	cmpl	%edi, %esi
@@ -59,26 +59,25 @@ Disassembly of section .text:
                	cmpl	$-0x1, %r12d
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpl	$-0x1, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	cmpl	%edx, %esi
+               	cmpl	$-0x1, %ecx
+               	sete	%dil
+               	movzbq	%dil, %rdi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	cmpl	$-0x1, %eax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	movl	(%rcx,%rbx,4), %esi
-               	cmpl	$-0x1, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpl	%esi, %edx
+               	cmpl	$-0x1, %ecx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	cmpl	%ecx, %esi
                	jne	<addr>
                	cmpl	%eax, %r12d
                	jne	<addr>
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	sete	%al
                	movzbq	%al, %rax
-               	movl	(%rcx,%rbx,4), %ecx
+               	movl	(%rdx,%rbx,4), %ecx
                	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx

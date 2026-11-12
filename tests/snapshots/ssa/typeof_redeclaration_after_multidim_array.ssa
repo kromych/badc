@@ -79,14 +79,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v63  ImmData(2400)                                    -> x1
     v64  Imm(16)                                          -> x1
     v65  BinopI { op=add, lhs=v25, rhs_imm=16 }           -> x1
-    v66  Load { addr=v25, disp=16, kind=I32 pc_rel }      -> x1
-    v67  BinopI { op=ne, lhs=v66, rhs_imm=8 }             -> x1
-    v68  BinopI { op=ne, lhs=v67, rhs_imm=0 }             -> x2
-    v69  Imm(0)                                           -> x2
-    v70  Imm(0)                                           -> x2
-    v71  Imm(0)                                           -> x2
-    v72  Imm(0)                                           -> x2
-    terminator Bnz { cond=v67, target=b7, fall=b6 }   (exit_acc=v67)
+    v66  Imm(8)                                           -> x1
+    v67  Imm(0)                                           -> x1
+    v68  Imm(0)                                           -> x1
+    v69  Imm(0)                                           -> x1
+    v70  Imm(0)                                           -> x1
+    v71  Imm(0)                                           -> x1
+    v72  Imm(0)                                           -> x1
+    terminator Jmp(b6)   (exit_acc=v67)
   block 6  start_pc=0
     v73  ImmData(2400)                                    -> x1
     v74  Imm(16)                                          -> x1

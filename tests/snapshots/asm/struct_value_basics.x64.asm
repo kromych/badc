@@ -93,22 +93,21 @@ Disassembly of section .text:
                	movl	$0xc8, %edi
                	callq	<addr>
                	movl	%eax, -0x4(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	cmpl	$0x1e, %eax
+               	movl	-0x10(%rbp), %ecx
+               	cmpl	$0x1e, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
-               	movl	-0x8(%rbp), %ecx
-               	cmpl	$0x64, %ecx
+               	movl	-0x8(%rbp), %edx
+               	cmpl	$0x64, %edx
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
-               	movl	-0xc(%rbp), %edx
-               	addq	%rdx, %rax
-               	addq	%rcx, %rax
-               	movl	-0x4(%rbp), %ecx
+               	movl	-0xc(%rbp), %esi
+               	addq	%rsi, %rcx
+               	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	cmpl	$0x172, %eax            # imm = 0x172
                	je	<addr>

@@ -342,10 +342,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v685 Imm(0)                                           -> x0
     terminator Return(v685)   (exit_acc=v685)
   block 2  start_pc=0
-    v686 ImmData(16)                                      -> x0
-    v687 Load { addr=v329, disp=0, kind=I32 pc_rel }      -> x0
-    v688 Extend { value=v687, kind=I32 }                  -> x1
-    terminator Return(v687)   (exit_acc=v687)
+    v686 ImmData(16)                                      -> x1
+    v687 Load { addr=v329, disp=0, kind=I32 pc_rel }      -> x1
+    v688 Extend { value=v330, kind=I32 }                  -> x1
+    terminator Return(v330)   (exit_acc=v330)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

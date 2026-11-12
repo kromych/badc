@@ -88,11 +88,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movl	-0x8(%rbp), %ecx
-               	cmpl	$0x3f800000, %ecx       # imm = 0x3F800000
+               	movl	-0x8(%rbp), %esi
+               	cmpl	$0x3f800000, %esi       # imm = 0x3F800000
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movl	-0x8(%rbp), %esi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x10, %eax

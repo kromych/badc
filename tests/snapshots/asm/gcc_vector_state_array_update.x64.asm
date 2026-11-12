@@ -1247,22 +1247,23 @@ Disassembly of section .text:
                	movzbq	0x7(%rax), %rcx
                	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
                	movzbq	0x8(%rax), %rcx
-               	vpinsrb	$0x8, %ecx, %xmm0, %xmm0
+               	movapd	%xmm0, %xmm1
+               	vpinsrb	$0x8, %ecx, %xmm1, %xmm1
                	movzbq	0x9(%rax), %rcx
-               	vpinsrb	$0x9, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0x9, %ecx, %xmm1, %xmm1
                	movzbq	0xa(%rax), %rcx
-               	vpinsrb	$0xa, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0xa, %ecx, %xmm1, %xmm1
                	movzbq	0xb(%rax), %rcx
-               	vpinsrb	$0xb, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0xb, %ecx, %xmm1, %xmm1
                	movzbq	0xc(%rax), %rcx
-               	vpinsrb	$0xc, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0xc, %ecx, %xmm1, %xmm1
                	movzbq	0xd(%rax), %rcx
-               	vpinsrb	$0xd, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0xd, %ecx, %xmm1, %xmm1
                	movzbq	0xe(%rax), %rcx
-               	vpinsrb	$0xe, %ecx, %xmm0, %xmm0
+               	vpinsrb	$0xe, %ecx, %xmm1, %xmm1
                	movzbq	0xf(%rax), %rax
-               	vpinsrb	$0xf, %eax, %xmm0, %xmm0
-               	movups	%xmm0, -0x30(%rbp)
+               	vpinsrb	$0xf, %eax, %xmm1, %xmm1
+               	movups	%xmm1, -0x30(%rbp)
                	movq	-0x70(%rbp), %rax
                	movq	-0x68(%rbp), %rcx
                	movq	-0x60(%rbp), %rdx
@@ -1271,8 +1272,8 @@ Disassembly of section .text:
                	movq	-0x48(%rbp), %r8
                	movq	-0x40(%rbp), %r9
                	movq	-0x38(%rbp), %rbx
-               	movq	-0x30(%rbp), %r13
-               	movq	-0x28(%rbp), %r10
+               	vmovq	%xmm0, %r13
+               	vpextrq	$0x1, %xmm1, %r10
                	movq	%r10, 0xe8(%rsp)
                	movq	%rax, -0xc0(%rbp)
                	movq	%rcx, -0xb8(%rbp)

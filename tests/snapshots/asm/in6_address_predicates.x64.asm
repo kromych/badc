@@ -429,20 +429,20 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	-0x30(%rbp), %eax
-               	movl	-0x20(%rbp), %ecx
-               	cmpl	%ecx, %eax
+               	movl	-0x2c(%rbp), %ecx
+               	movl	-0x28(%rbp), %edx
+               	movl	-0x24(%rbp), %esi
+               	movl	-0x20(%rbp), %edi
+               	cmpl	%edi, %eax
                	jne	<addr>
-               	movl	-0x2c(%rbp), %eax
-               	movl	-0x1c(%rbp), %ecx
-               	cmpl	%ecx, %eax
+               	movl	-0x1c(%rbp), %eax
+               	cmpl	%eax, %ecx
                	jne	<addr>
-               	movl	-0x28(%rbp), %eax
-               	movl	-0x18(%rbp), %ecx
-               	cmpl	%ecx, %eax
+               	movl	-0x18(%rbp), %eax
+               	cmpl	%eax, %edx
                	jne	<addr>
-               	movl	-0x24(%rbp), %eax
-               	movl	-0x14(%rbp), %ecx
-               	cmpl	%ecx, %eax
+               	movl	-0x14(%rbp), %eax
+               	cmpl	%eax, %esi
                	jne	<addr>
                	movl	$0xd, %eax
                	leave

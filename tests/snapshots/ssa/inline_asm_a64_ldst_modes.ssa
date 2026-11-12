@@ -6,11 +6,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
-    v3   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
-    v4   Imm(0)                                           -> x0
-    v5   Imm(8)                                           -> x0
-    v6   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
-    v7   Load { addr=v1, disp=8, kind=I64 pc_rel }        -> x0
+    v3   Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x0
+    v4   Imm(0)                                           -> x1
+    v5   Imm(8)                                           -> x1
+    v6   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
+    v7   Load { addr=v1, disp=8, kind=I64 pc_rel }        -> x1
     v8   Imm(0)                                           -> x2
     v9   Load { addr=v1, disp=8, kind=I64 pc_rel }        -> x2
     v10  Imm(0)                                           -> x2
@@ -28,15 +28,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x7
     v23  Binop { op=add, lhs=v21, rhs=v7 }                -> x6
     v24  Imm(0)                                           -> x7
-    v25  Binop { op=add, lhs=v23, rhs=v3 }                -> x1
-    v26  Imm(0)                                           -> x6
-    v27  Load { addr=v1, disp=24, kind=I64 pc_rel }       -> x6
-    v28  Binop { op=sub, lhs=v7, rhs=v17 }                -> x0
-    v29  Binop { op=add, lhs=v25, rhs=v28 }               -> x0
-    v30  Imm(0)                                           -> x1
-    v31  Binop { op=add, lhs=v29, rhs=v17 }               -> x0
-    v32  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
-    v33  Binop { op=add, lhs=v31, rhs=v32 }               -> x0
+    v25  Binop { op=add, lhs=v23, rhs=v3 }                -> x6
+    v26  Imm(0)                                           -> x7
+    v27  Load { addr=v1, disp=24, kind=I64 pc_rel }       -> x7
+    v28  Binop { op=sub, lhs=v7, rhs=v17 }                -> x1
+    v29  Binop { op=add, lhs=v25, rhs=v28 }               -> x1
+    v30  Imm(0)                                           -> x6
+    v31  Binop { op=add, lhs=v29, rhs=v17 }               -> x1
+    v32  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x2
+    v33  Binop { op=add, lhs=v31, rhs=v3 }                -> x0
     v34  Extend { value=v33, kind=I32 }                   -> x1
     v35  Extend { value=v33, kind=I32 }                   -> x1
     terminator Return(v33)   (exit_acc=v33)

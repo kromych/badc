@@ -33,12 +33,11 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x10]
-               	cbz	x1, <addr>
-               	ldrb	w1, [x1]
+               	ldr	x0, [x0, <lo12>]
+               	cbz	x0, <addr>
+               	ldrb	w1, [x0]
                	cmp	w1, #0x79
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x10]
                	ldrb	w0, [x0, #0x2]
                	cmp	w0, #0x73
                	b.eq	<addr>

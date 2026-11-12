@@ -944,21 +944,22 @@ Disassembly of section .text:
                	movl	$0x0, <rip> # <addr>
                	movb	$0x0, <rip> # <addr>
                	callq	<addr>
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	cmpb	$0x0, (%rbx,%rax)
+               	movsbq	(%rbx,%rax), %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movsbq	(%rbx,%rax), %rdx
-               	movsbq	(%rcx,%rax), %rsi
-               	cmpl	%esi, %edx
+               	movsbq	(%rdx,%rax), %rsi
+               	cmpl	%esi, %ecx
                	jne	<addr>
                	incq	%rax
-               	cmpb	$0x0, (%rbx,%rax)
+               	movsbq	(%rbx,%rax), %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movsbq	(%rdx,%rax), %rdx
-               	movsbq	(%rcx,%rax), %rax
-               	cmpl	%eax, %edx
+               	leaq	<rip>, %rcx # <addr>
+               	movsbq	(%rcx,%rax), %rcx
+               	movsbq	(%rdx,%rax), %rax
+               	cmpl	%eax, %ecx
                	sete	%al
                	movzbq	%al, %rax
                	movl	<rip>, %ecx # <addr>
@@ -1061,7 +1062,6 @@ Disassembly of section .text:
                	movq	%rdi, -0x10(%rbp)
                	cmpl	$0x2, %ebx
                	jne	<addr>
-               	movq	-0x10(%rbp), %rdi
                	testq	%rdi, %rdi
                	je	<addr>
                	xorl	%eax, %eax

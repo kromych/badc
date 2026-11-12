@@ -686,8 +686,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v205 Extend { value=v204, kind=I32, nsw }             -> x1
     v206 ImmData(384)                                     -> x1
     v207 BinopI { op=add, lhs=v184, rhs_imm=36 }          -> x1
-    v208 Load { addr=v184, disp=36, kind=I32 pc_rel }     -> x1
-    v209 Binop { op=add, lhs=v204, rhs=v208 }             -> x0
+    v208 Imm(13)                                          -> x1
+    v209 BinopI { op=add, lhs=v204, rhs_imm=13 }          -> x0
     v210 Extend { value=v209, kind=I32, nsw }             -> x1
     v211 BinopI { op=ne, lhs=v209, rhs_imm=39 }           -> x0
     terminator Bz { cond=v211, target=b48, fall=b47 }   (exit_acc=v211)

@@ -41,7 +41,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	-0x38(%rbp), %rcx
                	negq	%rcx
                	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
                	cmpq	%r11, %rcx
@@ -51,18 +50,18 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	cmpq	$0x0, -0x38(%rbp)
+               	movq	-0x38(%rbp), %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movq	-0x38(%rbp), %rax
                	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x40(%rbp), %rcx
                	testq	%rax, %rax
                	je	<addr>
-               	cmpq	$0x0, -0x38(%rbp)
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
                	leave

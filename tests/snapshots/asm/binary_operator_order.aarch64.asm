@@ -16,28 +16,10 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	str	wzr, [x0, #0x20]
-               	ldrsw	x1, [x0, #0x20]
-               	add	x1, x1, #0x1
+               	mov	x1, #0x1                // =1
                	str	w1, [x0, #0x20]
-               	cmp	w1, #0x0
-               	cset	x3, ne
-               	cmp	w3, #0x1
-               	b.ne	<addr>
-               	cmp	w1, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x13               // =19
-               	ret
-               	ldrsw	x1, [x0, #0x20]
-               	add	x1, x1, #0x1
+               	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x20]
-               	cmp	w1, #0x0
-               	cset	x3, ne
-               	cmp	w3, #0x1
-               	b.ne	<addr>
-               	cmp	w1, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0x14               // =20
-               	ret
                	str	wzr, [x0, #0x20]
                	mov	x3, #0x1                // =1
                	str	w3, [x0, #0x20]

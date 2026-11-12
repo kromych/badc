@@ -59,13 +59,12 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	cmpl	$0x72, %ecx
                	jne	<addr>
-               	movq	0x8(%rax), %rax
-               	movsbq	0x1(%rax), %rax
-               	cmpl	$0x6f, %eax
+               	movq	0x8(%rax), %rcx
+               	movsbq	0x1(%rcx), %rcx
+               	cmpl	$0x6f, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	cmpq	$0x0, 0x10(%rax)
                	je	<addr>
                	movl	$0x5, %eax

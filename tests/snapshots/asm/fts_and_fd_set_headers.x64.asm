@@ -62,10 +62,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movq	0x30(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x30(%rax), %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
-               	movsbq	(%rcx), %rcx
+               	movsbq	(%rdi), %rcx
                	cmpl	$0x2e, %ecx
                	je	<addr>
                	movl	$0x4, %eax
@@ -73,7 +73,6 @@ Disassembly of section .text:
                	retq
                	movzwq	0x40(%rax), %r10
                	movq	%r10, (%rsp)
-               	movq	0x30(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF

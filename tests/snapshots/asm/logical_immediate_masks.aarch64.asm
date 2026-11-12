@@ -525,24 +525,23 @@ Disassembly of section .text:
                	and	x2, x1, #0x7
                	cmp	w2, #0x5
                	b.ne	<addr>
-               	ubfx	x1, x1, #3, #5
-               	cmp	w1, #0x5
+               	ubfx	x2, x1, #3, #5
+               	cmp	w2, #0x5
                	b.ne	<addr>
-               	ldur	w1, [x29, #-0x30]
                	ubfx	x2, x1, #8, #8
                	cmp	w2, #0xc8
                	b.ne	<addr>
-               	asr	x1, x1, #16
+               	asr	x2, x1, #16
                	mov	x17, #0x9daa            // =40362
-               	cmp	w1, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	ldur	w1, [x29, #-0x30]
                	and	x2, x1, #0x7
+               	ldur	w1, [x29, #-0x30]
                	ubfx	x3, x1, #3, #5
                	add	x2, x2, x3
                	ubfx	x3, x1, #8, #8

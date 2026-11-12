@@ -257,7 +257,7 @@ Disassembly of section .text:
                	mov	w4, v0.s[0]
                	mov	w5, v0.s[1]
                	mov	w6, v0.s[2]
-               	ldur	w7, [x29, #-0xe4]
+               	mov	w7, v0.s[3]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w0, w17
                	b.ne	<addr>

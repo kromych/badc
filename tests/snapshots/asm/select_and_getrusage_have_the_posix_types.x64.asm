@@ -65,13 +65,12 @@ Disassembly of section .text:
                	sarq	$0x3, %rdx
                	movq	%rax, %rsi
                	shrq	$0x3d, %rsi
-               	addq	%rsi, %rax
-               	sarq	$0x3, %rax
-               	movzbq	(%rcx,%rax), %rax
-               	movl	$0x1, %esi
-               	movl	-0x1b8(%rbp), %edi
-               	andq	$0x7, %rdi
-               	shlxq	%rdi, %rsi, %rsi
+               	addq	%rax, %rsi
+               	sarq	$0x3, %rsi
+               	movzbq	(%rcx,%rsi), %rsi
+               	movl	$0x1, %edi
+               	andq	$0x7, %rax
+               	shlxq	%rax, %rdi, %rax
                	orq	%rsi, %rax
                	movb	%al, (%rcx,%rdx)
                	xorl	%edx, %edx
@@ -118,13 +117,12 @@ Disassembly of section .text:
                	sarq	$0x3, %rdx
                	movq	%rax, %rsi
                	shrq	$0x3d, %rsi
-               	addq	%rsi, %rax
-               	sarq	$0x3, %rax
-               	movzbq	(%rcx,%rax), %rax
-               	movl	$0x1, %esi
-               	movl	-0x1b8(%rbp), %edi
-               	andq	$0x7, %rdi
-               	shlxq	%rdi, %rsi, %rsi
+               	addq	%rax, %rsi
+               	sarq	$0x3, %rsi
+               	movzbq	(%rcx,%rsi), %rsi
+               	movl	$0x1, %edi
+               	andq	$0x7, %rax
+               	shlxq	%rax, %rdi, %rax
                	orq	%rsi, %rax
                	movb	%al, (%rcx,%rdx)
                	xorl	%edx, %edx

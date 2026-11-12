@@ -36,17 +36,16 @@ Disassembly of section .text:
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
-               	cvttsd2si	%xmm0, %rax
+               	movq	%rcx, %xmm1
+               	movq	%rax, %xmm15
+               	vfmadd213sd	%xmm15, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm1) + xmm15
+               	cvttsd2si	%xmm1, %rax
                	addq	$0x2, %rax
                	cmpq	$0xe, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movsd	-0x8(%rbp), %xmm0
                	cvttsd2si	%xmm0, %rax
                	addq	$0x18, %rax
                	cmpq	$0x1c, %rax

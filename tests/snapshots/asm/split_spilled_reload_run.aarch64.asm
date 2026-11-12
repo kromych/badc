@@ -29,42 +29,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
                	mov	x1, #0x0                // =0
-               	ldr	x2, [x0]
-               	add	x2, x2, #0x1
+               	ldr	x8, [x0]
+               	add	x2, x8, #0x1
                	ldr	x3, [x0, #0x8]
                	add	x3, x3, #0x2
                	ldr	x4, [x0, #0x10]
                	add	x4, x4, #0x3
-               	ldr	x5, [x0, #0x18]
-               	add	x5, x5, #0x4
+               	ldr	x9, [x0, #0x18]
+               	add	x5, x9, #0x4
                	ldr	x6, [x0, #0x20]
                	add	x6, x6, #0x5
-               	ldr	x7, [x0, #0x28]
-               	add	x7, x7, #0x6
-               	ldr	x8, [x0, #0x30]
-               	add	x15, x8, #0x7
-               	ldr	x8, [x0, #0x38]
-               	add	x20, x8, #0x8
-               	ldr	x10, [x0]
-               	ldr	x9, [x0, #0x18]
-               	eor	x21, x10, x9
-               	ldr	x11, [x0, #0x8]
                	ldr	x10, [x0, #0x28]
-               	eor	x22, x11, x10
-               	ldr	x12, [x0, #0x10]
+               	add	x7, x10, #0x6
                	ldr	x11, [x0, #0x30]
-               	eor	x23, x12, x11
-               	eor	x24, x9, x8
-               	ldr	x8, [x0, #0x20]
-               	ldr	x9, [x0]
-               	add	x25, x8, x9
+               	add	x15, x11, #0x7
+               	ldr	x12, [x0, #0x38]
+               	add	x20, x12, #0x8
+               	eor	x21, x8, x9
                	ldr	x8, [x0, #0x8]
-               	add	x26, x10, x8
-               	ldr	x8, [x0, #0x10]
-               	add	x27, x11, x8
-               	ldr	x8, [x0, #0x38]
-               	ldr	x0, [x0, #0x18]
-               	add	x28, x8, x0
+               	eor	x22, x8, x10
+               	ldr	x9, [x0, #0x10]
+               	eor	x23, x9, x11
+               	ldr	x10, [x0, #0x18]
+               	eor	x24, x10, x12
+               	ldr	x11, [x0, #0x20]
+               	ldr	x12, [x0]
+               	add	x25, x11, x12
+               	ldr	x11, [x0, #0x28]
+               	add	x26, x11, x8
+               	ldr	x8, [x0, #0x30]
+               	add	x27, x8, x9
+               	ldr	x0, [x0, #0x38]
+               	add	x28, x0, x10
                	add	x8, x2, x2, lsl #1
                	add	x9, x3, x3, lsl #1
                	add	x10, x4, x4, lsl #1
@@ -140,47 +136,43 @@ Disassembly of section .text:
                	mov	x20, x1
                	ldr	x1, [x0]
                	add	x21, x1, #0x1
-               	ldr	x1, [x0, #0x8]
-               	add	x22, x1, #0x2
-               	ldr	x1, [x0, #0x10]
-               	add	x23, x1, #0x3
-               	ldr	x1, [x0, #0x18]
-               	add	x24, x1, #0x4
-               	ldr	x1, [x0, #0x20]
-               	add	x25, x1, #0x5
-               	ldr	x1, [x0, #0x28]
-               	add	x26, x1, #0x6
-               	ldr	x1, [x0, #0x30]
-               	add	x27, x1, #0x7
-               	ldr	x1, [x0, #0x38]
-               	add	x28, x1, #0x8
-               	ldr	x3, [x0]
+               	ldr	x2, [x0, #0x8]
+               	add	x22, x2, #0x2
+               	ldr	x2, [x0, #0x10]
+               	add	x23, x2, #0x3
                	ldr	x2, [x0, #0x18]
-               	eor	x16, x3, x2
-               	str	x16, [sp, #0x80]
-               	ldr	x4, [x0, #0x8]
+               	add	x24, x2, #0x4
+               	ldr	x3, [x0, #0x20]
+               	add	x25, x3, #0x5
                	ldr	x3, [x0, #0x28]
-               	eor	x16, x4, x3
-               	str	x16, [sp, #0x78]
-               	ldr	x5, [x0, #0x10]
+               	add	x26, x3, #0x6
                	ldr	x4, [x0, #0x30]
-               	eor	x16, x5, x4
-               	str	x16, [sp, #0x70]
-               	eor	x16, x2, x1
-               	str	x16, [sp, #0x68]
-               	ldr	x1, [x0, #0x20]
-               	ldr	x2, [x0]
-               	add	x16, x1, x2
-               	str	x16, [sp, #0x60]
+               	add	x27, x4, #0x7
+               	ldr	x5, [x0, #0x38]
+               	add	x28, x5, #0x8
+               	eor	x16, x1, x2
+               	str	x16, [sp, #0x80]
                	ldr	x1, [x0, #0x8]
-               	add	x16, x3, x1
-               	str	x16, [sp, #0x58]
-               	ldr	x1, [x0, #0x10]
+               	eor	x16, x1, x3
+               	str	x16, [sp, #0x78]
+               	ldr	x2, [x0, #0x10]
+               	eor	x16, x2, x4
+               	str	x16, [sp, #0x70]
+               	ldr	x3, [x0, #0x18]
+               	eor	x16, x3, x5
+               	str	x16, [sp, #0x68]
+               	ldr	x4, [x0, #0x20]
+               	ldr	x5, [x0]
+               	add	x16, x4, x5
+               	str	x16, [sp, #0x60]
+               	ldr	x4, [x0, #0x28]
                	add	x16, x4, x1
+               	str	x16, [sp, #0x58]
+               	ldr	x1, [x0, #0x30]
+               	add	x16, x1, x2
                	str	x16, [sp, #0x50]
-               	ldr	x1, [x0, #0x38]
-               	ldr	x0, [x0, #0x18]
-               	add	x16, x1, x0
+               	ldr	x0, [x0, #0x38]
+               	add	x16, x0, x3
                	str	x16, [sp, #0x88]
                	cbnz	w20, <addr>
                	ldr	x17, [sp, #0x88]

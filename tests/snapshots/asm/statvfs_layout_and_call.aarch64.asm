@@ -33,14 +33,13 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldur	x0, [x29, #-0xd0]
                	cbz	x0, <addr>
-               	ldur	x0, [x29, #-0x90]
-               	cbnz	x0, <addr>
+               	ldur	x1, [x29, #-0x90]
+               	cbnz	x1, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0xf0]
                	ldp	x20, x21, [sp], #0x100
                	ret
                	ldur	x1, [x29, #-0xc8]
-               	ldur	x0, [x29, #-0xd0]
                	cmp	x1, x0
                	b.hi	<addr>
                	ldur	x1, [x29, #-0xc0]

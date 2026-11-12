@@ -49,33 +49,33 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w0, w17
-               	cset	x2, eq
+               	cset	x3, eq
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	ldr	w3, [x1, x20, lsl #2]
+               	ldr	w2, [x1, x20, lsl #2]
                	mov	x17, #0xffffffff        // =4294967295
-               	cmp	w3, w17
-               	cset	x3, eq
-               	cmp	w2, w3
+               	cmp	w2, w17
+               	cset	x4, eq
+               	cmp	w3, w4
                	b.ne	<addr>
                	cmp	w21, w0
                	b.ne	<addr>
                	mov	x17, #0x80000000        // =2147483648
                	cmp	w0, w17
-               	cset	x2, eq
-               	ldr	w0, [x1, x20, lsl #2]
+               	cset	x0, eq
                	mov	x17, #0x80000000        // =2147483648
-               	cmp	w0, w17
-               	cset	x1, eq
-               	cmp	w2, w1
+               	cmp	w2, w17
+               	cset	x2, eq
+               	cmp	w0, w2
                	b.ne	<addr>
                	mov	x17, #-0x80000000       // =-2147483648
                	cmp	w21, w17
-               	cset	x1, eq
-               	mov	x17, #0x80000000        // =2147483648
-               	cmp	w0, w17
                	cset	x0, eq
-               	cmp	w1, w0
+               	ldr	w1, [x1, x20, lsl #2]
+               	mov	x17, #0x80000000        // =2147483648
+               	cmp	w1, w17
+               	cset	x1, eq
+               	cmp	w0, w1
                	b.ne	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x6

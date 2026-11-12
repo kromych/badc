@@ -92,9 +92,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Return(v74)   (exit_acc=v74)
   block 6  start_pc=0
     v76  ImmData(96)                                      -> x6
-    v77  Load { addr=v76, disp=0, kind=I64 pc_rel }       -> x6
-    v78  BinopI { op=add, lhs=v76, rhs_imm=8 }            -> x7
-    v79  Load { addr=v76, disp=8, kind=I64 pc_rel }       -> x7
+    v77  Load { addr=v76, disp=0, kind=I64 pc_rel }       -> x7
+    v78  BinopI { op=add, lhs=v76, rhs_imm=8 }            -> x6
+    v79  Load { addr=v76, disp=8, kind=I64 pc_rel }       -> x6
     v80  Imm(1)                                           -> x8
     v81  Imm(0)                                           -> x8
     v82  Imm(0)                                           -> x8
@@ -112,16 +112,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v94  Imm(0)                                           -> x8
     v95  Imm(0)                                           -> x8
     v96  BinopI { op=xor, lhs=v77, rhs_imm=0 }            -> x8
-    v97  BinopI { op=xor, lhs=v79, rhs_imm=68719476736 }  -> x7
-    v98  Binop { op=or, lhs=v77, rhs=v97 }                -> x6
-    v99  BinopI { op=ne, lhs=v98, rhs_imm=0 }             -> x7
-    v100 Imm(0)                                           -> x7
+    v97  BinopI { op=xor, lhs=v79, rhs_imm=68719476736 }  -> x8
+    v98  Binop { op=or, lhs=v77, rhs=v97 }                -> x7
+    v99  BinopI { op=ne, lhs=v98, rhs_imm=0 }             -> x8
+    v100 Imm(0)                                           -> x8
     terminator Bnz { cond=v98, target=b8, fall=b7 }   (exit_acc=v99)
   block 7  start_pc=0
-    v101 ImmData(96)                                      -> x6
-    v102 Load { addr=v76, disp=0, kind=I64 pc_rel }       -> x6
-    v103 BinopI { op=add, lhs=v76, rhs_imm=8 }            -> x6
-    v104 Load { addr=v76, disp=8, kind=I64 pc_rel }       -> x6
+    v101 ImmData(96)                                      -> x7
+    v102 Load { addr=v76, disp=0, kind=I64 pc_rel }       -> x7
+    v103 BinopI { op=add, lhs=v76, rhs_imm=8 }            -> x7
+    v104 Load { addr=v76, disp=8, kind=I64 pc_rel }       -> x7
     v105 Imm(64)                                          -> x7
     v106 Imm(0)                                           -> x7
     v107 Imm(0)                                           -> x7
@@ -130,7 +130,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v110 Imm(0)                                           -> x7
     v111 Imm(0)                                           -> x7
     v112 Imm(68719476736)                                 -> x7
-    v113 BinopI { op=ne, lhs=v104, rhs_imm=68719476736 }  -> x6
+    v113 BinopI { op=ne, lhs=v79, rhs_imm=68719476736 }   -> x6
     v114 Imm(0)                                           -> x7
     v115 Imm(0)                                           -> x7
     v116 Imm(0)                                           -> x7

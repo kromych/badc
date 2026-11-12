@@ -872,7 +872,6 @@ Disassembly of section .text:
                	movzbq	0x9(%rbx), %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	movups	(%rbx), %xmm0
                	pextrb	$0xf, %xmm0, %eax
                	movzbq	0xf(%rbx), %rcx
                	cmpl	%ecx, %eax

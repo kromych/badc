@@ -235,25 +235,24 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldrb	w0, [x4]
-               	ldrb	w6, [x4, #0x6]
-               	add	x0, x0, x6
-               	cmp	w0, #0x12
+               	ldrb	w6, [x4]
+               	ldrb	w0, [x4, #0x6]
+               	add	x6, x6, x0
+               	cmp	w6, #0x12
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldrb	w0, [x5]
-               	ldrb	w6, [x5, #0xa]
-               	add	x0, x0, x6
-               	cmp	w0, #0xe
+               	ldrb	w6, [x5]
+               	ldrb	w7, [x5, #0xa]
+               	add	x6, x6, x7
+               	cmp	w6, #0xe
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	ldrb	w0, [x4, #0x6]
                	cmp	w0, #0xc
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

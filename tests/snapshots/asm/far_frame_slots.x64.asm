@@ -355,33 +355,32 @@ Disassembly of section .text:
                	movzbq	0x3(%r10), %rcx
                	addq	%rcx, %rax
                	movl	%eax, -0x20(%rbp)
-               	movq	-0x18(%rbp), %rax
-               	movq	-0x28(%rbp), %rcx
-               	subq	%rcx, %rax
-               	movq	%rax, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rcx
+               	movq	-0x28(%rbp), %rax
+               	subq	%rax, %rcx
+               	movq	%rcx, -0x18(%rbp)
                	movsd	-0x10(%rbp), %xmm0
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
-               	movl	-0x20(%rbp), %ecx
-               	leaq	(%rbx,%rbx,2), %rdx
-               	leaq	0x3(%rbx), %rsi
-               	andq	$0xff, %rsi
-               	addq	%rsi, %rdx
-               	cmpl	%edx, %ecx
+               	movl	-0x20(%rbp), %edx
+               	leaq	(%rbx,%rbx,2), %rsi
+               	leaq	0x3(%rbx), %rdi
+               	andq	$0xff, %rdi
+               	addq	%rdi, %rsi
+               	cmpl	%esi, %edx
                	je	<addr>
                	movl	$0xb, %eax
                	leaq	-0x1050(%rbp), %rsp
                	popq	%rbx
                	leave
                	retq
-               	movq	-0x18(%rbp), %rcx
-               	movq	%rbx, %rdx
-               	shlq	$0x28, %rdx
-               	movq	-0x28(%rbp), %rsi
-               	subq	%rsi, %rdx
-               	cmpq	%rdx, %rcx
+               	movq	-0x18(%rbp), %rdx
+               	movq	%rbx, %rsi
+               	shlq	$0x28, %rsi
+               	subq	%rax, %rsi
+               	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0xc, %eax
                	leaq	-0x1050(%rbp), %rsp
@@ -391,10 +390,10 @@ Disassembly of section .text:
                	movsd	-0x10(%rbp), %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movq	%rcx, %xmm15
-               	divsd	%xmm15, %xmm1
+               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm15
+               	divsd	%xmm15, %xmm1
+               	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

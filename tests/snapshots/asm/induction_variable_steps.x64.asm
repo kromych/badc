@@ -189,16 +189,15 @@ Disassembly of section .text:
 
 <partition>:
                	xorl	%ecx, %ecx
-               	movl	0xfc(%rdi), %edx
+               	movl	0xfc(%rdi), %esi
                	movq	$-0x1, %rax
-               	movl	(%rdi,%rcx,4), %esi
-               	cmpl	%edx, %esi
+               	movl	(%rdi,%rcx,4), %edx
+               	cmpl	%esi, %edx
                	jge	<addr>
                	incq	%rax
-               	movl	(%rdi,%rax,4), %esi
-               	movl	(%rdi,%rcx,4), %r8d
-               	movl	%r8d, (%rdi,%rax,4)
-               	movl	%esi, (%rdi,%rcx,4)
+               	movl	(%rdi,%rax,4), %r8d
+               	movl	%edx, (%rdi,%rax,4)
+               	movl	%r8d, (%rdi,%rcx,4)
                	incq	%rcx
                	cmpl	$0x3f, %ecx
                	jl	<addr>

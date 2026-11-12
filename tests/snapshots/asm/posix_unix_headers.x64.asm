@@ -45,13 +45,12 @@ Disassembly of section .text:
                	movzbq	-0x80(%rbp), %rax
                	testb	$0x8, %al
                	je	<addr>
-               	movzbq	-0x7b(%rbp), %rax
-               	testb	$0x1, %al
+               	movzbq	-0x7b(%rbp), %rcx
+               	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movzbq	-0x80(%rbp), %rax
                	testb	$0x10, %al
                	je	<addr>
                	movl	$0x3, %eax

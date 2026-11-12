@@ -105,8 +105,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v21  Imm(7)                                           -> x1
     v22  Imm(0)                                           -> x1
     v23  ImmData(16)                                      -> x1
-    v24  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x1
-    v25  BinopI { op=add, lhs=v24, rhs_imm=1 }            -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Imm(1)                                           -> x1
     v26  Store { addr=v1, disp=0, value=v25, kind=I32 pc_rel } -> -
     v27  ImmData(20)                                      -> x1
     v28  Imm(-1)                                          -> x1

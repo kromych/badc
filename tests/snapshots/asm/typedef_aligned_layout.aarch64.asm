@@ -126,9 +126,6 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	fcvtzs	x0, d0
                	sub	x0, x0, #0x6
-               	ldursw	x1, [x29, #-0x8]
-               	sub	x1, x1, #0x1
-               	add	x0, x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

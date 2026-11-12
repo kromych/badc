@@ -116,17 +116,16 @@ Disassembly of section .text:
                	add	x0, x0, x5
                	ldr	d0, [x0]
                	fmov	d18, x2
-               	fmadd	d0, d0, d3, d18
-               	ldr	d2, [x0, #0x8]
+               	fmadd	d2, d0, d3, d18
+               	ldr	d6, [x0, #0x8]
                	add	x6, x4, #0x18
-               	ldr	d6, [x6]
-               	fmadd	d0, d2, d6, d0
-               	ldr	d2, [x0, #0x10]
+               	ldr	d7, [x6]
+               	fmadd	d2, d6, d7, d2
+               	ldr	d6, [x0, #0x10]
                	add	x4, x4, #0x30
-               	ldr	d6, [x4]
-               	fmadd	d0, d2, d6, d0
-               	ldr	d2, [x0]
-               	fsub	d0, d0, d2
+               	ldr	d7, [x4]
+               	fmadd	d2, d6, d7, d2
+               	fsub	d0, d2, d0
                	fmov	d17, x2
                	fcmpe	d0, d17
                	b.pl	<addr>

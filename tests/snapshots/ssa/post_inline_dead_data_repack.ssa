@@ -101,7 +101,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v87  Imm(8)                                           -> x1
     v88  BinopI { op=add, lhs=v86, rhs_imm=8 }            -> x1
     v89  Imm(20)                                          -> x1
-    v90  Imm(25)                                          -> x1
+    v90  Imm(25)                                          -> x8
     v91  Store { addr=v83, disp=16, value=v90, kind=I64 pc_rel } -> -
     v92  Imm(0)                                           -> x1
     v93  Load { addr=v83, disp=0, kind=I64 pc_rel }       -> x1
@@ -156,8 +156,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v130 ImmData(144)                                     -> x0
     v131 Imm(16)                                          -> x0
     v132 BinopI { op=add, lhs=v83, rhs_imm=16 }           -> x0
-    v133 Load { addr=v83, disp=16, kind=I64 pc_rel }      -> x8
-    v134 CallExt { binding_idx=0, args=[v120, v124, v116, v129, v133], fp_arg_mask=0x0 } -> x0
+    v133 Load { addr=v83, disp=16, kind=I64 pc_rel }      -> x0
+    v134 CallExt { binding_idx=0, args=[v120, v124, v116, v129, v90], fp_arg_mask=0x0 } -> x0
     v135 Imm(0)                                           -> x0
     terminator Return(v135)   (exit_acc=v135)
 ; --- SSA dump (ok=true) ent_pc=0 ---

@@ -23,13 +23,13 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x10]
-               	ldur	q1, [x29, #-0x10]
+               	ldr	d1, [x0, #0x10]
+               	ldur	q0, [x29, #-0x10]
                	mov	x16, #0x4141            // =16705
                	dup	v2.8h, w16
-               	cmeq	v1.8h, v1.8h, v2.8h
-               	shrn	v1.8b, v1.8h, #0x4
-               	mov	x0, v1.d[0]
+               	cmeq	v2.8h, v0.8h, v2.8h
+               	shrn	v2.8b, v2.8h, #0x4
+               	mov	x0, v2.d[0]
                	mov	x17, #0xff000000        // =4278190080
                	movk	x17, #0xff00, lsl #32
                	cmp	x0, x17
@@ -38,8 +38,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	d1, [x29, #-0x10]
-               	eor	v0.8b, v1.8b, v0.8b
+               	mov	d0, v0.d[0]
+               	eor	v0.8b, v0.8b, v1.8b
                	mov	x0, v0.d[0]
                	mov	x17, #0x800000000000    // =140737488355328
                	cmp	x0, x17

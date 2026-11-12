@@ -2003,25 +2003,25 @@ fn ent_pc=39 n_params=0 variadic=false locals=32
     v746 LocalAddr(-10)                                   -> x1
     v747 Imm(4)                                           -> x2
     v748 BinopI { op=add, lhs=v746, rhs_imm=4 }           -> x1
-    v749 Binop { op=ne, lhs=v745, rhs=v748 }              -> x0
-    v750 Imm(1)                                           -> x1
-    v751 Imm(0)                                           -> x1
+    v749 Binop { op=ne, lhs=v745, rhs=v748 }              -> x1
+    v750 Imm(1)                                           -> x2
+    v751 Imm(0)                                           -> x2
     terminator Bnz { cond=v749, target=b50, fall=b48 }   (exit_acc=v749)
   block 48  start_pc=0
-    v752 LocalAddr(-8)                                    -> x0
-    v753 BinopI { op=add, lhs=v744, rhs_imm=8 }           -> x0
-    v754 LoadLocal { off=-8, disp=8, kind=I64 }           -> x0
-    v755 BinopI { op=ne, lhs=v754, rhs_imm=3 }            -> x0
-    v756 BinopI { op=ne, lhs=v755, rhs_imm=0 }            -> x1
-    v757 Imm(0)                                           -> x1
-    v758 Imm(0)                                           -> x1
-    v759 Imm(0)                                           -> x1
-    v760 Imm(0)                                           -> x1
+    v752 LocalAddr(-8)                                    -> x1
+    v753 BinopI { op=add, lhs=v744, rhs_imm=8 }           -> x1
+    v754 LoadLocal { off=-8, disp=8, kind=I64 }           -> x1
+    v755 BinopI { op=ne, lhs=v754, rhs_imm=3 }            -> x1
+    v756 BinopI { op=ne, lhs=v755, rhs_imm=0 }            -> x2
+    v757 Imm(0)                                           -> x2
+    v758 Imm(0)                                           -> x2
+    v759 Imm(0)                                           -> x2
+    v760 Imm(0)                                           -> x2
     terminator Bnz { cond=v755, target=b50, fall=b49 }   (exit_acc=v755)
   block 49  start_pc=0
-    v761 LocalAddr(-8)                                    -> x0
-    v762 LoadLocal { off=-8, kind=I64 }                   -> x0
-    v763 Load { addr=v762, disp=0, kind=I32 }             -> x0
+    v761 LocalAddr(-8)                                    -> x1
+    v762 LoadLocal { off=-8, kind=I64 }                   -> x1
+    v763 Load { addr=v745, disp=0, kind=I32 }             -> x0
     v764 BinopI { op=ne, lhs=v763, rhs_imm=1 }            -> x0
     v765 Imm(0)                                           -> x1
     v766 Imm(0)                                           -> x1

@@ -489,24 +489,24 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v491 LocalAddr(-1)                                    -> x0
     v492 LoadLocal { off=-1, kind=U16 }                   -> x0
     v493 BinopI { op=and, lhs=v492, rhs_imm=4095 }        -> x1
-    v494 BinopI { op=shl, lhs=v492, rhs_imm=52 }          -> x0
-    v495 BinopI { op=shr, lhs=v494, rhs_imm=52 }          -> x0
-    v496 BinopI { op=ne, lhs=v495, rhs_imm=1810 }         -> x0
-    v497 Imm(0)                                           -> x1
+    v494 BinopI { op=shl, lhs=v492, rhs_imm=52 }          -> x1
+    v495 BinopI { op=shr, lhs=v494, rhs_imm=52 }          -> x1
+    v496 BinopI { op=ne, lhs=v495, rhs_imm=1810 }         -> x1
+    v497 Imm(0)                                           -> x2
     terminator Bnz { cond=v496, target=b22, fall=b18 }   (exit_acc=v496)
   block 18  start_pc=0
-    v505 LocalAddr(-1)                                    -> x0
-    v506 BinopI { op=add, lhs=v505, rhs_imm=2 }           -> x0
-    v507 Imm(11)                                          -> x0
-    v508 Imm(0)                                           -> x0
-    v509 Imm(0)                                           -> x0
-    v510 Imm(0)                                           -> x0
-    v511 Imm(0)                                           -> x0
-    v512 LocalAddr(-1)                                    -> x0
-    v513 Imm(-2048)                                       -> x0
-    v514 Imm(2048)                                        -> x0
-    v515 LoadLocal { off=-1, kind=U16 }                   -> x0
-    v516 BinopI { op=and, lhs=v515, rhs_imm=-4096 }       -> x0
+    v505 LocalAddr(-1)                                    -> x1
+    v506 BinopI { op=add, lhs=v505, rhs_imm=2 }           -> x1
+    v507 Imm(11)                                          -> x1
+    v508 Imm(0)                                           -> x1
+    v509 Imm(0)                                           -> x1
+    v510 Imm(0)                                           -> x1
+    v511 Imm(0)                                           -> x1
+    v512 LocalAddr(-1)                                    -> x1
+    v513 Imm(-2048)                                       -> x1
+    v514 Imm(2048)                                        -> x1
+    v515 LoadLocal { off=-1, kind=U16 }                   -> x1
+    v516 BinopI { op=and, lhs=v492, rhs_imm=-4096 }       -> x0
     v517 BinopI { op=or, lhs=v516, rhs_imm=2048 }         -> x0
     v518 StoreLocal { off=-1, value=v517, kind=I16 }      -> -
     v519 Imm(-9223372036854775808)                        -> x1

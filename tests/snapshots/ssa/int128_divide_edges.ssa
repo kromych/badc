@@ -816,21 +816,21 @@ fn ent_pc=6 n_params=2 variadic=false locals=8
     v14  LoadLocal { off=-41, disp=8, kind=I64 }          -> x1
     v15  Imm(0)                                           -> x1
     v16  BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x1
-    v17  BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x6
-    v18  Imm(0)                                           -> x6
-    v19  Imm(0)                                           -> x6
-    v20  BinopI { op=or, lhs=v16, rhs_imm=0 }             -> x6
+    v17  BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x8
+    v18  Imm(0)                                           -> x8
+    v19  Imm(0)                                           -> x8
+    v20  BinopI { op=or, lhs=v16, rhs_imm=0 }             -> x8
     terminator Bz { cond=v16, target=b18, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
     v21  LocalAddr(-41)                                   -> x1
     v22  LoadLocal { off=-41, kind=I64 }                  -> x1
     v23  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x1
     v24  LoadLocal { off=-41, disp=8, kind=I64 }          -> x1
-    v25  Imm(0)                                           -> x6
-    v26  BinopI { op=ugt, lhs=v12, rhs_imm=0 }            -> x6
+    v25  Imm(0)                                           -> x1
+    v26  BinopI { op=ugt, lhs=v12, rhs_imm=0 }            -> x1
     v27  Neg(v12)                                         -> x0
-    v28  Neg(v24)                                         -> x1
-    v29  Binop { op=sub, lhs=v28, rhs=v26 }               -> x1
+    v28  Neg(v1)                                          -> x6
+    v29  Binop { op=sub, lhs=v28, rhs=v26 }               -> x6
     v30  LocalAddr(-8)                                    -> x7
     v31  StoreLocal { off=-8, value=v27, kind=I64 }       -> -
     v32  BinopI { op=add, lhs=v30, rhs_imm=8 }            -> x0
@@ -4200,29 +4200,29 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v2548 ImmData(160)                                     -> x0
     v2549 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x0
     v2550 BinopI { op=mul, lhs=v2549, rhs_imm=6364136223846793005 } -> x0
-    v2551 BinopI { op=add, lhs=v2550, rhs_imm=1442695040888963407 } -> x1
+    v2551 BinopI { op=add, lhs=v2550, rhs_imm=1442695040888963407 } -> x0
     v2552 Store { addr=v2548, disp=0, value=v2551, kind=I64 pc_rel } -> -
-    v2553 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x0
-    v2554 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x0
-    v2555 BinopI { op=shru, lhs=v2551, rhs_imm=29 }        -> x0
+    v2553 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x1
+    v2554 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x1
+    v2555 BinopI { op=shru, lhs=v2551, rhs_imm=29 }        -> x1
     v2556 Binop { op=xor, lhs=v2551, rhs=v2555 }           -> x1
-    v2557 Imm(0)                                           -> x0
-    v2558 Imm(0)                                           -> x0
-    v2559 Imm(0)                                           -> x0
-    v2560 Imm(0)                                           -> x0
-    v2561 Imm(0)                                           -> x0
-    v2562 Imm(0)                                           -> x0
-    v2563 Imm(0)                                           -> x0
-    v2564 Imm(64)                                          -> x0
-    v2565 Imm(0)                                           -> x0
-    v2566 Imm(0)                                           -> x0
-    v2567 Imm(0)                                           -> x0
-    v2568 Imm(0)                                           -> x0
-    v2569 Imm(0)                                           -> x0
-    v2570 Imm(0)                                           -> x0
-    v2571 ImmData(160)                                     -> x0
-    v2572 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x0
-    v2573 BinopI { op=mul, lhs=v2572, rhs_imm=6364136223846793005 } -> x0
+    v2557 Imm(0)                                           -> x2
+    v2558 Imm(0)                                           -> x2
+    v2559 Imm(0)                                           -> x2
+    v2560 Imm(0)                                           -> x2
+    v2561 Imm(0)                                           -> x2
+    v2562 Imm(0)                                           -> x2
+    v2563 Imm(0)                                           -> x2
+    v2564 Imm(64)                                          -> x2
+    v2565 Imm(0)                                           -> x2
+    v2566 Imm(0)                                           -> x2
+    v2567 Imm(0)                                           -> x2
+    v2568 Imm(0)                                           -> x2
+    v2569 Imm(0)                                           -> x2
+    v2570 Imm(0)                                           -> x2
+    v2571 ImmData(160)                                     -> x2
+    v2572 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x2
+    v2573 BinopI { op=mul, lhs=v2551, rhs_imm=6364136223846793005 } -> x0
     v2574 BinopI { op=add, lhs=v2573, rhs_imm=1442695040888963407 } -> x0
     v2575 Store { addr=v2548, disp=0, value=v2574, kind=I64 pc_rel } -> -
     v2576 Load { addr=v2548, disp=0, kind=I64 pc_rel }     -> x2
@@ -5004,23 +5004,23 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v3314 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x1
     v3315 BinopI { op=shru, lhs=v3311, rhs_imm=29 }        -> x1
     v3316 Binop { op=xor, lhs=v3311, rhs=v3315 }           -> x1
-    v3317 Imm(0)                                           -> x0
-    v3318 Imm(0)                                           -> x0
-    v3319 Imm(0)                                           -> x0
-    v3320 Imm(0)                                           -> x0
-    v3321 Imm(0)                                           -> x0
-    v3322 Imm(0)                                           -> x0
-    v3323 Imm(0)                                           -> x0
-    v3324 Imm(64)                                          -> x0
-    v3325 Imm(0)                                           -> x0
-    v3326 Imm(0)                                           -> x0
-    v3327 Imm(0)                                           -> x0
-    v3328 Imm(0)                                           -> x0
-    v3329 Imm(0)                                           -> x0
-    v3330 Imm(0)                                           -> x0
-    v3331 ImmData(160)                                     -> x0
-    v3332 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x0
-    v3333 BinopI { op=mul, lhs=v3332, rhs_imm=6364136223846793005 } -> x0
+    v3317 Imm(0)                                           -> x2
+    v3318 Imm(0)                                           -> x2
+    v3319 Imm(0)                                           -> x2
+    v3320 Imm(0)                                           -> x2
+    v3321 Imm(0)                                           -> x2
+    v3322 Imm(0)                                           -> x2
+    v3323 Imm(0)                                           -> x2
+    v3324 Imm(64)                                          -> x2
+    v3325 Imm(0)                                           -> x2
+    v3326 Imm(0)                                           -> x2
+    v3327 Imm(0)                                           -> x2
+    v3328 Imm(0)                                           -> x2
+    v3329 Imm(0)                                           -> x2
+    v3330 Imm(0)                                           -> x2
+    v3331 ImmData(160)                                     -> x2
+    v3332 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x2
+    v3333 BinopI { op=mul, lhs=v3311, rhs_imm=6364136223846793005 } -> x0
     v3334 BinopI { op=add, lhs=v3333, rhs_imm=1442695040888963407 } -> x0
     v3335 Store { addr=v3308, disp=0, value=v3334, kind=I64 pc_rel } -> -
     v3336 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x2
@@ -5048,23 +5048,23 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v3358 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x1
     v3359 BinopI { op=shru, lhs=v3355, rhs_imm=29 }        -> x1
     v3360 Binop { op=xor, lhs=v3355, rhs=v3359 }           -> x1
-    v3361 Imm(0)                                           -> x0
-    v3362 Imm(0)                                           -> x0
-    v3363 Imm(0)                                           -> x0
-    v3364 Imm(0)                                           -> x0
-    v3365 Imm(0)                                           -> x0
-    v3366 Imm(0)                                           -> x0
-    v3367 Imm(0)                                           -> x0
-    v3368 Imm(64)                                          -> x0
-    v3369 Imm(0)                                           -> x0
-    v3370 Imm(0)                                           -> x0
-    v3371 Imm(0)                                           -> x0
-    v3372 Imm(0)                                           -> x0
-    v3373 Imm(0)                                           -> x0
-    v3374 Imm(0)                                           -> x0
-    v3375 ImmData(160)                                     -> x0
-    v3376 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x0
-    v3377 BinopI { op=mul, lhs=v3376, rhs_imm=6364136223846793005 } -> x0
+    v3361 Imm(0)                                           -> x2
+    v3362 Imm(0)                                           -> x2
+    v3363 Imm(0)                                           -> x2
+    v3364 Imm(0)                                           -> x2
+    v3365 Imm(0)                                           -> x2
+    v3366 Imm(0)                                           -> x2
+    v3367 Imm(0)                                           -> x2
+    v3368 Imm(64)                                          -> x2
+    v3369 Imm(0)                                           -> x2
+    v3370 Imm(0)                                           -> x2
+    v3371 Imm(0)                                           -> x2
+    v3372 Imm(0)                                           -> x2
+    v3373 Imm(0)                                           -> x2
+    v3374 Imm(0)                                           -> x2
+    v3375 ImmData(160)                                     -> x2
+    v3376 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x2
+    v3377 BinopI { op=mul, lhs=v3355, rhs_imm=6364136223846793005 } -> x0
     v3378 BinopI { op=add, lhs=v3377, rhs_imm=1442695040888963407 } -> x0
     v3379 Store { addr=v3308, disp=0, value=v3378, kind=I64 pc_rel } -> -
     v3380 Load { addr=v3308, disp=0, kind=I64 pc_rel }     -> x2

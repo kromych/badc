@@ -46,21 +46,18 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0x9                // =9
                	str	w1, [x0, #0x20]
-               	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0xc]
-               	cmp	w1, #0x3e8
+               	adrp	x0, <page>
+               	ldrsw	x0, [x0, #0xc]
+               	cmp	w0, #0x3e8
                	b.ne	<addr>
-               	ldrsw	x0, [x0, #0x20]
-               	cmp	w0, #0x9
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret

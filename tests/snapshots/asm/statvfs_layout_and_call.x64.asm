@@ -43,7 +43,8 @@ Disassembly of section .text:
                	je	<addr>
                	cmpq	$0x0, -0xd8(%rbp)
                	je	<addr>
-               	cmpq	$0x0, -0xd0(%rbp)
+               	movq	-0xd0(%rbp), %rax
+               	testq	%rax, %rax
                	je	<addr>
                	cmpq	$0x0, -0x90(%rbp)
                	jne	<addr>
@@ -51,7 +52,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	-0xc8(%rbp), %rcx
-               	movq	-0xd0(%rbp), %rax
                	cmpq	%rax, %rcx
                	ja	<addr>
                	movq	-0xc0(%rbp), %rcx

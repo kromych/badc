@@ -618,16 +618,15 @@ Disassembly of section .text:
                	movq	-0xa0(%rbp), %rax
                	testq	%rsi, %rsi
                	jge	<addr>
-               	movq	-0x98(%rbp), %rcx
                	testq	%rax, %rax
-               	seta	%sil
-               	movzbq	%sil, %rsi
+               	seta	%cl
+               	movzbq	%cl, %rcx
                	negq	%rax
-               	negq	%rcx
-               	subq	%rsi, %rcx
+               	negq	%rsi
+               	subq	%rcx, %rsi
                	leaq	-0x40(%rbp), %rdi
                	movq	%rax, -0x40(%rbp)
-               	movq	%rcx, -0x38(%rbp)
+               	movq	%rsi, -0x38(%rbp)
                	movq	-0x90(%rbp), %rax
                	movq	-0x88(%rbp), %rcx
                	testq	%rcx, %rcx
@@ -2133,13 +2132,12 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax
-               	movabsq	$0x14057b7ef767814f, %rcx # imm = 0x14057B7EF767814F
-               	addq	%rax, %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	%rcx, %rax
-               	shrq	$0x1d, %rax
+               	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
+               	addq	%r11, %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	%rax, %rcx
+               	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
-               	movq	<rip>, %rax # <addr>
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
@@ -2536,7 +2534,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
-               	movq	<rip>, %rax # <addr>
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F
@@ -2556,7 +2553,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x1d, %rcx
                	xorq	%rax, %rcx
-               	movq	<rip>, %rax # <addr>
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax
                	movabsq	$0x14057b7ef767814f, %r11 # imm = 0x14057B7EF767814F

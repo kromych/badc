@@ -11,7 +11,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(1)                                           -> x0
-    v8   StoreLocal { off=-1, value=v7, kind=I32 }        -> -
+    v8   Imm(0)                                           -> x0
     v9   Imm(3)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(2)                                           -> x0
@@ -86,16 +86,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v80  LocalAddr(-1)                                    -> x0
     v81  Imm(0)                                           -> x0
     v82  Imm(0)                                           -> x0
-    v83  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v84  BinopI { op=ne, lhs=v83, rhs_imm=1 }             -> x0
-    terminator Bz { cond=v84, target=b2, fall=b1 }   (exit_acc=v84)
+    v83  Imm(1)                                           -> x0
+    v84  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v84)
   block 1  start_pc=0
-    v109 Imm(12)                                          -> x0
-    v110 LifetimeEnd(0)                                   -> -
-    v111 LifetimeEnd(0)                                   -> -
-    v112 LifetimeEnd(-1)                                  -> -
-    terminator Return(v109)   (exit_acc=v109)
-  block 2  start_pc=0
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0

@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	-0x8(%rbp), %edi
+               	movq	%rax, %rdi
                	movslq	<rip>, %rcx # <addr>
                	leaq	0x1(%rcx), %r8
                	movl	%r8d, <rip> # <addr>

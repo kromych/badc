@@ -35,18 +35,17 @@ Disassembly of section .text:
 <partition>:
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	movl	(%rdi,%rdx,4), %ecx
+               	movl	(%rdi,%rdx,4), %r8d
                	leaq	-0x1(%rsi), %rax
                	cmpl	%edx, %esi
                	jge	<addr>
-               	movl	(%rdi,%rsi,4), %r8d
-               	cmpl	%ecx, %r8d
+               	movl	(%rdi,%rsi,4), %ecx
+               	cmpl	%r8d, %ecx
                	jg	<addr>
                	incq	%rax
-               	movl	(%rdi,%rax,4), %r8d
-               	movl	(%rdi,%rsi,4), %r9d
-               	movl	%r9d, (%rdi,%rax,4)
-               	movl	%r8d, (%rdi,%rsi,4)
+               	movl	(%rdi,%rax,4), %r9d
+               	movl	%ecx, (%rdi,%rax,4)
+               	movl	%r9d, (%rdi,%rsi,4)
                	incq	%rsi
                	cmpl	%edx, %esi
                	jl	<addr>

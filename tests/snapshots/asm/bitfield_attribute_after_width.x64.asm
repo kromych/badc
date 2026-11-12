@@ -140,11 +140,11 @@ Disassembly of section .text:
                	jne	<addr>
                	movb	$0x12, -0x8(%rbp)
                	movzwq	-0x8(%rbp), %rax
-               	shlq	$0x34, %rax
-               	sarq	$0x34, %rax
-               	cmpl	$0x712, %eax            # imm = 0x712
+               	movq	%rax, %rcx
+               	shlq	$0x34, %rcx
+               	sarq	$0x34, %rcx
+               	cmpl	$0x712, %ecx            # imm = 0x712
                	jne	<addr>
-               	movzwq	-0x8(%rbp), %rax
                	andq	$-0x1000, %rax          # imm = 0xF000
                	orq	$0x800, %rax            # imm = 0x800
                	movw	%ax, -0x8(%rbp)

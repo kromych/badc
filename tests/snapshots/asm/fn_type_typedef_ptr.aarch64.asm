@@ -99,8 +99,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	ldur	x1, [x29, #-0x8]
-               	blr	x1
+               	bl	<addr>
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

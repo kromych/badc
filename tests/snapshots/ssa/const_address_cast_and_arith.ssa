@@ -118,15 +118,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v72  Load { addr=v71, disp=0, kind=I64 pc_rel }       -> x6
     v73  ImmData(144)                                     -> x7
     v74  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x7
-    v75  Binop { op=ne, lhs=v72, rhs=v60 }                -> x0
-    v76  Imm(0)                                           -> x6
+    v75  Binop { op=ne, lhs=v72, rhs=v60 }                -> x6
+    v76  Imm(0)                                           -> x7
     terminator Bnz { cond=v75, target=b22, fall=b21 }   (exit_acc=v75)
   block 21  start_pc=0
-    v77  ImmData(160)                                     -> x0
-    v78  Load { addr=v77, disp=0, kind=I64 pc_rel }       -> x0
-    v79  ImmData(144)                                     -> x6
-    v80  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x6
-    v81  Binop { op=ne, lhs=v78, rhs=v80 }                -> x0
+    v77  ImmData(160)                                     -> x6
+    v78  Load { addr=v77, disp=0, kind=I64 pc_rel }       -> x6
+    v79  ImmData(144)                                     -> x7
+    v80  Load { addr=v59, disp=0, kind=I64 pc_rel }       -> x7
+    v81  Binop { op=ne, lhs=v78, rhs=v60 }                -> x0
     v82  Imm(0)                                           -> x6
     v83  Imm(0)                                           -> x6
     v84  Imm(0)                                           -> x6
@@ -179,17 +179,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v111 Load { addr=v110, disp=0, kind=I64 pc_rel }      -> x1
     v112 ImmData(184)                                     -> x2
     v113 Load { addr=v98, disp=0, kind=I64 pc_rel }       -> x2
-    v114 Binop { op=ne, lhs=v111, rhs=v99 }               -> x0
+    v114 Binop { op=ne, lhs=v111, rhs=v99 }               -> x1
     terminator Bz { cond=v114, target=b33, fall=b32 }   (exit_acc=v114)
   block 32  start_pc=0
     v115 Imm(16)                                          -> x0
     terminator Return(v115)   (exit_acc=v115)
   block 33  start_pc=0
-    v116 ImmData(208)                                     -> x0
-    v117 Load { addr=v116, disp=0, kind=I64 pc_rel }      -> x0
-    v118 ImmData(184)                                     -> x1
-    v119 Load { addr=v98, disp=0, kind=I64 pc_rel }       -> x1
-    v120 Binop { op=ne, lhs=v117, rhs=v119 }              -> x0
+    v116 ImmData(208)                                     -> x1
+    v117 Load { addr=v116, disp=0, kind=I64 pc_rel }      -> x1
+    v118 ImmData(184)                                     -> x2
+    v119 Load { addr=v98, disp=0, kind=I64 pc_rel }       -> x2
+    v120 Binop { op=ne, lhs=v117, rhs=v99 }               -> x0
     terminator Bz { cond=v120, target=b35, fall=b34 }   (exit_acc=v120)
   block 34  start_pc=0
     v121 Imm(17)                                          -> x0

@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movl	<rip>, %esi # <addr>
                	movl	<rip>, %edi # <addr>
                	movl	<rip>, %r8d # <addr>
-               	movzwq	<rip>, %r9 # <addr>
-               	cmpl	$0x1, %r9d
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movzwq	<rip>, %r9 # <addr>
                	cmpl	$0x2, %r9d

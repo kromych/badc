@@ -20,17 +20,15 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	w1, [x29, #-0x8]
                	ldur	w0, [x29, #-0x4]
-               	lsl	x1, x1, #2
-               	orr	x1, x1, x0, lsr #30
-               	lsl	x0, x0, #2
-               	ldur	w2, [x29, #-0x8]
-               	ldur	w3, [x29, #-0x4]
-               	add	x1, x1, x2
-               	add	x2, x0, x3
-               	cmp	w2, w0
-               	cinc	x0, x1, lo
-               	mov	w0, w0
-               	orr	x0, x0, x2, lsl #32
+               	lsl	x2, x1, #2
+               	orr	x3, x2, x0, lsr #30
+               	lsl	x2, x0, #2
+               	add	x1, x3, x1
+               	add	x0, x2, x0
+               	cmp	w0, w2
+               	cinc	x1, x1, lo
+               	mov	w1, w1
+               	orr	x0, x1, x0, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -42,17 +40,15 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	w1, [x29, #-0x8]
                	ldur	w0, [x29, #-0x4]
-               	lsl	x1, x1, #3
-               	orr	x1, x1, x0, lsr #29
-               	lsl	x0, x0, #3
-               	ldur	w2, [x29, #-0x8]
-               	ldur	w3, [x29, #-0x4]
-               	add	x1, x1, x2
-               	add	x2, x0, x3
-               	cmp	w2, w0
-               	cinc	x0, x1, lo
-               	mov	w0, w0
-               	orr	x0, x0, x2, lsl #32
+               	lsl	x2, x1, #3
+               	orr	x3, x2, x0, lsr #29
+               	lsl	x2, x0, #3
+               	add	x1, x3, x1
+               	add	x0, x2, x0
+               	cmp	w0, w2
+               	cinc	x1, x1, lo
+               	mov	w1, w1
+               	orr	x0, x1, x0, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

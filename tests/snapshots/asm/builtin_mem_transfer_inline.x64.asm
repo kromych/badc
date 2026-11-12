@@ -29,17 +29,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x420, %rsp            # imm = 0x420
-               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
-               	movabsq	$-0x123456789abcdf0, %rcx # imm = 0xFEDCBA9876543210
-               	movq	%rdx, -0x418(%rbp)
-               	movq	%rcx, -0x410(%rbp)
+               	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
+               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
+               	movq	%rcx, -0x418(%rbp)
+               	movq	%rdx, -0x410(%rbp)
                	movl	$0xdeadbeef, -0x408(%rbp) # imm = 0xDEADBEEF
                	movb	$0x5a, -0x404(%rbp)
                	movb	$0x0, -0x403(%rbp)
                	movw	$0x0, -0x402(%rbp)
-               	movq	-0x410(%rbp), %rax
-               	cmpq	%rcx, %rax
-               	jne	<addr>
                	movl	-0x408(%rbp), %eax
                	cmpl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
                	jne	<addr>

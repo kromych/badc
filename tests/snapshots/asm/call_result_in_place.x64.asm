@@ -64,7 +64,6 @@ Disassembly of section .text:
                	movq	0x18(%rax), %rcx
                	movq	(%rax), %rdx
                	movq	0x8(%rax), %rsi
-               	movq	<rip>, %rax # <addr>
                	movq	0x10(%rax), %rdi
                	movq	-0x10(%rbp), %rax
                	movq	%rcx, (%rax)

@@ -87,9 +87,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x0, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
                	movl	<rip>, %ecx # <addr>

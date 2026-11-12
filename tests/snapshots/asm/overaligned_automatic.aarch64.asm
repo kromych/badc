@@ -49,9 +49,6 @@ Disassembly of section .text:
                	ldrsw	x2, [sp, #0x6c]
                	cmp	w2, #0x16
                	b.ne	<addr>
-               	ldr	x2, [sp, #0x40]
-               	cmp	x2, #0x21
-               	b.ne	<addr>
                	orr	x0, x0, x1
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3

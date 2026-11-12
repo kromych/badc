@@ -18,17 +18,15 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	w1, [x0]
                	ldr	w2, [x0, #0x4]
-               	ldr	w3, [x0, #0x10]
+               	ldr	w0, [x0, #0x10]
                	cmp	w1, #0x1
                	b.ne	<addr>
                	cmp	w2, #0x2
                	b.ne	<addr>
-               	cmp	w3, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	w1, [x0]
-               	ldr	w0, [x0, #0x10]
                	add	x0, x1, x0
                	cmp	w0, #0x6
                	b.eq	<addr>

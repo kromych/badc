@@ -519,11 +519,11 @@ Disassembly of section .text:
                	andq	$0x7, %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>
-               	sarq	$0x3, %rax
-               	andq	$0x1f, %rax
-               	cmpl	$0x11, %eax
+               	movq	%rax, %rcx
+               	sarq	$0x3, %rcx
+               	andq	$0x1f, %rcx
+               	cmpl	$0x11, %ecx
                	jne	<addr>
-               	movl	-0x258(%rbp), %eax
                	sarq	$0x8, %rax
                	andq	$0xfff, %rax            # imm = 0xFFF
                	movq	%rbx, %rcx

@@ -1962,36 +1962,36 @@ fn ent_pc=33 n_params=0 variadic=false locals=5
     v983 ImmData(144)                                     -> x1
     v984 Store { addr=v967, disp=0, value=v981, kind=I8 pc_rel } -> -
     v985 Call { target_pc=25, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v986 ImmData(79)                                      -> x1
+    v986 ImmData(79)                                      -> x2
     v987 Imm(0)                                           -> x0
     terminator Jmp(b124)   (exit_acc=v987)
   block 122  start_pc=0
-    v1024 ImmData(144)                                     -> x2
-    v1025 Extend { value=v996, kind=I32 }                  -> x2
-    v1026 Binop { op=add, lhs=v967, rhs=v996 }             -> x2
-    v1027 LoadIndexed { base=v967, index=v996, scale=1, kind=I8 } -> x2
+    v1024 ImmData(144)                                     -> x6
+    v1025 Extend { value=v996, kind=I32 }                  -> x6
+    v1026 Binop { op=add, lhs=v967, rhs=v996 }             -> x6
+    v1027 LoadIndexed { base=v967, index=v996, scale=1, kind=I8 } -> x6
     v1028 Binop { op=add, lhs=v986, rhs=v996 }             -> x6
     v1029 LoadIndexed { base=v986, index=v996, scale=1, kind=I8 } -> x6
-    v1030 Binop { op=eq, lhs=v1027, rhs=v1029 }            -> x2
+    v1030 Binop { op=eq, lhs=v1000, rhs=v1029 }            -> x1
     v1031 Imm(0)                                           -> x6
     terminator Bz { cond=v1030, target=b125, fall=b123 }   (exit_acc=v1030)
   block 123  start_pc=0
-    v1001 Extend { value=v996, kind=I32 }                  -> x2
+    v1001 Extend { value=v996, kind=I32 }                  -> x1
     v1002 BinopI { op=add, lhs=v996, rhs_imm=1 }           -> x0
-    v1003 Extend { value=v1002, kind=I32, nsw }            -> x2
+    v1003 Extend { value=v1002, kind=I32, nsw }            -> x1
     terminator Jmp(b124)   (exit_acc=v1002)
   block 124  start_pc=0
     v996 Phi { incoming=[b121:v987, b123:v1002], kind=I64 } -> x0
-    v997 ImmData(144)                                     -> x2
-    v998 Extend { value=v996, kind=I32 }                  -> x2
-    v999 Binop { op=add, lhs=v967, rhs=v996 }             -> x2
-    v1000 LoadIndexed { base=v967, index=v996, scale=1, kind=I8 } -> x2
+    v997 ImmData(144)                                     -> x1
+    v998 Extend { value=v996, kind=I32 }                  -> x1
+    v999 Binop { op=add, lhs=v967, rhs=v996 }             -> x1
+    v1000 LoadIndexed { base=v967, index=v996, scale=1, kind=I8 } -> x1
     terminator Bz { cond=v1000, target=b125, fall=b122 }   (exit_acc=v1000)
   block 125  start_pc=0
-    v1004 ImmData(144)                                     -> x2
+    v1004 ImmData(144)                                     -> x1
     v1005 Extend { value=v996, kind=I32 }                  -> x6
     v1006 Binop { op=add, lhs=v1004, rhs=v996 }            -> x6
-    v1007 LoadIndexed { base=v1004, index=v996, scale=1, kind=I8 } -> x2
+    v1007 LoadIndexed { base=v1004, index=v996, scale=1, kind=I8 } -> x1
     v1008 Binop { op=add, lhs=v986, rhs=v996 }             -> x6
     v1009 LoadIndexed { base=v986, index=v996, scale=1, kind=I8 } -> x0
     v1010 Binop { op=eq, lhs=v1007, rhs=v1009 }            -> x0
@@ -2186,10 +2186,10 @@ fn ent_pc=33 n_params=0 variadic=false locals=5
     terminator Bz { cond=v1256, target=b161, fall=b153 }   (exit_acc=v1256)
   block 153  start_pc=0
     v1277 LocalAddr(-2)                                    -> x0
-    v1278 LoadLocal { off=-2, kind=I64 }                   -> x7
-    terminator Bz { cond=v1278, target=b155, fall=b154 }   (exit_acc=v1278)
+    v1278 LoadLocal { off=-2, kind=I64 }                   -> x0
+    terminator Bz { cond=v1254, target=b155, fall=b154 }   (exit_acc=v1254)
   block 154  start_pc=0
-    v1333 CallExt { binding_idx=3, args=[v1278], fp_arg_mask=0x0 } -> x0
+    v1333 CallExt { binding_idx=3, args=[v1254], fp_arg_mask=0x0 } -> x0
     v1334 ImmData(228)                                     -> x0
     v1335 Load { addr=v1334, disp=0, kind=I32 pc_rel }     -> x0
     v1336 BinopI { op=add, lhs=v1335, rhs_imm=1 }          -> x0

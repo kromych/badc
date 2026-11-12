@@ -58,12 +58,6 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x9, %eax
-               	je	<addr>
-               	movl	$0xa, %eax
-               	popq	%rbp
-               	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -71,5 +65,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %eax
                	popq	%rbp
                	retq

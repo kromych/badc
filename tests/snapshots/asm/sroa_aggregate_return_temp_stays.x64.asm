@@ -32,22 +32,21 @@ Disassembly of section .text:
                	movq	%rdi, -0x8(%rbp)
                	movl	-0x8(%rbp), %ecx
                	movl	-0x4(%rbp), %eax
-               	shlq	$0x2, %rcx
+               	movq	%rcx, %rdx
+               	shlq	$0x2, %rdx
+               	movq	%rax, %rsi
+               	shrq	$0x1e, %rsi
+               	orq	%rdx, %rsi
                	movq	%rax, %rdx
-               	shrq	$0x1e, %rdx
-               	orq	%rdx, %rcx
-               	shlq	$0x2, %rax
-               	movl	-0x8(%rbp), %edx
-               	movl	-0x4(%rbp), %esi
-               	addq	%rdx, %rcx
-               	leaq	(%rax,%rsi), %rdx
+               	shlq	$0x2, %rdx
+               	addq	%rsi, %rcx
+               	addq	%rdx, %rax
                	leaq	0x1(%rcx), %rsi
-               	cmpl	%eax, %edx
-               	movq	%rcx, %rax
-               	cmovbq	%rsi, %rax
-               	movl	%eax, %eax
-               	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
+               	cmpl	%edx, %eax
+               	cmovbq	%rsi, %rcx
+               	movl	%ecx, %ecx
+               	shlq	$0x20, %rax
+               	orq	%rcx, %rax
                	leave
                	retq
 
@@ -58,22 +57,21 @@ Disassembly of section .text:
                	movq	%rdi, -0x8(%rbp)
                	movl	-0x8(%rbp), %ecx
                	movl	-0x4(%rbp), %eax
-               	shlq	$0x3, %rcx
+               	movq	%rcx, %rdx
+               	shlq	$0x3, %rdx
+               	movq	%rax, %rsi
+               	shrq	$0x1d, %rsi
+               	orq	%rdx, %rsi
                	movq	%rax, %rdx
-               	shrq	$0x1d, %rdx
-               	orq	%rdx, %rcx
-               	shlq	$0x3, %rax
-               	movl	-0x8(%rbp), %edx
-               	movl	-0x4(%rbp), %esi
-               	addq	%rdx, %rcx
-               	leaq	(%rax,%rsi), %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rsi, %rcx
+               	addq	%rdx, %rax
                	leaq	0x1(%rcx), %rsi
-               	cmpl	%eax, %edx
-               	movq	%rcx, %rax
-               	cmovbq	%rsi, %rax
-               	movl	%eax, %eax
-               	shlq	$0x20, %rdx
-               	orq	%rdx, %rax
+               	cmpl	%edx, %eax
+               	cmovbq	%rsi, %rcx
+               	movl	%ecx, %ecx
+               	shlq	$0x20, %rax
+               	orq	%rcx, %rax
                	leave
                	retq
 

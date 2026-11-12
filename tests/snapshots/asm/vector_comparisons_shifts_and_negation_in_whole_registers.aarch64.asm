@@ -33,14 +33,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x100]
-               	cmge	v0.16b, v1.16b, v0.16b
+               	cmge	v2.16b, v1.16b, v0.16b
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldr	q0, [sp]
-               	cmgt	v1.16b, v0.16b, v1.16b
+               	stur	q2, [x29, #-0xe0]
+               	cmgt	v2.16b, v0.16b, v1.16b
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x100]
+               	stur	q2, [x29, #-0xd0]
                	cmge	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -110,14 +108,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x90]
-               	cmhs	v0.16b, v1.16b, v0.16b
+               	cmhs	v2.16b, v1.16b, v0.16b
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldur	q0, [x29, #-0xa0]
-               	cmhi	v1.16b, v0.16b, v1.16b
+               	stur	q2, [x29, #-0xe0]
+               	cmhi	v2.16b, v0.16b, v1.16b
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x90]
+               	stur	q2, [x29, #-0xd0]
                	cmhs	v0.16b, v0.16b, v1.16b
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -188,15 +184,13 @@ Disassembly of section .text:
                	cmgt	v2.4h, v0.4h, v1.4h
                	sub	x4, x29, #0x28
                	stur	d2, [x29, #-0x28]
-               	cmge	v0.4h, v0.4h, v1.4h
+               	cmge	v2.4h, v0.4h, v1.4h
                	sub	x5, x29, #0x20
-               	stur	d0, [x29, #-0x20]
-               	ldur	d0, [x29, #-0x48]
-               	ldur	d1, [x29, #-0x40]
-               	cmgt	v2.4h, v0.4h, v1.4h
+               	stur	d2, [x29, #-0x20]
+               	cmgt	v2.4h, v1.4h, v0.4h
                	sub	x6, x29, #0x18
                	stur	d2, [x29, #-0x18]
-               	cmge	v0.4h, v0.4h, v1.4h
+               	cmge	v0.4h, v1.4h, v0.4h
                	sub	x7, x29, #0x10
                	stur	d0, [x29, #-0x10]
                	ldur	d0, [x29, #-0x48]
@@ -265,15 +259,13 @@ Disassembly of section .text:
                	cmhi	v2.4h, v0.4h, v1.4h
                	sub	x4, x29, #0x28
                	stur	d2, [x29, #-0x28]
-               	cmhs	v0.4h, v0.4h, v1.4h
+               	cmhs	v2.4h, v0.4h, v1.4h
                	sub	x5, x29, #0x20
-               	stur	d0, [x29, #-0x20]
-               	ldur	d0, [x29, #-0x38]
-               	ldur	d1, [x29, #-0x30]
-               	cmhi	v2.4h, v0.4h, v1.4h
+               	stur	d2, [x29, #-0x20]
+               	cmhi	v2.4h, v1.4h, v0.4h
                	sub	x6, x29, #0x18
                	stur	d2, [x29, #-0x18]
-               	cmhs	v0.4h, v0.4h, v1.4h
+               	cmhs	v0.4h, v1.4h, v0.4h
                	sub	x7, x29, #0x10
                	stur	d0, [x29, #-0x10]
                	ldur	d0, [x29, #-0x38]
@@ -345,14 +337,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x70]
-               	cmge	v0.4s, v1.4s, v0.4s
+               	cmge	v2.4s, v1.4s, v0.4s
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldur	q0, [x29, #-0x80]
-               	cmgt	v1.4s, v0.4s, v1.4s
+               	stur	q2, [x29, #-0xe0]
+               	cmgt	v2.4s, v0.4s, v1.4s
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x70]
+               	stur	q2, [x29, #-0xd0]
                	cmge	v0.4s, v0.4s, v1.4s
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -422,14 +412,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x90]
-               	cmhs	v0.4s, v1.4s, v0.4s
+               	cmhs	v2.4s, v1.4s, v0.4s
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldur	q0, [x29, #-0x100]
-               	cmhi	v1.4s, v0.4s, v1.4s
+               	stur	q2, [x29, #-0xe0]
+               	cmhi	v2.4s, v0.4s, v1.4s
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x90]
+               	stur	q2, [x29, #-0xd0]
                	cmhs	v0.4s, v0.4s, v1.4s
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -501,14 +489,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x70]
-               	cmge	v0.2d, v1.2d, v0.2d
+               	cmge	v2.2d, v1.2d, v0.2d
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldur	q0, [x29, #-0x60]
-               	cmgt	v1.2d, v0.2d, v1.2d
+               	stur	q2, [x29, #-0xe0]
+               	cmgt	v2.2d, v0.2d, v1.2d
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x70]
+               	stur	q2, [x29, #-0xd0]
                	cmge	v0.2d, v0.2d, v1.2d
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -578,14 +564,12 @@ Disassembly of section .text:
                	sub	x4, x29, #0xf0
                	stur	q1, [x29, #-0xf0]
                	ldur	q1, [x29, #-0x90]
-               	cmhs	v0.2d, v1.2d, v0.2d
+               	cmhs	v2.2d, v1.2d, v0.2d
                	sub	x5, x29, #0xe0
-               	stur	q0, [x29, #-0xe0]
-               	ldur	q0, [x29, #-0x100]
-               	cmhi	v1.2d, v0.2d, v1.2d
+               	stur	q2, [x29, #-0xe0]
+               	cmhi	v2.2d, v0.2d, v1.2d
                	sub	x6, x29, #0xd0
-               	stur	q1, [x29, #-0xd0]
-               	ldur	q1, [x29, #-0x90]
+               	stur	q2, [x29, #-0xd0]
                	cmhs	v0.2d, v0.2d, v1.2d
                	sub	x7, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
@@ -695,13 +679,13 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	sub	x1, x29, #0x80
+               	sub	x2, x29, #0x80
                	ldur	q0, [x29, #-0x80]
                	neg	v1.4s, v0.4s
-               	sub	x2, x29, #0xd0
+               	sub	x3, x29, #0xd0
                	stur	q1, [x29, #-0xd0]
                	mvn	v0.16b, v0.16b
-               	sub	x3, x29, #0xc0
+               	sub	x4, x29, #0xc0
                	stur	q0, [x29, #-0xc0]
                	ldur	q0, [x29, #-0x60]
                	neg	v0.2d, v0.2d
@@ -709,15 +693,14 @@ Disassembly of section .text:
                	mvn	v1.16b, v1.16b
                	stur	q1, [x29, #-0xb0]
                	mov	x0, #0x0                // =0
-               	ldrsw	x4, [x2, x0, lsl #2]
-               	ldrsw	x5, [x1, x0, lsl #2]
-               	neg	x5, x5
-               	cmp	w4, w5
+               	ldrsw	x5, [x3, x0, lsl #2]
+               	ldrsw	x1, [x2, x0, lsl #2]
+               	neg	x6, x1
+               	cmp	w5, w6
                	b.ne	<addr>
-               	ldrsw	x4, [x3, x0, lsl #2]
-               	ldrsw	x5, [x1, x0, lsl #2]
-               	mvn	x5, x5
-               	cmp	x4, x5
+               	ldrsw	x5, [x4, x0, lsl #2]
+               	mvn	x1, x1
+               	cmp	x5, x1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

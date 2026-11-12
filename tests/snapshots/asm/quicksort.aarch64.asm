@@ -22,18 +22,17 @@ Disassembly of section .text:
 
 <partition>:
                	sxtw	x1, w1
-               	ldrsw	x4, [x0, w2, sxtw #2]
+               	ldrsw	x5, [x0, w2, sxtw #2]
                	sub	x3, x1, #0x1
                	cmp	w1, w2
                	b.ge	<addr>
-               	ldrsw	x5, [x0, x1, lsl #2]
-               	cmp	w5, w4
+               	ldrsw	x4, [x0, x1, lsl #2]
+               	cmp	w4, w5
                	b.gt	<addr>
                	add	x3, x3, #0x1
-               	ldrsw	x5, [x0, x3, lsl #2]
-               	ldrsw	x6, [x0, x1, lsl #2]
-               	str	w6, [x0, x3, lsl #2]
-               	str	w5, [x0, x1, lsl #2]
+               	ldrsw	x6, [x0, x3, lsl #2]
+               	str	w4, [x0, x3, lsl #2]
+               	str	w6, [x0, x1, lsl #2]
                	add	x1, x1, #0x1
                	cmp	w1, w2
                	b.lt	<addr>

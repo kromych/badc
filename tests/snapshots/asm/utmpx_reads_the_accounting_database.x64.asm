@@ -36,10 +36,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	cmpl	$0x186a0, %ebx          # imm = 0x186A0
                	jge	<addr>
-               	movswq	(%rax), %rcx
-               	testl	%ecx, %ecx
-               	jl	<addr>
                	movswq	(%rax), %rax
+               	testl	%eax, %eax
+               	jl	<addr>
                	cmpl	$0x9, %eax
                	jg	<addr>
                	incq	%rbx

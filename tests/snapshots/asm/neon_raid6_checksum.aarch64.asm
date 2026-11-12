@@ -23,36 +23,30 @@ Disassembly of section .text:
                	ldr	x12, [x2, #0x28]
                	ldr	x13, [x2, #0x30]
                	movi	v0.16b, #0x1d
-               	mov	x1, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	ldr	x0, [x2, #0x20]
-               	add	x0, x0, x1
-               	ldr	q19, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x4, x1, #0x10
-               	add	x0, x0, x4
-               	ldr	q7, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x5, x1, #0x20
-               	add	x0, x0, x5
-               	ldr	q6, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x6, x1, #0x30
-               	add	x0, x0, x6
-               	ldr	q5, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x7, x1, #0x40
+               	add	x1, x0, x3
+               	ldr	q19, [x1]
+               	add	x4, x3, #0x10
+               	add	x1, x0, x4
+               	ldr	q7, [x1]
+               	add	x5, x3, #0x20
+               	add	x1, x0, x5
+               	ldr	q6, [x1]
+               	add	x6, x3, #0x30
+               	add	x1, x0, x6
+               	ldr	q5, [x1]
+               	add	x7, x3, #0x40
                	add	x0, x0, x7
                	ldr	q4, [x0]
                	ldr	x0, [x2, #0x20]
-               	add	x8, x1, #0x50
-               	add	x0, x0, x8
-               	ldr	q3, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x9, x1, #0x60
-               	add	x0, x0, x9
-               	ldr	q2, [x0]
-               	ldr	x0, [x2, #0x20]
-               	add	x10, x1, #0x70
+               	add	x8, x3, #0x50
+               	add	x1, x0, x8
+               	ldr	q3, [x1]
+               	add	x9, x3, #0x60
+               	add	x1, x0, x9
+               	ldr	q2, [x1]
+               	add	x10, x3, #0x70
                	add	x0, x0, x10
                	ldr	q1, [x0]
                	mov	x0, #0x3                // =3
@@ -64,29 +58,24 @@ Disassembly of section .text:
                	mov	v23.16b, v4.16b
                	mov	v22.16b, v3.16b
                	mov	v21.16b, v2.16b
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x11, x3, x1
+               	ldr	x1, [x2, x0, lsl #3]
+               	add	x11, x1, x3
                	ldr	q28, [x11]
-               	add	x3, x3, x4
-               	ldr	q29, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x5
-               	ldr	q30, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x6
-               	ldr	q31, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x7
-               	ldr	q8, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x8
-               	ldr	q9, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x9
-               	ldr	q10, [x3]
-               	ldr	x3, [x2, x0, lsl #3]
-               	add	x3, x3, x10
-               	ldr	q11, [x3]
+               	add	x11, x1, x4
+               	ldr	q29, [x11]
+               	add	x11, x1, x5
+               	ldr	q30, [x11]
+               	add	x11, x1, x6
+               	ldr	q31, [x11]
+               	add	x1, x1, x7
+               	ldr	q8, [x1]
+               	ldr	x1, [x2, x0, lsl #3]
+               	add	x11, x1, x8
+               	ldr	q9, [x11]
+               	add	x11, x1, x9
+               	ldr	q10, [x11]
+               	add	x1, x1, x10
+               	ldr	q11, [x1]
                	eor	v27.16b, v27.16b, v28.16b
                	eor	v26.16b, v26.16b, v29.16b
                	eor	v25.16b, v25.16b, v30.16b
@@ -154,34 +143,34 @@ Disassembly of section .text:
                	sub	x0, x0, #0x1
                	cmp	w0, #0x0
                	b.ge	<addr>
-               	add	x0, x12, x1
+               	add	x0, x12, x3
                	str	q27, [x0]
-               	add	x0, x1, #0x10
-               	add	x3, x12, x0
-               	str	q26, [x3]
-               	add	x3, x1, #0x20
-               	add	x4, x12, x3
+               	add	x0, x3, #0x10
+               	add	x1, x12, x0
+               	str	q26, [x1]
+               	add	x1, x3, #0x20
+               	add	x4, x12, x1
                	str	q25, [x4]
-               	add	x4, x1, #0x30
+               	add	x4, x3, #0x30
                	add	x5, x12, x4
                	str	q24, [x5]
-               	add	x5, x1, #0x40
+               	add	x5, x3, #0x40
                	add	x6, x12, x5
                	str	q23, [x6]
-               	add	x6, x1, #0x50
+               	add	x6, x3, #0x50
                	add	x7, x12, x6
                	str	q22, [x7]
-               	add	x7, x1, #0x60
+               	add	x7, x3, #0x60
                	add	x8, x12, x7
                	str	q21, [x8]
-               	add	x8, x1, #0x70
+               	add	x8, x3, #0x70
                	add	x9, x12, x8
                	str	q20, [x9]
-               	add	x9, x13, x1
+               	add	x9, x13, x3
                	str	q19, [x9]
                	add	x0, x13, x0
                	str	q7, [x0]
-               	add	x0, x13, x3
+               	add	x0, x13, x1
                	str	q6, [x0]
                	add	x0, x13, x4
                	str	q5, [x0]
@@ -193,8 +182,8 @@ Disassembly of section .text:
                	str	q2, [x0]
                	add	x0, x13, x8
                	str	q1, [x0]
-               	add	x1, x1, #0x80
-               	cmp	w1, #0x200
+               	add	x3, x3, #0x80
+               	cmp	w3, #0x200
                	b.lo	<addr>
                	ldp	x29, x30, [sp, #0x80]
                	ldp	d14, d15, [sp, #0x30]

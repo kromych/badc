@@ -92,23 +92,23 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v64  ImmData(64)                                      -> x1
     v65  Load { addr=v51, disp=0, kind=I64 pc_rel }       -> x1
     v66  BinopI { op=add, lhs=v52, rhs_imm=8 }            -> x1
-    v67  Load { addr=v52, disp=8, kind=I64 }              -> x0
-    v68  Imm(1)                                           -> x1
-    v69  BinopI { op=add, lhs=v67, rhs_imm=1 }            -> x1
-    v70  Load { addr=v67, disp=1, kind=I8 }               -> x0
-    v71  BinopI { op=ne, lhs=v70, rhs_imm=111 }           -> x0
-    v72  Imm(0)                                           -> x1
-    v73  Imm(0)                                           -> x1
-    v74  Imm(0)                                           -> x1
+    v67  Load { addr=v52, disp=8, kind=I64 }              -> x1
+    v68  Imm(1)                                           -> x2
+    v69  BinopI { op=add, lhs=v67, rhs_imm=1 }            -> x2
+    v70  Load { addr=v67, disp=1, kind=I8 }               -> x1
+    v71  BinopI { op=ne, lhs=v70, rhs_imm=111 }           -> x1
+    v72  Imm(0)                                           -> x2
+    v73  Imm(0)                                           -> x2
+    v74  Imm(0)                                           -> x2
     terminator Bz { cond=v71, target=b13, fall=b12 }   (exit_acc=v71)
   block 12  start_pc=0
     v75  Imm(4)                                           -> x0
     terminator Return(v75)   (exit_acc=v75)
   block 13  start_pc=0
-    v76  ImmData(64)                                      -> x0
-    v77  Load { addr=v51, disp=0, kind=I64 pc_rel }       -> x0
-    v78  BinopI { op=add, lhs=v77, rhs_imm=16 }           -> x1
-    v79  Load { addr=v77, disp=16, kind=I64 }             -> x0
+    v76  ImmData(64)                                      -> x1
+    v77  Load { addr=v51, disp=0, kind=I64 pc_rel }       -> x1
+    v78  BinopI { op=add, lhs=v52, rhs_imm=16 }           -> x1
+    v79  Load { addr=v52, disp=16, kind=I64 }             -> x0
     v80  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x1
     terminator Bz { cond=v79, target=b15, fall=b14 }   (exit_acc=v80)
   block 14  start_pc=0

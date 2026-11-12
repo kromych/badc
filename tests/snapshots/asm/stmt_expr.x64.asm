@@ -43,12 +43,11 @@ Disassembly of section .text:
                	imulq	$0xa, %rax, %rcx
                	incq	%rax
                	movl	%eax, <rip> # <addr>
-               	imulq	$0x64, %rax, %rax
+               	imulq	$0x64, %rax, %rdx
                	cmpl	$0xa, %ecx
                	jne	<addr>
-               	cmpl	$0xc8, %eax
+               	cmpl	$0xc8, %edx
                	jne	<addr>
-               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax

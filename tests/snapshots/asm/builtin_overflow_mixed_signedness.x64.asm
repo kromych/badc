@@ -43,35 +43,14 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0xf, %eax
-               	leave
-               	retq
                	movq	$-0x2, -0x8(%rbp)
                	movq	$-0x2, -0x8(%rbp)
                	movq	$0x8, -0x8(%rbp)
                	movq	$-0x8, -0x8(%rbp)
                	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
                	movq	%rcx, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x18, %eax
-               	leave
-               	retq
                	movabsq	$0x7ffffffffffffffe, %rax # imm = 0x7FFFFFFFFFFFFFFE
                	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movabsq	$0x7ffffffffffffffe, %r11 # imm = 0x7FFFFFFFFFFFFFFE
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x19, %eax
-               	leave
-               	retq
                	movq	%rcx, -0x8(%rbp)
                	movq	$0x0, -0x8(%rbp)
                	movq	%rcx, -0x8(%rbp)

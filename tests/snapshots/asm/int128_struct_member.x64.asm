@@ -54,14 +54,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdi # <addr>
-               	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
-               	xorq	%r11, %rdi
-               	orq	%rdi, %rsi
-               	testq	%rsi, %rsi
-               	jne	<addr>
                	movq	<rip>, %rsi # <addr>
+               	movabsq	$0x1000000000, %r8      # imm = 0x1000000000
+               	xorq	%rsi, %r8
+               	orq	%r8, %rdi
+               	testq	%rdi, %rdi
+               	jne	<addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	cmpq	%r11, %rsi
                	je	<addr>

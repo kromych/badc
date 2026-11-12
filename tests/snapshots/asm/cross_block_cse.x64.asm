@@ -40,14 +40,6 @@ Disassembly of section .text:
                	movl	$0x31, -0xc(%rbp)
                	movl	$0x40, -0x8(%rbp)
                	movl	$0x51, -0x4(%rbp)
-               	movl	-0xc(%rbp), %eax
-               	cmpl	$0xc8, %eax
-               	jle	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	cmpl	$0x31, %eax
-               	jne	<addr>
                	movl	$0x99, %ecx
                	xorl	%eax, %eax
                	imulq	$0x1999999a, %rcx, %rdx # imm = 0x1999999A

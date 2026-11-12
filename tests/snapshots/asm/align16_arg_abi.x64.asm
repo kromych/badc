@@ -297,20 +297,9 @@ Disassembly of section .text:
                	movq	$0x28, -0x30(%rbp)
                	movq	$-0x2, -0x28(%rbp)
                	movq	-0x40(%rbp), %rax
-               	movq	-0x38(%rbp), %rcx
-               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
-               	addq	%rcx, %rax
+               	addq	$0x1388, %rax           # imm = 0x1388
                	cmpq	$0x1393, %rax           # imm = 0x1393
                	jne	<addr>
-               	movq	-0x30(%rbp), %rax
-               	movq	-0x28(%rbp), %rcx
-               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
-               	addq	%rcx, %rax
-               	cmpq	$-0x7a8, %rax           # imm = 0xF858
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %ecx
                	movq	0x8(%rsi), %rdx
@@ -708,5 +697,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
+               	leave
+               	retq
+               	movl	$0x1, %eax
                	leave
                	retq

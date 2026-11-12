@@ -643,25 +643,23 @@ Disassembly of section .text:
                	ldr	x2, [x0, #0x40]
                	add	x1, x1, x2
                	ldr	x2, [x0, #0x48]
-               	add	x1, x1, x2
-               	ldr	x2, [x0, #0x50]
-               	add	x1, x1, x2
-               	ldr	x2, [x0, #0x58]
-               	add	x1, x1, x2
-               	ldr	x2, [x0, #0x60]
-               	add	x1, x1, x2
-               	ldr	x2, [x0, #0x68]
-               	add	x1, x1, x2
-               	cmp	x1, #0x1f
-               	b.ne	<addr>
-               	ldr	x1, [x0, #0x30]
-               	cmp	x1, #0x3
-               	b.ne	<addr>
+               	add	x2, x1, x2
                	ldr	x1, [x0, #0x50]
+               	add	x2, x2, x1
+               	ldr	x3, [x0, #0x58]
+               	add	x2, x2, x3
+               	ldr	x3, [x0, #0x60]
+               	add	x3, x2, x3
+               	ldr	x2, [x0, #0x68]
+               	add	x3, x3, x2
+               	cmp	x3, #0x1f
+               	b.ne	<addr>
+               	ldr	x0, [x0, #0x30]
+               	cmp	x0, #0x3
+               	b.ne	<addr>
                	cmp	x1, #0x1
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x68]
-               	cmp	x0, #0x1
+               	cmp	x2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x90]

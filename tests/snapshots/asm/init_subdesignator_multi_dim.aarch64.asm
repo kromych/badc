@@ -22,8 +22,7 @@ Disassembly of section .text:
                	ldr	w4, [x0, #0x24]
                	ldr	w5, [x0, #0x2c]
                	ldr	w6, [x0, #0x98]
-               	ldrh	w7, [x0]
-               	cmp	w7, #0x1
+               	cmp	w1, #0x1
                	b.ne	<addr>
                	ldrh	w7, [x0, #0x2]
                	cmp	w7, #0x2

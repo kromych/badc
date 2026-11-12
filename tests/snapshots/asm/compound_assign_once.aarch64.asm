@@ -476,8 +476,8 @@ Disassembly of section .text:
                	orr	x2, x2, x3
                	str	w2, [x0, #0x8]
                	ldr	w2, [x0, #0x8]
-               	sbfx	x2, x2, #0, #7
-               	cmp	w2, #0x1
+               	sbfx	x3, x2, #0, #7
+               	cmp	w3, #0x1
                	b.eq	<addr>
                	mov	x2, #0x1                // =1
                	cbz	x2, <addr>
@@ -671,14 +671,13 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x3e]
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	ldrsw	x2, [x0]
-               	add	x2, x2, #0x5
-               	str	w2, [x0]
-               	cmp	w2, #0x5
+               	ldrsw	x3, [x0]
+               	add	x3, x3, #0x5
+               	str	w3, [x0]
+               	cmp	w3, #0x5
                	b.eq	<addr>
                	mov	x2, #0x2                // =2
                	b	<addr>
-               	ldr	w2, [x0, #0x8]
                	and	x2, x2, #0xfffffffffffff07f
                	orr	x2, x2, #0x180
                	str	w2, [x0, #0x8]

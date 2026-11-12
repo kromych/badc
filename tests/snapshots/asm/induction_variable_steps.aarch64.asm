@@ -179,16 +179,15 @@ Disassembly of section .text:
 
 <partition>:
                	mov	x2, #0x0                // =0
-               	ldrsw	x3, [x0, #0xfc]
+               	ldrsw	x4, [x0, #0xfc]
                	mov	x1, #-0x1               // =-1
-               	ldrsw	x4, [x0, x2, lsl #2]
-               	cmp	w4, w3
+               	ldrsw	x3, [x0, x2, lsl #2]
+               	cmp	w3, w4
                	b.ge	<addr>
                	add	x1, x1, #0x1
-               	ldrsw	x4, [x0, x1, lsl #2]
-               	ldrsw	x5, [x0, x2, lsl #2]
-               	str	w5, [x0, x1, lsl #2]
-               	str	w4, [x0, x2, lsl #2]
+               	ldrsw	x5, [x0, x1, lsl #2]
+               	str	w3, [x0, x1, lsl #2]
+               	str	w5, [x0, x2, lsl #2]
                	add	x2, x2, #0x1
                	cmp	w2, #0x3f
                	b.lt	<addr>

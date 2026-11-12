@@ -2124,10 +2124,9 @@ Disassembly of section .text:
                	ldur	q3, [x29, #-0x10]
                	mov	d2, v1.d[0]
                	mov	d4, v3.d[0]
-               	ldur	q5, [x29, #-0x30]
-               	tbl	v6.16b, { v0.16b }, v1.16b
+               	tbl	v5.16b, { v0.16b }, v1.16b
                	sub	x7, x29, #0x70
-               	stur	q6, [x29, #-0x70]
+               	stur	q5, [x29, #-0x70]
                	mov	v16.16b, v3.16b
                	tbx	v16.16b, { v0.16b }, v1.16b
                	mov	v1.16b, v16.16b
@@ -2136,12 +2135,11 @@ Disassembly of section .text:
                	tbl	v1.8b, { v0.16b }, v2.8b
                	sub	x9, x29, #0x48
                	stur	d1, [x29, #-0x48]
-               	mov	v16.16b, v4.16b
-               	tbx	v16.8b, { v0.16b }, v2.8b
-               	mov	v0.16b, v16.16b
+               	mov	v1.16b, v4.16b
+               	tbx	v1.8b, { v0.16b }, v2.8b
                	sub	x10, x29, #0x40
-               	stur	d0, [x29, #-0x40]
-               	tbl	v0.8b, { v5.16b }, v2.8b
+               	stur	d1, [x29, #-0x40]
+               	tbl	v0.8b, { v0.16b }, v2.8b
                	sub	x11, x29, #0x38
                	stur	d0, [x29, #-0x38]
                	mov	x4, #0x0                // =0

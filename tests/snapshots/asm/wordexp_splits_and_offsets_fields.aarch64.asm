@@ -91,9 +91,8 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	ldr	x1, [x0]
                	cbnz	x1, <addr>
-               	ldr	x0, [x0, #0x8]
-               	cbnz	x0, <addr>
-               	ldur	x0, [x29, #-0x10]
+               	ldr	x1, [x0, #0x8]
+               	cbnz	x1, <addr>
                	ldr	x0, [x0, #0x18]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

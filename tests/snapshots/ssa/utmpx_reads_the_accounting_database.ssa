@@ -29,14 +29,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=48
     terminator Bz { cond=v40, target=b6, fall=b2 }   (exit_acc=v40)
   block 2  start_pc=0
     v24  Imm(0)                                           -> x1
-    v25  Load { addr=v21, disp=0, kind=I16 }              -> x1
+    v25  Load { addr=v21, disp=0, kind=I16 }              -> x0
     v26  BinopI { op=lt, lhs=v25, rhs_imm=0 }             -> x1
     v27  Imm(0)                                           -> x2
     terminator Bnz { cond=v26, target=b9, fall=b3 }   (exit_acc=v26)
   block 3  start_pc=0
     v44  Imm(0)                                           -> x1
-    v45  Load { addr=v21, disp=0, kind=I16 }              -> x0
-    v46  BinopI { op=gt, lhs=v45, rhs_imm=9 }             -> x0
+    v45  Load { addr=v21, disp=0, kind=I16 }              -> x1
+    v46  BinopI { op=gt, lhs=v25, rhs_imm=9 }             -> x0
     v47  Imm(0)                                           -> x1
     v48  Imm(0)                                           -> x1
     v49  Imm(0)                                           -> x1

@@ -1501,21 +1501,17 @@ Disassembly of section .text:
                	cmpl	$0x8, %r12d
                	jl	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x30(%rbp), %rdi
+               	leaq	-0x30(%rbp), %r8
                	movzbq	(%rdx,%rax), %rcx
-               	movzbq	(%rsi,%rax), %r8
-               	cmpl	%r8d, %ecx
-               	jge	<addr>
-               	movzbq	(%rdx,%rax), %rcx
-               	movb	%cl, (%rdi,%rax)
+               	movzbq	(%rsi,%rax), %rdi
+               	cmpl	%edi, %ecx
+               	cmovgeq	%rdi, %rcx
+               	movb	%cl, (%r8,%rax)
                	leaq	-0x20(%rbp), %r8
                	movzbq	(%rdx,%rax), %rcx
                	movzbq	(%rsi,%rax), %rdi
                	cmpl	%edi, %ecx
                	cmovleq	%rdi, %rcx
-               	jmp	<addr>
-               	movzbq	(%rsi,%rax), %rcx
-               	jmp	<addr>
                	movb	%cl, (%r8,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax

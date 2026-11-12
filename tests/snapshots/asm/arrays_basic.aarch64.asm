@@ -53,21 +53,6 @@ Disassembly of section .text:
                	str	w2, [x1, #0xc]
                	mov	x2, #0x28               // =40
                	str	w2, [x1, #0x10]
-               	ldrsw	x2, [x1]
-               	ldrsw	x3, [x1, #0x4]
-               	add	x2, x2, x3
-               	ldrsw	x3, [x1, #0x8]
-               	add	x2, x2, x3
-               	ldrsw	x3, [x1, #0xc]
-               	add	x2, x2, x3
-               	ldrsw	x1, [x1, #0x10]
-               	add	x1, x2, x1
-               	cmp	w1, #0x64
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x68               // =104

@@ -1365,77 +1365,77 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v990 LocalAddr(-6)                                    -> x0
     v991 Imm(0)                                           -> x0
     v992 LoadLocal { off=-6, kind=U32 }                   -> x0
-    v993 LocalAddr(-6)                                    -> x0
-    v994 LoadLocal { off=-6, kind=U32 }                   -> x0
-    v995 Imm(1)                                           -> x0
-    v996 Imm(0)                                           -> x0
+    v993 LocalAddr(-6)                                    -> x1
+    v994 LoadLocal { off=-6, kind=U32 }                   -> x1
+    v995 Imm(1)                                           -> x1
+    v996 Imm(0)                                           -> x1
     terminator Jmp(b82)   (exit_acc=v995)
   block 82  start_pc=0
-    v997 LocalAddr(-6)                                    -> x0
-    v998 Imm(4)                                           -> x0
-    v999 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x0
-    v1000 LoadLocal { off=-6, disp=4, kind=U32 }           -> x0
-    v1001 LocalAddr(-6)                                    -> x0
-    v1002 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x0
-    v1003 LoadLocal { off=-6, disp=4, kind=U32 }           -> x0
-    v1004 Imm(1)                                           -> x0
-    v1005 Imm(1)                                           -> x0
-    v1006 Imm(0)                                           -> x0
-    v1007 Imm(0)                                           -> x0
-    v1008 Imm(0)                                           -> x0
-    v1009 Imm(0)                                           -> x0
-    v1010 Imm(0)                                           -> x0
+    v997 LocalAddr(-6)                                    -> x1
+    v998 Imm(4)                                           -> x1
+    v999 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x1
+    v1000 LoadLocal { off=-6, disp=4, kind=U32 }           -> x1
+    v1001 LocalAddr(-6)                                    -> x2
+    v1002 BinopI { op=add, lhs=v990, rhs_imm=4 }           -> x2
+    v1003 LoadLocal { off=-6, disp=4, kind=U32 }           -> x2
+    v1004 Imm(1)                                           -> x2
+    v1005 Imm(1)                                           -> x2
+    v1006 Imm(0)                                           -> x2
+    v1007 Imm(0)                                           -> x2
+    v1008 Imm(0)                                           -> x2
+    v1009 Imm(0)                                           -> x2
+    v1010 Imm(0)                                           -> x2
     terminator Jmp(b83)   (exit_acc=v1004)
   block 83  start_pc=0
-    v1011 LocalAddr(-6)                                    -> x0
-    v1012 Imm(8)                                           -> x0
-    v1013 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x0
-    v1014 LoadLocal { off=-6, disp=8, kind=U32 }           -> x0
-    v1015 LocalAddr(-6)                                    -> x0
-    v1016 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x0
-    v1017 LoadLocal { off=-6, disp=8, kind=U32 }           -> x0
-    v1018 Imm(1)                                           -> x0
-    v1019 Imm(1)                                           -> x0
-    v1020 Imm(0)                                           -> x0
-    v1021 Imm(0)                                           -> x0
-    v1022 Imm(0)                                           -> x0
-    v1023 Imm(0)                                           -> x0
-    v1024 Imm(0)                                           -> x0
+    v1011 LocalAddr(-6)                                    -> x2
+    v1012 Imm(8)                                           -> x2
+    v1013 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x2
+    v1014 LoadLocal { off=-6, disp=8, kind=U32 }           -> x2
+    v1015 LocalAddr(-6)                                    -> x6
+    v1016 BinopI { op=add, lhs=v990, rhs_imm=8 }           -> x6
+    v1017 LoadLocal { off=-6, disp=8, kind=U32 }           -> x6
+    v1018 Imm(1)                                           -> x6
+    v1019 Imm(1)                                           -> x6
+    v1020 Imm(0)                                           -> x6
+    v1021 Imm(0)                                           -> x6
+    v1022 Imm(0)                                           -> x6
+    v1023 Imm(0)                                           -> x6
+    v1024 Imm(0)                                           -> x6
     terminator Jmp(b84)   (exit_acc=v1018)
   block 84  start_pc=0
-    v1025 LocalAddr(-6)                                    -> x0
-    v1026 Imm(12)                                          -> x0
-    v1027 BinopI { op=add, lhs=v990, rhs_imm=12 }          -> x0
-    v1028 LoadLocal { off=-6, disp=12, kind=U32 }          -> x0
-    v1029 LocalAddr(-6)                                    -> x0
-    v1030 BinopI { op=add, lhs=v1029, rhs_imm=12 }         -> x0
-    v1031 LoadLocal { off=-6, disp=12, kind=U32 }          -> x0
-    v1032 Imm(1)                                           -> x0
-    v1033 Imm(1)                                           -> x0
-    v1034 Imm(0)                                           -> x0
-    v1035 Imm(0)                                           -> x0
-    v1036 Imm(0)                                           -> x0
-    v1037 Imm(0)                                           -> x0
-    v1038 Imm(0)                                           -> x0
+    v1025 LocalAddr(-6)                                    -> x6
+    v1026 Imm(12)                                          -> x6
+    v1027 BinopI { op=add, lhs=v990, rhs_imm=12 }          -> x6
+    v1028 LoadLocal { off=-6, disp=12, kind=U32 }          -> x6
+    v1029 LocalAddr(-6)                                    -> x7
+    v1030 BinopI { op=add, lhs=v1029, rhs_imm=12 }         -> x7
+    v1031 LoadLocal { off=-6, disp=12, kind=U32 }          -> x7
+    v1032 Imm(1)                                           -> x7
+    v1033 Imm(1)                                           -> x7
+    v1034 Imm(0)                                           -> x7
+    v1035 Imm(0)                                           -> x7
+    v1036 Imm(0)                                           -> x7
+    v1037 Imm(0)                                           -> x7
+    v1038 Imm(0)                                           -> x7
     terminator Jmp(b85)   (exit_acc=v1037)
   block 85  start_pc=0
-    v1039 LocalAddr(-6)                                    -> x0
-    v1040 Imm(0)                                           -> x0
-    v1041 LoadLocal { off=-6, kind=U32 }                   -> x0
-    v1042 LocalAddr(-4)                                    -> x1
-    v1043 LoadLocal { off=-4, kind=U32 }                   -> x1
-    v1044 Binop { op=eq, lhs=v1041, rhs=v1043 }            -> x0
-    v1045 Imm(0)                                           -> x1
+    v1039 LocalAddr(-6)                                    -> x7
+    v1040 Imm(0)                                           -> x7
+    v1041 LoadLocal { off=-6, kind=U32 }                   -> x7
+    v1042 LocalAddr(-4)                                    -> x7
+    v1043 LoadLocal { off=-4, kind=U32 }                   -> x7
+    v1044 Binop { op=eq, lhs=v992, rhs=v1043 }             -> x0
+    v1045 Imm(0)                                           -> x7
     terminator Bz { cond=v1044, target=b90, fall=b86 }   (exit_acc=v1044)
   block 86  start_pc=0
     v1046 LocalAddr(-6)                                    -> x0
     v1047 Imm(4)                                           -> x0
     v1048 BinopI { op=add, lhs=v1029, rhs_imm=4 }          -> x0
     v1049 LoadLocal { off=-6, disp=4, kind=U32 }           -> x0
-    v1050 LocalAddr(-4)                                    -> x1
-    v1051 BinopI { op=add, lhs=v1042, rhs_imm=4 }          -> x1
-    v1052 LoadLocal { off=-4, disp=4, kind=U32 }           -> x1
-    v1053 Binop { op=eq, lhs=v1049, rhs=v1052 }            -> x0
+    v1050 LocalAddr(-4)                                    -> x0
+    v1051 BinopI { op=add, lhs=v1042, rhs_imm=4 }          -> x0
+    v1052 LoadLocal { off=-4, disp=4, kind=U32 }           -> x0
+    v1053 Binop { op=eq, lhs=v1000, rhs=v1052 }            -> x0
     v1054 BinopI { op=ne, lhs=v1053, rhs_imm=0 }           -> x1
     v1055 Imm(0)                                           -> x1
     v1056 Imm(0)                                           -> x1
@@ -1448,10 +1448,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v1061 Imm(8)                                           -> x0
     v1062 BinopI { op=add, lhs=v1029, rhs_imm=8 }          -> x0
     v1063 LoadLocal { off=-6, disp=8, kind=U32 }           -> x0
-    v1064 LocalAddr(-4)                                    -> x1
-    v1065 BinopI { op=add, lhs=v1042, rhs_imm=8 }          -> x1
-    v1066 LoadLocal { off=-4, disp=8, kind=U32 }           -> x1
-    v1067 Binop { op=eq, lhs=v1063, rhs=v1066 }            -> x0
+    v1064 LocalAddr(-4)                                    -> x0
+    v1065 BinopI { op=add, lhs=v1042, rhs_imm=8 }          -> x0
+    v1066 LoadLocal { off=-4, disp=8, kind=U32 }           -> x0
+    v1067 Binop { op=eq, lhs=v1014, rhs=v1066 }            -> x0
     v1068 BinopI { op=ne, lhs=v1067, rhs_imm=0 }           -> x1
     v1069 Imm(0)                                           -> x1
     v1070 Imm(0)                                           -> x1
@@ -1464,10 +1464,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v1075 Imm(12)                                          -> x0
     v1076 BinopI { op=add, lhs=v1029, rhs_imm=12 }         -> x0
     v1077 LoadLocal { off=-6, disp=12, kind=U32 }          -> x0
-    v1078 LocalAddr(-4)                                    -> x1
-    v1079 BinopI { op=add, lhs=v1042, rhs_imm=12 }         -> x1
-    v1080 LoadLocal { off=-4, disp=12, kind=U32 }          -> x1
-    v1081 Binop { op=eq, lhs=v1077, rhs=v1080 }            -> x0
+    v1078 LocalAddr(-4)                                    -> x0
+    v1079 BinopI { op=add, lhs=v1042, rhs_imm=12 }         -> x0
+    v1080 LoadLocal { off=-4, disp=12, kind=U32 }          -> x0
+    v1081 Binop { op=eq, lhs=v1028, rhs=v1080 }            -> x0
     v1082 BinopI { op=ne, lhs=v1081, rhs_imm=0 }           -> x1
     v1083 Imm(0)                                           -> x1
     v1084 Imm(0)                                           -> x1

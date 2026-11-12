@@ -79,8 +79,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	str	wzr, [x0, #0x20]
-               	ldrsw	x2, [x0, #0x20]
-               	add	x2, x2, #0x1
+               	mov	x2, #0x1                // =1
                	str	w2, [x0, #0x20]
                	adrp	x2, <page>
                	mov	x3, #-0x1               // =-1

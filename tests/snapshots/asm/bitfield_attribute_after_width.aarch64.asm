@@ -143,10 +143,9 @@ Disassembly of section .text:
                	mov	x1, #0x12               // =18
                	sturb	w1, [x29, #-0x8]
                	ldurh	w1, [x29, #-0x8]
-               	sbfx	x1, x1, #0, #12
-               	cmp	w1, #0x712
+               	sbfx	x2, x1, #0, #12
+               	cmp	w2, #0x712
                	b.ne	<addr>
-               	ldurh	w1, [x29, #-0x8]
                	and	x1, x1, #0xfffffffffffff000
                	orr	x1, x1, #0x800
                	sturh	w1, [x29, #-0x8]

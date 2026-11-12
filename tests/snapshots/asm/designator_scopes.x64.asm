@@ -30,10 +30,10 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	cmpl	$0x17, %eax
+               	addq	%rax, %rcx
+               	movslq	<rip>, %rax # <addr>
+               	addq	%rax, %rcx
+               	cmpl	$0x17, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	testq	%rax, %rax
@@ -65,18 +65,18 @@ Disassembly of section .text:
                	retq
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	cmpl	$0x7, %eax
+               	addq	%rax, %rcx
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x11, %eax
                	jmp	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpl	$0x0, <rip> # <addr>
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x4, %eax
@@ -121,26 +121,25 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0xe, %eax
                	jmp	<addr>
-               	movl	<rip>, %eax # <addr>
+               	movl	<rip>, %edx # <addr>
                	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
-               	cmpl	$0x17, %eax
+               	addq	%rcx, %rdx
+               	movl	<rip>, %esi # <addr>
+               	addq	%rdx, %rsi
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rsi
+               	cmpl	$0x17, %esi
                	je	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	cmpl	$0x0, <rip> # <addr>
+               	testq	%rax, %rax
                	jne	<addr>
-               	cmpl	$0x0, <rip> # <addr>
-               	jne	<addr>
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x9, %eax
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
+               	jne	<addr>
+               	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	jmp	<addr>

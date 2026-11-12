@@ -150,15 +150,27 @@ fn lane_kind(kind: LoadKind, bytes: u8) -> bool {
 const MAX_FORWARD_DISTANCE: u32 = 16;
 
 /// Distance between two instruction indices in emitted instructions:
-/// the bound above is about the live range the forward extends, and a
-/// lifetime marker adds none. Returns a closure over a prefix count so
+/// the bound above is about the live range the forward extends, and
+/// neither a lifetime marker nor a pure value nothing reads adds any. Returns a closure over a prefix count so
 /// each query is O(1).
 fn emitted_span(func: &FunctionSsa) -> impl Fn(u32, usize) -> u32 + use<> {
+    let mut used = alloc::vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(u) = used.get_mut(v as usize) {
+            *u = true;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut mark));
+    func.blocks
+        .iter()
+        .for_each(|b| b.terminator.for_each_operand(&mut mark));
     let mut prefix: Vec<u32> = Vec::with_capacity(func.insts.len() + 1);
     let mut n = 0u32;
-    for inst in &func.insts {
+    for (inst, used) in func.insts.iter().zip(used) {
         prefix.push(n);
-        n += u32::from(!inst.is_lifetime_marker());
+        n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
     }
     prefix.push(n);
     move |from: u32, to: usize| {
@@ -1752,6 +1764,62 @@ mod tests {
         }
     }
 
+    /// The forward distance counts the instructions the emit performs: a
+    /// run of constants nothing reads leaves the reload in reach, the same
+    /// run of live arithmetic does not.
+    #[test]
+    fn unread_constants_add_no_forward_distance() {
+        for (live, forwards) in [(false, true), (true, false)] {
+            let mut insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::StoreLocal {
+                    disp: 0,
+                    off: -1,
+                    value: 0,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    nsw: false,
+                },
+            ];
+            for k in 0..20 {
+                insts.push(if live {
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: if k == 0 {
+                            0
+                        } else {
+                            insts.len() as ValueId - 1
+                        },
+                        rhs_imm: 1,
+                    }
+                } else {
+                    Inst::Imm(0)
+                });
+            }
+            let chain = insts.len() as ValueId - 1;
+            insts.push(Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            });
+            let load = chain + 1;
+            insts.push(Inst::Binop {
+                op: crate::c5::ir::BinOp::Add,
+                lhs: chain,
+                rhs: load,
+            });
+            let n = insts.len() as ValueId - 1;
+            let mut f = fresh(insts, Terminator::Return(n), n);
+            run_one(&mut f);
+            let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
+            assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
+        }
+    }
+
     /// A call between the slot store and the reload blocks the forward:
     /// not for aliasing (the callee cannot reach the slot) but because
     /// forwarding would keep the value live across the call.
@@ -2363,10 +2431,7 @@ mod tests {
             kind: LoadKind::I64,
         };
         let mut insts = alloc::vec![param, load_of(0)];
-        insts.extend(core::iter::repeat_n(
-            Inst::Imm(0),
-            super::MAX_FORWARD_DISTANCE as usize + 1,
-        ));
+        insts.extend(live_filler(2));
         let near = insts.len() as ValueId;
         insts.extend([load_of(0), load_of(0)]);
         insts.push(Inst::Binop {
@@ -2384,9 +2449,22 @@ mod tests {
         );
     }
 
+    /// Arithmetic from the parameter `v0`, starting at value `start`, that
+    /// the emit performs past the forward bound: each step reads the one
+    /// before it.
+    fn live_filler(start: ValueId) -> Vec<Inst> {
+        (0..super::MAX_FORWARD_DISTANCE + 2)
+            .map(|k| Inst::BinopI {
+                op: BinOp::Add,
+                lhs: if k == 0 { 0 } else { start + k - 1 },
+                rhs_imm: 1,
+            })
+            .collect()
+    }
+
     #[test]
     fn indexed_forward_is_bounded_by_distance() {
-        let filler = alloc::vec![Inst::Imm(0); super::MAX_FORWARD_DISTANCE as usize + 1];
+        let filler = live_filler(4);
         let (v, _) = indexed_reload(load_indexed(0, 1, 1, LoadKind::I8), filler, LoadKind::I8);
         assert_ne!(v, 3, "a reuse past the bound reloads");
     }

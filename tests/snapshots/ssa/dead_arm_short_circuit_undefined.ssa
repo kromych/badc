@@ -158,8 +158,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v152 Imm(0)                                           -> x0
     v153 LocalAddr(-2)                                    -> x0
     v154 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v155 BinopI { op=and, lhs=v154, rhs_imm=1 }           -> x0
-    v156 BinopI { op=eq, lhs=v155, rhs_imm=0 }            -> x0
+    v155 Imm(1)                                           -> x0
+    v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x0
     v158 Imm(0)                                           -> x0
     v159 Imm(0)                                           -> x0
@@ -254,8 +254,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v248 Imm(0)                                           -> x0
     v249 LocalAddr(-2)                                    -> x0
     v250 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v251 BinopI { op=and, lhs=v250, rhs_imm=1 }           -> x0
-    v252 BinopI { op=eq, lhs=v251, rhs_imm=0 }            -> x0
+    v251 Imm(1)                                           -> x0
+    v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0
     v254 Imm(0)                                           -> x0
     v255 Imm(0)                                           -> x0
@@ -350,8 +350,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v344 Imm(0)                                           -> x0
     v345 LocalAddr(-2)                                    -> x0
     v346 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v347 BinopI { op=and, lhs=v346, rhs_imm=1 }           -> x0
-    v348 BinopI { op=eq, lhs=v347, rhs_imm=0 }            -> x0
+    v347 Imm(1)                                           -> x0
+    v348 Imm(0)                                           -> x0
     v349 Imm(0)                                           -> x0
     v350 Imm(0)                                           -> x0
     v351 Imm(0)                                           -> x0
@@ -446,8 +446,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=2
     v440 Imm(0)                                           -> x0
     v441 LocalAddr(-2)                                    -> x0
     v442 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v443 BinopI { op=and, lhs=v442, rhs_imm=1 }           -> x0
-    v444 BinopI { op=eq, lhs=v443, rhs_imm=0 }            -> x0
+    v443 Imm(1)                                           -> x0
+    v444 Imm(0)                                           -> x0
     v445 Imm(0)                                           -> x0
     v446 Imm(0)                                           -> x0
     v447 Imm(0)                                           -> x0

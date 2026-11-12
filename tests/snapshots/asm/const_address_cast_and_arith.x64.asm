@@ -89,9 +89,8 @@ Disassembly of section .text:
                	movq	<rip>, %rsi # <addr>
                	cmpq	%rax, %rsi
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rsi # <addr>
-               	cmpq	%rsi, %rax
+               	cmpq	%rax, %rsi
                	je	<addr>
                	movl	$0xb, %eax
                	retq
@@ -125,9 +124,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x11, %eax
                	retq

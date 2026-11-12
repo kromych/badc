@@ -1018,37 +1018,36 @@ Disassembly of section .text:
                	str	wzr, [x1, #0x70]
                	strb	wzr, [x20]
                	bl	<addr>
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
-               	ldrb	w2, [x20, x0]
-               	cbz	x2, <addr>
-               	ldrb	w2, [x20, x0]
-               	ldrb	w3, [x1, x0]
-               	cmp	w2, w3
+               	ldrb	w1, [x20, x0]
+               	cbz	x1, <addr>
+               	ldrb	w3, [x2, x0]
+               	cmp	w1, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
-               	ldrb	w2, [x20, x0]
-               	cbnz	x2, <addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrb	w3, [x2, x0]
-               	ldrb	w0, [x1, x0]
+               	ldrb	w1, [x20, x0]
+               	cbnz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w3, [x1, x0]
+               	ldrb	w0, [x2, x0]
                	cmp	w3, w0
                	adrp	x0, <page>
                	ldrsw	x3, [x0, #0x74]
                	add	x3, x3, #0x1
                	str	w3, [x0, #0x74]
                	b.eq	<addr>
-               	adrp	x1, <page>
-               	ldrsw	x3, [x1, #0x78]
+               	adrp	x2, <page>
+               	ldrsw	x3, [x2, #0x78]
                	cbnz	w3, <addr>
                	ldrsw	x0, [x0, #0x74]
-               	str	w0, [x1, #0x78]
+               	str	w0, [x2, #0x78]
                	adrp	x0, <page>
                	mov	x20, #0x0               // =0
                	str	w20, [x0, #0x70]
-               	strb	w20, [x2]
+               	strb	w20, [x1]
                	adrp	x22, <page>
                	mov	x21, #0x0               // =0
                	str	w21, [x22, #0x84]
@@ -1133,7 +1132,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	cmp	w20, #0x2
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x10]
                	cbz	x0, <addr>
                	bl	<addr>
                	adrp	x0, <page>

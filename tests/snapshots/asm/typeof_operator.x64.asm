@@ -31,21 +31,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x5, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
                	retq
                	xorl	%eax, %eax
-               	leave
                	retq

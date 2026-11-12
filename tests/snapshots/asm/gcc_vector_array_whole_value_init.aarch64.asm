@@ -157,13 +157,6 @@ Disassembly of section .text:
                	stur	q1, [x29, #-0x40]
                	mov	x0, #0x6                // =6
                	stur	w0, [x29, #-0x30]
-               	ldursw	x0, [x29, #-0x50]
-               	cmp	w0, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x15               // =21
-               	add	sp, sp, #0x60
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x10

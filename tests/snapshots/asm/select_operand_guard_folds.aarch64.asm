@@ -63,13 +63,11 @@ Disassembly of section .text:
                	ldrsw	x3, [x1, #0x50]
                	cbz	x3, <addr>
                	str	w0, [x1, #0x50]
-               	ldrsw	x3, [x2, #0x60]
-               	cbz	x3, <addr>
-               	ldrsw	x1, [x1, #0x50]
+               	ldrsw	x1, [x2, #0x60]
                	cbz	x1, <addr>
-               	mov	x0, #0x7                // =7
-               	ret
                	str	w0, [x2, #0x60]
+               	ret
+               	mov	x0, #0x7                // =7
                	ret
                	mov	x0, #0x6                // =6
                	ret

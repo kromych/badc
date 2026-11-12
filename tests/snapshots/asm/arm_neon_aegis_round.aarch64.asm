@@ -69,10 +69,10 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0x40]
                	umov	w0, v0.b[5]
                	eor	x0, x0, #0xff
-               	mov	v0.b[5], w0
+               	mov	v1.16b, v0.16b
+               	mov	v1.b[5], w0
                	sub	x2, x29, #0x20
-               	ldur	q1, [x29, #-0x40]
-               	cmeq	v0.16b, v1.16b, v0.16b
+               	cmeq	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x20]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
@@ -144,14 +144,13 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x1, #0x7f               // =127
                	mov	x0, #0x0                // =0
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldrb	w3, [x2, x0]
-               	sxtb	x3, w3
-               	cmp	w3, w1
-               	b.ge	<addr>
-               	ldrb	w1, [x2, x0]
-               	sxtb	x1, w1
+               	adrp	x3, <addr>
+               	add	x3, x3, <lo12>
+               	ldrb	w2, [x3, x0]
+               	sxtb	x4, w2
+               	sxtb	x2, w2
+               	cmp	w4, w1
+               	csel	x1, x2, x1, lt
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

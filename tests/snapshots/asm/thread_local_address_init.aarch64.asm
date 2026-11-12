@@ -33,14 +33,13 @@ Disassembly of section .text:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x18
-               	ldr	x1, [x0]
-               	ldrb	w2, [x1]
-               	cmp	w2, #0x68
+               	ldr	x0, [x0]
+               	ldrb	w1, [x0]
+               	cmp	w1, #0x68
                	b.ne	<addr>
-               	ldrb	w1, [x1, #0x1]
+               	ldrb	w1, [x0, #0x1]
                	cmp	w1, #0x69
                	b.ne	<addr>
-               	ldr	x0, [x0]
                	ldrb	w0, [x0, #0x2]
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2

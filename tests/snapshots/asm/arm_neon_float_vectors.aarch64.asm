@@ -828,7 +828,6 @@ Disassembly of section .text:
                	dup	v0.2s, v17.s[0]
                	stur	d0, [x29, #-0x38]
                	stur	q2, [x29, #-0x30]
-               	stur	d3, [x29, #-0x30]
                	ldur	s0, [x29, #-0x38]
                	fmov	s17, w0
                	fcmp	s0, s17
@@ -837,9 +836,8 @@ Disassembly of section .text:
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.ne	<addr>
-               	ldur	d0, [x29, #-0x30]
-               	fmov	d2, #10.50000000
-               	fcmp	d0, d2
+               	fmov	d0, #10.50000000
+               	fcmp	d3, d0
                	b.ne	<addr>
                	ldur	d0, [x29, #-0x28]
                	fmov	d2, #4.00000000

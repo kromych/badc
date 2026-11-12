@@ -68,13 +68,12 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movq	-0x80(%rbp), %rax
+               	movq	-0x40(%rbp), %rax
                	bswapq	%rax
-               	movq	-0x40(%rbp), %rcx
-               	bswapq	%rcx
-               	movl	-0x40(%rbp), %edx
-               	addq	%rdx, %rcx
-               	xorq	%rcx, %rax
+               	movl	-0x40(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
+               	xorq	%r11, %rax
                	bswapq	%rax
                	movq	%rax, -0x80(%rbp)
                	movq	-0x78(%rbp), %rax

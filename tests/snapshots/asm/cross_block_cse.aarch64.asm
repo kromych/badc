@@ -38,15 +38,6 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	mov	x1, #0x51               // =81
                	stur	w1, [x29, #-0x4]
-               	ldursw	x1, [x29, #-0xc]
-               	cmp	w1, #0xc8
-               	b.le	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	cmp	w1, #0x31
-               	b.ne	<addr>
                	mov	x1, #0x99               // =153
                	mov	x4, #0xa                // =10
                	mov	x5, #0x999a             // =39322

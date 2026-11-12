@@ -117,12 +117,10 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	andq	$0xfff, %rcx            # imm = 0xFFF
                	xorl	%eax, %eax
+               	movl	$0x1, %edx
                	testl	%ecx, %ecx
-               	jne	<addr>
-               	movsbq	(%rsp), %rcx
-               	cmpl	$0x1, %ecx
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	movq	%rdx, %rcx
+               	cmovneq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movsbq	0xfff(%rsp), %rax
@@ -131,8 +129,6 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	leave
                	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>
 
 <over_a_page>:
                	pushq	%rbp
@@ -155,12 +151,10 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	andq	$0x3f, %rdx
                	xorl	%eax, %eax
+               	movl	$0x1, %esi
                	testl	%edx, %edx
-               	jne	<addr>
-               	movsbq	(%rsp), %rdx
-               	cmpl	$0x1, %edx
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	movq	%rsi, %rdx
+               	cmovneq	%rax, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rcx
@@ -178,8 +172,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	%rax, %rcx
-               	jmp	<addr>
-               	movq	%rax, %rdx
                	jmp	<addr>
 
 <nested>:

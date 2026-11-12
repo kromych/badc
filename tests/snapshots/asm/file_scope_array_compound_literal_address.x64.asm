@@ -69,7 +69,6 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpb	$0x0, 0x2(%rax)
                	jne	<addr>
-               	movq	<rip>, %rax # <addr>
                	cmpb	$0x0, 0x3(%rax)
                	je	<addr>
                	movl	$0x3, %eax

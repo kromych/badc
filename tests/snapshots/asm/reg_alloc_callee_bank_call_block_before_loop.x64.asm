@@ -62,10 +62,9 @@ Disassembly of section .text:
                	jg	<addr>
                	cmpl	%edx, %ebx
                	jg	<addr>
-               	movl	(%r12,%rcx,4), %r8d
-               	movl	(%r12,%rdi,4), %r9d
-               	movl	%r9d, (%r12,%rcx,4)
-               	movl	%r8d, (%r12,%rdi,4)
+               	movl	(%r12,%rcx,4), %r9d
+               	movl	%r8d, (%r12,%rcx,4)
+               	movl	%r9d, (%r12,%rdi,4)
                	incq	%rbx
                	decq	%rdx
                	cmpl	%edx, %ebx

@@ -105,7 +105,6 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpq	$0x0, 0x8(%rax)
                	jne	<addr>
-               	movq	-0x10(%rbp), %rax
                	movq	0x18(%rax), %rdi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax

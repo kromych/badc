@@ -155,7 +155,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     terminator Bz { cond=v607, target=b13, fall=b12 }   (exit_acc=v607)
   block 12  start_pc=0
     v622 LocalAddr(-1)                                    -> x1
-    v623 LoadLocal { off=-1, kind=I32 }                   -> x7
+    v623 Extend { value=v599, kind=I32 }                  -> x7
     v624 Extend { value=v623, kind=I32 }                  -> x1
     v625 ImmData(16)                                      -> x1
     v626 ImmData(272)                                     -> x1

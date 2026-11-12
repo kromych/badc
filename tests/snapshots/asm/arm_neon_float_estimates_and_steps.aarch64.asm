@@ -138,41 +138,40 @@ Disassembly of section .text:
                	str	x16, [x0]
                	ldur	d0, [x29, #-0x30]
                	stur	d0, [x29, #-0x8]
-               	ldur	q0, [x29, #-0x20]
-               	mov	d2, v0.d[1]
-               	ldur	q1, [x29, #-0x10]
-               	mov	d3, v1.d[1]
-               	frecpe	v4.4s, v0.4s
+               	ldur	q1, [x29, #-0x20]
+               	mov	d2, v1.d[1]
+               	ldur	q3, [x29, #-0x10]
+               	frecpe	v4.4s, v1.4s
                	stur	q4, [x29, #-0xb0]
-               	frsqrte	v0.4s, v0.4s
-               	stur	q0, [x29, #-0xa0]
+               	frsqrte	v1.4s, v1.4s
+               	stur	q1, [x29, #-0xa0]
                	stur	d2, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
-               	frecpe	v0.2s, v16.2s
-               	stur	d0, [x29, #-0x28]
+               	frecpe	v1.2s, v16.2s
+               	stur	d1, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]
                	stur	x0, [x29, #-0x50]
                	stur	d2, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
-               	frsqrte	v0.2s, v16.2s
-               	stur	d0, [x29, #-0x28]
+               	frsqrte	v1.2s, v16.2s
+               	stur	d1, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]
                	stur	x0, [x29, #-0x48]
-               	frecpe	v0.2d, v1.2d
-               	stur	q0, [x29, #-0x90]
-               	frsqrte	v0.2d, v1.2d
-               	stur	q0, [x29, #-0x80]
-               	stur	d3, [x29, #-0x30]
+               	frecpe	v1.2d, v3.2d
+               	stur	q1, [x29, #-0x90]
+               	frsqrte	v1.2d, v3.2d
+               	stur	q1, [x29, #-0x80]
+               	stur	d0, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
-               	frecpe	d0, d16
-               	stur	d0, [x29, #-0x28]
+               	frecpe	d1, d16
+               	stur	d1, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]
                	stur	x0, [x29, #-0x40]
                	ldur	d8, [x29, #-0x40]
-               	stur	d3, [x29, #-0x30]
+               	stur	d0, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
                	frsqrte	d0, d16

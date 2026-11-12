@@ -35,11 +35,6 @@ Disassembly of section .text:
                	str	w2, [x0, #0x20]
                	mov	x2, #0x2                // =2
                	str	w2, [x0, #0x20]
-               	ldrsw	x2, [x0, #0x20]
-               	cmp	w2, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
                	str	wzr, [x0, #0x20]
                	mov	x2, #0x1                // =1
                	str	w2, [x0, #0x20]

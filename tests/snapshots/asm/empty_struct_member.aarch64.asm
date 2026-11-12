@@ -21,15 +21,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x28]
                	mov	x0, #0x2222             // =8738
                	stur	x0, [x29, #-0x20]
-               	ldur	x0, [x29, #-0x28]
-               	mov	x17, #0x1111            // =4369
-               	cmp	x0, x17
-               	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x5                // =5
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

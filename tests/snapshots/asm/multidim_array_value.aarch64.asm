@@ -25,33 +25,25 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x3, x29, #0x18
+               	sub	x2, x29, #0x18
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x3]
+               	stp	x16, x17, [x2]
                	ldr	x16, [x0, #0x10]
-               	str	x16, [x3, #0x10]
+               	str	x16, [x2, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x1, x0, #0xc
-               	ldrsw	x2, [x1, #0x8]
-               	cmp	w2, #0x6
+               	ldrsw	x3, [x1, #0x8]
+               	cmp	w3, #0x6
                	b.ne	<addr>
-               	ldrsw	x2, [x1, #0x8]
-               	cmp	w2, #0x6
+               	cmp	w3, #0x6
                	b.ne	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	mov	x4, #0x2a               // =42
-               	str	w4, [x2, #0x5c]
-               	ldrsw	x4, [x2, #0x5c]
-               	cmp	w4, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	str	w4, [x3, #0x5c]
                	ldrsw	x4, [x0, #0xc]
                	cmp	w4, #0x4
                	b.ne	<addr>
@@ -104,8 +96,8 @@ Disassembly of section .text:
                	add	x0, x0, x0, lsr #63
                	cmp	x0, #0x2
                	b.ne	<addr>
-               	add	x0, x2, #0x30
-               	sub	x0, x0, x2
+               	add	x0, x3, #0x30
+               	sub	x0, x0, x3
                	smulh	x0, x0, x1
                	asr	x0, x0, #3
                	add	x0, x0, x0, lsr #63
@@ -115,11 +107,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x3, #0xc
-               	ldrsw	x2, [x0]
-               	cmp	w2, #0xa
+               	add	x0, x2, #0xc
+               	ldrsw	x3, [x0]
+               	cmp	w3, #0xa
                	b.ne	<addr>
-               	sub	x0, x0, x3
+               	sub	x0, x0, x2
                	smulh	x0, x0, x1
                	asr	x0, x0, #1
                	add	x0, x0, x0, lsr #63

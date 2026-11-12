@@ -52,15 +52,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0]
-               	ldr	x3, [x0, #0x8]
-               	add	x1, x2, #0x1
-               	cmp	x1, x2
-               	cset	x2, lo
-               	add	x2, x3, x2
-               	str	x1, [x0]
-               	str	x2, [x0, #0x8]
-               	cmp	w1, #0xd
+               	add	x3, x1, #0x1
+               	cmp	x3, x1
+               	cset	x1, lo
+               	add	x1, x2, x1
+               	str	x3, [x0]
+               	str	x1, [x0, #0x8]
+               	cmp	w3, #0xd
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10

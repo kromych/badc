@@ -58,12 +58,11 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	-0x40(%rbp), %rcx
                	leaq	-0x1(%rax), %rdx
-               	movsbq	(%rcx,%rdx), %rsi
-               	cmpl	$0xa, %esi
-               	je	<addr>
-               	cmpl	$0xd, %esi
-               	je	<addr>
                	movsbq	(%rcx,%rdx), %rcx
+               	cmpl	$0xa, %ecx
+               	je	<addr>
+               	cmpl	$0xd, %ecx
+               	je	<addr>
                	cmpl	$0x20, %ecx
                	jne	<addr>
                	leaq	-0x40(%rbp), %rcx

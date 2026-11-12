@@ -75,12 +75,12 @@ Disassembly of section .text:
                	cmpl	$0xfff80001, %eax       # imm = 0xFFF80001
                	jne	<addr>
                	movl	-0x5(%rbp), %eax
-               	sarq	$0x4, %rax
-               	shlq	$0x2c, %rax
-               	sarq	$0x2c, %rax
-               	cmpl	$0x7ffff, %eax          # imm = 0x7FFFF
+               	movq	%rax, %rcx
+               	sarq	$0x4, %rcx
+               	shlq	$0x2c, %rcx
+               	sarq	$0x2c, %rcx
+               	cmpl	$0x7ffff, %ecx          # imm = 0x7FFFF
                	jne	<addr>
-               	movl	-0x5(%rbp), %eax
                	andq	$-0xfffff1, %rax        # imm = 0xFF00000F
                	orq	$0xfffff0, %rax         # imm = 0xFFFFF0
                	movl	%eax, -0x5(%rbp)

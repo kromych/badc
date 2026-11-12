@@ -29,14 +29,14 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	sarq	$0x3f, %rcx
-               	xorq	$-0x3, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x3, %rdx
                	xorq	$-0x1, %rcx
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	orq	%rdx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	sarq	$0x3f, %rax
                	movq	%rax, %rcx
                	sarq	$0x3f, %rcx
@@ -56,14 +56,14 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	sarq	$0x3f, %rcx
-               	xorq	$-0x3, %rax
+               	movq	%rax, %rdx
+               	xorq	$-0x3, %rdx
                	xorq	$-0x1, %rcx
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	orq	%rdx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	addq	$0x4, %rax
                	cmpl	$0x1, %eax
                	je	<addr>

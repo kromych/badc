@@ -54,7 +54,8 @@ Disassembly of section .text:
                	movl	$0x5e, %edx
                	movb	$0x0, %al
                	callq	<addr>
-               	cmpl	$0x0, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -63,7 +64,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	<rip>, %eax # <addr>
                	popq	%rbx
                	leave
                	retq

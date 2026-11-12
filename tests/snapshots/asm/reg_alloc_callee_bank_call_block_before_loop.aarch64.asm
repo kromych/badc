@@ -43,10 +43,9 @@ Disassembly of section .text:
                	b.gt	<addr>
                	cmp	w20, w2
                	b.gt	<addr>
-               	ldrsw	x3, [x21, w20, sxtw #2]
-               	ldrsw	x4, [x21, w2, sxtw #2]
-               	str	w4, [x21, w20, sxtw #2]
-               	str	w3, [x21, w2, sxtw #2]
+               	ldrsw	x4, [x21, w20, sxtw #2]
+               	str	w3, [x21, w20, sxtw #2]
+               	str	w4, [x21, w2, sxtw #2]
                	add	x20, x20, #0x1
                	sub	x2, x2, #0x1
                	cmp	w20, w2

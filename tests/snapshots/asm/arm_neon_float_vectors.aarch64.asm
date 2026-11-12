@@ -742,44 +742,44 @@ Disassembly of section .text:
                	fmov	d17, x0
                	mov	v4.s[3], v17.s[0]
                	fcvtn2	v4.4s, v2.2d
-               	fmov	s6, #1.50000000
-               	fmov	s7, #2.00000000
-               	fmov	s19, #-2.00000000
-               	fmov	s20, #4.00000000
+               	fmov	s7, #1.50000000
+               	fmov	s19, #2.00000000
+               	fmov	s20, #-2.00000000
+               	fmov	s6, #4.00000000
                	mov	s21, v4.s[0]
-               	fcmp	s21, s6
+               	fcmp	s21, s7
                	b.ne	<addr>
-               	mov	s6, v4.s[1]
-               	fcmp	s6, s19
+               	mov	s7, v4.s[1]
+               	fcmp	s7, s20
                	b.ne	<addr>
-               	mov	s6, v4.s[2]
-               	fcmp	s6, s7
+               	mov	s7, v4.s[2]
+               	fcmp	s7, s19
                	b.ne	<addr>
                	mov	s4, v4.s[3]
-               	fcmp	s4, s20
+               	fcmp	s4, s6
                	b.eq	<addr>
                	mov	x0, #0x2e               // =46
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	d0, v0.d[1]
-               	mov	d1, v1.d[0]
-               	zip1	v0.2d, v0.2d, v1.2d
-               	fmov	s1, #3.25000000
-               	fmov	s4, #8.00000000
-               	fmov	s6, #0.50000000
-               	fmov	s7, #4.00000000
-               	mov	s19, v0.s[0]
-               	fcmp	s19, s1
+               	mov	x0, #0x0                // =0
+               	fmov	d0, d0
+               	zip1	v1.2d, v0.2d, v1.2d
+               	fmov	s4, #3.25000000
+               	fmov	s7, #8.00000000
+               	fmov	s19, #0.50000000
+               	mov	s20, v0.s[0]
+               	fcmp	s20, s4
                	b.ne	<addr>
-               	mov	s1, v0.s[1]
-               	fcmp	s1, s4
-               	b.ne	<addr>
-               	mov	s1, v0.s[2]
-               	fcmp	s1, s6
-               	b.ne	<addr>
-               	mov	s0, v0.s[3]
+               	mov	s0, v0.s[1]
                	fcmp	s0, s7
+               	b.ne	<addr>
+               	mov	s0, v1.s[2]
+               	fcmp	s0, s19
+               	b.ne	<addr>
+               	mov	s0, v1.s[3]
+               	fcmp	s0, s6
                	b.eq	<addr>
                	mov	x0, #0x2f               // =47
                	add	sp, sp, #0x40
@@ -787,12 +787,10 @@ Disassembly of section .text:
                	ret
                	mov	d0, v5.d[1]
                	mov	d1, v2.d[0]
-               	zip1	v0.2d, v0.2d, v1.2d
-               	mov	d1, v0.d[0]
                	fmov	d4, #-0.25000000
-               	fcmp	d1, d4
+               	fcmp	d0, d4
                	b.ne	<addr>
-               	mov	d0, v0.d[1]
+               	fmov	d0, d1
                	fmov	d1, #2.00000000
                	fcmp	d0, d1
                	b.eq	<addr>

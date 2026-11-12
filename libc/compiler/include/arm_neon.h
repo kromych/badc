@@ -261,11 +261,18 @@ __BADC_NEON_ALL(__BADC_NEON_F_DUP, _)
     __BADC_INTRIN Q vld1q_dup_##sfx(const E *__p) { return vdupq_n_##sfx(*__p); }
 __BADC_NEON_ALL(__BADC_NEON_F_MEM, _)
 
-/* Halves and the concatenation of two. */
+/* Halves and the concatenation of two, as the 64-bit lanes of the
+ * 128-bit vector. */
 #define __BADC_NEON_F_HALF(_, sfx, k, E, D, Q, ...)                       \
-    __BADC_NEON_FN1(vget_low_##sfx, D, Q, "mov %d0, %1.d[0]")             \
-    __BADC_NEON_FN1(vget_high_##sfx, D, Q, "mov %d0, %1.d[1]")            \
-    __BADC_NEON_FN2(vcombine_##sfx, Q, D, D, "zip1 %0.2d, %1.2d, %2.2d")
+    __BADC_INTRIN D vget_low_##sfx(Q __a) {                               \
+        return (D)(float64x1_t){((float64x2_t)__a)[0]};                   \
+    }                                                                     \
+    __BADC_INTRIN D vget_high_##sfx(Q __a) {                              \
+        return (D)(float64x1_t){((float64x2_t)__a)[1]};                   \
+    }                                                                     \
+    __BADC_INTRIN Q vcombine_##sfx(D __a, D __b) {                        \
+        return (Q)(float64x2_t){((float64x1_t)__a)[0], ((float64x1_t)__b)[0]}; \
+    }
 __BADC_NEON_ALL(__BADC_NEON_F_HALF, _)
 
 /* Reinterpretations: casts between vector types of one width. AFTER_x

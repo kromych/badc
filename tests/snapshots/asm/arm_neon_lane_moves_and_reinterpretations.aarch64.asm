@@ -1450,7 +1450,6 @@ Disassembly of section .text:
 
 <w_vget_low_s8>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1463,7 +1462,7 @@ Disassembly of section .text:
 <w_vcombine_s8>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1499,7 +1498,6 @@ Disassembly of section .text:
 
 <w_vget_low_u8>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1512,7 +1510,7 @@ Disassembly of section .text:
 <w_vcombine_u8>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1550,7 +1548,6 @@ Disassembly of section .text:
 
 <w_vget_low_p8>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1563,7 +1560,7 @@ Disassembly of section .text:
 <w_vcombine_p8>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1601,7 +1598,6 @@ Disassembly of section .text:
 
 <w_vget_low_s16>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1614,7 +1610,7 @@ Disassembly of section .text:
 <w_vcombine_s16>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1650,7 +1646,6 @@ Disassembly of section .text:
 
 <w_vget_low_u16>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1663,7 +1658,7 @@ Disassembly of section .text:
 <w_vcombine_u16>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1701,7 +1696,6 @@ Disassembly of section .text:
 
 <w_vget_low_p16>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1714,7 +1708,7 @@ Disassembly of section .text:
 <w_vcombine_p16>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1752,7 +1746,6 @@ Disassembly of section .text:
 
 <w_vget_low_s32>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1765,7 +1758,7 @@ Disassembly of section .text:
 <w_vcombine_s32>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1801,7 +1794,6 @@ Disassembly of section .text:
 
 <w_vget_low_u32>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1814,7 +1806,7 @@ Disassembly of section .text:
 <w_vcombine_u32>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1850,7 +1842,6 @@ Disassembly of section .text:
 
 <w_vget_low_f32>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1863,7 +1854,7 @@ Disassembly of section .text:
 <w_vcombine_f32>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1895,7 +1886,6 @@ Disassembly of section .text:
 
 <w_vget_low_s64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1908,7 +1898,7 @@ Disassembly of section .text:
 <w_vcombine_s64>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1941,7 +1931,6 @@ Disassembly of section .text:
 
 <w_vget_low_u64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1954,7 +1943,7 @@ Disassembly of section .text:
 <w_vcombine_u64>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1987,7 +1976,6 @@ Disassembly of section .text:
 
 <w_vget_low_p64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -2000,7 +1988,7 @@ Disassembly of section .text:
 <w_vcombine_p64>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 
@@ -2033,7 +2021,6 @@ Disassembly of section .text:
 
 <w_vget_low_f64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -2046,7 +2033,7 @@ Disassembly of section .text:
 <w_vcombine_f64>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	zip1	v0.2d, v0.2d, v1.2d
+               	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret
 

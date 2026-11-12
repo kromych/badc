@@ -444,6 +444,34 @@ fn the_loads_stores_and_broadcasts_are_their_instructions() {
     );
 }
 
+/// A half of a 128-bit vector is its 64-bit lane, and two halves combine
+/// into one register: `mov d, v.d[1]`, nothing for the low half, `ins` and
+/// `zip1`.
+#[cfg(feature = "full")]
+#[test]
+fn the_halves_and_their_combination_are_lane_moves() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        uint8x8_t lo(uint8x16_t a) { return vget_low_u8(a); }\n\
+        float32x2_t hi(float32x4_t a) { return vget_high_f32(a); }\n\
+        int16x8_t comb(int16x4_t a, int16x4_t b) { return vcombine_s16(a, b); }\n\
+        int16x8_t swap(int16x4_t a, int16x4_t b) { return vcombine_s16(b, a); }\n\
+        float32x4_t mix(float32x4_t a, float32x4_t b) {\n\
+            return vcombine_f32(vget_high_f32(a), vget_low_f32(b));\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("lo", &[RET][..]),
+        ("hi", &[0x5E18_0400, RET]),
+        ("comb", &[0x6E18_0420, RET]),
+        ("swap", &[0x4EC0_3820, RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+    let words = super::perf_codegen::a64_at(SRC, "mix", true);
+    assert!(words.len() <= 3, "mix: {words:08x?}");
+}
+
 /// A lane of an 8-byte vector is read and written in its register, as a
 /// 16-byte vector's is: `smov` and `ins` on the D register.
 #[cfg(feature = "full")]

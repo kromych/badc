@@ -359,8 +359,7 @@ Disassembly of section .text:
                	retq
 
 <model_round>:
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm1
+               	movapd	%xmm0, %xmm1
                	movq	%xmm1, %rcx
                	movq	%rcx, %rax
                	shrq	$0x34, %rax

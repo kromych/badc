@@ -2070,6 +2070,25 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         };
         redirect[load_id as usize] = None;
     }
+    // Bits moved back to the file they came from are the value they were;
+    // the reaching values are final once every load above is a cast.
+    for (&load_id, slot) in &load_slot {
+        let Inst::FpCast { kind, value } = func.insts[load_id as usize] else {
+            continue;
+        };
+        if bits.contains_key(slot)
+            && let Inst::FpCast {
+                kind: inner,
+                value: x,
+            } = func.insts[resolve(&redirect, value) as usize]
+            && matches!(
+                (kind, inner),
+                (FpCastKind::BitsFp, FpCastKind::FpBits) | (FpCastKind::FpBits, FpCastKind::BitsFp)
+            )
+        {
+            redirect[load_id as usize] = Some(x);
+        }
+    }
     store_ids.retain(|id| !marked_stores.contains(id));
 
     // Narrow loads keep their own id but become an extension of the
@@ -2783,6 +2802,59 @@ mod tests {
             !f.insts
                 .iter()
                 .any(|i| matches!(i, Inst::Mcpy { .. } | Inst::LocalAddr(_)))
+        );
+    }
+
+    /// A double's bits moved through an integer slot and read back as a
+    /// double are the double.
+    #[test]
+    fn bits_moved_back_to_their_file_are_the_value() {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::F64,
+            },
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                value: 0,
+                kind: StoreKind::F64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::StoreLocal {
+                disp: 0,
+                off: -2,
+                value: 2,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -2,
+                kind: LoadKind::F64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..5,
+            terminator: Terminator::Return(4),
+            exit_acc: 4,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(0)),
+            "{:?}",
+            f.insts
         );
     }
 

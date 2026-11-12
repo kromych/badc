@@ -251,13 +251,13 @@ fn ent_pc=11 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
 fn ent_pc=14 n_params=0 variadic=false locals=14
-  spill_count=1 gpr_used=[3] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4653144478742216704)                         -> x0
     v2   Imm(-4570227558112559104)                        -> x0
     v3   StoreLocal { off=-2, value=v2, kind=F64, volatile } -> -
-    v4   LoadLocal { off=-2, kind=F64, volatile }         -> [spill 0]
+    v4   LoadLocal { off=-2, kind=F64, volatile }         -> [spill 1]
     v5   Imm(0)                                           -> x0
     v6   LocalAddr(-14)                                   -> x6
     v7   ImmData(8)                                       -> x0
@@ -265,7 +265,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
     v9   LocalAddr(-13)                                   -> x2
     v10  ImmData(16)                                      -> x0
     v11  Mcpy { dst=v9, src=v10, size=8, align=8 }        -> -
-    v12  LocalAddr(-9)                                    -> x3
+    v12  LocalAddr(-9)                                    -> [spill 0]
     v13  LocalAddr(-14)                                   -> x0
     v14  LocalAddr(-13)                                   -> x0
     v15  Call { target_pc=1, args=[v12, v6, v9], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -738,10 +738,10 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
     v460 LocalAddr(-10)                                   -> x2
     v461 LocalAddr(-1)                                    -> x2
     v462 Mcpy { dst=v453, src=v454, size=8, align=1 }     -> -
-    v463 LoadLocal { off=-10, kind=F64 }                  -> d0
+    v463 LoadLocal { off=-10, kind=F64 }                  -> [spill 0]
     v464 LifetimeEnd(-10)                                 -> -
     v465 LifetimeEnd(-1)                                  -> -
-    v466 FpCast { kind=FpBits, value=v463 }               -> x3
+    v466 FpCast { kind=FpBits, value=v463 }               -> x0
     v467 Imm(4)                                           -> x0
     v468 Imm(5)                                           -> x0
     v469 Imm(5)                                           -> x0
@@ -758,8 +758,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=14
     v480 LifetimeEnd(-10)                                 -> -
     v481 LifetimeEnd(-1)                                  -> -
     v482 Imm(0)                                           -> x6
-    v483 FpCast { kind=BitsFp, value=v466 }               -> d0
-    v484 StoreLocal { off=-1, value=v466, kind=I64, volatile } -> -
+    v483 Imm(0)                                           -> x6
+    v484 StoreLocal { off=-1, value=v463, kind=F64, volatile } -> -
     v485 LocalAddr(-10)                                   -> x6
     v486 LocalAddr(-1)                                    -> x6
     v487 Mcpy { dst=v476, src=v477, size=8, align=1 }     -> -

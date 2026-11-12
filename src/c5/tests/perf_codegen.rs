@@ -3235,6 +3235,23 @@ fn a_select_writes_over_an_arm_it_consumes() {
     assert_eq!(insns.len(), 7, "{insns:x?}");
 }
 
+/// The members of a structure of two 8-byte vectors, read back where it was
+/// built, are the vectors' registers: the copy of the structure moves each
+/// cell as an integer, and its bits come back to the vector file unchanged.
+#[test]
+fn a_pair_of_8_byte_vectors_reads_back_its_registers() {
+    const SRC: &str = "typedef signed char c8 __attribute__((vector_size(8)));\n\
+typedef struct { c8 v[2]; } c8x2;\n\
+static inline __attribute__((always_inline)) c8x2 mk(c8 a, c8 b) { return (c8x2){{a + b, a - b}}; }\n\
+c8 sum(c8 a, c8 b) { c8x2 r = mk(a, b); return r.v[0] + r.v[1]; }\n";
+    let mut m = Misses::default();
+    let words = a64(SRC, "sum");
+    m.expect(words.len() == 4, || format!("aarch64: {words:08x?}"));
+    let insns = x64(SRC, "sum");
+    m.expect(insns.len() == 4, || format!("x86-64: {insns:x?}"));
+    m.finish();
+}
+
 /// A pair of 8-byte vectors returned in a structure and copied out stores
 /// each vector from its register: the copy's 64-bit reloads of the
 /// doubles just stored read those registers.

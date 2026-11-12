@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	paddb	%xmm1, %xmm0
+               	vpaddb	%xmm1, %xmm0, %xmm0
                	leaq	-0x8(%rbp), %rax
                	movsd	%xmm0, -0x8(%rbp)
                	andq	$0x7, %rdi
@@ -41,7 +41,7 @@ Disassembly of section .text:
 
 <write_h>:
                	movq	$-0x7, %rax
-               	psubw	%xmm1, %xmm0
+               	vpsubw	%xmm1, %xmm0, %xmm0
                	vpinsrw	$0x2, %eax, %xmm0, %xmm0
                	retq
 

@@ -1131,8 +1131,7 @@ Disassembly of section .text:
                	movups	(%r9), %xmm0
                	movq	(%rcx,%rsi,8), %rcx
                	movups	(%rcx), %xmm1
-               	movapd	%xmm0, %xmm2
-               	pand	%xmm1, %xmm2
+               	vpand	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rcx
                	vpextrq	$0x1, %xmm2, %r9
                	orq	%r9, %rcx
@@ -1142,9 +1141,8 @@ Disassembly of section .text:
                	cmpl	%r8d, %ecx
                	jne	<addr>
                	vpcmpeqd	%xmm2, %xmm2, %xmm2
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm2, %xmm3
-               	pand	%xmm1, %xmm3
+               	vpxor	%xmm2, %xmm0, %xmm3
+               	vpand	%xmm1, %xmm3, %xmm3
                	vmovq	%xmm3, %rcx
                	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
@@ -1153,17 +1151,15 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	cmpl	%edx, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm3
-               	pand	%xmm1, %xmm3
+               	vpand	%xmm1, %xmm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vpextrq	$0x1, %xmm3, %r9
                	orq	%rcx, %r9
                	xorl	%ecx, %ecx
                	testq	%r9, %r9
                	je	<addr>
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm2, %xmm3
-               	pand	%xmm1, %xmm3
+               	vpxor	%xmm2, %xmm0, %xmm3
+               	vpand	%xmm1, %xmm3, %xmm3
                	vmovq	%xmm3, %rcx
                	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
@@ -1181,8 +1177,7 @@ Disassembly of section .text:
                	cmoveq	%rdi, %r9
                	cmpl	%r9d, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm3
-               	pand	%xmm1, %xmm3
+               	vpand	%xmm1, %xmm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vpextrq	$0x1, %xmm3, %r9
                	orq	%r9, %rcx
@@ -1191,16 +1186,15 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	cmpl	%r8d, %ecx
                	jne	<addr>
-               	movapd	%xmm0, %xmm3
-               	pand	%xmm1, %xmm3
+               	vpand	%xmm1, %xmm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vpextrq	$0x1, %xmm3, %r9
                	orq	%rcx, %r9
                	xorl	%ecx, %ecx
                	testq	%r9, %r9
                	je	<addr>
-               	pxor	%xmm2, %xmm0
-               	pand	%xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
+               	vpand	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	vpextrq	$0x1, %xmm0, %r9
                	orq	%r9, %rcx
@@ -1308,8 +1302,8 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm2
                	pcmpeqd	%xmm0, %xmm2
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	pxor	%xmm1, %xmm0
-               	pand	%xmm2, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
+               	vpand	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	vpextrq	$0x1, %xmm0, %rdx
                	orq	%rdx, %rcx
@@ -1321,8 +1315,8 @@ Disassembly of section .text:
                	vpcmpeqd	%xmm0, %xmm0, %xmm0
                	movapd	%xmm0, %xmm2
                	pcmpeqd	%xmm0, %xmm2
-               	pxor	%xmm1, %xmm0
-               	pand	%xmm2, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
+               	vpand	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	vpextrq	$0x1, %xmm0, %rcx
                	orq	%rcx, %rax

@@ -3623,11 +3623,11 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	movapd	%xmm1, %xmm2
                	pcmpgtd	%xmm0, %xmm2
-               	pand	%xmm2, %xmm0
+               	vpand	%xmm0, %xmm2, %xmm0
                	vpcmpeqd	%xmm3, %xmm3, %xmm3
-               	pxor	%xmm3, %xmm2
-               	pand	%xmm2, %xmm1
-               	por	%xmm1, %xmm0
+               	vpxor	%xmm3, %xmm2, %xmm2
+               	vpand	%xmm1, %xmm2, %xmm1
+               	vpor	%xmm1, %xmm0, %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpq	$0x1, %rax

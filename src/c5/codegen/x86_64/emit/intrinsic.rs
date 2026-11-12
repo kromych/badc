@@ -352,32 +352,32 @@ pub(super) fn emit_vec_binop(
     frame: Frame,
 ) -> Emit {
     use super::super::ir::{BinOp, VecLane};
-    // The SSE form and its VEX / EVEX spelling; EVEX names the bitwise
-    // operations by element width.
-    let (mnem, vmnem) = match (op, lane) {
-        (BinOp::Add, VecLane::I8) => ("paddb", "vpaddb"),
-        (BinOp::Add, VecLane::I16) => ("paddw", "vpaddw"),
-        (BinOp::Add, VecLane::I32) => ("paddd", "vpaddd"),
-        (BinOp::Add, VecLane::I64) => ("paddq", "vpaddq"),
-        (BinOp::Sub, VecLane::I8) => ("psubb", "vpsubb"),
-        (BinOp::Sub, VecLane::I16) => ("psubw", "vpsubw"),
-        (BinOp::Sub, VecLane::I32) => ("psubd", "vpsubd"),
-        (BinOp::Sub, VecLane::I64) => ("psubq", "vpsubq"),
-        (BinOp::Mul, VecLane::I16) => ("pmullw", "vpmullw"),
-        (BinOp::And, _) if bytes == 64 => ("pand", "vpandq"),
-        (BinOp::Or, _) if bytes == 64 => ("por", "vporq"),
-        (BinOp::Xor, _) if bytes == 64 => ("pxor", "vpxorq"),
-        (BinOp::And, _) => ("pand", "vpand"),
-        (BinOp::Or, _) => ("por", "vpor"),
-        (BinOp::Xor, _) => ("pxor", "vpxor"),
-        (BinOp::Fadd, VecLane::F32) => ("addps", "vaddps"),
-        (BinOp::Fadd, VecLane::F64) => ("addpd", "vaddpd"),
-        (BinOp::Fsub, VecLane::F32) => ("subps", "vsubps"),
-        (BinOp::Fsub, VecLane::F64) => ("subpd", "vsubpd"),
-        (BinOp::Fmul, VecLane::F32) => ("mulps", "vmulps"),
-        (BinOp::Fmul, VecLane::F64) => ("mulpd", "vmulpd"),
-        (BinOp::Fdiv, VecLane::F32) => ("divps", "vdivps"),
-        (BinOp::Fdiv, VecLane::F64) => ("divpd", "vdivpd"),
+    // The VEX / EVEX spelling; EVEX names the bitwise operations by
+    // element width.
+    let vmnem = match (op, lane) {
+        (BinOp::Add, VecLane::I8) => "vpaddb",
+        (BinOp::Add, VecLane::I16) => "vpaddw",
+        (BinOp::Add, VecLane::I32) => "vpaddd",
+        (BinOp::Add, VecLane::I64) => "vpaddq",
+        (BinOp::Sub, VecLane::I8) => "vpsubb",
+        (BinOp::Sub, VecLane::I16) => "vpsubw",
+        (BinOp::Sub, VecLane::I32) => "vpsubd",
+        (BinOp::Sub, VecLane::I64) => "vpsubq",
+        (BinOp::Mul, VecLane::I16) => "vpmullw",
+        (BinOp::And, _) if bytes == 64 => "vpandq",
+        (BinOp::Or, _) if bytes == 64 => "vporq",
+        (BinOp::Xor, _) if bytes == 64 => "vpxorq",
+        (BinOp::And, _) => "vpand",
+        (BinOp::Or, _) => "vpor",
+        (BinOp::Xor, _) => "vpxor",
+        (BinOp::Fadd, VecLane::F32) => "vaddps",
+        (BinOp::Fadd, VecLane::F64) => "vaddpd",
+        (BinOp::Fsub, VecLane::F32) => "vsubps",
+        (BinOp::Fsub, VecLane::F64) => "vsubpd",
+        (BinOp::Fmul, VecLane::F32) => "vmulps",
+        (BinOp::Fmul, VecLane::F64) => "vmulpd",
+        (BinOp::Fdiv, VecLane::F32) => "vdivps",
+        (BinOp::Fdiv, VecLane::F64) => "vdivpd",
         _ => {
             return fail(alloc::format!(
                 "VecBinop: no instruction for {op:?} on {lane:?}"
@@ -389,20 +389,51 @@ pub(super) fn emit_vec_binop(
     if w >= VecWidth::V256 {
         return wide_binary(code, vmnem, None, w, dst, (place(lhs), place(rhs)), frame);
     }
-    let commutes = matches!(
-        op,
-        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
-    );
-    sse_binary(
+    vex_binary(
         code,
-        mnem,
-        None,
-        commutes,
+        vmnem,
         bytes == 16,
         dst,
         (place(lhs), place(rhs)),
         frame,
     )
+}
+
+/// The VEX three-operand form `mnem` over xmm registers, `dst = a op b`,
+/// for a 16-byte vector (`wide`) or an 8-byte one in the low half: no
+/// source is copied into the destination first. A spilled source is
+/// loaded into an FP scratch, and a spilled result is formed in one and
+/// stored.
+pub(super) fn vex_binary(
+    code: &mut Vec<u8>,
+    mnem: &'static str,
+    wide: bool,
+    dst: Place,
+    (a, b): (Place, Place),
+    frame: Frame,
+) -> Emit {
+    let (sa, sb) = (Reg(frame.fp_scratch[0]), Reg(frame.fp_scratch[1]));
+    let load = |code: &mut Vec<u8>, p: Place, scratch: Reg| match wide {
+        true => materialize_v128(code, p, scratch, frame),
+        false => materialize_fp(code, p, scratch, frame),
+    };
+    let (Some(ra), Some(rb)) = (load(code, a, sa), load(code, b, sb)) else {
+        return fail("x86 simd: a source has no place");
+    };
+    let rd = match dst {
+        Place::FpReg(r) => Reg(r),
+        _ => sa,
+    };
+    encode_wide(
+        code,
+        mnem,
+        &[wide_reg(16, rb.0), wide_reg(16, ra.0), wide_reg(16, rd.0)],
+    )?;
+    match wide {
+        true => mirror_v128_dst(code, dst, rd, frame),
+        false => fp_spill_dst_to_slot(code, dst, rd, frame),
+    }
+    Ok(())
 }
 
 /// The VEX or EVEX three-operand form `mnem` over 256- or 512-bit

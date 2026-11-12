@@ -992,20 +992,19 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdx
                	xorl	%eax, %eax
                	movups	-0x80(%rbp), %xmm0
-               	movq	%rax, %xmm1
-               	psubd	%xmm0, %xmm1
+               	movq	%rax, %xmm14
+               	vpsubd	%xmm0, %xmm14, %xmm1
                	leaq	-0xd0(%rbp), %rsi
                	movups	%xmm1, -0xd0(%rbp)
                	vpcmpeqd	%xmm1, %xmm1, %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
                	leaq	-0xc0(%rbp), %rdi
                	movups	%xmm0, -0xc0(%rbp)
                	movups	-0x60(%rbp), %xmm0
-               	movq	%rax, %xmm15
-               	psubq	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	movq	%rax, %xmm14
+               	vpsubq	%xmm0, %xmm14, %xmm0
                	movups	-0xa0(%rbp), %xmm2
-               	pxor	%xmm2, %xmm1
+               	vpxor	%xmm1, %xmm2, %xmm1
                	movups	%xmm1, -0xb0(%rbp)
                	movl	(%rsi,%rax,4), %r8d
                	movslq	(%rdx,%rax,4), %rcx

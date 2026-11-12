@@ -5698,12 +5698,12 @@ Disassembly of section .text:
                	vmovdqa	%xmm0, %xmm3
                	vmovdqa	%xmm1, %xmm4
                	vpcmpeqd	%xmm2, %xmm2, %xmm2
-               	pxor	%xmm2, %xmm3
-               	pand	%xmm4, %xmm3
+               	vpxor	%xmm2, %xmm3, %xmm3
+               	vpand	%xmm4, %xmm3, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
                	vextracti128	$0x1, %ymm1, %xmm1
-               	pxor	%xmm2, %xmm0
-               	pand	%xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
+               	vpand	%xmm1, %xmm0, %xmm0
                	vmovdqa	%xmm3, %xmm1
                	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
                	leaq	0x80(%rsp), %rsi
@@ -5734,10 +5734,10 @@ Disassembly of section .text:
                	vmovups	0x60(%rsp), %ymm1
                	vmovdqa	%xmm0, %xmm2
                	vmovdqa	%xmm1, %xmm3
-               	pxor	%xmm3, %xmm2
+               	vpxor	%xmm3, %xmm2, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm0
                	vextracti128	$0x1, %ymm1, %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
                	vmovdqa	%xmm2, %xmm1
                	vinserti128	$0x1, %xmm0, %ymm1, %ymm0
                	leaq	0x80(%rsp), %rsi

@@ -3291,6 +3291,27 @@ unsigned v(unsigned x, unsigned n) { return x << n | x >> (32 - n); }\n";
     m.finish();
 }
 
+/// A 16-byte vector operation on x86-64 is the VEX three-operand form, as
+/// the code generator's x86-64-v3 baseline allows: the result forms in its
+/// register with no copy of a source first, including a subtraction whose
+/// result takes the second operand's register.
+#[test]
+fn a_vector_operation_writes_its_result_directly() {
+    const SRC: &str = "typedef int v4 __attribute__((vector_size(16)));\n\
+typedef float f4 __attribute__((vector_size(16)));\n\
+v4 add(v4 a, v4 b) { return a + b; }\n\
+v4 sub(v4 a, v4 b) { return b - a; }\n\
+f4 mul(f4 a, f4 b) { return a * b; }\n";
+    let mut m = Misses::default();
+    for name in ["add", "sub", "mul"] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == 2 && insns[0].vex, || {
+            format!("x86-64 {name}: {insns:x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

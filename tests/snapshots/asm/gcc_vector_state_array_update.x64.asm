@@ -194,7 +194,7 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	imulq	%rcx, %rax
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
                	movl	$0x63, %eax
                	vpextrb	$0x0, %xmm0, %ecx
                	xorq	%rax, %rcx
@@ -482,16 +482,16 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
-               	movups	0x50(%rsp), %xmm15
-               	pxor	%xmm0, %xmm15
-               	movups	%xmm15, 0x50(%rsp)
+               	movups	0x50(%rsp), %xmm14
+               	vpxor	%xmm0, %xmm14, %xmm14
+               	movups	%xmm14, 0x50(%rsp)
                	leaq	-0x80(%rbp), %rax
                	leaq	0x30(%rax), %r9
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
                	movups	-0x40(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x40(%rbp)
                	leaq	-0x80(%rbp), %rax
                	leaq	0x20(%rax), %r9
@@ -499,7 +499,7 @@ Disassembly of section .text:
                	movups	(%r10), %xmm0
                	callq	<addr>
                	movups	-0x50(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	leaq	-0x80(%rbp), %rax
                	leaq	0x10(%rax), %r9
@@ -507,19 +507,19 @@ Disassembly of section .text:
                	movups	(%r10), %xmm0
                	callq	<addr>
                	movups	-0x60(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x60(%rbp)
                	leaq	-0x80(%rbp), %r9
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	callq	<addr>
                	movups	-0x70(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x70(%rbp)
                	leaq	-0x80(%rbp), %rcx
                	movups	-0x80(%rbp), %xmm0
-               	movups	0x50(%rsp), %xmm14
-               	pxor	%xmm14, %xmm0
+               	movups	0x50(%rsp), %xmm15
+               	vpxor	%xmm15, %xmm0, %xmm0
                	movups	%xmm0, -0x80(%rbp)
                	movq	-0x20(%rbp), %rax
                	movups	(%rcx), %xmm14

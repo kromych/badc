@@ -33,8 +33,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm0
                	vpbroadcastb	%xmm0, %xmm0
                	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
-               	movapd	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
+               	vpaddb	%xmm0, %xmm0, %xmm1
                	vmovq	%xmm1, %rax
                	movabsq	$-0x3737373737373738, %r11 # imm = 0xC8C8C8C8C8C8C8C8
                	cmpq	%r11, %rax
@@ -207,7 +206,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movsd	<rip>, %xmm0
-               	paddw	%xmm1, %xmm0
+               	vpaddw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$0x5000400030002, %r11  # imm = 0x5000400030002
                	cmpq	%r11, %rax

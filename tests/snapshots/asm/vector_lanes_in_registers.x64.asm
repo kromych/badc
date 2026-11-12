@@ -31,14 +31,11 @@ Disassembly of section .text:
                	leaq	-0x1(%rdi), %rax
                	movsbq	%al, %rax
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
-               	movapd	%xmm0, %xmm15
-               	paddb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddb	%xmm0, %xmm0, %xmm0
                	retq
 
 <get_c>:
-               	movapd	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
+               	vpaddb	%xmm0, %xmm0, %xmm1
                	vpextrb	$0x5, %xmm1, %eax
                	movsbq	%al, %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
@@ -48,9 +45,7 @@ Disassembly of section .text:
                	retq
 
 <get_uc>:
-               	movapd	%xmm0, %xmm15
-               	paddb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddb	%xmm0, %xmm0, %xmm0
                	vpextrb	$0x9, %xmm0, %eax
                	retq
 
@@ -58,23 +53,18 @@ Disassembly of section .text:
                	movswq	%di, %rdi
                	vpinsrw	$0x0, %edi, %xmm0, %xmm0
                	vpinsrw	$0x7, %edi, %xmm0, %xmm0
-               	movapd	%xmm0, %xmm1
-               	psubw	%xmm0, %xmm1
-               	paddw	%xmm1, %xmm0
+               	vpsubw	%xmm0, %xmm0, %xmm1
+               	vpaddw	%xmm0, %xmm1, %xmm0
                	retq
 
 <get_s>:
-               	movapd	%xmm0, %xmm15
-               	por	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpor	%xmm0, %xmm0, %xmm0
                	vpextrw	$0x6, %xmm0, %eax
                	movswq	%ax, %rax
                	retq
 
 <get_us>:
-               	movapd	%xmm0, %xmm15
-               	por	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpor	%xmm0, %xmm0, %xmm0
                	vpextrw	$0x1, %xmm0, %eax
                	retq
 
@@ -82,30 +72,24 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %edi, %xmm0, %xmm0
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
                	retq
 
 <get_i>:
-               	movapd	%xmm0, %xmm15
-               	paddd	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddd	%xmm0, %xmm0, %xmm0
                	vpextrd	$0x3, %xmm0, %eax
                	movslq	%eax, %rax
                	retq
 
 <get_u>:
-               	movapd	%xmm0, %xmm15
-               	paddd	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddd	%xmm0, %xmm0, %xmm0
                	vpextrd	$0x3, %xmm0, %eax
                	retq
 
 <mk_l>:
                	vmovq	%rdi, %xmm0
                	vpinsrq	$0x1, %rsi, %xmm0, %xmm0
-               	movapd	%xmm0, %xmm15
-               	paddq	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddq	%xmm0, %xmm0, %xmm0
                	retq
 
 <get_l>:
@@ -156,11 +140,8 @@ Disassembly of section .text:
                	retq
 
 <get_d>:
-               	movapd	%xmm0, %xmm1
-               	mulpd	%xmm0, %xmm1
-               	movapd	%xmm0, %xmm15
-               	mulpd	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vmulpd	%xmm0, %xmm0, %xmm1
+               	vmulpd	%xmm0, %xmm0, %xmm0
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
                	vaddsd	%xmm0, %xmm1, %xmm0
                	retq

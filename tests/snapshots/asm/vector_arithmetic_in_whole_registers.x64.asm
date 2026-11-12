@@ -26,26 +26,22 @@ Disassembly of section .text:
                	int3
 
 <c_ops>:
-               	movapd	%xmm0, %xmm2
-               	paddb	%xmm1, %xmm2
-               	movapd	%xmm0, %xmm3
-               	psubb	%xmm1, %xmm3
-               	pxor	%xmm3, %xmm2
-               	pand	%xmm1, %xmm0
-               	por	%xmm2, %xmm0
+               	vpaddb	%xmm1, %xmm0, %xmm2
+               	vpsubb	%xmm1, %xmm0, %xmm3
+               	vpxor	%xmm3, %xmm2, %xmm2
+               	vpand	%xmm1, %xmm0, %xmm0
+               	vpor	%xmm0, %xmm2, %xmm0
                	retq
 
 <s_ops>:
-               	movapd	%xmm0, %xmm2
-               	pmullw	%xmm1, %xmm2
-               	psubw	%xmm1, %xmm0
-               	paddw	%xmm2, %xmm0
+               	vpmullw	%xmm1, %xmm0, %xmm2
+               	vpsubw	%xmm1, %xmm0, %xmm0
+               	vpaddw	%xmm0, %xmm2, %xmm0
                	retq
 
 <i_ops>:
-               	movapd	%xmm0, %xmm2
-               	paddd	%xmm1, %xmm2
-               	psubd	%xmm1, %xmm0
+               	vpaddd	%xmm1, %xmm0, %xmm2
+               	vpsubd	%xmm1, %xmm0, %xmm0
                	vmovd	%xmm2, %eax
                	movslq	%eax, %rax
                	vmovd	%xmm0, %ecx
@@ -74,49 +70,36 @@ Disassembly of section .text:
                	retq
 
 <u_ops>:
-               	movapd	%xmm0, %xmm2
-               	psubd	%xmm1, %xmm2
-               	por	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpsubd	%xmm1, %xmm0, %xmm2
+               	vpor	%xmm1, %xmm0, %xmm0
+               	vpxor	%xmm0, %xmm2, %xmm0
                	retq
 
 <l_ops>:
-               	movapd	%xmm0, %xmm2
-               	paddq	%xmm1, %xmm2
-               	pand	%xmm1, %xmm0
-               	movapd	%xmm2, %xmm15
-               	psubq	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddq	%xmm1, %xmm0, %xmm2
+               	vpand	%xmm1, %xmm0, %xmm0
+               	vpsubq	%xmm0, %xmm2, %xmm0
                	retq
 
 <f_ops>:
-               	movapd	%xmm0, %xmm2
-               	mulps	%xmm1, %xmm2
-               	addps	%xmm0, %xmm2
-               	movapd	%xmm1, %xmm15
-               	subps	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
-               	movapd	%xmm2, %xmm15
-               	divps	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vmulps	%xmm1, %xmm0, %xmm2
+               	vaddps	%xmm0, %xmm2, %xmm2
+               	vsubps	%xmm0, %xmm1, %xmm0
+               	vdivps	%xmm0, %xmm2, %xmm0
                	retq
 
 <d_ops>:
-               	movapd	%xmm0, %xmm2
-               	subpd	%xmm1, %xmm2
-               	addpd	%xmm1, %xmm0
-               	movapd	%xmm2, %xmm15
-               	mulpd	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
-               	divpd	%xmm1, %xmm0
+               	vsubpd	%xmm1, %xmm0, %xmm2
+               	vaddpd	%xmm1, %xmm0, %xmm0
+               	vmulpd	%xmm0, %xmm2, %xmm0
+               	vdivpd	%xmm1, %xmm0, %xmm0
                	retq
 
 <b8_ops>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movapd	%xmm0, %xmm2
-               	paddb	%xmm1, %xmm2
+               	vpaddb	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm0, %rax
                	vmovq	%xmm1, %rcx
                	orq	%rcx, %rax
@@ -128,19 +111,16 @@ Disassembly of section .text:
                	retq
 
 <h8_ops>:
-               	pmullw	%xmm0, %xmm1
-               	movapd	%xmm1, %xmm15
-               	psubw	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpmullw	%xmm1, %xmm0, %xmm1
+               	vpsubw	%xmm0, %xmm1, %xmm0
                	retq
 
 <i8_ops>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movapd	%xmm0, %xmm2
-               	psubd	%xmm1, %xmm2
-               	paddd	%xmm1, %xmm0
+               	vpsubd	%xmm1, %xmm0, %xmm2
+               	vpaddd	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm2, %rax
                	vmovq	%xmm0, %rcx
                	andq	%rcx, %rax

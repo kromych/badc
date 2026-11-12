@@ -26,25 +26,19 @@ Disassembly of section .text:
                	int3
 
 <vec_sub>:
-               	movapd	%xmm1, %xmm15
-               	psubb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpsubb	%xmm0, %xmm1, %xmm0
                	retq
 
 <vec8_sub>:
-               	movapd	%xmm1, %xmm15
-               	psubb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpsubb	%xmm0, %xmm1, %xmm0
                	retq
 
 <vecf_add>:
-               	addps	%xmm1, %xmm0
+               	vaddps	%xmm1, %xmm0, %xmm0
                	retq
 
 <wrap_double>:
-               	movapd	%xmm0, %xmm15
-               	paddb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddb	%xmm0, %xmm0, %xmm0
                	retq
 
 <nine>:
@@ -55,15 +49,15 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x18(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	paddb	%xmm1, %xmm0
-               	paddb	%xmm2, %xmm0
-               	paddb	%xmm3, %xmm0
-               	paddb	%xmm4, %xmm0
-               	paddb	%xmm5, %xmm0
-               	paddb	%xmm6, %xmm0
-               	paddb	%xmm7, %xmm0
+               	vpaddb	%xmm1, %xmm0, %xmm0
+               	vpaddb	%xmm2, %xmm0, %xmm0
+               	vpaddb	%xmm3, %xmm0, %xmm0
+               	vpaddb	%xmm4, %xmm0, %xmm0
+               	vpaddb	%xmm5, %xmm0, %xmm0
+               	vpaddb	%xmm6, %xmm0, %xmm0
+               	vpaddb	%xmm7, %xmm0, %xmm0
                	movups	-0x10(%rbp), %xmm1
-               	paddb	%xmm1, %xmm0
+               	vpaddb	%xmm1, %xmm0, %xmm0
                	leave
                	retq
 
@@ -148,8 +142,8 @@ Disassembly of section .text:
                	movl	$0x64, %edi
                	vzeroupper
                	callq	<addr>
-               	movups	-0x10(%rbp), %xmm14
-               	psubb	%xmm14, %xmm0
+               	movups	-0x10(%rbp), %xmm15
+               	vpsubb	%xmm15, %xmm0, %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0x63, %eax
                	je	<addr>
@@ -206,9 +200,7 @@ Disassembly of section .text:
                	vmovq	%r11, %xmm0
                	movabsq	$0x2f2e2d2c2b2a2928, %r11 # imm = 0x2F2E2D2C2B2A2928
                	vmovq	%r11, %xmm1
-               	movapd	%xmm1, %xmm15
-               	psubb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpsubb	%xmm0, %xmm1, %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0x27, %eax
                	je	<addr>
@@ -241,7 +233,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm1
-               	addps	%xmm1, %xmm0
+               	vaddps	%xmm1, %xmm0, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movl	$0x41300000, %eax       # imm = 0x41300000
                	movq	%rax, %xmm15
@@ -273,9 +265,7 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	vzeroupper
                	callq	<addr>
-               	movapd	%xmm0, %xmm15
-               	paddb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddb	%xmm0, %xmm0, %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	cmpq	$0x4, %rax
                	je	<addr>
@@ -331,15 +321,14 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	vzeroupper
                	callq	<addr>
-               	movapd	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm0, %xmm1
-               	paddb	%xmm1, %xmm0
+               	vpaddb	%xmm0, %xmm0, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm1
+               	vpaddb	%xmm0, %xmm1, %xmm0
                	leaq	0x20(%rsp), %rcx
                	movups	%xmm0, 0x20(%rsp)
                	xorl	%eax, %eax

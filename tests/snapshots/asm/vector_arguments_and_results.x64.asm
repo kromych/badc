@@ -26,19 +26,18 @@ Disassembly of section .text:
                	int3
 
 <add>:
-               	paddd	%xmm1, %xmm0
+               	vpaddd	%xmm1, %xmm0, %xmm0
                	retq
 
 <fma4>:
-               	mulps	%xmm1, %xmm0
-               	addps	%xmm2, %xmm0
+               	vmulps	%xmm1, %xmm0, %xmm0
+               	vaddps	%xmm2, %xmm0, %xmm0
                	retq
 
 <neg>:
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	psubw	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	movq	%rax, %xmm14
+               	vpsubw	%xmm0, %xmm14, %xmm0
                	retq
 
 <swap>:

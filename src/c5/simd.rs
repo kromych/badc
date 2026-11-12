@@ -294,6 +294,14 @@ pub(crate) enum Sem {
     AesRound(bool),
     /// AArch64's `aesmc`: MixColumns.
     AesMix,
+    /// FEAT_SHA3: the three-way xor (`eor3`), the first operand xor the
+    /// second with the third's bits cleared (`bcax`), the first xor the
+    /// second rotated left by one in each 64-bit lane (`rax1`), and the xor
+    /// of the two rotated right by the immediate in each 64-bit lane (`xar`).
+    Eor3,
+    Bcax,
+    Rax1,
+    Xar,
     /// Data movement: the form carries the direction.
     Move,
     /// Hardware random number generator.
@@ -1022,6 +1030,16 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             }
             return Some(o);
         }
+        Sem::Eor3 | Sem::Bcax => {
+            let mut o = [0u8; 16];
+            for i in 0..16 {
+                o[i] = match sem {
+                    Sem::Eor3 => acc[i] ^ a[i] ^ b[i],
+                    _ => acc[i] ^ (a[i] & !b[i]),
+                };
+            }
+            return Some(o);
+        }
         Sem::Tbx(bytes) => {
             let mut o = [0u8; 16];
             for i in 0..usize::from(bytes) {
@@ -1632,6 +1650,15 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             };
         }
         Sem::AesMix => o = mix_columns(a, MIX),
+        Sem::Rax1 | Sem::Xar => {
+            for i in 0..2 {
+                let x = match sem {
+                    Sem::Rax1 => lane(a, 8, i) ^ lane(b, 8, i).rotate_left(1),
+                    _ => (lane(a, 8, i) ^ lane(b, 8, i)).rotate_right(u32::from(imm) & 63),
+                };
+                set_lane(&mut o, 8, i, x);
+            }
+        }
         Sem::AesKeygen => {
             let x1 = lane(a, 4, 1) as u32;
             let x3 = lane(a, 4, 3) as u32;
@@ -1673,6 +1700,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
+        Sem::Eor3 | Sem::Bcax => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32

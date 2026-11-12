@@ -626,6 +626,47 @@ fn the_polynomial_long_products_are_rows() {
     assert!(words.contains(&0x0EE1_E000), "m: {words:08x?}");
 }
 
+/// The FEAT_SHA3 bitwise forms are rows: `eor3` and `bcax` over four
+/// registers, `rax1` and `xar` over the 64-bit lanes. Hardware, clang and
+/// the interpreter agree, and each is one instruction under -O.
+#[cfg(feature = "full")]
+#[test]
+fn the_sha3_bitwise_forms_are_rows() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int main(void) {\n\
+            volatile unsigned long long seed = 0x0123456789abcdefULL;\n\
+            uint64x2_t a = {seed, seed * 3}, b = {seed ^ 0xff00ff00ff00ff00ULL, seed + 77}, c = {~seed, seed << 7};\n\
+            uint64x2_t e = veor3q_u64(a, b, c), x = vbcaxq_u64(a, b, c), r = vrax1q_u64(a, b), y = vxarq_u64(a, b, 13);\n\
+            for (int i = 0; i < 2; i++) {\n\
+                if (e[i] != (a[i] ^ b[i] ^ c[i])) return 1;\n\
+                if (x[i] != (a[i] ^ (b[i] & ~c[i]))) return 2;\n\
+                if (r[i] != (a[i] ^ (b[i] << 1 | b[i] >> 63))) return 3;\n\
+                unsigned long long t = a[i] ^ b[i];\n\
+                if (y[i] != (t >> 13 | t << 51)) return 4;\n\
+            }\n\
+            uint8x16_t p = vreinterpretq_u8_u64(a), q = vreinterpretq_u8_u64(b), s = vreinterpretq_u8_u64(c);\n\
+            uint8x16_t e8 = veor3q_u8(p, q, s);\n\
+            for (int i = 0; i < 16; i++) if (e8[i] != (p[i] ^ q[i] ^ s[i])) return 5;\n\
+            return 42;\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        uint64x2_t e(uint64x2_t a, uint64x2_t b, uint64x2_t c) { return veor3q_u64(a, b, c); }\n\
+        uint64x2_t x(uint64x2_t a, uint64x2_t b, uint64x2_t c) { return vbcaxq_u64(a, b, c); }\n\
+        uint64x2_t r(uint64x2_t a, uint64x2_t b) { return vrax1q_u64(a, b); }\n\
+        uint64x2_t y(uint64x2_t a, uint64x2_t b) { return vxarq_u64(a, b, 13); }\n";
+    for (name, want) in [
+        ("e", 0xCE01_0800u32),
+        ("x", 0xCE21_0800),
+        ("r", 0xCE61_8C00),
+        ("y", 0xCE81_3400),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

@@ -1096,35 +1096,31 @@ __BADC_NEON_FN3(vsha512su1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
                 __BADC_NEON_I3("sha512su1", 2d, 2d, 2d))
 #define __BADC_NEON_XOR3(name, T, insn)                                     \
     __BADC_INTRIN T name(T __a, T __b, T __c) {                             \
-        T __r;                                                              \
-        __asm__(insn " %0.16b, %1.16b, %2.16b, %3.16b"                      \
-                : "=w"(__r) : "w"(__a), "w"(__b), "w"(__c));                \
-        return __r;                                                         \
+        return (T)__builtin_neon_##insn##_16b(__a, __b, __c);               \
     }
-__BADC_NEON_XOR3(veor3q_u8, uint8x16_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_u8, uint8x16_t, "bcax")
-__BADC_NEON_XOR3(veor3q_u16, uint16x8_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_u16, uint16x8_t, "bcax")
-__BADC_NEON_XOR3(veor3q_u32, uint32x4_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_u32, uint32x4_t, "bcax")
-__BADC_NEON_XOR3(veor3q_u64, uint64x2_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_u64, uint64x2_t, "bcax")
-__BADC_NEON_XOR3(veor3q_s8, int8x16_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_s8, int8x16_t, "bcax")
-__BADC_NEON_XOR3(veor3q_s16, int16x8_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_s16, int16x8_t, "bcax")
-__BADC_NEON_XOR3(veor3q_s32, int32x4_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_s32, int32x4_t, "bcax")
-__BADC_NEON_XOR3(veor3q_s64, int64x2_t, "eor3")
-__BADC_NEON_XOR3(vbcaxq_s64, int64x2_t, "bcax")
-__BADC_NEON_FN2(vrax1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
-                __BADC_NEON_I3("rax1", 2d, 2d, 2d))
+__BADC_NEON_XOR3(veor3q_u8, uint8x16_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u8, uint8x16_t, bcax)
+__BADC_NEON_XOR3(veor3q_u16, uint16x8_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u16, uint16x8_t, bcax)
+__BADC_NEON_XOR3(veor3q_u32, uint32x4_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u32, uint32x4_t, bcax)
+__BADC_NEON_XOR3(veor3q_u64, uint64x2_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_u64, uint64x2_t, bcax)
+__BADC_NEON_XOR3(veor3q_s8, int8x16_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s8, int8x16_t, bcax)
+__BADC_NEON_XOR3(veor3q_s16, int16x8_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s16, int16x8_t, bcax)
+__BADC_NEON_XOR3(veor3q_s32, int32x4_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s32, int32x4_t, bcax)
+__BADC_NEON_XOR3(veor3q_s64, int64x2_t, eor3)
+__BADC_NEON_XOR3(vbcaxq_s64, int64x2_t, bcax)
+__BADC_INTRIN uint64x2_t vrax1q_u64(uint64x2_t __a, uint64x2_t __b) {
+    return (uint64x2_t)__builtin_neon_rax1_2d(__a, __b);
+}
 #define vxarq_u64(__a, __b, __n) __extension__({                            \
-    uint64x2_t __xa = (__a), __xb = (__b), __xr;                            \
+    uint64x2_t __xa = (__a), __xb = (__b);                                  \
     _Static_assert((__n) >= 0 && (__n) < 64, "rotate count out of range"); \
-    __asm__("xar %0.2d, %1.2d, %2.2d, #%3"                                  \
-            : "=w"(__xr) : "w"(__xa), "w"(__xb), "i"(__n));                 \
-    __xr;                                                                   \
+    (uint64x2_t)__builtin_neon_xar_2d(__xa, __xb, __n);                     \
 })
 
 /* SM3 and SM4 (FEAT_SM3, FEAT_SM4). */

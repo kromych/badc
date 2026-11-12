@@ -1740,6 +1740,10 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::PolyMul(_)
         | Sem::AesRound(_)
         | Sem::AesMix
+        | Sem::Eor3
+        | Sem::Bcax
+        | Sem::Rax1
+        | Sem::Xar
         | Sem::MulHi(..)
         | Sem::Avg(_)
         | Sem::Min(..)

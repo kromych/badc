@@ -578,6 +578,54 @@ fn the_aes_rounds_are_rows() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 148);
 }
 
+/// The carry-less products of twice the width are rows: `pmull` /
+/// `pmull2` of bytes into halfwords and of doublewords into the 128-bit
+/// lane, which hardware, clang's results, the interpreter and the
+/// constant folder agree on.
+#[cfg(feature = "full")]
+#[test]
+fn the_polynomial_long_products_are_rows() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        #include <string.h>\n\
+        static void ref64(unsigned long long x, unsigned long long y, unsigned long long *lo, unsigned long long *hi) {\n\
+            unsigned long long l = 0, h = 0;\n\
+            for (int k = 0; k < 64; k++) if (y >> k & 1) { l ^= x << k; if (k) h ^= x >> (64 - k); }\n\
+            *lo = l; *hi = h;\n\
+        }\n\
+        static unsigned short ref8(unsigned char x, unsigned char y) { unsigned p = 0; for (int k = 0; k < 8; k++) if (y >> k & 1) p ^= (unsigned)x << k; return (unsigned short)p; }\n\
+        int main(void) {\n\
+            volatile unsigned long long s1 = 0x87654321fedcba98ULL, s2 = 0xf00d1234cafe5678ULL;\n\
+            unsigned long long lo, hi;\n\
+            poly128_t r = vmull_p64(s1, s2);\n\
+            ref64(s1, s2, &lo, &hi);\n\
+            unsigned long long w[2];\n\
+            memcpy(w, &r, 16);\n\
+            if (w[0] != lo || w[1] != hi) return 1;\n\
+            poly64x2_t a = {s2, s1}, b = {s1 ^ 5, s2 + 3};\n\
+            poly128_t r2 = vmull_high_p64(a, b);\n\
+            ref64(s1, s2 + 3, &lo, &hi);\n\
+            memcpy(w, &r2, 16);\n\
+            if (w[0] != lo || w[1] != hi) return 2;\n\
+            poly8x16_t c, d;\n\
+            for (int i = 0; i < 16; i++) { c[i] = (unsigned char)(s1 >> (i * 3)); d[i] = (unsigned char)(s2 >> (i * 2)); }\n\
+            poly16x8_t e = vmull_p8(vget_low_p8(c), vget_low_p8(d)), f = vmull_high_p8(c, d);\n\
+            for (int i = 0; i < 8; i++) if (e[i] != ref8(c[i], d[i]) || f[i] != ref8(c[i + 8], d[i + 8])) return 3 + i;\n\
+            return 42;\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        poly128_t m(poly64_t a, poly64_t b) { return vmull_p64(a, b); }\n\
+        poly128_t h(poly64x2_t a, poly64x2_t b) { return vmull_high_p64(a, b); }\n\
+        poly16x8_t b8(poly8x16_t a, poly8x16_t b) { return vmull_high_p8(a, b); }\n";
+    for (name, want) in [("h", 0x4EE1_E000u32), ("b8", 0x4E21_E000)] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+    let words = super::perf_codegen::a64_at(OPS, "m", true);
+    assert!(words.contains(&0x0EE1_E000), "m: {words:08x?}");
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

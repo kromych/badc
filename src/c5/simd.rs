@@ -494,6 +494,8 @@ pub(crate) enum LongOp {
     /// The product subtracted from the accumulator (`smlsl`).
     MulSub,
     AbsDiff,
+    /// The carry-less (polynomial) product (`pmull`).
+    PolyMul,
 }
 
 /// How a narrowing form fits a lane into half its width: the low bits, or
@@ -1381,6 +1383,12 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 o[i] = a[i].count_ones() as u8;
             }
         }
+        // A 64-bit polynomial product fills the 128-bit result.
+        Sem::Long(LongOp::PolyMul, 8, _, high) => {
+            let (lo, hi) = clmul(lane(a, 8, high as usize), lane(b, 8, high as usize));
+            set_lane(&mut o, 8, 0, lo);
+            set_lane(&mut o, 8, 1, hi);
+        }
         Sem::Long(op, w, signed, high) | Sem::Wide(op, w, signed, high) => {
             let base = if high { 8 / w as usize } else { 0 };
             let get = |v: &[u8; 16], i: usize| match signed {
@@ -1399,6 +1407,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     LongOp::Sub => x - y,
                     LongOp::Mul | LongOp::MulSub => x * y,
                     LongOp::AbsDiff => (x - y).abs(),
+                    LongOp::PolyMul => i128::from(clmul(x as u64, y as u64).0),
                 };
                 set_lane(&mut o, 2 * w, i, r as u64 & mask(2 * w));
             }

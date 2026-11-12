@@ -59,6 +59,19 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
         };
         return table::encode(row.mnem, &[index(rd), table, index(rm)]);
     }
+    // A 64-bit polynomial product names its 128-bit lane `.1q` and its
+    // sources' 64-bit lanes as vectors, the `2` form the upper ones.
+    if let (
+        crate::c5::simd::Sem::Long(crate::c5::simd::LongOp::PolyMul, 8, _, high),
+        [rd, rn, rm],
+    ) = (row.sem, regs)
+    {
+        let v = |num, size, q| Opnd::VecReg { num, size, q };
+        return table::encode(
+            row.mnem,
+            &[v(*rd, 4, true), v(*rn, 3, high), v(*rm, 3, high)],
+        );
+    }
     // `dup` names its source lane in the operand: `vN.T[index]`.
     if let (crate::c5::simd::Sem::DupLane(w), [rd, rn], Some(index)) = (row.sem, regs, imm) {
         let (lane, bytes) = row.arrangement(0);

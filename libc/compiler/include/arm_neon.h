@@ -25,7 +25,7 @@
  * vfms vrecpe vrecps vrsqrte vrsqrts, the compares, and the conversions to
  * and from the integers of one width (truncating) and between single and
  * double. Also vmul_p8, vqtbl1q_u8, vqtbx1q_u8, the FEAT_AES rounds,
- * vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
+ * vmull_p8, vmull_high_p8, vmull_p64, vmull_high_p64, the SHA-1, SHA-256, SHA-512, SHA3, SM3 and
  * SM4 intrinsics, vld2q_u16 and vld4q_u8.
  *
  * Not provided: float16, bfloat16, the lane-indexed and by-scalar forms,
@@ -1034,21 +1034,20 @@ __BADC_INTRIN uint8x16_t vaesimcq_u8(uint8x16_t __d) {
     return (uint8x16_t)__builtin_neon_aesimc_16b(__d);
 }
 
-/* 64x64->128 carryless multiply (FEAT_PMULL). The scalar operands move to
- * the low d lanes; the product fills the q register. */
-__BADC_INTRIN poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
-    poly128_t __r;
-    __asm__(".arch_extension aes\n\t"
-            "pmull %0.1q, %1.1d, %2.1d" : "=w"(__r) : "w"(__a), "w"(__b));
-    return __r;
+/* Carry-less (polynomial) products, each lane twice as wide: 8x8->16 on
+ * the bytes, and 64x64->128 (FEAT_PMULL); the _high forms take the upper
+ * half of each source. */
+__BADC_INTRIN poly16x8_t vmull_p8(poly8x8_t __a, poly8x8_t __b) {
+    return (poly16x8_t)__builtin_neon_pmull_8b(__a, __b);
 }
-
-/* The same product over the upper d lane of each source. */
+__BADC_INTRIN poly16x8_t vmull_high_p8(poly8x16_t __a, poly8x16_t __b) {
+    return (poly16x8_t)__builtin_neon_pmull2_16b(__a, __b);
+}
+__BADC_INTRIN poly128_t vmull_p64(poly64_t __a, poly64_t __b) {
+    return (poly128_t)__builtin_neon_pmull_1d((poly64x1_t){__a}, (poly64x1_t){__b});
+}
 __BADC_INTRIN poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
-    poly128_t __r;
-    __asm__(".arch_extension aes\n\t"
-            "pmull2 %0.1q, %1.2d, %2.2d" : "=w"(__r) : "w"(__a), "w"(__b));
-    return __r;
+    return (poly128_t)__builtin_neon_pmull2_2d(__a, __b);
 }
 
 /* SHA-1 and SHA-256 (FEAT_SHA1, FEAT_SHA256): the hash updates take the

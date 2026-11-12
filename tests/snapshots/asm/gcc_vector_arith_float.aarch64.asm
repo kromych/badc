@@ -664,7 +664,6 @@ Disassembly of section .text:
                	fmov	s1, #2.00000000
                	mov	s2, v0.s[0]
                	fmul	s2, s2, s1
-               	mov	x0, #0x0                // =0
                	fmov	s2, s2
                	mov	s3, v0.s[1]
                	fmul	s3, s3, s1

@@ -676,8 +676,6 @@ Disassembly of section .text:
                	movl	%edx, -0x18(%rbp)
                	movl	%eax, -0x18(%rbp)
                	movss	-0x18(%rbp), %xmm0
-               	xorl	%edi, %edi
-               	xorl	%eax, %eax
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm0
                	movups	-0x70(%rbp), %xmm14
@@ -785,7 +783,6 @@ Disassembly of section .text:
                	movl	%edx, -0x18(%rbp)
                	movl	%eax, -0x18(%rbp)
                	movss	-0x18(%rbp), %xmm1
-               	xorl	%eax, %eax
                	vmovd	%xmm1, %r11d
                	vmovd	%r11d, %xmm1
                	movups	-0x70(%rbp), %xmm14
@@ -894,7 +891,6 @@ Disassembly of section .text:
                	movl	%edx, -0x18(%rbp)
                	movl	%eax, -0x18(%rbp)
                	movss	-0x18(%rbp), %xmm0
-               	xorl	%eax, %eax
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm0
                	movups	-0x70(%rbp), %xmm14

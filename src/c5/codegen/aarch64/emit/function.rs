@@ -976,7 +976,9 @@ impl FunctionEmitter<'_, '_> {
         if let Inst::BlockAddr(tb) = inst {
             return self.emit_block_addr(v, place, *tb);
         }
-        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place) {
+        if let (Inst::Imm(bits), Place::FpReg(d)) = (inst, place)
+            && !alloc.imm_held.get(v as usize).copied().unwrap_or(false)
+        {
             let (x, single) = (self.fcx.scratch.primary, alloc.is_f32(v));
             let literals = &mut self.fp_literals;
             emit_fp_imm(self.cx.code, d, *bits as u64, single, x, literals);

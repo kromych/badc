@@ -1277,7 +1277,6 @@ Disassembly of section .text:
                	vpinsrb	$0x6, %eax, %xmm1, %xmm1
                	movl	$0x8, %eax
                	vpinsrb	$0x7, %eax, %xmm1, %xmm1
-               	xorl	%eax, %eax
                	vmovq	%xmm1, %rdx
                	vmovq	%rdx, %xmm1
                	movapd	%xmm1, %xmm2

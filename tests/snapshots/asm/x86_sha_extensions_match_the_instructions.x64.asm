@@ -31,7 +31,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%eax, %eax
                	movq	$-0x3de0216b, %rcx      # imm = 0xC21FDE95
                	vmovd	%ecx, %xmm0
                	movl	$0x3ead5c56, %edx       # imm = 0x3EAD5C56
@@ -144,7 +143,6 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorl	%eax, %eax
                	vmovd	%edx, %xmm0
                	vpinsrd	$0x1, %esi, %xmm0, %xmm0
                	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
@@ -207,7 +205,6 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorl	%eax, %eax
                	vmovd	%ecx, %xmm0
                	vpinsrd	$0x1, %edx, %xmm0, %xmm0
                	vpinsrd	$0x2, %esi, %xmm0, %xmm0
@@ -275,7 +272,6 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorl	%eax, %eax
                	vmovd	%ecx, %xmm0
                	vpinsrd	$0x1, %edx, %xmm0, %xmm0
                	vpinsrd	$0x2, %esi, %xmm0, %xmm0
@@ -339,7 +335,6 @@ Disassembly of section .text:
                	movq	%r8, %rdi
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	xorl	%eax, %eax
                	vmovd	%ecx, %xmm0
                	vpinsrd	$0x1, %edx, %xmm0, %xmm0
                	vpinsrd	$0x2, %esi, %xmm0, %xmm0
@@ -361,7 +356,6 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	xorl	%eax, %eax
                	movl	$0xd2be0fd9, %ecx       # imm = 0xD2BE0FD9
                	vmovd	%ecx, %xmm0
                	movl	$0x3ab9d7d7, %ecx       # imm = 0x3AB9D7D7

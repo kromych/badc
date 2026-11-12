@@ -727,7 +727,6 @@ Disassembly of section .text:
                	ret
                	mov	d4, v0.d[0]
                	fcvtn	v19.2s, v2.2d
-               	mov	x0, #0x0                // =0
                	fmov	d4, d4
                	zip1	v19.2d, v4.2d, v19.2d
                	fmov	s21, #1.50000000
@@ -749,7 +748,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	d0, v0.d[1]
-               	mov	x0, #0x0                // =0
                	fmov	d0, d0
                	zip1	v1.2d, v0.2d, v1.2d
                	fmov	s4, #3.25000000

@@ -826,7 +826,9 @@ fn asm_rw_apart(
 /// Per value: an `Imm` placed in the register an earlier `Imm` of the same
 /// constant in its block was placed in, with only instructions between
 /// whose lowering writes no register but its result's, none of them that
-/// one: the register still holds the constant.
+/// one: the register still holds the constant. Also a zero only the
+/// inserts of a lane of 4 bytes or more at byte 0 read, as their vector:
+/// their lowering clears the bytes above the lane and reads no zero.
 fn imm_already_held(
     func: &FunctionSsa,
     places: &[Place],
@@ -834,6 +836,21 @@ fn imm_already_held(
     target: Target,
 ) -> Vec<bool> {
     let mut held = vec![false; func.insts.len()];
+    let mut base_reads = vec![0u32; func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        if let Inst::VecInsert {
+            vec, off: 0, kind, ..
+        } = *inst
+            && use_counts.get(i).copied().unwrap_or(0) > 0
+            && matches!(
+                kind,
+                StoreKind::I32 | StoreKind::F32 | StoreKind::I64 | StoreKind::F64 | StoreKind::V128
+            )
+            && let Some(n) = base_reads.get_mut(vec as usize)
+        {
+            *n += 1;
+        }
+    }
     let place = |v: usize| places.get(v).copied().unwrap_or(Place::None);
     for block in &func.blocks {
         // The registers known to hold a constant, with it.
@@ -841,6 +858,10 @@ fn imm_already_held(
         for v in block.inst_range.clone().map(|v| v as usize) {
             let inst = &func.insts[v];
             if use_counts.get(v).copied().unwrap_or(0) == 0 && inst.is_pure() {
+                continue;
+            }
+            if matches!(inst, Inst::Imm(0)) && base_reads[v] > 0 && base_reads[v] == use_counts[v] {
+                held[v] = true;
                 continue;
             }
             if let (&Inst::Imm(k), Place::IntReg(r)) = (inst, place(v)) {

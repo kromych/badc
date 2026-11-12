@@ -5684,7 +5684,6 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	asr	x0, x0, #32
                	add	x0, x0, x0, lsr #63
-               	mov	x1, #0x0                // =0
                	fmov	s0, w0
                	ldrsw	x0, [sp, #0xa4]
                	mov	x17, #0x5556            // =21846

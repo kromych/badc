@@ -6245,7 +6245,6 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x3f, %rcx
                	addq	%rcx, %rax
-               	xorl	%ecx, %ecx
                	vmovd	%eax, %xmm0
                	movslq	0x104(%rsp), %rax
                	imulq	$0x55555556, %rax, %rax # imm = 0x55555556

@@ -3244,6 +3244,29 @@ void st0(float *p, f4 v) { *p = v[0]; }\n";
     m.finish();
 }
 
+/// A vector of one scalar lane over zeros is the scalar's move into the
+/// vector register, which clears the bytes above it: the zero under it is
+/// never materialized.
+#[test]
+fn a_scalar_in_a_zero_vector_is_one_move() {
+    const SRC: &str = "typedef unsigned u4 __attribute__((vector_size(16)));\n\
+typedef double d2 __attribute__((vector_size(16)));\n\
+u4 one(unsigned x) { return (u4){x}; }\n\
+d2 dz(double x) { return (d2){x}; }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("one", &[0x1E27_0000u32, RET][..]),
+        ("dz", &[0x1E60_4000, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == 2, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

@@ -448,8 +448,6 @@ Disassembly of section .text:
                	vmovd	%xmm0, %eax
                	vmovd	%xmm1, %ecx
                	imulq	%rcx, %rax
-               	xorl	%ecx, %ecx
-               	xorl	%edx, %edx
                	vmovd	%eax, %xmm2
                	vpextrd	$0x1, %xmm0, %eax
                	vpextrd	$0x1, %xmm1, %edx
@@ -469,7 +467,6 @@ Disassembly of section .text:
                	vextracti128	$0x1, %ymm1, %xmm3
                	vmovd	%xmm3, %ecx
                	imulq	%rcx, %rax
-               	xorl	%ecx, %ecx
                	vmovd	%eax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm4
                	vpextrd	$0x1, %xmm4, %eax

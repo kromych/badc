@@ -399,7 +399,6 @@ Disassembly of section .text:
                	add	x25, x25, #0x2
                	cmp	w25, #0x100
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fmov	s0, s17
@@ -525,7 +524,6 @@ Disassembly of section .text:
                	orr	x1, x1, #0x2
                	str	w1, [x0, #0x20]
                	mov	s0, v2.s[3]
-               	mov	x0, #0x0                // =0
                	fmov	s0, s0
                	mov	w0, v0.s[0]
                	ubfx	x0, x0, #23, #8

@@ -51,7 +51,6 @@ Disassembly of section .text:
                	vmovd	%xmm0, %ecx
                	movslq	%ecx, %rcx
                	imulq	%rcx, %rax
-               	xorl	%ecx, %ecx
                	vmovd	%eax, %xmm1
                	vpextrd	$0x1, %xmm2, %eax
                	movslq	%eax, %rax
@@ -159,7 +158,6 @@ Disassembly of section .text:
                	subss	%xmm3, %xmm0
                	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
                	divss	%xmm3, %xmm2
-               	xorl	%eax, %eax
                	vmovd	%xmm2, %r11d
                	vmovd	%r11d, %xmm2
                	vpermilps	$0x1, %xmm1, %xmm1 # xmm1 = xmm1[1,0,0,0]

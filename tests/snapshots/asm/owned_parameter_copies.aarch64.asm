@@ -103,7 +103,7 @@ Disassembly of section .text:
 
 <kept>:
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	ldr	x1, [x0, #0x10]
                	lsl	x1, x1, #1
                	str	x1, [x0, #0x10]

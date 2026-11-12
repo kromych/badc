@@ -23,7 +23,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x10
                	ldr	x2, [x1]
                	adrp	x0, <page>
-               	ldr	x4, [x0, #0x18]
+               	ldr	x4, [x0, #0x10]
                	mov	x0, #0x0                // =0
                	cmp	x2, x3
                	cset	x3, eq

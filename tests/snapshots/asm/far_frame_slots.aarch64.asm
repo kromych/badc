@@ -1078,7 +1078,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	ldrsw	x20, [x0, #0x14]
+               	ldrsw	x20, [x0, #0xc]
                	mov	x0, x20
                	bl	<addr>
                	cbz	w0, <addr>

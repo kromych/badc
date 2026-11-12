@@ -170,7 +170,7 @@ Disassembly of section .text:
                	and	x2, x0, #0xff
                	strb	w2, [sp]
                	adrp	x2, <page>
-               	str	x1, [x2, #0x30]
+               	str	x1, [x2, #0x20]
                	and	x1, x1, #0x3f
                	ldrb	w2, [sp]
                	add	x1, x1, x2
@@ -249,7 +249,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	adrp	x0, <page>
                	mov	x1, sp
-               	str	x1, [x0, #0x30]
+               	str	x1, [x0, #0x20]
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
                	str	xzr, [x0, #0x10]

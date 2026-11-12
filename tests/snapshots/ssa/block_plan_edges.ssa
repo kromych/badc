@@ -995,7 +995,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v320 Imm(36)                                          -> x0
     terminator Return(v320)   (exit_acc=v320)
   block 78  start_pc=0
-    v321 ImmData(4)                                       -> x2
+    v321 ImmData(1)                                       -> x2
     v322 Imm(8)                                           -> x0
     v323 Imm(8)                                           -> x0
     v324 Imm(0)                                           -> x0
@@ -1032,7 +1032,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v325 Imm(37)                                          -> x0
     terminator Return(v325)   (exit_acc=v325)
   block 84  start_pc=0
-    v326 ImmData(4)                                       -> x0
+    v326 ImmData(1)                                       -> x0
     v327 Imm(0)                                           -> x0
     v328 Imm(0)                                           -> x0
     v329 Imm(0)                                           -> x0
@@ -1115,7 +1115,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v382 Imm(0)                                           -> x1
     terminator Bnz { cond=v1063, target=b101, fall=b93 }   (exit_acc=v380)
   block 93  start_pc=0
-    v383 ImmData(49)                                      -> x1
+    v383 ImmData(48)                                      -> x1
     v384 Imm(0)                                           -> x0
     terminator Jmp(b95)   (exit_acc=v384)
   block 94  start_pc=0
@@ -1135,7 +1135,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v390 Imm(0)                                           -> x1
     terminator Bnz { cond=v385, target=b101, fall=b97 }   (exit_acc=v385)
   block 97  start_pc=0
-    v391 ImmData(51)                                      -> x1
+    v391 ImmData(50)                                      -> x1
     v392 Imm(0)                                           -> x0
     terminator Jmp(b99)   (exit_acc=v392)
   block 98  start_pc=0

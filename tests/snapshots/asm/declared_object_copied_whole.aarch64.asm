@@ -68,23 +68,23 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	adrp	x0, <page>
-               	ldrb	w1, [x0, #0x41]
+               	ldrb	w1, [x0, #0x30]
                	and	x1, x1, #0xfffffffffffffffe
-               	strb	w1, [x0, #0x41]
+               	strb	w1, [x0, #0x30]
                	adrp	x0, <page>
-               	ldrb	w1, [x0, #0x42]
+               	ldrb	w1, [x0, #0x31]
                	and	x1, x1, #0xfffffffffffffffe
-               	strb	w1, [x0, #0x42]
+               	strb	w1, [x0, #0x31]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x41]
+               	ldrb	w0, [x0, #0x30]
                	and	x0, x0, #0x1
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x42]
+               	ldrb	w0, [x0, #0x31]
                	and	x0, x0, #0x1
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	w1, [x0, #0x50]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x20]
+               	ldrsw	x0, [x0, #0x14]
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x1c]
+               	ldrsw	x0, [x0, #0x10]
                	bl	<addr>
                	cmp	w0, #0x195
                	b.eq	<addr>
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x48]
                	stur	w1, [x29, #-0x4]
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x24]
+               	ldrsw	x1, [x1, #0x18]
                	bl	<addr>
                	ldur	x0, [x29, #-0x48]
                	cbz	x0, <addr>

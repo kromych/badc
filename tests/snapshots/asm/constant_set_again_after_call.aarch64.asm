@@ -15,18 +15,18 @@ Disassembly of section .text:
 
 <note>:
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0xb0]
+               	ldr	x2, [x1, #0xa0]
                	add	x2, x2, x0
-               	str	x2, [x1, #0xb0]
+               	str	x2, [x1, #0xa0]
                	add	x0, x0, #0x1
                	ret
 
 <scale>:
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0xb0]
+               	ldr	x1, [x0, #0xa0]
                	fcvtzs	x2, d0
                	add	x1, x1, x2
-               	str	x1, [x0, #0xb0]
+               	str	x1, [x0, #0xa0]
                	fmov	d1, #0.50000000
                	fmul	d0, d0, d1
                	ret

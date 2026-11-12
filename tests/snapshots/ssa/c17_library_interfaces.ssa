@@ -87,7 +87,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v4   BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x2
     v5   StoreLocal { off=-1, disp=4, value=v2, kind=I32 } -> -
     v6   LocalAddr(-8)                                    -> x7
-    v7   ImmData(8)                                       -> x6
+    v7   ImmData(1)                                       -> x6
     v8   Imm(1)                                           -> x2
     v9   LocalAddr(-1)                                    -> x0
     v10  CallExt { binding_idx=220, args=[v6, v7, v8, v1], fp_arg_mask=0x0 } -> x0
@@ -116,13 +116,13 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Bnz { cond=v171, target=b61, fall=b4 }   (exit_acc=v171)
   block 4  start_pc=0
     v176 Imm(0)                                           -> x7
-    v177 ImmData(12)                                      -> x6
+    v177 ImmData(5)                                       -> x6
     v178 CallExt { binding_idx=1, args=[v176, v177], fp_arg_mask=0x0 } -> x0
     v179 BinopI { op=eq, lhs=v178, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v178, target=b28, fall=b5 }   (exit_acc=v179)
   block 5  start_pc=0
     v180 Imm(0)                                           -> x7
-    v181 ImmData(24)                                      -> x6
+    v181 ImmData(17)                                      -> x6
     v182 CallExt { binding_idx=1, args=[v180, v181], fp_arg_mask=0x0 } -> x0
     v183 BinopI { op=eq, lhs=v182, rhs_imm=0 }            -> x1
     v184 Imm(0)                                           -> x1
@@ -284,7 +284,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v111 CallExt { binding_idx=28, args=[v110], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 28  start_pc=0
-    v190 ImmData(32)                                      -> x6
+    v190 ImmData(25)                                      -> x6
     v191 LocalAddr(-8)                                    -> x1
     v192 Imm(0)                                           -> x0
     v193 StoreLocal { off=-8, value=v192, kind=I32 }      -> -
@@ -312,7 +312,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Jmp(b7)   (exit_acc=v206)
   block 31  start_pc=0
     v211 LocalAddr(-7)                                    -> x7
-    v212 ImmData(32)                                      -> x0
+    v212 ImmData(25)                                      -> x0
     v213 BinopI { op=add, lhs=v212, rhs_imm=1 }           -> x6
     v214 Imm(1)                                           -> x2
     v215 LocalAddr(-8)                                    -> x1
@@ -328,7 +328,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Jmp(b7)   (exit_acc=v218)
   block 33  start_pc=0
     v223 LocalAddr(-7)                                    -> x7
-    v224 ImmData(32)                                      -> x0
+    v224 ImmData(25)                                      -> x0
     v225 BinopI { op=add, lhs=v224, rhs_imm=2 }           -> x6
     v226 Imm(5)                                           -> x2
     v227 LocalAddr(-8)                                    -> x1
@@ -351,7 +351,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Jmp(b7)   (exit_acc=v235)
   block 36  start_pc=0
     v240 LocalAddr(-7)                                    -> x7
-    v241 ImmData(32)                                      -> x0
+    v241 ImmData(25)                                      -> x0
     v242 BinopI { op=add, lhs=v241, rhs_imm=3 }           -> x6
     v243 Imm(4)                                           -> x2
     v244 LocalAddr(-8)                                    -> x1
@@ -379,7 +379,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v260 BinopI { op=add, lhs=v257, rhs_imm=4 }           -> x2
     v261 StoreLocal { off=-8, disp=4, value=v258, kind=I32 } -> -
     v262 LocalAddr(-6)                                    -> x7
-    v263 ImmData(32)                                      -> x0
+    v263 ImmData(25)                                      -> x0
     v264 BinopI { op=add, lhs=v263, rhs_imm=3 }           -> x6
     v265 Imm(4)                                           -> x2
     v266 LocalAddr(-8)                                    -> x0
@@ -404,7 +404,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
   block 42  start_pc=0
     v280 LocalAddr(-6)                                    -> x1
     v281 BinopI { op=add, lhs=v269, rhs_imm=2 }           -> x7
-    v282 ImmData(32)                                      -> x0
+    v282 ImmData(25)                                      -> x0
     v283 BinopI { op=add, lhs=v282, rhs_imm=7 }           -> x6
     v284 Imm(0)                                           -> x2
     v285 LocalAddr(-8)                                    -> x1
@@ -458,7 +458,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Bnz { cond=v322, target=b49, fall=b48 }   (exit_acc=v322)
   block 48  start_pc=0
     v323 LocalAddr(-4)                                    -> x7
-    v324 ImmData(32)                                      -> x0
+    v324 ImmData(25)                                      -> x0
     v325 BinopI { op=add, lhs=v324, rhs_imm=3 }           -> x6
     v326 Imm(4)                                           -> x2
     v327 CallExt { binding_idx=85, args=[v323, v325, v326], fp_arg_mask=0x0 } -> x0
@@ -480,7 +480,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Bnz { cond=v338, target=b52, fall=b51 }   (exit_acc=v338)
   block 51  start_pc=0
     v339 LocalAddr(-4)                                    -> x7
-    v340 ImmData(32)                                      -> x0
+    v340 ImmData(25)                                      -> x0
     v341 BinopI { op=add, lhs=v340, rhs_imm=1 }           -> x6
     v342 Imm(2)                                           -> x2
     v343 CallExt { binding_idx=85, args=[v339, v341, v342], fp_arg_mask=0x0 } -> x0
@@ -523,7 +523,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Jmp(b7)   (exit_acc=v365)
   block 57  start_pc=0
     v370 LocalAddr(-7)                                    -> x7
-    v371 ImmData(40)                                      -> x6
+    v371 ImmData(33)                                      -> x6
     v372 Imm(1)                                           -> x2
     v373 LocalAddr(-8)                                    -> x1
     v374 CallExt { binding_idx=222, args=[v370, v371, v372, v373], fp_arg_mask=0x0 } -> x0
@@ -552,7 +552,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     terminator Jmp(b9)
   block 62  start_pc=0
     v122 LocalAddr(-7)                                    -> x7
-    v123 ImmData(10)                                      -> x6
+    v123 ImmData(3)                                       -> x6
     v124 Imm(1)                                           -> x2
     v125 LocalAddr(-1)                                    -> x1
     v126 CallExt { binding_idx=222, args=[v122, v123, v124, v125], fp_arg_mask=0x0 } -> x0

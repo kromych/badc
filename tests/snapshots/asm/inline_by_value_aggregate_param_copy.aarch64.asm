@@ -40,7 +40,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	sturb	w0, [x29, #-0x8]
                	adrp	x2, <page>
-               	str	x1, [x2, #0x30]
+               	str	x1, [x2, #0x20]
                	ldurb	w2, [x29, #-0x8]
                	mov	x3, #0x63               // =99
                	strb	w3, [x1]
@@ -88,10 +88,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	mov	x1, #0x4                // =4
-               	strb	w1, [x0, #0x38]
+               	strb	w1, [x0, #0x28]
                	mov	x1, #0x4d               // =77
-               	strb	w1, [x0, #0x38]
-               	ldrb	w0, [x0, #0x38]
+               	strb	w1, [x0, #0x28]
+               	ldrb	w0, [x0, #0x28]
                	cmp	w0, #0x4d
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

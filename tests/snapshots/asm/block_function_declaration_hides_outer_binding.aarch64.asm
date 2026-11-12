@@ -64,7 +64,7 @@ Disassembly of section .text:
 
 <declared_in_an_outer_block>:
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
                	add	x0, x0, #0x3
@@ -72,7 +72,7 @@ Disassembly of section .text:
 
 <outer_block_double>:
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	scvtf	d0, x0
                	fmov	d1, #2.00000000
                	fdiv	d0, d0, d1
@@ -82,7 +82,7 @@ Disassembly of section .text:
 
 <outer_block_pointer>:
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	sub	x0, x0, #0x4
                	sxtw	x0, w0
                	adrp	x1, <page>

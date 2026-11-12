@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x7, #0x1                // =1
                	movk	x7, #0x20, lsl #48
                	adrp	x16, <page>
-               	ldr	d0, [x16, #0x138]
+               	ldr	d0, [x16, #0x130]
                	fmov	d1, #3.25000000
                	add	x17, sp, #0x80
                	stp	x9, x10, [sp]
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x140]
+               	ldr	d1, [x16, #0x138]
                	add	x17, sp, #0x90
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
@@ -162,7 +162,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x148]
+               	ldr	d1, [x16, #0x140]
                	add	x16, sp, #0x80
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]

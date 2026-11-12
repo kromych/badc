@@ -18,21 +18,21 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	adrp	x1, <page>
-               	ldrsw	x0, [x1, #0x30]
+               	ldrsw	x0, [x1, #0x20]
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	cbz	x0, <addr>
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x1, #0x30]
+               	ldrsw	x0, [x1, #0x20]
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

@@ -55,16 +55,16 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x128]
+               	ldrsw	x0, [x0, #0x114]
                	cbz	w0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x140]
+               	ldrsw	x1, [x0, #0x120]
                	adrp	x2, <page>
-               	ldrsw	x2, [x2, #0x120]
+               	ldrsw	x2, [x2, #0x110]
                	add	x1, x1, x2
-               	str	w1, [x0, #0x140]
+               	str	w1, [x0, #0x120]
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x128]
+               	str	wzr, [x0, #0x114]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -93,12 +93,12 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x130]
+               	ldrsw	x0, [x0, #0x118]
                	cbz	w0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x138]
+               	ldrsw	x1, [x0, #0x11c]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x138]
+               	str	w1, [x0, #0x11c]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -565,13 +565,13 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x128]
+               	ldrsw	x0, [x0, #0x114]
                	cbnz	x0, <addr>
                	adrp	x0, <page>
-               	str	w21, [x0, #0x120]
+               	str	w21, [x0, #0x110]
                	adrp	x0, <page>
                	mov	x1, #0x1                // =1
-               	str	w1, [x0, #0x128]
+               	str	w1, [x0, #0x114]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -593,7 +593,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xd0
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x140]
+               	ldrsw	x0, [x0, #0x120]
                	mov	x17, #0xa314            // =41748
                	movk	x17, #0x7, lsl #16
                	cmp	w0, w17
@@ -621,7 +621,7 @@ Disassembly of section .text:
                	bl	<addr>
                	adrp	x0, <page>
                	mov	x1, #0x1                // =1
-               	str	w1, [x0, #0x130]
+               	str	w1, [x0, #0x118]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -639,7 +639,7 @@ Disassembly of section .text:
                	cmp	w20, #0x4
                	b.lt	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x138]
+               	ldrsw	x0, [x0, #0x11c]
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9d               // =157

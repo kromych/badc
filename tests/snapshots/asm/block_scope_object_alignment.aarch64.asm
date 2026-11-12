@@ -126,7 +126,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	ldrb	w1, [x1, #0x28]
+               	ldrb	w1, [x1, #0x21]
                	cmp	w1, #0x61
                	b.ne	<addr>
                	adrp	x1, <page>

@@ -3074,8 +3074,7 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
         "the computed address lowers to a register base, not RIP-relative or SIB: {repl:02x?}"
     );
     // `lea sel_data(%rip), %rdi`: ModRM 3D, the disp32 relocated
-    // PC-relative, its addend the object's offset (4, the residue of its
-    // `.data` offset past the NULL guard) less the end skew.
+    // PC-relative, its addend the object's offset less the end skew.
     let (repl, rela) = replacement("sel_data");
     assert_eq!(repl, [0x48, 0x8d, 0x3d, 0, 0, 0, 0], "{repl:02x?}");
     assert_eq!(rela.len(), 24, "one relocation: {rela:02x?}");
@@ -3083,7 +3082,7 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
     const R_X86_64_PC32: u64 = 2;
     assert_eq!(
         (field(0), field(8) & 0xffff_ffff, field(16) as i64),
-        (3, R_X86_64_PC32, 0)
+        (3, R_X86_64_PC32, -4)
     );
 }
 
@@ -8720,7 +8719,12 @@ fn alignas_places_objects_at_requested_alignment() {
         __attribute__((aligned(16))) unsigned char pool2[8];\n\
         int use_all(void) { return pool[0] + skew[0] + pool2[0]; }\n";
     let obj = compile(aligned_unit);
-    assert_eq!(obj.data_align, 16, "unit must claim 16-byte data alignment");
+    // The zero-filled pools are `.bss`; the data family claims their boundary.
+    assert_eq!(
+        obj.data_align.max(obj.bss_align),
+        16,
+        "unit must claim 16-byte data alignment"
+    );
     for name in ["pool", "pool2"] {
         let sym = obj
             .symbols
@@ -8830,7 +8834,8 @@ fn variable_aligned_sets_where_alignas_only_raises() {
             ..Default::default()
         };
         let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-        parse_native_elf(&bytes).expect("parse ET_REL").data_align
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        obj.data_align.max(obj.bss_align)
     };
     let cell = "struct __attribute__((aligned(64))) cell { char c[64]; };\n";
     assert_eq!(
@@ -10238,10 +10243,10 @@ fn named_section_alignment_and_size_data_only_unit() {
     assert_eq!(sections[".d.c64"], (4, 64));
     assert_eq!(sections[".d.nat"], (16, 16));
     assert_eq!(sections[".d.page"], (4096, 4096));
-    assert_eq!(sections[".data"], (12, 8), "no ghost bytes in .data");
+    assert_eq!(sections[".data"], (8, 8), "no ghost bytes in .data");
     assert_eq!(sections[".bss"].0, 0);
     assert_eq!(syms["raw"].1, 0);
-    assert_eq!(syms["in_data"].1, 8);
+    assert_eq!(syms["in_data"].1, 4);
 }
 
 #[test]

@@ -113,7 +113,7 @@ Disassembly of section .text:
                	mov	x1, x6
                	b	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x48]
+               	ldrsw	x0, [x0, #0x3c]
                	mov	x17, #0x5678            // =22136
                	movk	x17, #0x1234, lsl #16
                	cmp	w0, w17

@@ -164,7 +164,7 @@ Disassembly of section .text:
                	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	adrp	x0, <page>
-               	ldrsw	x4, [x0, #0x18]
+               	ldrsw	x4, [x0, #0xc]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	cmp	w0, w4

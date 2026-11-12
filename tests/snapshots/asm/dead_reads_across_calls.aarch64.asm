@@ -237,7 +237,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	mov	x1, #0xd89e             // =55454
-               	str	x1, [x0, #0x70]
+               	str	x1, [x0, #0x60]
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x26, [sp, #0x30]

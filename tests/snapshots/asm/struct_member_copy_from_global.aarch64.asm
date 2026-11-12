@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <new_client>:
                	adrp	x0, <page>
-               	ldr	w1, [x0, #0x18]
+               	ldr	w1, [x0, #0x10]
                	mov	x2, #0x9                // =9
-               	str	w2, [x0, #0x18]
+               	str	w2, [x0, #0x10]
                	mov	x0, #0x1                // =1
                	mov	x2, #-0x64              // =-100
                	mov	x17, #-0x1              // =-1
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	w0, [x0, #0x18]
+               	ldr	w0, [x0, #0x10]
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

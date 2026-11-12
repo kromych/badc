@@ -112,13 +112,13 @@ Disassembly of section .text:
                	mov	x0, #0xe                // =14
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x80]
+               	ldrsw	x0, [x0, #0x78]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x88]
+               	ldr	d0, [x0, #0x80]
                	fmov	d1, #3.00000000
                	fcmp	d0, d1
                	b.eq	<addr>

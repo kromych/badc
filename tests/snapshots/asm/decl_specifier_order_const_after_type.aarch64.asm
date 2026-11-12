@@ -16,14 +16,14 @@ Disassembly of section .text:
 <main>:
                	adrp	x1, <page>
                	mov	x0, #0x1                // =1
-               	strb	w0, [x1, #0x30]
+               	strb	w0, [x1, #0x20]
+               	adrp	x1, <page>
+               	strb	w0, [x1, #0x29]
+               	adrp	x1, <page>
+               	strb	w0, [x1, #0x32]
                	adrp	x1, <page>
                	strb	w0, [x1, #0x39]
                	adrp	x1, <page>
-               	strb	w0, [x1, #0x44]
-               	adrp	x1, <page>
-               	strb	w0, [x1, #0x4b]
-               	adrp	x1, <page>
-               	strb	w0, [x1, #0x58]
+               	strb	w0, [x1, #0x40]
                	mov	x0, #0x0                // =0
                	ret

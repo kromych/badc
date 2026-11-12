@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	and	x0, x0, #0x1ff
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
@@ -53,10 +53,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x14]
+               	ldrsw	x1, [x0, #0xc]
                	and	x1, x1, #0x1ff
                	stur	w1, [x29, #-0x18]
-               	ldrsw	x1, [x0, #0x14]
+               	ldrsw	x1, [x0, #0xc]
                	and	x1, x1, #0x1ff
                	sxtb	x1, w1
                	cmp	w1, #0x0
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	mov	x3, #0x0                // =0
                	cmp	w1, #0x3
                	csel	x1, x2, x3, ne
-               	ldrsw	x2, [x0, #0x14]
+               	ldrsw	x2, [x0, #0xc]
                	and	x2, x2, #0x1ff
                	and	x2, x2, #0xff
                	cmp	w2, #0xc8
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	orr	x3, x1, #0x4
                	cmp	w2, #0x3
                	csel	x1, x3, x1, ne
-               	ldrsw	x2, [x0, #0x14]
+               	ldrsw	x2, [x0, #0xc]
                	and	x2, x2, #0x1ff
                	mov	x17, #0xc8              // =200
                	mul	x2, x2, x17
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	orr	x3, x1, #0x8
                	cmp	w2, #0x3
                	csel	x1, x3, x1, ne
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	and	x0, x0, #0x1ff
                	and	x0, x0, #0x7
                	mvn	x0, x0
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	and	x0, x0, #0x1ff
                	stur	w0, [x29, #-0x18]
                	sub	x0, x29, #0x18
@@ -128,10 +128,10 @@ Disassembly of section .text:
                	csel	x20, x1, x20, ne
                	adrp	x1, <page>
                	sub	x0, x29, #0x18
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	and	x0, x0, #0x1ff
                	stur	w0, [x29, #-0x18]
                	adrp	x0, <page>

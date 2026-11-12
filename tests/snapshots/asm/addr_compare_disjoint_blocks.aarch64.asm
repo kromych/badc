@@ -18,7 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x34]
+               	ldrsw	x0, [x0, #0x20]
                	stur	w0, [x29, #-0x18]
                	sub	x2, x29, #0x18
                	sub	x3, x29, #0x8
@@ -26,7 +26,7 @@ Disassembly of section .text:
                	cmp	x3, x2
                	cset	x0, eq
                	add	x0, x0, x0, lsl #1
-               	strb	w0, [x1, #0x38]
+               	strb	w0, [x1, #0x24]
                	sxtb	x0, w0
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1

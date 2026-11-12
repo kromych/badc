@@ -232,7 +232,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x18]
+               	ldr	x20, [x0, #0x10]
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0

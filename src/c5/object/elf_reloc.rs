@@ -743,7 +743,7 @@ fn plan_data_layout(
     let data_file_len = build.data.len() as u64;
     let bss_size = build.bss_size.max(0) as u64;
     let base_align = build.data_align.max(1) as u64;
-    if named_objs.is_empty() {
+    if named_objs.is_empty() && program.data_pad_ranges.is_empty() {
         return Ok(DataPlan::identity(data_file_len, bss_size, base_align));
     }
     let unified_len = data_file_len + bss_size;
@@ -859,7 +859,7 @@ fn plan_data_layout(
             &mut cursor_bss
         };
         let base = if let Some(&a) = split_align.get(&pos) {
-            let a = crate::c5::layout::data_image_align(a as usize) as u64;
+            let a = a.max(1);
             if in_file {
                 data_align = data_align.max(a);
             } else {
@@ -867,8 +867,8 @@ fn plan_data_layout(
             }
             round_up(*cursor, a)
         } else {
-            // Anonymous content keeps its 8-byte residue.
-            *cursor + (pos as i64 - *cursor as i64).rem_euclid(8) as u64
+            // Every boundary the layout placed content on is recorded.
+            *cursor
         };
         let home = if in_file {
             DataHome::Data(base)

@@ -53,17 +53,17 @@ Disassembly of section .text:
                	cbz	w3, <addr>
                	swpa	w1, w0, [x5]
                	cbnz	w0, <addr>
-               	ldr	x0, [x10, #0x60]
+               	ldr	x0, [x10, #0x50]
                	add	x0, x0, #0x1
-               	str	x0, [x10, #0x60]
+               	str	x0, [x10, #0x50]
                	mov	x0, #0x0                // =0
                	stlr	w0, [x5]
                	swpab	w1, w0, [x6]
                	and	x0, x0, #0xff
                	cbnz	x0, <addr>
-               	ldr	x0, [x11, #0x68]
+               	ldr	x0, [x11, #0x58]
                	add	x0, x0, #0x1
-               	str	x0, [x11, #0x68]
+               	str	x0, [x11, #0x58]
                	mov	x0, #0x0                // =0
                	stlrb	w0, [x6]
                	add	x7, x7, #0x1
@@ -166,7 +166,7 @@ Disassembly of section .text:
                	mov	x0, #0x6a               // =106
                	b	<addr>
                	adrp	x0, <page>
-               	ldr	w0, [x0, #0x48]
+               	ldr	w0, [x0, #0x44]
                	cbz	w0, <addr>
                	mov	x0, #0x6b               // =107
                	b	<addr>

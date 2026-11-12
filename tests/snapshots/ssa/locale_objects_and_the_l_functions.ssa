@@ -470,9 +470,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=15
     v206 Imm(16)                                          -> x0
     terminator Jmp(b12)   (exit_acc=v206)
   block 75  start_pc=0
-    v207 ImmData(8)                                       -> x7
+    v207 ImmData(1)                                       -> x7
     v208 CallExt { binding_idx=226, args=[v207, v16], fp_arg_mask=0x0 } -> x13
-    v209 ImmData(14)                                      -> x7
+    v209 ImmData(7)                                       -> x7
     v210 CallExt { binding_idx=225, args=[v209, v16], fp_arg_mask=0x0 } -> [spill 0]
     v211 BinopI { op=eq, lhs=v208, rhs_imm=0 }            -> x0
     terminator Bz { cond=v208, target=b79, fall=b76 }   (exit_acc=v211)

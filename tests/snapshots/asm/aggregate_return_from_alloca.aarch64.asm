@@ -568,7 +568,7 @@ Disassembly of section .text:
                	stp	x22, x23, [sp, #0x50]
                	stp	x24, x25, [sp, #0x60]
                	adrp	x0, <page>
-               	ldr	x21, [x0, #0x18]
+               	ldr	x21, [x0, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]

@@ -73,12 +73,12 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0xc]
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x20]
+               	ldrsw	x1, [x1, #0x10]
                	add	x0, x0, x1
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x50]
+               	ldrsw	x1, [x1, #0x40]
                	add	x0, x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x4                // =4

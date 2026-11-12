@@ -294,13 +294,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v184 Imm(0)                                           -> x0
     v185 LifetimeEnd(0)                                   -> -
     v186 Imm(0)                                           -> x0
-    v187 ImmData(21)                                      -> x0
+    v187 ImmData(16)                                      -> x0
     v188 Imm(4)                                           -> x1
     v189 BinopI { op=add, lhs=v187, rhs_imm=4 }           -> x1
     v190 BinopI { op=add, lhs=v187, rhs_imm=7 }           -> x1
     v191 Imm(8)                                           -> x1
     v192 Store { addr=v187, disp=7, value=v191, kind=I8 pc_rel } -> -
-    v193 ImmData(21)                                      -> x1
+    v193 ImmData(16)                                      -> x1
     v194 Imm(4)                                           -> x1
     v195 BinopI { op=add, lhs=v187, rhs_imm=4 }           -> x0
     v196 Imm(0)                                           -> x1
@@ -448,7 +448,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v316 Imm(52)                                          -> x1
     v317 Imm(2)                                           -> x9
     v318 Call { target_pc=1, args=[v279, v277, v315, v316, v277, v317], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v319 ImmData(21)                                      -> x7
+    v319 ImmData(16)                                      -> x7
     v320 Imm(0)                                           -> x6
     v321 Imm(7)                                           -> x2
     v322 Imm(5)                                           -> x1

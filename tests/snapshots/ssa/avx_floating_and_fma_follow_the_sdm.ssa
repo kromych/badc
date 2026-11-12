@@ -1131,7 +1131,7 @@ fn ent_pc=1358 n_params=1 variadic=false locals=2
     v24  BinopI { op=ult, lhs=v23, rhs_imm=5 }            -> x1
     terminator Bz { cond=v24, target=b8, fall=b1 }   (exit_acc=v24)
   block 1  start_pc=0
-    v25  ImmData(8)                                       -> x1
+    v25  ImmData(4)                                       -> x1
     v26  Imm(0)                                           -> x2
     v27  BinopI { op=shru, lhs=v20, rhs_imm=32 }          -> x6
     v28  Imm(0)                                           -> x0

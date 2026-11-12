@@ -20,9 +20,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x64]
+               	ldrsw	x1, [x0, #0x50]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x64]
+               	str	w1, [x0, #0x50]
                	ldursw	x2, [x29, #-0x8]
                	cmp	w2, #0x3
                	b.ne	<addr>
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x64]
+               	str	w1, [x0, #0x50]
                	mov	x0, x1
                	cmp	w0, #0x2
                	b.eq	<addr>
@@ -42,13 +42,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x18]
+               	ldr	d0, [x0, #0x10]
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	fcmpe	d0, d1
                	b.le	<addr>
                	adrp	x0, <page>
-               	ldr	s0, [x0, #0x20]
+               	ldr	s0, [x0, #0x18]
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x10]
                	fcmpe	s0, s1
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x28]
+               	ldr	d0, [x0, #0x20]
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x20]
                	stur	d0, [x29, #-0x20]
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	cmp	x1, x17
                	b.ne	<addr>
                	adrp	x1, <page>
-               	ldr	d0, [x1, #0x30]
+               	ldr	d0, [x1, #0x28]
                	stur	x0, [x29, #-0x20]
                	stur	d0, [x29, #-0x20]
                	ldur	x1, [x29, #-0x20]
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	ldr	s0, [x1, #0x38]
+               	ldr	s0, [x1, #0x30]
                	stur	w0, [x29, #-0x18]
                	stur	s0, [x29, #-0x18]
                	ldur	w1, [x29, #-0x18]

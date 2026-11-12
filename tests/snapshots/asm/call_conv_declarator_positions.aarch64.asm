@@ -162,7 +162,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x28]
+               	ldr	x2, [x0, #0x20]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2

@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <note>:
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x30]
+               	ldrsw	x2, [x1, #0x20]
                	add	x2, x2, x0
-               	str	w2, [x1, #0x30]
+               	str	w2, [x1, #0x20]
                	ret
 
 <both>:
@@ -438,7 +438,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cbnz	w20, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, w2
                	b.eq	<addr>
                	mov	x20, #0x16              // =22

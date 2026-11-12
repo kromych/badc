@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <touch>:
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x40]
+               	ldr	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	x1, [x0, #0x40]
+               	str	x1, [x0, #0x30]
                	ret
 
 <gprs>:
@@ -183,7 +183,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x18]
+               	ldr	x20, [x0, #0x10]
                	lsl	x1, x20, #1
                	mov	x0, x20
                	bl	<addr>
@@ -198,10 +198,10 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #2.00000000
                	adrp	x0, <page>
-               	ldr	d1, [x0, #0x20]
+               	ldr	d1, [x0, #0x18]
                	fmul	d0, d0, d1
                	fmov	d1, #4.00000000
-               	ldr	d2, [x0, #0x20]
+               	ldr	d2, [x0, #0x18]
                	fmul	d1, d1, d2
                	bl	<addr>
                	adrp	x16, <page>

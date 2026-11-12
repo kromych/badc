@@ -230,11 +230,11 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v137 LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v136)
   block 19  start_pc=0
-    v138 ImmData(100)                                     -> x0
+    v138 ImmData(96)                                      -> x0
     v139 Imm(2147483648)                                  -> x0
     v140 Store { addr=v138, disp=0, value=v139, kind=I32 pc_rel } -> -
     v141 Imm(0)                                           -> x0
-    v142 ImmData(100)                                     -> x0
+    v142 ImmData(96)                                      -> x0
     v143 Load { addr=v138, disp=0, kind=U32 pc_rel }      -> x0
     v144 Imm(2147483648)                                  -> x1
     v145 Binop { op=ne, lhs=v143, rhs=v144 }              -> x0

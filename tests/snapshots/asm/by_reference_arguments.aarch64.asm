@@ -229,7 +229,7 @@ Disassembly of section .text:
                	ldr	x1, [x1, <lo12>]
                	blr	x1
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
+               	ldr	x1, [x0, #0x10]
                	sub	x0, x29, #0x60
                	blr	x1
                	sub	x0, x29, #0x48

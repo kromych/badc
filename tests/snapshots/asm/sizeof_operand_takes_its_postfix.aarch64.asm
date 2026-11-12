@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x34]
+               	ldrsw	x0, [x0, #0x20]
                	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ret

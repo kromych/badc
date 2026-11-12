@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <callee>:
                	adrp	x3, <page>
-               	str	x2, [x3, #0x50]
+               	str	x2, [x3, #0x40]
                	add	x0, x0, x0, lsl #1
                	add	x0, x0, x1
                	ret

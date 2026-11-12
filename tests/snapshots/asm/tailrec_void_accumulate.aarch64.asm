@@ -16,9 +16,9 @@ Disassembly of section .text:
 <accumulate>:
                	adrp	x1, <page>
                	mov	x0, #0x64               // =100
-               	ldr	x2, [x1, #0x30]
+               	ldr	x2, [x1, #0x20]
                	add	x2, x2, x0
-               	str	x2, [x1, #0x30]
+               	str	x2, [x1, #0x20]
                	sub	x0, x0, #0x1
                	cbnz	w0, <addr>
                	ret
@@ -31,7 +31,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x30]
+               	ldr	x0, [x0, #0x20]
                	mov	x17, #0x13ba            // =5050
                	cmp	x0, x17
                	csel	x0, x1, x2, eq

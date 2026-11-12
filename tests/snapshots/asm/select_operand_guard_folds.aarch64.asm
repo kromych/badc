@@ -31,14 +31,14 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	str	x0, [x1, #0x58]
                	adrp	x2, <page>
-               	ldr	x3, [x2, #0x18]
+               	ldr	x3, [x2, #0x10]
                	ldr	x3, [x3]
                	tbz	w3, #0x16, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x3, #0x400000           // =4194304
                	str	x3, [x1, #0x58]
-               	ldr	x1, [x2, #0x18]
+               	ldr	x1, [x2, #0x10]
                	ldr	x1, [x1]
                	tbz	w1, #0x16, <addr>
                	adrp	x1, <page>

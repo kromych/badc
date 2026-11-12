@@ -21,7 +21,7 @@ Disassembly of section .text:
                	and	sp, x16, #0xffffffffffffffe0
                	mov	x0, sp
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x1, #0x9                // =9
                	str	w1, [sp]
                	mov	x1, #0xa                // =10
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	mov	x3, #0x3                // =3
                	strb	w3, [sp]
                	adrp	x3, <page>
-               	str	x0, [x3, #0x30]
+               	str	x0, [x3, #0x20]
                	and	x3, x0, #0xf
                	mov	x0, #0x0                // =0
                	and	x1, x1, #0x1f
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	str	xzr, [sp]
                	mov	x0, sp
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x1, #0x1                // =1
                	strb	w1, [sp]
                	mov	x1, #0x2                // =2
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	str	xzr, [sp]
                	mov	x0, sp
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x1, #0x1                // =1
                	strb	w1, [sp]
                	add	x1, x0, #0x1, lsl #12   // =0x1000
@@ -173,7 +173,7 @@ Disassembly of section .text:
                	and	sp, x16, #0xffffffffffffffe0
                	mov	x0, sp
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x1, #0x4                // =4
                	strh	w1, [sp]
                	tst	x0, #0x1f
@@ -190,7 +190,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0xa0
                	sub	x0, x29, #0xa0
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x2, #0x1                // =1
                	sturh	w2, [x29, #-0xa0]
                	mov	x3, #0x2                // =2
@@ -201,7 +201,7 @@ Disassembly of section .text:
                	cmp	w0, #0x1
                	b.ne	<addr>
                	sub	x0, x29, #0x20
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	mov	x1, #0x7                // =7
                	stur	x1, [x29, #-0x20]
                	mov	x1, #0x8                // =8

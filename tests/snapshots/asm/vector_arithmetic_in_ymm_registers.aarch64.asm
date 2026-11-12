@@ -940,9 +940,9 @@ Disassembly of section .text:
 
 <touch>:
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x34]
+               	ldrsw	x2, [x1, #0x20]
                	add	x0, x2, x0
-               	str	w0, [x1, #0x34]
+               	str	w0, [x1, #0x20]
                	ret
 
 <main>:
@@ -2255,7 +2255,7 @@ Disassembly of section .text:
                	cmp	w0, #0x12
                	b.lt	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x34]
+               	ldrsw	x0, [x0, #0x20]
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1e               // =30
                	cmp	w0, #0x2d

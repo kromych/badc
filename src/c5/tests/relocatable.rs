@@ -2240,12 +2240,14 @@ fn a_relocatable_link_renders_gnu_ld_map_rows() {
 /// C11 6.2.8: a file-scope object sits on its own type's boundary and
 /// spans its own size, and a negative initializer leaves the bytes past
 /// its object zero. The x86-64 psABI 3.1.2 puts an array variable of 16
-/// bytes or more on 16.
+/// bytes or more on 16. The sections hold nothing else: `.data` the
+/// one-byte NULL guard and the initialized objects, `.bss` the rest, as
+/// gcc lays them out; the `const` object moved to `.rodata` leaves no gap.
 #[test]
 fn file_scope_objects_take_their_own_size_and_boundary() {
     let src = "char c1 = -1; char c2; short s1; int i1; int i2; static int i3; int *p;\n\
-               char t1 = -1; int arr[4] = {-1}; short s2 = -1;\n\
-               int use(void) { return c1 + c2 + s1 + i1 + i2 + i3 + (p != 0) + t1 + arr[0] + s2; }\n";
+               const int k = 3; char t1 = -1; int arr[4] = {-1}; short s2 = -1;\n\
+               int use(void) { return c1 + c2 + s1 + i1 + i2 + i3 + (p != 0) + t1 + arr[0] + s2 + k; }\n";
     let objects = [
         ("c1", 1, 1),
         ("c2", 1, 1),
@@ -2281,6 +2283,15 @@ fn file_scope_objects_take_their_own_size_and_boundary() {
             }
         }
         let bytes = &obj.sections[data].bytes;
+        // guard, c1, t1, arr (on 16 or 4), s2.
+        let data_len = if target == Target::LinuxX64 { 34 } else { 22 };
+        assert_eq!(bytes.len(), data_len, "{target:?}: .data {bytes:02x?}");
+        let bss = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".bss")
+            .expect(".bss");
+        assert_eq!(bss.nobits_size, 24, "{target:?}: .bss");
         let stray: Vec<usize> = (0..bytes.len())
             .filter(|&i| !written[i] && bytes[i] != 0)
             .collect();

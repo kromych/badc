@@ -40,7 +40,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v26  ImmData(1)                                       -> x0
     v27  ImmData(8)                                       -> x0
     v28  ImmData(16)                                      -> x0
-    v29  ImmData(24)                                      -> x0
+    v29  ImmData(17)                                      -> x0
     v30  ImmData(64)                                      -> x0
     v31  Imm(8)                                           -> x0
     v32  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
@@ -62,7 +62,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v44  Load { addr=v43, disp=0, kind=I8 pc_rel }        -> x1
     v45  Binop { op=add, lhs=v42, rhs=v44 }               -> x0
     v46  Extend { value=v45, kind=I32, nsw }              -> x1
-    v47  ImmData(24)                                      -> x1
+    v47  ImmData(17)                                      -> x1
     v48  Load { addr=v47, disp=0, kind=I8 pc_rel }        -> x1
     v49  Binop { op=add, lhs=v45, rhs=v48 }               -> x0
     v50  Extend { value=v49, kind=I32, nsw }              -> x1
@@ -217,20 +217,20 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v78  Imm(2)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v78)
   block 23  start_pc=0
-    v79  ImmData(32)                                      -> x0
+    v79  ImmData(18)                                      -> x0
     v80  Load { addr=v79, disp=0, kind=I8 pc_rel }        -> x0
-    v81  ImmData(48)                                      -> x1
+    v81  ImmData(32)                                      -> x1
     v82  Load { addr=v81, disp=0, kind=I8 pc_rel }        -> x1
     v83  Binop { op=add, lhs=v80, rhs=v82 }               -> x0
     v84  Extend { value=v83, kind=I32, nsw }              -> x1
-    v85  ImmData(56)                                      -> x1
+    v85  ImmData(33)                                      -> x1
     v86  Load { addr=v85, disp=0, kind=I8 pc_rel }        -> x1
     v87  Binop { op=add, lhs=v83, rhs=v86 }               -> x0
     v88  Extend { value=v87, kind=I32, nsw }              -> x1
     v89  BinopI { op=ne, lhs=v87, rhs_imm=15 }            -> x0
     terminator Bnz { cond=v89, target=b25, fall=b24 }   (exit_acc=v89)
   block 24  start_pc=0
-    v90  ImmData(40)                                      -> x0
+    v90  ImmData(24)                                      -> x0
     v91  Load { addr=v90, disp=0, kind=F64 pc_rel }       -> d0
     v92  Imm(4612811918334230528)                         -> x0
     v93  Binop { op=fne, lhs=v91, rhs=v92 }               -> x0

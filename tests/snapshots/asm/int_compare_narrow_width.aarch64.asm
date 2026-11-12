@@ -15,13 +15,13 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x2, <page>
-               	ldr	x0, [x2, #0x18]
+               	ldr	x0, [x2, #0x10]
                	sxtw	x4, w0
                	adrp	x3, <page>
-               	ldr	x0, [x3, #0x20]
+               	ldr	x0, [x3, #0x18]
                	sxtw	x1, w0
-               	ldr	x0, [x2, #0x18]
-               	ldr	x5, [x3, #0x20]
+               	ldr	x0, [x2, #0x10]
+               	ldr	x5, [x3, #0x18]
                	cmp	w4, #0x0
                	b.lt	<addr>
                	mov	x0, #0x1                // =1
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	ldr	x0, [x2, #0x18]
+               	ldr	x0, [x2, #0x10]
                	mov	x17, #0x100000000       // =4294967296
                	cmp	x0, x17
                	b.gt	<addr>
@@ -107,11 +107,11 @@ Disassembly of section .text:
                	mov	x0, #0x1a               // =26
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x28]
+               	ldr	x2, [x0, #0x20]
                	sxtb	x2, w2
-               	ldr	x3, [x0, #0x28]
+               	ldr	x3, [x0, #0x20]
                	and	x3, x3, #0xff
-               	ldr	x0, [x0, #0x28]
+               	ldr	x0, [x0, #0x20]
                	sxth	x0, w0
                	cmp	w2, #0x0
                	b.ge	<addr>

@@ -87,8 +87,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0, #0x20]
-               	ldr	x0, [x0, #0x20]
+               	str	x1, [x0, #0x18]
+               	ldr	x0, [x0, #0x18]
                	blr	x0
                	cmp	w0, #0x29
                	b.eq	<addr>

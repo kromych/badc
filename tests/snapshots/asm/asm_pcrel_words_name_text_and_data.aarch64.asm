@@ -99,10 +99,10 @@ Disassembly of section .text:
 
 <text_tbl>:
   <addr>: c0 fe ff ff  	.word	0xfffffec0
-  <addr>: 70 0a 01 00  	.word	0x00010a70
+  <addr>: 68 0a 01 00  	.word	0x00010a68
   <addr>: 10 00 00 00  	.word	0x00000010
   <addr>: 00 00 00 00  	.word	0x00000000
-  <addr>: 64 0a 01 00  	.word	0x00010a64
+  <addr>: 5c 0a 01 00  	.word	0x00010a5c
   <addr>: 00 00 00 00  	.word	0x00000000
 
 <text_end>:

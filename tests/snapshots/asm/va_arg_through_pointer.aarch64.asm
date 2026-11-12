@@ -68,7 +68,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x2, x16
                	ldr	x2, [x2]
-               	str	x2, [x1, #0x30]
+               	str	x2, [x1, #0x20]
                	adrp	x1, <page>
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x2, x16
                	ldrsw	x2, [x2]
-               	str	w2, [x1, #0x38]
+               	str	w2, [x1, #0x28]
                	adrp	x1, <page>
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
                	ldr	d0, [x0]
-               	str	d0, [x1, #0x40]
+               	str	d0, [x1, #0x30]
                	sub	x0, x29, #0x20
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -128,14 +128,14 @@ Disassembly of section .text:
                	fmov	d0, #1.50000000
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
+               	ldrsw	x0, [x0, #0x28]
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	d0, [x0, #0x40]
+               	ldr	d0, [x0, #0x30]
                	fmov	d1, #1.50000000
                	fcmp	d0, d1
                	b.eq	<addr>

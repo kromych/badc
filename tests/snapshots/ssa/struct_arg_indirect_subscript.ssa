@@ -221,7 +221,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v215 BinopI { op=add, lhs=v212, rhs_imm=8 }           -> x0
     v216 Imm(48)                                          -> x1
     v217 BinopI { op=add, lhs=v215, rhs_imm=48 }          -> x0
-    v218 ImmData(36)                                      -> x1
+    v218 ImmData(32)                                      -> x1
     v219 Imm(3)                                           -> x2
     v220 Load { addr=v217, disp=0, kind=I64 }             -> x2
     v221 BinopI { op=mul, lhs=v220, rhs_imm=1000 }        -> x2

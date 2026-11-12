@@ -55,19 +55,19 @@ Disassembly of section .text:
                	add	x29, sp, #0x50
                	mov	x20, x1
                	adrp	x1, <page>
-               	ldr	x21, [x1, #0x18]
+               	ldr	x21, [x1, #0x10]
                	adrp	x1, <page>
-               	ldr	x22, [x1, #0x20]
+               	ldr	x22, [x1, #0x18]
                	adrp	x1, <page>
-               	ldr	x23, [x1, #0x28]
+               	ldr	x23, [x1, #0x20]
                	adrp	x1, <page>
-               	ldr	x24, [x1, #0x30]
+               	ldr	x24, [x1, #0x28]
                	adrp	x1, <page>
-               	ldr	x25, [x1, #0x38]
+               	ldr	x25, [x1, #0x30]
                	adrp	x1, <page>
-               	ldr	x26, [x1, #0x40]
+               	ldr	x26, [x1, #0x38]
                	adrp	x1, <page>
-               	ldr	x27, [x1, #0x48]
+               	ldr	x27, [x1, #0x40]
                	bl	<addr>
                	mov	x28, x0
                	mov	x0, x20

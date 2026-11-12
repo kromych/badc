@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <keep>:
                	adrp	x1, <page>
-               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x20]
                	ret
 
 <mk_U1>:

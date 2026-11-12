@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(36)                                      -> x0
+    v3   ImmData(32)                                      -> x0
     v4   BinopI { op=or, lhs=v3, rhs_imm=1 }              -> x1
     v5   Imm(0)                                           -> x2
     v6   Imm(0)                                           -> x2
@@ -30,7 +30,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v20  LoadLocal { off=-1, kind=I64, volatile }         -> x1
     v21  Imm(-2)                                          -> x2
     v22  BinopI { op=and, lhs=v20, rhs_imm=-2 }           -> x1
-    v23  ImmData(36)                                      -> x2
+    v23  ImmData(32)                                      -> x2
     v24  Binop { op=ne, lhs=v22, rhs=v3 }                 -> x1
     terminator Bz { cond=v24, target=b4, fall=b3 }   (exit_acc=v24)
   block 3  start_pc=0
@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1
-    v31  ImmData(36)                                      -> x1
+    v31  ImmData(32)                                      -> x1
     v32  BinopI { op=shru, lhs=v3, rhs_imm=2 }            -> x0
     v33  Imm(0)                                           -> x1
     v34  Imm(0)                                           -> x1
@@ -64,7 +64,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
-    v49  ImmData(36)                                      -> x0
+    v49  ImmData(32)                                      -> x0
     v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x0
     v52  ImmData(16)                                      -> x0

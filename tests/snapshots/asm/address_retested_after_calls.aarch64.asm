@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <movable>:
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x34]
+               	ldrsw	x2, [x1, #0x20]
                	add	x2, x2, #0x1
-               	str	w2, [x1, #0x34]
+               	str	w2, [x1, #0x20]
                	ldr	x0, [x0]
                	cmp	x0, #0x0
                	cset	x0, eq
@@ -25,9 +25,9 @@ Disassembly of section .text:
 
 <enable>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x34]
+               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x34]
+               	str	w1, [x0, #0x20]
                	ret
 
 <report>:
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	mov	x2, #0x0                // =0
                	mov	x3, #0x4                // =4
-               	ldrsw	x1, [x1, #0x34]
+               	ldrsw	x1, [x1, #0x20]
                	cmp	w1, #0x2
                	csel	x1, x2, x3, eq
                	add	x0, x0, x1

@@ -17,9 +17,9 @@ Disassembly of section .text:
                	add	x1, x0, x0, lsl #1
                	add	x1, x1, #0x1
                	adrp	x2, <page>
-               	ldrsw	x3, [x2, #0x34]
+               	ldrsw	x3, [x2, #0x20]
                	add	x3, x3, #0x1
-               	str	w3, [x2, #0x34]
+               	str	w3, [x2, #0x20]
                	ret
 
 <make_wide>:
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x5
                	stur	x0, [x29, #-0x10]
                	adrp	x1, <page>
-               	ldrsw	x0, [x1, #0x34]
+               	ldrsw	x0, [x1, #0x20]
                	add	x0, x0, #0x1
-               	str	w0, [x1, #0x34]
+               	str	w0, [x1, #0x20]
                	mov	x16, x2
                	ldur	x17, [x29, #-0x8]
                	ldp	x0, x1, [x16]
@@ -153,7 +153,7 @@ Disassembly of section .text:
                	csel	x0, x1, x20, ne
                	adrp	x1, <page>
                	orr	x2, x0, #0x80
-               	ldrsw	x1, [x1, #0x34]
+               	ldrsw	x1, [x1, #0x20]
                	cmp	w1, #0xa
                	csel	x0, x2, x0, ne
                	ldp	x29, x30, [sp, #0x60]

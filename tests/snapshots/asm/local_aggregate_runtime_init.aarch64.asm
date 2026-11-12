@@ -96,7 +96,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	stur	w1, [x29, #-0x28]
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x20]
+               	ldrsw	x1, [x1, #0x10]
                	stur	w1, [x29, #-0x24]
                	mov	x1, #0x5                // =5
                	stur	w1, [x29, #-0x20]

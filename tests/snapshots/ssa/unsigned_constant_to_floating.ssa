@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(4)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=F32 pc_rel }        -> d0 [f32]
     v3   Imm(1602224128)                                  -> x0 [f32]
     v4   Binop { op=fne, lhs=v2, rhs=v3 }                 -> x1
@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v5   Imm(1)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
-    v6   ImmData(16)                                      -> x1
+    v6   ImmData(8)                                       -> x1
     v7   Load { addr=v6, disp=0, kind=F64 pc_rel }        -> d0
     v8   Imm(4895412794951729152)                         -> x1
     v9   Binop { op=fne, lhs=v7, rhs=v8 }                 -> x2
@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v10  Imm(2)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 4  start_pc=0
-    v11  ImmData(24)                                      -> x2
+    v11  ImmData(16)                                      -> x2
     v12  Load { addr=v11, disp=0, kind=F64 pc_rel }       -> d0
     v13  Imm(4890909195324358656)                         -> x2
     v14  Binop { op=fne, lhs=v12, rhs=v13 }               -> x2
@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v15  Imm(3)                                           -> x0
     terminator Return(v15)   (exit_acc=v15)
   block 6  start_pc=0
-    v16  ImmData(32)                                      -> x2
+    v16  ImmData(24)                                      -> x2
     v17  Load { addr=v16, disp=0, kind=F32 pc_rel }       -> d0 [f32]
     v18  Imm(1602224128)                                  -> x2 [f32]
     v19  Binop { op=fne, lhs=v17, rhs=v3 }                -> x0
@@ -40,7 +40,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v20  Imm(4)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
   block 8  start_pc=0
-    v21  ImmData(40)                                      -> x0
+    v21  ImmData(32)                                      -> x0
     v22  Load { addr=v21, disp=0, kind=F64 pc_rel }       -> d0
     v23  Imm(4895412794951729152)                         -> x0
     v24  Binop { op=fne, lhs=v22, rhs=v8 }                -> x0
@@ -49,7 +49,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v25  Imm(5)                                           -> x0
     terminator Return(v25)   (exit_acc=v25)
   block 10  start_pc=0
-    v26  ImmData(48)                                      -> x0
+    v26  ImmData(40)                                      -> x0
     v27  Load { addr=v26, disp=0, kind=F32 pc_rel }       -> d0 [f32]
     v28  Imm(1593835520)                                  -> x0 [f32]
     v29  Binop { op=fne, lhs=v27, rhs=v28 }               -> x0
@@ -58,7 +58,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v30  Imm(6)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 12  start_pc=0
-    v31  ImmData(56)                                      -> x0
+    v31  ImmData(48)                                      -> x0
     v32  Load { addr=v31, disp=0, kind=F64 pc_rel }       -> d0
     v33  Imm(4895412794951729151)                         -> x0
     v34  Binop { op=fne, lhs=v32, rhs=v33 }               -> x1
@@ -67,7 +67,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v35  Imm(7)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
   block 14  start_pc=0
-    v36  ImmData(64)                                      -> x1
+    v36  ImmData(56)                                      -> x1
     v37  Load { addr=v36, disp=0, kind=F64 pc_rel }       -> d0
     v38  Imm(4895412794951729151)                         -> x1
     v39  Binop { op=fne, lhs=v37, rhs=v33 }               -> x0

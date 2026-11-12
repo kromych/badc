@@ -232,7 +232,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v226 Imm(0)                                           -> x0
     v227 Imm(0)                                           -> x0
     v228 Imm(0)                                           -> x0
-    v229 ImmData(8)                                       -> x0
+    v229 ImmData(1)                                       -> x0
     v230 Imm(0)                                           -> x0
     v231 Imm(2)                                           -> x0
     v232 BinopI { op=add, lhs=v229, rhs_imm=2 }           -> x0
@@ -243,7 +243,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v237 Imm(0)                                           -> x1
     terminator Bnz { cond=v234, target=b2, fall=b1 }   (exit_acc=v236)
   block 1  start_pc=0
-    v248 ImmData(8)                                       -> x0
+    v248 ImmData(1)                                       -> x0
     v249 Imm(0)                                           -> x0
     v250 Imm(2)                                           -> x0
     v251 BinopI { op=add, lhs=v229, rhs_imm=2 }           -> x0
@@ -260,7 +260,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v260 Imm(11)                                          -> x0
     terminator Return(v260)   (exit_acc=v260)
   block 3  start_pc=0
-    v261 ImmData(8)                                       -> x0
+    v261 ImmData(1)                                       -> x0
     v262 Imm(6)                                           -> x0
     v263 BinopI { op=add, lhs=v229, rhs_imm=6 }           -> x0
     v264 Imm(4)                                           -> x0
@@ -273,7 +273,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v271 Imm(0)                                           -> x1
     terminator Bnz { cond=v268, target=b5, fall=b4 }   (exit_acc=v270)
   block 4  start_pc=0
-    v272 ImmData(8)                                       -> x0
+    v272 ImmData(1)                                       -> x0
     v273 Imm(6)                                           -> x0
     v274 BinopI { op=add, lhs=v229, rhs_imm=6 }           -> x0
     v275 Imm(4)                                           -> x0

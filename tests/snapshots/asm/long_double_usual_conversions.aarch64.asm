@@ -229,7 +229,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x90
                	str	x20, [sp, #0x40]
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x3c]
+               	ldrsw	x0, [x0, #0x38]
                	cmp	w0, #0x2
                	cset	x20, gt
                	adrp	x0, <page>
@@ -3064,7 +3064,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x2, <page>
-               	ldrsw	x2, [x2, #0x3c]
+               	ldrsw	x2, [x2, #0x38]
                	cmp	w2, #0x3
                	b.eq	<addr>
                	mov	x0, #0x1d               // =29

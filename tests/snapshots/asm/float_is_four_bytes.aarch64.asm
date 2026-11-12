@@ -29,7 +29,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x6                // =6
                	adrp	x1, <page>
-               	ldr	s0, [x1, #0x18]
+               	ldr	s0, [x1, #0xc]
                	fmov	s1, #1.50000000
                	fcmp	s0, s1
                	b.eq	<addr>

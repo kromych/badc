@@ -17,15 +17,15 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldr	x3, [x2, #0x1b0]
                	adrp	x2, <page>
-               	ldrsw	x4, [x2, #0x34]
+               	ldrsw	x4, [x2, #0x20]
                	add	x4, x4, #0x1
-               	str	w4, [x2, #0x34]
+               	str	w4, [x2, #0x20]
                	adrp	x2, <page>
                	mov	x4, #-0x1               // =-1
                	ldrsw	x1, [x1]
                	cmp	w1, w0
                	csel	x0, x0, x4, eq
-               	str	w0, [x2, #0x38]
+               	str	w0, [x2, #0x24]
                	adrp	x0, <page>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	mov	x17, #0x100000          // =1048576
                	cmp	x1, x17
                	cset	x1, lo
-               	str	w1, [x0, #0x3c]
+               	str	w1, [x0, #0x28]
                	ret
 
 <check>:
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x34]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
+               	ldrsw	x0, [x0, #0x24]
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -136,7 +136,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x3c]
+               	ldrsw	x0, [x0, #0x28]
                	mov	x1, #0x0                // =0
                	mov	x2, #0x6                // =6
                	cmp	x0, #0x0
@@ -151,7 +151,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	sub	x1, x29, #0x8
-               	str	x1, [x0, #0x40]
+               	str	x1, [x0, #0x30]
                	bl	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

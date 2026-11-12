@@ -24,7 +24,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x3                // =3
                	adrp	x5, <page>
-               	ldr	x0, [x5, #0x18]
+               	ldr	x0, [x5, #0x10]
                	adrp	x4, <page>
                	mov	x3, x2
                	ldr	x6, [x4, #0x30]
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	b.lo	<addr>
                	cmp	w1, #0x3
                	b.lo	<addr>
-               	ldr	x1, [x5, #0x18]
+               	ldr	x1, [x5, #0x10]
                	cmp	x0, x1
                	b.ne	<addr>
                	mov	x1, x2

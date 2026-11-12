@@ -215,7 +215,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xf0
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
+               	ldr	x1, [x0, #0x10]
                	mov	x2, #0x0                // =0
                	mov	x0, x20
                	bl	<addr>

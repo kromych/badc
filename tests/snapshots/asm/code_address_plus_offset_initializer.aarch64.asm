@@ -47,7 +47,7 @@ Disassembly of section .text:
                	cset	x1, eq
                	cbz	x1, <addr>
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x30]
+               	ldrsw	x1, [x1, #0x28]
                	cmp	w1, #0x3
                	cset	x1, eq
                	cbz	x1, <addr>

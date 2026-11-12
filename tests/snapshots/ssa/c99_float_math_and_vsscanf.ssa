@@ -198,8 +198,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=7
     v130 Imm(0)                                           -> x0
     v131 StoreLocal { off=-5, value=v130, kind=I32 }      -> -
     v132 StoreLocal { off=-4, value=v130, kind=I32 }      -> -
-    v133 ImmData(8)                                       -> x7
-    v134 ImmData(14)                                      -> x6
+    v133 ImmData(1)                                       -> x7
+    v134 ImmData(7)                                       -> x6
     v135 LocalAddr(-5)                                    -> x2
     v136 LocalAddr(-4)                                    -> x1
     v137 Call { target_pc=19, args=[v133, v134, v135, v136], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0

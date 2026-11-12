@@ -1780,7 +1780,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     terminator Bz { cond=v1207, target=b178, fall=b175 }   (exit_acc=v1207)
   block 178  start_pc=0
     v1214 Imm(0)                                           -> x0
-    v1215 ImmData(8)                                       -> x0
+    v1215 ImmData(1)                                       -> x0
     v1216 InlineAsm { template="vpbroadcastb %0,%%ymm7", ops=1, args=[v1215] } -> -
     v1217 ImmData(2176)                                    -> x0
     v1218 Imm(0)                                           -> x0
@@ -2216,7 +2216,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     terminator Bz { cond=v1345, target=b200, fall=b197 }   (exit_acc=v1345)
   block 200  start_pc=0
     v1352 Imm(0)                                           -> x0
-    v1353 ImmData(8)                                       -> x0
+    v1353 ImmData(1)                                       -> x0
     v1354 InlineAsm { template="vpbroadcastb %0,%%zmm7", ops=1, args=[v1353] } -> -
     v1355 ImmData(2176)                                    -> x0
     v1356 Imm(0)                                           -> x0

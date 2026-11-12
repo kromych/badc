@@ -170,7 +170,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -237,7 +237,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -304,7 +304,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -372,7 +372,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -436,7 +436,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -500,7 +500,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	ldrsw	x6, [x1, #0x18]
+               	ldrsw	x6, [x1, #0xc]
                	mov	x2, x0
                	cmp	w0, w6
                	b.ge	<addr>
@@ -565,7 +565,7 @@ Disassembly of section .text:
                	add	x5, x5, <lo12>
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	ldrsw	x7, [x2, #0x18]
+               	ldrsw	x7, [x2, #0xc]
                	mov	x3, x0
                	cmp	w0, w7
                	b.ge	<addr>
@@ -631,7 +631,7 @@ Disassembly of section .text:
                	add	x5, x5, <lo12>
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	ldrsw	x7, [x2, #0x18]
+               	ldrsw	x7, [x2, #0xc]
                	mov	x3, x0
                	cmp	w0, w7
                	b.ge	<addr>
@@ -697,7 +697,7 @@ Disassembly of section .text:
                	add	x5, x5, <lo12>
                	adrp	x6, <page>
                	add	x6, x6, <lo12>
-               	ldrsw	x7, [x2, #0x18]
+               	ldrsw	x7, [x2, #0xc]
                	mov	x3, x0
                	cmp	w0, w7
                	b.ge	<addr>
@@ -747,7 +747,7 @@ Disassembly of section .text:
                	str	x0, [x21, #0x18]
                	mov	x0, x23
                	bl	<addr>
-               	ldrsw	x4, [x24, #0x18]
+               	ldrsw	x4, [x24, #0xc]
                	mov	x1, #0x0                // =0
                	mov	x3, x1
                	cmp	w1, w4
@@ -793,7 +793,7 @@ Disassembly of section .text:
                	str	x0, [x21, #0x18]
                	mov	x0, x23
                	bl	<addr>
-               	ldrsw	x4, [x24, #0x18]
+               	ldrsw	x4, [x24, #0xc]
                	mov	x1, #0x0                // =0
                	mov	x3, x1
                	cmp	w1, w4
@@ -838,7 +838,7 @@ Disassembly of section .text:
                	str	x0, [x21, #0x18]
                	mov	x0, x23
                	bl	<addr>
-               	ldrsw	x4, [x24, #0x18]
+               	ldrsw	x4, [x24, #0xc]
                	mov	x1, #0x0                // =0
                	mov	x3, x1
                	cmp	w1, w4
@@ -884,7 +884,7 @@ Disassembly of section .text:
                	str	x0, [x21, #0x18]
                	mov	x0, x23
                	bl	<addr>
-               	ldrsw	x4, [x24, #0x18]
+               	ldrsw	x4, [x24, #0xc]
                	mov	x1, #0x0                // =0
                	mov	x3, x1
                	cmp	w1, w4

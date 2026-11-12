@@ -94,7 +94,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w1, [x0, #0x14]
+               	ldrb	w1, [x0, #0xc]
                	and	x3, x1, #0x1
                	cmp	w3, #0x1
                	b.eq	<addr>
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w0, [x0, #0x14]
+               	ldr	w0, [x0, #0xc]
                	ubfx	x1, x0, #2, #3
                	cmp	w1, #0x1
                	b.eq	<addr>
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x18]
+               	ldrb	w0, [x0, #0x10]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x1c]
+               	ldrb	w0, [x0, #0x14]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
@@ -155,14 +155,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x45]
+               	ldrb	w0, [x0, #0x30]
                	cbz	w0, <addr>
                	mov	x0, #0x1a               // =26
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x46]
+               	ldrb	w0, [x0, #0x31]
                	cbz	w0, <addr>
                	mov	x0, #0x1b               // =27
                	add	sp, sp, #0x10
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrb	w0, [x0, #0x24]
+               	ldrb	w0, [x0, #0x18]
                	and	x1, x0, #0x1
                	cmp	w1, #0x1
                	b.eq	<addr>

@@ -259,7 +259,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v168 Imm(0)                                           -> x0
     v169 Imm(42)                                          -> x0
     v170 Imm(0)                                           -> x0
-    v171 ImmData(20)                                      -> x0
+    v171 ImmData(16)                                      -> x0
     v172 Imm(0)                                           -> x0
     v173 Store { addr=v171, disp=0, value=v172, kind=I32 pc_rel } -> -
     v174 Imm(0)                                           -> x1
@@ -276,7 +276,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v185 LifetimeEnd(0)                                   -> -
     v186 Imm(5)                                           -> x1
     v187 Imm(0)                                           -> x1
-    v188 ImmData(20)                                      -> x1
+    v188 ImmData(16)                                      -> x1
     v189 Load { addr=v171, disp=0, kind=U32 pc_rel }      -> x1
     v190 BinopI { op=ne, lhs=v189, rhs_imm=0 }            -> x2
     terminator Bz { cond=v189, target=b2, fall=b1 }   (low word)   (exit_acc=v190)

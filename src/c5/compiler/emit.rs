@@ -89,7 +89,7 @@ impl Compiler {
         // no new boundary. Static DCE needs the boundary to drop a dead
         // literal instead of gluing it to its neighbors.
         if self.lex.tk == '"' && prev_tk != '"' {
-            self.data_object_starts.push(self.lex.ival);
+            self.note_literal_start();
             // A literal's storage is immutable (C99 6.4.5p6), so record
             // its byte range for the const-data load fold. Gated on the
             // bytes being freshly appended: a snapshot restore re-lexes
@@ -130,7 +130,17 @@ impl Compiler {
     pub(super) fn restore_lex(&mut self, snap: crate::c5::lexer::LexerSnapshot) {
         self.lex.restore(snap);
         if self.lex.tk == '"' {
-            self.data_object_starts.push(self.lex.ival);
+            self.note_literal_start();
+        }
+    }
+
+    /// Record the current string literal as a data object, with its
+    /// element boundary when the elements are wider than a byte.
+    fn note_literal_start(&mut self) {
+        self.data_object_starts.push(self.lex.ival);
+        if self.lex.str_is_wide && self.lex.str_elem_bytes > 1 {
+            self.data_align_marks
+                .push((self.lex.ival, self.lex.str_elem_bytes as i64));
         }
     }
 
@@ -419,15 +429,15 @@ impl Compiler {
         self.emit_imm(data_offset);
     }
 
-    /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
-    /// `aligned(16)` placement for a file-scope object.
+    /// Pad `self.data` to `align` bytes for the object placed next, and
+    /// record the boundary so a repack keeps it.
     pub(super) fn align_data_to(&mut self, align: usize) {
         let start = self.data.len();
         while !self.data.len().is_multiple_of(align.max(1)) {
             self.data.push(0);
         }
         self.record_data_pad(start);
-        if align > 8 {
+        if align > 1 {
             self.data_align_marks
                 .push((self.data.len() as i64, align as i64));
         }

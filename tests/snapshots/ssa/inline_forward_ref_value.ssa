@@ -34,7 +34,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v23  Imm(0)                                           -> x6
     v24  Imm(0)                                           -> x6
     v25  Imm(0)                                           -> x6
-    v26  ImmData(20)                                      -> x6
+    v26  ImmData(16)                                      -> x6
     v27  Extend { value=v22, kind=I32 }                   -> x6
     v28  Extend { value=v22, kind=I32 }                   -> x6
     v29  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x6
@@ -66,7 +66,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v9   Imm(6)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(210)                                         -> x0
-    v12  ImmData(20)                                      -> x0
+    v12  ImmData(16)                                      -> x0
     v13  Imm(210)                                         -> x0
     v14  Imm(210)                                         -> x0
     v15  Imm(211)                                         -> x0

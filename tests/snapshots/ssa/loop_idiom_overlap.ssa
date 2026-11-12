@@ -74,7 +74,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v68  Store { addr=v1, disp=30, value=v2, kind=I8 pc_rel } -> -
     v69  BinopI { op=add, lhs=v1, rhs_imm=31 }            -> x2
     v70  Store { addr=v1, disp=31, value=v2, kind=I8 pc_rel } -> -
-    v71  ImmData(8)                                       -> x2
+    v71  ImmData(1)                                       -> x2
     v72  Mcpy { dst=v1, src=v71, size=3, align=1 }        -> -
     v73  Imm(9)                                           -> x2
     v74  Imm(9)                                           -> x2
@@ -88,7 +88,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v253)
   block 2  start_pc=0
     v79  ImmData(64)                                      -> x7
-    v80  ImmData(12)                                      -> x6
+    v80  ImmData(5)                                       -> x6
     v81  Imm(12)                                          -> x2
     v82  CallExt { binding_idx=11, args=[v79, v80, v81], fp_arg_mask=0x0 } -> x0
     v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x1
@@ -167,7 +167,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v152 Store { addr=v85, disp=30, value=v86, kind=I8 pc_rel } -> -
     v153 BinopI { op=add, lhs=v85, rhs_imm=31 }           -> x2
     v154 Store { addr=v85, disp=31, value=v86, kind=I8 pc_rel } -> -
-    v155 ImmData(25)                                      -> x2
+    v155 ImmData(18)                                      -> x2
     v156 Mcpy { dst=v85, src=v155, size=10, align=1 }     -> -
     v157 Imm(7)                                           -> x2
     v158 Imm(7)                                           -> x2
@@ -181,7 +181,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Jmp(b6)   (exit_acc=v265)
   block 6  start_pc=0
     v163 ImmData(64)                                      -> x7
-    v164 ImmData(36)                                      -> x6
+    v164 ImmData(29)                                      -> x6
     v165 Imm(10)                                          -> x2
     v166 CallExt { binding_idx=11, args=[v163, v164, v165], fp_arg_mask=0x0 } -> x0
     v167 BinopI { op=ne, lhs=v166, rhs_imm=0 }            -> x1
@@ -260,7 +260,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v236 Store { addr=v169, disp=30, value=v170, kind=I8 pc_rel } -> -
     v237 BinopI { op=add, lhs=v169, rhs_imm=31 }          -> x2
     v238 Store { addr=v169, disp=31, value=v170, kind=I8 pc_rel } -> -
-    v239 ImmData(47)                                      -> x2
+    v239 ImmData(40)                                      -> x2
     v240 Mcpy { dst=v169, src=v239, size=2, align=1 }     -> -
     v241 Imm(2)                                           -> x2
     v242 Imm(10)                                          -> x2
@@ -288,7 +288,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Bz { cond=v279, target=b11, fall=b9 }   (exit_acc=v279)
   block 11  start_pc=0
     v246 ImmData(64)                                      -> x7
-    v247 ImmData(50)                                      -> x6
+    v247 ImmData(43)                                      -> x6
     v248 Imm(12)                                          -> x2
     v249 CallExt { binding_idx=11, args=[v246, v247, v248], fp_arg_mask=0x0 } -> x0
     v250 BinopI { op=ne, lhs=v249, rhs_imm=0 }            -> x1

@@ -451,7 +451,7 @@ Disassembly of section .text:
 
 <sink>:
                	adrp	x1, <page>
-               	str	x0, [x1, #0x40]
+               	str	x0, [x1, #0x30]
                	add	x0, x0, #0x1
                	ret
 

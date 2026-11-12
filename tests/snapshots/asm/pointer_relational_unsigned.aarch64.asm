@@ -39,12 +39,12 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x14]
+               	ldrsw	x0, [x0, #0xc]
                	cbnz	w0, <addr>
                	mov	x0, #0xa                // =10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0x10]
                	cbnz	w0, <addr>
                	mov	x0, #0xb                // =11
                	ret

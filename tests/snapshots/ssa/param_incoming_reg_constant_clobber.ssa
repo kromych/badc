@@ -108,7 +108,7 @@ fn ent_pc=4 n_params=5 variadic=false locals=0
     v60  BinopI { op=le, lhs=v59, rhs_imm=5 }             -> x0
     terminator Bz { cond=v60, target=b5, fall=b1 }   (exit_acc=v60)
   block 5  start_pc=0
-    v71  ImmData(34)                                      -> x0
+    v71  ImmData(32)                                      -> x0
     v72  Load { addr=v71, disp=0, kind=U16 pc_rel }       -> x0
     v73  AggParts { desc=0, parts=[v72], fp_mask=0x0 }    -> -
     terminator Return(v73)   (exit_acc=v71)

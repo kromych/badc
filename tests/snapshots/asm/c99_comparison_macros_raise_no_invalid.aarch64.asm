@@ -164,15 +164,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x30]
+               	str	wzr, [x0, #0x20]
                	mov	x1, #0x1                // =1
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	mov	x1, #0x3                // =3
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	mov	x1, #0x4                // =4
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x30]
                	fcmp	d0, d1

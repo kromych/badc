@@ -13,14 +13,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v7   Load { addr=v4, disp=8, kind=I64 pc_rel }        -> [spill 0]
     v8   LocalAddr(-8)                                    -> x0
     v9   Imm(64)                                          -> x6
-    v10  ImmData(8)                                       -> x2
+    v10  ImmData(1)                                       -> x2
     v11  Imm(42)                                          -> x1
-    v12  ImmData(17)                                      -> x8
+    v12  ImmData(10)                                      -> x8
     v13  Imm(99)                                          -> x9
     v14  CallIndirect { target=v7, args=[v1, v9, v10, v11, v12, v13], callee_variadic=true, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v15  Extend { value=v14, kind=I32 }                   -> x0
     v16  LocalAddr(-8)                                    -> x7
-    v17  ImmData(21)                                      -> x6
+    v17  ImmData(14)                                      -> x6
     v18  CallExt { binding_idx=90, args=[v16, v17], fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x1
     terminator Bz { cond=v18, target=b2, fall=b1 }   (exit_acc=v19)

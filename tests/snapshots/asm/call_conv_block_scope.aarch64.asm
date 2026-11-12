@@ -65,9 +65,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -90,9 +90,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -136,10 +136,10 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x28]
-               	ldr	x23, [x0, #0x28]
+               	ldr	x22, [x0, #0x20]
+               	ldr	x23, [x0, #0x20]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -169,9 +169,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x28]
+               	ldr	x2, [x0, #0x20]
                	adrp	x0, <page>
-               	ldr	x22, [x0, #0x20]
+               	ldr	x22, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -182,7 +182,7 @@ Disassembly of section .text:
                	blr	x22
                	add	x22, x23, x0
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -246,7 +246,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2

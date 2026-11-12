@@ -22,7 +22,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	str	x0, [x8]
                	adrp	x0, <page>
-               	str	x2, [x0, #0xb0]
+               	str	x2, [x0, #0xa0]
                	str	x3, [x8, #0x10]
                	add	x0, x4, x4, lsl #1
                	add	x0, x0, x5

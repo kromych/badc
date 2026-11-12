@@ -65,13 +65,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	d2, [x0, #0x18]
+               	ldr	d2, [x0, #0x10]
                	fadd	d2, d2, d0
-               	str	d2, [x0, #0x18]
-               	ldr	d2, [x0, #0x18]
+               	str	d2, [x0, #0x10]
+               	ldr	d2, [x0, #0x10]
                	fadd	d2, d2, d0
-               	str	d2, [x0, #0x18]
-               	ldr	d2, [x0, #0x18]
+               	str	d2, [x0, #0x10]
+               	ldr	d2, [x0, #0x10]
                	fmov	d3, #7.00000000
                	fcmp	d2, d3
                	b.eq	<addr>

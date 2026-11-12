@@ -21,7 +21,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x60]
+               	ldr	x1, [x0, #0x58]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	cmp	x1, x0
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0xa8]
+               	ldr	x1, [x0, #0xa0]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	cmp	x1, x0
@@ -131,7 +131,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0xb0]
+               	ldr	x1, [x0, #0xa8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x2, x0, #0x8
@@ -141,7 +141,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0xb8]
+               	ldr	x2, [x1, #0xb0]
                	add	x1, x0, #0x4
                	cmp	x2, x1
                	b.eq	<addr>
@@ -275,7 +275,7 @@ Disassembly of section .text:
                	mov	x0, #0x1d               // =29
                	b	<addr>
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x138]
+               	ldr	x1, [x0, #0x130]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	cmp	x1, x0
@@ -287,7 +287,7 @@ Disassembly of section .text:
                	mov	x0, #0x1e               // =30
                	b	<addr>
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x140]
+               	ldr	x1, [x0, #0x138]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x2, x0, #0x8
@@ -296,7 +296,7 @@ Disassembly of section .text:
                	mov	x0, #0x1f               // =31
                	b	<addr>
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0x148]
+               	ldr	x2, [x1, #0x140]
                	add	x1, x0, #0x4
                	cmp	x2, x1
                	b.eq	<addr>

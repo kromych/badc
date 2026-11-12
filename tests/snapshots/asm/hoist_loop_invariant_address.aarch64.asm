@@ -185,37 +185,37 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
-               	ldrsw	x2, [x1, #0x98]
+               	ldrsw	x2, [x1, #0x88]
                	add	x2, x2, #0x1
-               	str	w2, [x1, #0x98]
+               	str	w2, [x1, #0x88]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3e8
                	b.lt	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x98]
+               	ldrsw	x0, [x0, #0x88]
                	cmp	w0, #0x3e8
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x98]
+               	ldrsw	x0, [x0, #0x88]
                	cmp	w0, #0x3e8
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x98]
+               	ldrsw	x1, [x1, #0x88]
                	bl	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1, #0xa0]
+               	str	w0, [x1, #0x8c]
                	mov	x2, x0
-               	ldrsw	x3, [x1, #0xa0]
+               	ldrsw	x3, [x1, #0x8c]
                	add	x2, x2, x3
-               	ldrsw	x3, [x1, #0xa0]
+               	ldrsw	x3, [x1, #0x8c]
                	add	x3, x3, #0x2
-               	str	w3, [x1, #0xa0]
+               	str	w3, [x1, #0x8c]
                	add	x0, x0, #0x1
                	cmp	w0, #0x64
                	b.lt	<addr>
@@ -223,13 +223,13 @@ Disassembly of section .text:
                	cmp	x2, x17
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0xa0]
+               	ldrsw	x0, [x0, #0x8c]
                	cmp	w0, #0xc8
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0xa0]
+               	ldrsw	x1, [x1, #0x8c]
                	bl	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

@@ -95,10 +95,10 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x8]
                	adrp	x0, <page>
                	sub	x2, x29, #0x8
-               	str	x2, [x0, #0x70]
+               	str	x2, [x0, #0x60]
                	mov	x1, x1
                	stur	x1, [x29, #-0x8]
-               	ldr	x0, [x0, #0x70]
+               	ldr	x0, [x0, #0x60]
                	ldr	x0, [x0]
                	add	x0, x0, x1
                	cmp	x0, #0x16

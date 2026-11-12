@@ -22,7 +22,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x50]
                	stur	x0, [x29, #-0x48]
                	adrp	x2, <page>
-               	ldr	x1, [x2, #0x18]
+               	ldr	x1, [x2, #0x10]
                	lsl	x3, x1, #36
                	sub	x1, x29, #0x40
                	stur	x0, [x29, #-0x40]
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x3, [x2, #0x18]
+               	ldr	x3, [x2, #0x10]
                	cmp	x3, #0x0
                	csel	x3, x1, x4, ne
                	ldr	x4, [x3]
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x3, [x2, #0x18]
+               	ldr	x3, [x2, #0x10]
                	cbz	x3, <addr>
                	ldr	x3, [x1]
                	ldr	x1, [x1, #0x8]
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x2, #0x18]
+               	ldr	x0, [x2, #0x10]
                	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x38]
                	neg	x2, x0

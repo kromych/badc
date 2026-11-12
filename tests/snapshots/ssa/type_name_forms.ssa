@@ -153,10 +153,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  Imm(2)                                           -> x7
-    v70  ImmData(8)                                       -> x6
+    v70  ImmData(1)                                       -> x6
     v71  ImmCode(ent_pc=1)                                -> x2
     v72  ImmData(16)                                      -> x0
-    v73  ImmData(10)                                      -> x8
+    v73  ImmData(3)                                       -> x8
     v74  Imm(12)                                          -> x0
     v75  BinopI { op=add, lhs=v4, rhs_imm=12 }            -> x0
     v76  Call { target_pc=2, args=[v69, v70, v71, v4, v73, v71, v75], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <fill>:
                	adrp	x1, <page>
-               	ldr	w1, [x1, #0x34]
+               	ldr	w1, [x1, #0x20]
                	add	x0, x1, x0
                	mov	w0, w0
                	ret

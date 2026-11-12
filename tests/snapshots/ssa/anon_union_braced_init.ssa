@@ -18,7 +18,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v0   AllocaInit(0)                                    -> -
     v1   Imm(7)                                           -> x0
     v2   StoreLocal { off=-4, value=v1, kind=I32, volatile } -> -
-    v3   ImmData(36)                                      -> x0
+    v3   ImmData(32)                                      -> x0
     v4   StoreLocal { off=-3, value=v3, kind=I64, volatile } -> -
     v5   LoadLocal { off=-4, kind=I32, volatile }         -> [spill 0]
     v6   LoadLocal { off=-3, kind=I64, volatile }         -> [spill 1]
@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v132 Imm(1)                                           -> x1
     v133 Imm(0)                                           -> x2
     v134 Imm(0)                                           -> x2
-    v135 ImmData(36)                                      -> x2
+    v135 ImmData(32)                                      -> x2
     v136 Imm(0)                                           -> x6
     v137 Imm(0)                                           -> x6
     v138 Imm(0)                                           -> x6
@@ -91,7 +91,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v32  Imm(0)                                           -> x1
     v33  BinopI { op=add, lhs=v148, rhs_imm=8 }           -> x1
     v34  Load { addr=v148, disp=8, kind=I64 }             -> x0
-    v35  ImmData(36)                                      -> x1
+    v35  ImmData(32)                                      -> x1
     v36  Binop { op=ne, lhs=v34, rhs=v35 }                -> x1
     v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> x2
     v38  Imm(0)                                           -> x2
@@ -153,7 +153,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v82  Imm(5)                                           -> x1
     v83  Imm(0)                                           -> x2
     v84  Imm(0)                                           -> x2
-    v85  ImmData(36)                                      -> x2
+    v85  ImmData(32)                                      -> x2
     v86  Imm(0)                                           -> x6
     v87  Imm(0)                                           -> x6
     v88  Imm(0)                                           -> x6
@@ -177,7 +177,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v104 Imm(0)                                           -> x1
     v105 BinopI { op=add, lhs=v98, rhs_imm=8 }            -> x1
     v106 Load { addr=v98, disp=8, kind=I64 }              -> x0
-    v107 ImmData(36)                                      -> x1
+    v107 ImmData(32)                                      -> x1
     v108 Binop { op=ne, lhs=v106, rhs=v107 }              -> x0
     v109 Imm(0)                                           -> x1
     v110 Imm(0)                                           -> x1

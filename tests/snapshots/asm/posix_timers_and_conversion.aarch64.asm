@@ -27,7 +27,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x180
                	str	x20, [sp]
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x15               // =21
                	blr	x1
                	cmp	w0, #0x2a

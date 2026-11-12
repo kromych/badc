@@ -41,14 +41,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x14]
+               	ldrsw	x1, [x0, #0xc]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x9                // =9
-               	str	w1, [x0, #0x14]
+               	str	w1, [x0, #0xc]
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -17,7 +17,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	mov	x2, #0xa                // =10
-               	strh	w2, [x1, #0x30]
+               	strh	w2, [x1, #0x20]
                	ret
 
 <one_of_two>:
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	str	x16, [x1, #0x10]
                	adrp	x3, <page>
                	mov	x4, #0xa                // =10
-               	strh	w4, [x3, #0x30]
+               	strh	w4, [x3, #0x20]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	stur	x3, [x29, #-0x40]
@@ -77,12 +77,12 @@ Disassembly of section .text:
                	str	wzr, [x0]
                	adrp	x2, <page>
                	mov	x3, #0xa                // =10
-               	strh	w3, [x2, #0x30]
+               	strh	w3, [x2, #0x20]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	stur	x2, [x29, #-0x8]
                	ldr	w0, [x0]
-               	str	w0, [x1, #0x40]
+               	str	w0, [x1, #0x24]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	str	x16, [x1, #0x10]
                	adrp	x4, <page>
                	mov	x5, #0xa                // =10
-               	strh	w5, [x4, #0x30]
+               	strh	w5, [x4, #0x20]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	stur	x4, [x29, #-0x38]

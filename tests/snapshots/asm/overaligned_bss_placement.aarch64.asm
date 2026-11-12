@@ -40,7 +40,7 @@ Disassembly of section .text:
                	strb	w3, [x2]
                	adrp	x4, <page>
                	mov	x3, #0x4                // =4
-               	str	w3, [x4, #0x500]
+               	str	w3, [x4, #0x400]
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
                	add	x0, x0, x1

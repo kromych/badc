@@ -19,7 +19,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
-               	str	x2, [x0, #0x50]
+               	str	x2, [x0, #0x40]
                	ldr	x0, [x1, #0x8]
                	str	x0, [x1]
                	br	x0

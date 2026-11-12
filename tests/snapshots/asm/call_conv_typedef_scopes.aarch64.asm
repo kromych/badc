@@ -146,14 +146,14 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
                	mov	x17, #0x2710            // =10000
                	mul	x22, x0, x17
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x20]
+               	ldr	x2, [x0, #0x18]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -161,7 +161,7 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x22, x22, x0
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x28]
+               	ldr	x2, [x0, #0x20]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -193,7 +193,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x22, x0
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -207,7 +207,7 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x22, x22, x0
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x18]
+               	ldr	x2, [x0, #0x10]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2

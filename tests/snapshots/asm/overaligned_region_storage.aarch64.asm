@@ -300,7 +300,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x0, <page>
-               	ldr	w20, [x0, #0x14]
+               	ldr	w20, [x0, #0xc]
                	mov	x0, x20
                	bl	<addr>
                	cbnz	w0, <addr>

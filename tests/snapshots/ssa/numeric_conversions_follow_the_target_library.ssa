@@ -4,20 +4,20 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   spill_count=2 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x7
+    v1   ImmData(1)                                       -> x7
     v2   Imm(0)                                           -> x0
-    v3   ImmData(17)                                      -> x0
+    v3   ImmData(10)                                      -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   LocalAddr(-1)                                    -> x6
     v7   Imm(0)                                           -> x2
     v8   CallExt { binding_idx=85, args=[v1, v6, v7], fp_arg_mask=0x0 } -> x6
     v9   Imm(0)                                           -> x0
-    v10  ImmData(21)                                      -> x7
+    v10  ImmData(14)                                      -> x7
     v11  Imm(0)                                           -> x0
     v12  LoadLocal { off=-1, kind=I64 }                   -> x2
     v13  Imm(0)                                           -> x0
-    v14  ImmData(8)                                       -> x0
+    v14  ImmData(1)                                       -> x0
     v15  Binop { op=sub, lhs=v12, rhs=v14 }               -> x2
     v16  Extend { value=v15, kind=I32 }                   -> x0
     v17  CallExt { binding_idx=1, args=[v10, v8, v15], fp_arg_mask=0x0 } -> x0
@@ -27,140 +27,140 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v21  Imm(0)                                           -> x0
     v22  LocalAddr(-1)                                    -> x6
     v23  Imm(10)                                          -> x2
-    v24  ImmData(17)                                      -> x7
+    v24  ImmData(10)                                      -> x7
     v25  CallExt { binding_idx=85, args=[v24, v22, v23], fp_arg_mask=0x0 } -> x3
     v26  Imm(0)                                           -> x0
-    v27  ImmData(29)                                      -> x0
+    v27  ImmData(22)                                      -> x0
     v28  Imm(0)                                           -> x0
     v29  LoadLocal { off=-1, kind=I64 }                   -> x0
     v30  Imm(0)                                           -> x1
-    v31  ImmData(17)                                      -> x1
+    v31  ImmData(10)                                      -> x1
     v32  Binop { op=sub, lhs=v29, rhs=v31 }               -> x12
     v33  Extend { value=v32, kind=I32 }                   -> x0
     v34  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v35  Load { addr=v34, disp=0, kind=I32 }              -> x1
-    v36  ImmData(29)                                      -> x7
+    v36  ImmData(22)                                      -> x7
     v37  CallExt { binding_idx=1, args=[v36, v25, v32, v35], fp_arg_mask=0x0 } -> x0
     v38  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v39  Imm(0)                                           -> x6
     v40  Store { addr=v38, disp=0, value=v39, kind=I32 }  -> -
-    v41  ImmData(40)                                      -> x0
-    v42  ImmData(48)                                      -> x7
+    v41  ImmData(33)                                      -> x0
+    v42  ImmData(41)                                      -> x7
     v43  CallExt { binding_idx=85, args=[v42, v39, v39], fp_arg_mask=0x0 } -> x3
     v44  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v45  Load { addr=v44, disp=0, kind=I32 }              -> x2
-    v46  ImmData(40)                                      -> x7
+    v46  ImmData(33)                                      -> x7
     v47  CallExt { binding_idx=1, args=[v46, v43, v45], fp_arg_mask=0x0 } -> x0
     v48  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v49  Imm(0)                                           -> x6
     v50  Store { addr=v48, disp=0, value=v49, kind=I32 }  -> -
-    v51  ImmData(52)                                      -> x7
+    v51  ImmData(45)                                      -> x7
     v52  Imm(10)                                          -> x2
     v53  CallExt { binding_idx=85, args=[v51, v49, v52], fp_arg_mask=0x0 } -> x3
     v54  Imm(0)                                           -> x0
-    v55  ImmData(64)                                      -> x0
+    v55  ImmData(57)                                      -> x0
     v56  Imm(0)                                           -> x0
     v57  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v58  Load { addr=v57, disp=0, kind=I32 }              -> x2
-    v59  ImmData(64)                                      -> x7
+    v59  ImmData(57)                                      -> x7
     v60  CallExt { binding_idx=1, args=[v59, v53, v58], fp_arg_mask=0x0 } -> x0
     v61  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v62  Imm(0)                                           -> x6
     v63  Store { addr=v61, disp=0, value=v62, kind=I32 }  -> -
-    v64  ImmData(72)                                      -> x7
+    v64  ImmData(65)                                      -> x7
     v65  Imm(10)                                          -> x2
     v66  CallExt { binding_idx=112, args=[v64, v62, v65], fp_arg_mask=0x0 } -> x3
     v67  Imm(0)                                           -> x0
-    v68  ImmData(75)                                      -> x0
+    v68  ImmData(68)                                      -> x0
     v69  Imm(0)                                           -> x0
     v70  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v71  Load { addr=v70, disp=0, kind=I32 }              -> x2
-    v72  ImmData(75)                                      -> x7
+    v72  ImmData(68)                                      -> x7
     v73  CallExt { binding_idx=1, args=[v72, v66, v71], fp_arg_mask=0x0 } -> x0
     v74  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v75  Imm(0)                                           -> x6
     v76  Store { addr=v74, disp=0, value=v75, kind=I32 }  -> -
-    v77  ImmData(83)                                      -> x0
-    v78  ImmData(92)                                      -> x7
+    v77  ImmData(76)                                      -> x0
+    v78  ImmData(85)                                      -> x7
     v79  Imm(10)                                          -> x2
     v80  CallExt { binding_idx=86, args=[v78, v75, v79], fp_arg_mask=0x0 } -> x3
     v81  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v82  Load { addr=v81, disp=0, kind=I32 }              -> x2
-    v83  ImmData(83)                                      -> x7
+    v83  ImmData(76)                                      -> x7
     v84  CallExt { binding_idx=1, args=[v83, v80, v82], fp_arg_mask=0x0 } -> x0
     v85  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v86  Imm(0)                                           -> x6
     v87  Store { addr=v85, disp=0, value=v86, kind=I32 }  -> -
-    v88  ImmData(113)                                     -> x0
-    v89  ImmData(122)                                     -> x7
+    v88  ImmData(106)                                     -> x0
+    v89  ImmData(115)                                     -> x7
     v90  Imm(36)                                          -> x2
     v91  CallExt { binding_idx=113, args=[v89, v86, v90], fp_arg_mask=0x0 } -> x3
     v92  CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v93  Load { addr=v92, disp=0, kind=I32 }              -> x2
-    v94  ImmData(113)                                     -> x7
+    v94  ImmData(106)                                     -> x7
     v95  CallExt { binding_idx=1, args=[v94, v91, v93], fp_arg_mask=0x0 } -> x0
-    v96  ImmData(125)                                     -> x0
-    v97  ImmData(141)                                     -> x7
+    v96  ImmData(118)                                     -> x0
+    v97  ImmData(134)                                     -> x7
     v98  CallExt { binding_idx=81, args=[v97], fp_arg_mask=0x0 } -> x3
-    v99  ImmData(146)                                     -> x7
+    v99  ImmData(139)                                     -> x7
     v100 CallExt { binding_idx=81, args=[v99], fp_arg_mask=0x0 } -> x12
-    v101 ImmData(157)                                     -> x7
+    v101 ImmData(150)                                     -> x7
     v102 CallExt { binding_idx=82, args=[v101], fp_arg_mask=0x0 } -> x13
-    v103 ImmData(160)                                     -> x7
+    v103 ImmData(153)                                     -> x7
     v104 CallExt { binding_idx=83, args=[v103], fp_arg_mask=0x0 } -> x8
-    v105 ImmData(125)                                     -> x7
+    v105 ImmData(118)                                     -> x7
     v106 CallExt { binding_idx=1, args=[v105, v98, v100, v102, v104], fp_arg_mask=0x0 } -> x0
     v107 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v108 Imm(0)                                           -> x1
     v109 Store { addr=v107, disp=0, value=v108, kind=I32 } -> -
-    v110 ImmData(173)                                     -> x7
+    v110 ImmData(166)                                     -> x7
     v111 LocalAddr(-1)                                    -> x6
     v112 Imm(37)                                          -> x2
     v113 CallExt { binding_idx=85, args=[v110, v111, v112], fp_arg_mask=0x0 } -> x3
     v114 Imm(0)                                           -> x0
-    v115 ImmData(175)                                     -> x0
+    v115 ImmData(168)                                     -> x0
     v116 Imm(0)                                           -> x0
     v117 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v118 Load { addr=v117, disp=0, kind=I32 }             -> x2
-    v119 ImmData(175)                                     -> x7
+    v119 ImmData(168)                                     -> x7
     v120 CallExt { binding_idx=1, args=[v119, v113, v118], fp_arg_mask=0x0 } -> x0
-    v121 ImmData(183)                                     -> x7
+    v121 ImmData(176)                                     -> x7
     v122 LocalAddr(-1)                                    -> x6
     v123 CallExt { binding_idx=87, args=[v121, v122], fp_arg_mask=0x0, fp_return=true } -> d0
     v124 Imm(0)                                           -> x0
-    v125 ImmData(188)                                     -> x7
+    v125 ImmData(181)                                     -> x7
     v126 Imm(0)                                           -> x0
     v127 CallExt { binding_idx=1, args=[v125, v123, v123], fp_arg_mask=0x6 } -> x0
-    v128 ImmData(195)                                     -> x0
-    v129 ImmData(202)                                     -> x7
+    v128 ImmData(188)                                     -> x0
+    v129 ImmData(195)                                     -> x7
     v130 Imm(0)                                           -> x6
     v131 CallExt { binding_idx=87, args=[v129, v130], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
-    v132 ImmData(210)                                     -> x7
+    v132 ImmData(203)                                     -> x7
     v133 Imm(0)                                           -> x6
     v134 CallExt { binding_idx=87, args=[v132, v133], fp_arg_mask=0x0, fp_return=true } -> d0
-    v135 ImmData(195)                                     -> x7
+    v135 ImmData(188)                                     -> x7
     v136 CallExt { binding_idx=1, args=[v135, v131, v134], fp_arg_mask=0x6 } -> x0
-    v137 ImmData(234)                                     -> x0
-    v138 ImmData(244)                                     -> x7
+    v137 ImmData(227)                                     -> x0
+    v138 ImmData(237)                                     -> x7
     v139 Imm(0)                                           -> x6
     v140 CallExt { binding_idx=88, args=[v138, v139], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v141 FpCast { kind=F32ToF64, value=v140 }             -> [spill 0]
-    v142 ImmData(248)                                     -> x7
+    v142 ImmData(241)                                     -> x7
     v143 Imm(0)                                           -> x6
     v144 CallExt { binding_idx=88, args=[v142, v143], fp_arg_mask=0x0, fp_return=true } -> d0 [f32]
     v145 FpCast { kind=F32ToF64, value=v144 }             -> d0
-    v146 ImmData(234)                                     -> x7
+    v146 ImmData(227)                                     -> x7
     v147 CallExt { binding_idx=1, args=[v146, v141, v145], fp_arg_mask=0x6 } -> x0
-    v148 ImmData(254)                                     -> x7
+    v148 ImmData(247)                                     -> x7
     v149 Imm(0)                                           -> x6
     v150 CallExt { binding_idx=89, args=[v148, v149], fp_arg_mask=0x0 } -> x0
     v151 LocalAddr(-24)                                   -> x0
     v152 LoadLocal { off=-24, kind=F80 }                  -> d0
     v153 StoreLocal { off=-23, value=v152, kind=F80 }     -> -
     v154 LifetimeEnd(-24)                                 -> -
-    v155 ImmData(277)                                     -> x0
+    v155 ImmData(270)                                     -> x0
     v156 LoadLocal { off=-23, kind=F80 }                  -> [spill 0]
-    v157 ImmData(288)                                     -> x7
+    v157 ImmData(281)                                     -> x7
     v158 Imm(0)                                           -> x6
     v159 CallExt { binding_idx=89, args=[v157, v158], fp_arg_mask=0x0 } -> x0
     v160 LocalAddr(-25)                                   -> x0
@@ -169,78 +169,78 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v163 StoreLocal { off=-26, value=v156, kind=F80 }     -> -
     v164 LocalAddr(-27)                                   -> x0
     v165 StoreLocal { off=-27, value=v161, kind=F80 }     -> -
-    v166 ImmData(277)                                     -> x7
+    v166 ImmData(270)                                     -> x7
     v167 CallExt { binding_idx=1, args=[v166, v162, v164], fp_arg_mask=0x0 } -> x0
     v168 LifetimeEnd(-25)                                 -> -
     v169 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v170 Imm(0)                                           -> x6
     v171 Store { addr=v169, disp=0, value=v170, kind=I32 } -> -
-    v172 ImmData(296)                                     -> x7
+    v172 ImmData(289)                                     -> x7
     v173 CallExt { binding_idx=87, args=[v172, v170], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v174 Imm(0)                                           -> x0
-    v175 ImmData(302)                                     -> x0
+    v175 ImmData(295)                                     -> x0
     v176 Imm(0)                                           -> x0
     v177 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v178 Load { addr=v177, disp=0, kind=I32 }             -> x6
-    v179 ImmData(302)                                     -> x7
+    v179 ImmData(295)                                     -> x7
     v180 CallExt { binding_idx=1, args=[v179, v173, v178], fp_arg_mask=0x2 } -> x0
     v181 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v182 Imm(0)                                           -> x6
     v183 Store { addr=v181, disp=0, value=v182, kind=I32 } -> -
-    v184 ImmData(309)                                     -> x7
+    v184 ImmData(302)                                     -> x7
     v185 CallExt { binding_idx=87, args=[v184, v182], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v186 Imm(0)                                           -> x0
-    v187 ImmData(316)                                     -> x0
+    v187 ImmData(309)                                     -> x0
     v188 Imm(0)                                           -> x0
     v189 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v190 Load { addr=v189, disp=0, kind=I32 }             -> x6
-    v191 ImmData(316)                                     -> x7
+    v191 ImmData(309)                                     -> x7
     v192 CallExt { binding_idx=1, args=[v191, v185, v190], fp_arg_mask=0x2 } -> x0
     v193 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v194 Imm(0)                                           -> x6
     v195 Store { addr=v193, disp=0, value=v194, kind=I32 } -> -
-    v196 ImmData(323)                                     -> x7
+    v196 ImmData(316)                                     -> x7
     v197 CallExt { binding_idx=87, args=[v196, v194], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v198 Imm(0)                                           -> x0
-    v199 ImmData(333)                                     -> x0
+    v199 ImmData(326)                                     -> x0
     v200 Imm(0)                                           -> x0
     v201 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v202 Load { addr=v201, disp=0, kind=I32 }             -> x6
-    v203 ImmData(333)                                     -> x7
+    v203 ImmData(326)                                     -> x7
     v204 CallExt { binding_idx=1, args=[v203, v197, v202], fp_arg_mask=0x2 } -> x0
-    v205 ImmData(340)                                     -> x0
-    v206 ImmData(350)                                     -> x7
+    v205 ImmData(333)                                     -> x0
+    v206 ImmData(343)                                     -> x7
     v207 Imm(0)                                           -> x6
     v208 CallExt { binding_idx=87, args=[v206, v207], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
-    v209 ImmData(360)                                     -> x7
+    v209 ImmData(353)                                     -> x7
     v210 CallExt { binding_idx=84, args=[v209], fp_arg_mask=0x0, fp_return=true } -> [spill 1]
-    v211 ImmData(364)                                     -> x7
+    v211 ImmData(357)                                     -> x7
     v212 Imm(0)                                           -> x6
     v213 CallExt { binding_idx=87, args=[v211, v212], fp_arg_mask=0x0, fp_return=true } -> d0
-    v214 ImmData(340)                                     -> x7
+    v214 ImmData(333)                                     -> x7
     v215 CallExt { binding_idx=1, args=[v214, v208, v210, v213], fp_arg_mask=0xe } -> x0
     v216 Imm(2048)                                        -> x7
     v217 CallExt { binding_idx=141, args=[v216], fp_arg_mask=0x0 } -> x0
-    v218 ImmData(369)                                     -> x7
+    v218 ImmData(362)                                     -> x7
     v219 Imm(0)                                           -> x6
     v220 CallExt { binding_idx=87, args=[v218, v219], fp_arg_mask=0x0, fp_return=true } -> [spill 0]
     v221 Imm(0)                                           -> x0
     v222 Imm(0)                                           -> x7
     v223 CallExt { binding_idx=141, args=[v222], fp_arg_mask=0x0 } -> x0
-    v224 ImmData(373)                                     -> x7
+    v224 ImmData(366)                                     -> x7
     v225 Imm(0)                                           -> x0
     v226 CallExt { binding_idx=1, args=[v224, v220], fp_arg_mask=0x2 } -> x0
-    v227 ImmData(377)                                     -> x7
+    v227 ImmData(370)                                     -> x7
     v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
     v230 LocalAddr(-1)                                    -> x6
     v231 CallExt { binding_idx=87, args=[v227, v230], fp_arg_mask=0x0, fp_return=true } -> d0
     v232 Imm(0)                                           -> x0
-    v233 ImmData(381)                                     -> x7
+    v233 ImmData(374)                                     -> x7
     v234 Imm(0)                                           -> x0
     v235 LoadLocal { off=-1, kind=I64 }                   -> x6
     v236 Imm(0)                                           -> x0
-    v237 ImmData(377)                                     -> x0
+    v237 ImmData(370)                                     -> x0
     v238 Binop { op=sub, lhs=v235, rhs=v237 }             -> x6
     v239 Extend { value=v238, kind=I32 }                  -> x0
     v240 CallExt { binding_idx=1, args=[v233, v231, v238], fp_arg_mask=0x2 } -> x0

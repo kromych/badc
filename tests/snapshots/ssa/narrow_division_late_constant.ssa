@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -41,7 +41,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -74,7 +74,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -107,7 +107,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -142,7 +142,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(20)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0

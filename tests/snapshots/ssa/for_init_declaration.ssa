@@ -59,7 +59,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v89  BinopI { op=ne, lhs=v76, rhs_imm=7 }             -> x0
     terminator Bz { cond=v89, target=b8, fall=b4 }   (exit_acc=v89)
   block 4  start_pc=0
-    v63  ImmData(2)                                       -> x7
+    v63  ImmData(1)                                       -> x7
     v64  ImmData(32)                                      -> x1
     v65  Imm(0)                                           -> x6
     v66  Imm(1)                                           -> x0

@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x34]
+               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x34]
+               	str	w1, [x0, #0x20]
                	mov	x0, x1
                	cmp	w0, #0x1
                	b.eq	<addr>

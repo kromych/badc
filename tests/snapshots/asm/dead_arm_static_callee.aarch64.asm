@@ -18,16 +18,16 @@ Disassembly of section .text:
 
 <f2>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0xa
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	ret
 
 <main>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0xa
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x20]
                	mov	x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x1                // =1

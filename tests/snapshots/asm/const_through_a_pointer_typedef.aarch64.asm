@@ -86,7 +86,7 @@ Disassembly of section .text:
                	cmp	w0, #0x62
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x20]
+               	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x5
                	b.ne	<addr>
                	mov	x0, #0x1                // =1

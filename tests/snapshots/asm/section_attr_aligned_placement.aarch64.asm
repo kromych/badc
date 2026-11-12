@@ -116,7 +116,7 @@ Disassembly of section .text:
                	mov	x0, #0xd                // =13
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x8]
+               	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0xe                // =14

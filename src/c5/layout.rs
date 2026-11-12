@@ -114,10 +114,10 @@ pub(crate) fn bss_image_align(declared: usize) -> usize {
 /// sorted `starts`, capped at `cap`, the section's own alignment.
 ///
 /// C99 6.2.8: an object sits on a boundary suitable for its type. The
-/// layout pads every allocation to `DATA_ALIGN_MIN` and records anything
-/// stricter in the defining symbol's `data_align` and in
-/// `Program::data_align_marks`, which also covers objects no symbol
-/// surfaces at that point (a block-scope static). An interval runs to
+/// layout records each placement's boundary in the defining symbol's
+/// `data_align` and in `Program::data_align_marks`, which also covers
+/// objects no symbol surfaces at that point (a block-scope static, a
+/// wide string literal). An interval runs to
 /// the next recorded start, so every constraint recorded inside it binds
 /// it: a base congruent to the interval's start modulo the value here
 /// keeps each object in it on its boundary.
@@ -128,9 +128,9 @@ pub(crate) fn data_object_aligns(
 ) -> alloc::vec::Vec<i64> {
     let data_len = program.data.len() as i64;
     let cap = bss_image_align(cap) as i64;
-    let mut aligns = alloc::vec![DATA_ALIGN_MIN as i64; starts.len()];
+    let mut aligns = alloc::vec![1i64; starts.len()];
     let mut note = |off: i64, a: i64| {
-        if a <= DATA_ALIGN_MIN as i64 || !(0..data_len).contains(&off) {
+        if a <= 1 || !(0..data_len).contains(&off) {
             return;
         }
         let i = match starts.binary_search(&off) {

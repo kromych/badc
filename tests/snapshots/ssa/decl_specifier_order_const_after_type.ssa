@@ -12,15 +12,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v6   Imm(9)                                           -> x1
     v7   Imm(9)                                           -> x1
     v8   Imm(0)                                           -> x1
-    v9   ImmData(36)                                      -> x1
+    v9   ImmData(34)                                      -> x1
     v10  Imm(1)                                           -> x1
     v11  Store { addr=v9, disp=0, value=v2, kind=I8 pc_rel } -> -
-    v12  ImmData(43)                                      -> x1
+    v12  ImmData(41)                                      -> x1
     v13  Store { addr=v12, disp=0, value=v2, kind=I8 pc_rel } -> -
     v14  Imm(7)                                           -> x1
     v15  Imm(7)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  ImmData(56)                                      -> x1
+    v17  ImmData(48)                                      -> x1
     v18  Imm(1)                                           -> x1
     v19  Store { addr=v17, disp=0, value=v2, kind=I8 pc_rel } -> -
     v20  Imm(6)                                           -> x0

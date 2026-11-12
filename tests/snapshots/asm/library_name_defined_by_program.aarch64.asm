@@ -26,7 +26,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x18]
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x7                // =7
                	blr	x1
                	cmp	w0, #0x8

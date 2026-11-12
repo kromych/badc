@@ -21,7 +21,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x20]
+               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x6
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

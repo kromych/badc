@@ -445,6 +445,10 @@ const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
 
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
+    row("__builtin_neon_tbl_8b", "tbl", Form::Vv, Ret::V8qi, Sem::Tbl(8), 8),
+    row("__builtin_neon_tbl_16b", "tbl", Form::Vv, Ret::V16qi, Sem::Tbl(16), 16),
+    row("__builtin_neon_tbx_8b", "tbx", Form::Vvv, Ret::V8qi, Sem::Tbx(8), 8),
+    row("__builtin_neon_tbx_16b", "tbx", Form::Vvv, Ret::V16qi, Sem::Tbx(16), 16),
     dupl("__builtin_neon_dup_8b_d", Ret::V8qi, 1, 8),
     dupl("__builtin_neon_dup_8b_q", Ret::V8qi, 1, 16),
     dupl("__builtin_neon_dup_16b_d", Ret::V16qi, 1, 8),

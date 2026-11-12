@@ -430,6 +430,12 @@ pub(crate) enum Sem {
     /// The source's lane of the width the immediate names, in every lane
     /// of the result (`dup` from an element).
     DupLane(u8),
+    /// The bytes of a 16-byte table the second operand's bytes index, zero
+    /// for an index past it, over results of the width (`tbl`).
+    Tbl(u8),
+    /// [`Sem::Tbl`] keeping the accumulator's byte for an index past the
+    /// table (`tbx`).
+    Tbx(u8),
 }
 
 /// The permutation of a [`Sem::Perm`] form.
@@ -669,6 +675,9 @@ impl SimdOp {
             (Form::Widen, _) if i == 1 => self.int_width,
             (Form::Zext, _) => self.int_width,
             (_, Sem::Wide(..) | Sem::LongAcc(..)) if i == 0 => 16,
+            // The table is a full register whatever the index width.
+            (_, Sem::Tbl(_)) if i == 0 => 16,
+            (_, Sem::Tbx(_)) if i == 1 => 16,
             _ => self.bytes,
         }
     }
@@ -953,6 +962,13 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             let mut o = [0u8; 16];
             for i in 0..16 {
                 o[i] = (acc[i] & a[i]) | (!acc[i] & b[i]);
+            }
+            return Some(o);
+        }
+        Sem::Tbx(bytes) => {
+            let mut o = [0u8; 16];
+            for i in 0..usize::from(bytes) {
+                o[i] = a.get(usize::from(b[i])).copied().unwrap_or(acc[i]);
             }
             return Some(o);
         }
@@ -1380,6 +1396,11 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, 2 * w, i, (x + y) as u64 & mask(2 * w));
             }
         }
+        Sem::Tbl(bytes) => {
+            for i in 0..usize::from(bytes) {
+                o[i] = a.get(usize::from(b[i])).copied().unwrap_or(0);
+            }
+        }
         Sem::DupLane(w) => {
             let x = lane(a, w, usize::from(imm));
             for i in 0..16 / w as usize {
@@ -1536,7 +1557,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // `eval_acc` the accumulating forms, and `eval_wide` the
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
-        Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect => {}
+        Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32

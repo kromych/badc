@@ -29,6 +29,25 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 /// accumulating form names its accumulator once, as the destination.
 fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::string::String> {
     use super::table::{self, Opnd};
+    // A table lookup names its table as a one-register list.
+    if let crate::c5::simd::Sem::Tbl(bytes) | crate::c5::simd::Sem::Tbx(bytes) = row.sem {
+        let (rd, rt, rm) = match regs {
+            [rd, rt, rm] => (*rd, *rt, *rm),
+            _ => return Err(alloc::format!("{}: three registers expected", row.name)),
+        };
+        let index = |num| Opnd::VecReg {
+            num,
+            size: 0,
+            q: bytes == 16,
+        };
+        let table = Opnd::VecList {
+            first: rt,
+            count: 1,
+            size: 0,
+            q: true,
+        };
+        return table::encode(row.mnem, &[index(rd), table, index(rm)]);
+    }
     // `dup` names its source lane in the operand: `vN.T[index]`.
     if let (crate::c5::simd::Sem::DupLane(w), [rd, rn], Some(index)) = (row.sem, regs, imm) {
         let (lane, bytes) = row.arrangement(0);

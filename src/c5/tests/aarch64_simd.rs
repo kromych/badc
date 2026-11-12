@@ -60,6 +60,8 @@ fn the_permutes_emit_their_instruction() {
         float32x2_t narrow(float64x2_t a) { return vcvt_f32_f64(a); }\n\
         int8x16_t dupq(int8x8_t a) { return vdupq_lane_s8(a, 7); }\n\
         uint16x4_t dup(uint16x8_t a) { return vdup_laneq_u16(a, 6); }\n\
+        uint8x16_t tbl(uint8x16_t t, uint8x16_t i) { return vqtbl1q_u8(t, i); }\n\
+        uint8x8_t tbx(uint8x8_t d, uint8x16_t t, uint8x8_t i) { return vqtbx1_u8(d, t, i); }\n\
         int main(void) { return 0; }";
     let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
         .compile()
@@ -81,6 +83,8 @@ fn the_permutes_emit_their_instruction() {
         (0x0e61_6800, "fcvtn v0.2s, v0.2d"),
         (0x4e0f_0400, "dup v0.16b, v0.b[7]"),
         (0x0e1a_0400, "dup v0.4h, v0.h[6]"),
+        (0x4e01_0000, "tbl v0.16b, {v0.16b}, v1.16b"),
+        (0x0e02_1020, "tbx v0.8b, {v1.16b}, v2.8b"),
     ] {
         let needle = word.to_le_bytes();
         assert!(

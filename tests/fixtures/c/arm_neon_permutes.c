@@ -1,5 +1,6 @@
 /* <arm_neon.h> lane permutes -- vzip1/2, vuzp1/2, vtrn1/2, the pairs
- * returning both halves, vext and vdup from a lane -- on every element type and vector width they
+ * returning both halves, vext, vdup from a lane and the one-register
+ * table lookups -- on every element type and vector width they
  * are defined for: each result checked against the permutation computed
  * lane by lane in C. The exit code has a bit per failing type; elsewhere
  * than AArch64 the unit is empty. */
@@ -120,11 +121,38 @@ static int check_dup(void) {
     return u[0] != -9 || u[1] != -9;
 }
 
+/* vqtbl1 / vqtbx1: an index past the 16-byte table gives 0, or keeps the
+ * destination byte. */
+static int check_tbl(void) {
+    unsigned char t[16], ix[16], dd[16];
+    for (int i = 0; i < 16; i++) {
+        t[i] = A[i];
+        ix[i] = (unsigned char)(i * 7 % 23);
+        dd[i] = (unsigned char)(200 + i);
+    }
+    uint8x16_t vt, vi, vd;
+    uint8x8_t vi8, vd8;
+    int8x16_t st;
+    memcpy(&vt, t, 16); memcpy(&vi, ix, 16); memcpy(&vd, dd, 16);
+    memcpy(&vi8, ix, 8); memcpy(&vd8, dd, 8); memcpy(&st, t, 16);
+    uint8x16_t a = vqtbl1q_u8(vt, vi), b = vqtbx1q_u8(vd, vt, vi);
+    uint8x8_t c = vqtbl1_u8(vt, vi8), d = vqtbx1_u8(vd8, vt, vi8);
+    int8x8_t e = vqtbl1_s8(st, vi8);
+    for (int i = 0; i < 16; i++) {
+        unsigned char hit = ix[i] < 16 ? t[ix[i]] : 0;
+        if (a[i] != hit || b[i] != (ix[i] < 16 ? hit : dd[i])) return 1;
+        if (i < 8 && (c[i] != hit || d[i] != (ix[i] < 16 ? hit : dd[i]) || e[i] != (int8_t)hit))
+            return 1;
+    }
+    return 0;
+}
+
 int main(void) {
     return check_s8() | check_s8q() << 1 | check_u8() << 2 | check_u8q() << 3 | check_s16() << 4
          | check_s16q() << 5 | check_u16() << 6 | check_u16q() << 7 | check_s32() << 8
          | check_u32q() << 9 | check_f32() << 10 | check_f32q() << 11 | check_s64q() << 12
-         | check_f64q() << 13 | check_pairs() << 14 | check_ext() << 15 | check_dup() << 16;
+         | check_f64q() << 13 | check_pairs() << 14 | check_ext() << 15 | check_dup() << 16
+         | check_tbl() << 17;
 }
 #else
 int main(void) { return 0; }

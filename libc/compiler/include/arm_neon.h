@@ -1016,18 +1016,24 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 #define vshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, "shrn", 2s, 2d, __a, __n)
 #define vrshrn_n_u64(__a, __n) __BADC_NEON_SHN(uint32x2_t, uint64x2_t, "rshrn", 2s, 2d, __a, __n)
 
-/* Byte table lookup; an out-of-range index gives 0. */
-static inline uint8x16_t vqtbl1q_u8(uint8x16_t __t, uint8x16_t __idx) {
-    uint8x16_t __r;
-    __asm__("tbl %0.16b, {%1.16b}, %2.16b" : "=w"(__r) : "w"(__t), "w"(__idx));
-    return __r;
-}
-
-/* Byte table lookup; an out-of-range index keeps the destination byte. */
-static inline uint8x16_t vqtbx1q_u8(uint8x16_t __d, uint8x16_t __t, uint8x16_t __idx) {
-    __asm__("tbx %0.16b, {%1.16b}, %2.16b" : "+w"(__d) : "w"(__t), "w"(__idx));
-    return __d;
-}
+/* Byte table lookups in one 16-byte table: an out-of-range index gives 0
+ * (vqtbl1), or keeps the destination byte (vqtbx1). */
+#define __BADC_NEON_TBL(sfx, D, Q)                                        \
+    static inline D##_t vqtbl1_##sfx(Q##_t __t, uint8x8_t __idx) {        \
+        return (D##_t)__builtin_neon_tbl_8b(__t, __idx);                  \
+    }                                                                     \
+    static inline Q##_t vqtbl1q_##sfx(Q##_t __t, uint8x16_t __idx) {      \
+        return (Q##_t)__builtin_neon_tbl_16b(__t, __idx);                 \
+    }                                                                     \
+    static inline D##_t vqtbx1_##sfx(D##_t __d, Q##_t __t, uint8x8_t __idx) { \
+        return (D##_t)__builtin_neon_tbx_8b(__d, __t, __idx);             \
+    }                                                                     \
+    static inline Q##_t vqtbx1q_##sfx(Q##_t __d, Q##_t __t, uint8x16_t __idx) { \
+        return (Q##_t)__builtin_neon_tbx_16b(__d, __t, __idx);            \
+    }
+__BADC_NEON_TBL(u8, uint8x8, uint8x16)
+__BADC_NEON_TBL(s8, int8x8, int8x16)
+__BADC_NEON_TBL(p8, poly8x8, poly8x16)
 
 /* AES single rounds (FEAT_AES): AddRoundKey + SubBytes + ShiftRows (aese /
  * aesd) and the [inverse] MixColumns (aesmc / aesimc). */

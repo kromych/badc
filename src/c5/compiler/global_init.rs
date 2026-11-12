@@ -257,8 +257,8 @@ impl Compiler {
     /// Mark `tls_data[..off + 8]` as part of the loader's initialization
     /// template: a relocated slot must be file-backed `.tdata`, never
     /// `.tbss`.
-    fn note_tls_init(&mut self, off: i64) {
-        let end = off as usize + 8;
+    fn note_tls_init(&mut self, off: i64, bytes: usize) {
+        let end = off as usize + bytes;
         if end > self.tls_init_size {
             self.tls_init_size = end;
         }
@@ -278,8 +278,9 @@ impl Compiler {
         let kept = self.init_reloc_for(reloc, var_ty)?;
         let bits = self.to_storage_bits(value, reloc, var_ty);
         let at = off as usize;
-        self.tls_data[at..at + 8].copy_from_slice(&(bits as u64).to_le_bytes());
-        self.note_tls_init(off);
+        let width = self.size_of_type(var_ty).clamp(1, 16);
+        self.tls_data[at..at + width].copy_from_slice(&bits.to_le_bytes()[..width]);
+        self.note_tls_init(off, width);
         match kept {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => match src_sym {
@@ -411,7 +412,8 @@ impl Compiler {
                     if is_thread_local {
                         self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
+                        let width = self.size_of_type(var_ty);
+                        self.write_init_value(var_offset as usize, width, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -465,7 +467,7 @@ impl Compiler {
                 } else {
                     self.write_init_value(
                         var_offset as usize,
-                        8,
+                        self.size_of_type(var_ty),
                         value,
                         InitElemReloc::None,
                         var_ty,
@@ -475,7 +477,7 @@ impl Compiler {
             let bytes = (ent_pc as u64).to_le_bytes();
             if is_thread_local {
                 self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-                self.note_tls_init(var_offset);
+                self.note_tls_init(var_offset, 8);
             } else {
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_init_reloc(var_offset as usize);
@@ -499,7 +501,7 @@ impl Compiler {
             // symbol itself, so the addend is zero.
             let target_offset = self.symbols[target_idx].val;
             if is_thread_local {
-                self.note_tls_init(var_offset);
+                self.note_tls_init(var_offset, 8);
             }
             self.emit_addr_reloc(var_offset, target_idx, target_offset, is_thread_local)?;
             return Ok(());
@@ -523,7 +525,7 @@ impl Compiler {
             {
                 self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), at)?;
                 if is_thread_local {
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 }
                 self.emit_addr_reloc(var_offset, a.sym_idx, a.off, is_thread_local)?;
                 return Ok(());
@@ -554,7 +556,7 @@ impl Compiler {
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                     self.tls_data_relocs.push(reloc);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
@@ -585,7 +587,8 @@ impl Compiler {
                     if is_thread_local {
                         self.write_tls_init_value(at.line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
+                        let width = self.size_of_type(var_ty);
+                        self.write_init_value(var_offset as usize, width, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -724,7 +727,7 @@ impl Compiler {
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
@@ -732,7 +735,7 @@ impl Compiler {
                 self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             } else {
                 if is_thread_local {
-                    self.note_tls_init(var_offset);
+                    self.note_tls_init(var_offset, 8);
                 }
                 self.emit_addr_reloc(var_offset, sym_idx, a.value, is_thread_local)?;
             }
@@ -762,13 +765,7 @@ impl Compiler {
         } else {
             self.to_storage_bits(cv.as_i128(), InitElemReloc::None, var_ty)
         };
-        // An integer slot is 8 bytes wide, so a 16-byte value needs
-        // both halves written.
-        let write_size = if var_is_float || self.is_int128_ty(var_ty) {
-            self.size_of_type(var_ty)
-        } else {
-            8
-        };
+        let write_size = self.size_of_type(var_ty).clamp(1, 16);
 
         let bytes = value.to_le_bytes();
         let segment = if is_thread_local {
@@ -777,14 +774,13 @@ impl Compiler {
             &mut self.data
         };
         let off = var_offset as usize;
-        // The slot is 8 preallocated zero bytes in either segment.
         debug_assert!(off + write_size <= segment.len());
         segment[off..off + write_size].copy_from_slice(&bytes[..write_size]);
 
         if is_thread_local {
             // A written slot has to be file-backed `.tdata`, so move
             // the boundary past it.
-            let end = off + 8;
+            let end = off + write_size;
             if end > self.tls_init_size {
                 self.tls_init_size = end;
             }

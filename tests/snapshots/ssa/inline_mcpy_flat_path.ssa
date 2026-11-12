@@ -8,7 +8,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   ImmData(80)                                      -> x0
-    v5   ImmData(8)                                       -> x0
+    v5   ImmData(16)                                      -> x0
     v6   Imm(2)                                           -> x1
     v7   Imm(2)                                           -> x1
     v8   Load { addr=v4, disp=0, kind=I64 pc_rel }        -> x1

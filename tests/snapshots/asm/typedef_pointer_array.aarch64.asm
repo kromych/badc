@@ -16,10 +16,10 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	adrp	x1, <page>
-               	ldrsw	x0, [x0, #0x40]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x1
                	b.ne	<addr>
-               	ldrsw	x0, [x1, #0x48]
+               	ldrsw	x0, [x1, #0x38]
                	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -27,10 +27,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x18]
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x20]
+               	ldrsw	x1, [x1, #0x1c]
                	add	x0, x0, x1
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x28]
+               	ldrsw	x1, [x1, #0x20]
                	add	x0, x0, x1
                	cmp	w0, #0x12
                	b.eq	<addr>

@@ -24,7 +24,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x288]
+               	ldr	s1, [x16, #0x280]
                	fcmp	s0, s1
                	b.ne	<addr>
                	bl	<addr>
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x28c]
+               	ldr	s1, [x16, #0x284]
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

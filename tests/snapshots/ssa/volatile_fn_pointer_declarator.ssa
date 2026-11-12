@@ -20,7 +20,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(4)                                       -> x0
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=p42
@@ -28,7 +28,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
+    v1   ImmData(8)                                       -> x0
     terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
@@ -36,7 +36,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(24)                                      -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
     v3   CallIndirect { target=v2, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
@@ -46,7 +46,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v6   Imm(1)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   ImmData(24)                                      -> x0
+    v7   ImmData(16)                                      -> x0
     v8   Load { addr=v7, disp=0, kind=I64, volatile pc_rel } -> x0
     v9   CallIndirect { target=v8, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v10  Extend { value=v9, kind=I32 }                    -> x1
@@ -56,7 +56,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v12  Imm(2)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 4  start_pc=0
-    v13  ImmData(32)                                      -> x0
+    v13  ImmData(24)                                      -> x0
     v14  Load { addr=v13, disp=0, kind=I64 pc_rel }       -> x0
     v15  CallIndirect { target=v14, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v16  Load { addr=v15, disp=0, kind=I32, volatile }    -> x0
@@ -66,7 +66,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v18  Imm(3)                                           -> x0
     terminator Return(v18)   (exit_acc=v18)
   block 6  start_pc=0
-    v19  ImmData(32)                                      -> x0
+    v19  ImmData(24)                                      -> x0
     v20  Load { addr=v19, disp=0, kind=I64 pc_rel }       -> x0
     v21  CallIndirect { target=v20, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v22  Load { addr=v21, disp=0, kind=I32, volatile }    -> x0
@@ -76,7 +76,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v24  Imm(4)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 8  start_pc=0
-    v25  ImmData(40)                                      -> x0
+    v25  ImmData(32)                                      -> x0
     v26  Imm(0)                                           -> x0
     v27  Load { addr=v25, disp=0, kind=I64, volatile pc_rel } -> x0
     v28  CallIndirect { target=v27, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -85,7 +85,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v31  Imm(0)                                           -> x1
     terminator Bnz { cond=v30, target=b10, fall=b9 }   (exit_acc=v30)
   block 9  start_pc=0
-    v32  ImmData(40)                                      -> x0
+    v32  ImmData(32)                                      -> x0
     v33  Imm(8)                                           -> x0
     v34  BinopI { op=add, lhs=v32, rhs_imm=8 }            -> x0
     v35  Load { addr=v32, disp=8, kind=I64, volatile pc_rel } -> x0
@@ -100,7 +100,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v42  Imm(5)                                           -> x0
     terminator Return(v42)   (exit_acc=v42)
   block 11  start_pc=0
-    v43  ImmData(24)                                      -> x0
+    v43  ImmData(16)                                      -> x0
     v44  ImmCode(ent_pc=0)                                -> x0
     v45  Store { addr=v43, disp=0, value=v44, kind=I64, volatile pc_rel } -> -
     v46  Load { addr=v43, disp=0, kind=I64, volatile pc_rel } -> x0

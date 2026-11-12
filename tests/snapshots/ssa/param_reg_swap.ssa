@@ -511,7 +511,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v178 LocalAddr(-7)                                    -> x7
     v179 LocalAddr(-6)                                    -> x6
     v180 LocalAddr(-4)                                    -> x2
-    v181 ImmData(8)                                       -> x1
+    v181 ImmData(16)                                      -> x1
     v182 Call { target_pc=1, args=[v178, v179, v180, v181], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v183 LocalAddr(-7)                                    -> x0
     v184 Imm(0)                                           -> x0

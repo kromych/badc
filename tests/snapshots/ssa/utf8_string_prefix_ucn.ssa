@@ -28,8 +28,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  ImmData(12)                                      -> x1
-    v26  ImmData(45)                                      -> x2
+    v25  ImmData(8)                                       -> x1
+    v26  ImmData(28)                                      -> x2
     v27  Imm(2)                                           -> x0
     v28  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v28)
@@ -55,8 +55,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v39, target=b4, fall=b1 }   (exit_acc=v39)
   block 4  start_pc=0
     v50  Imm(0)                                           -> x0
-    v51  ImmData(24)                                      -> x1
-    v52  ImmData(48)                                      -> x2
+    v51  ImmData(15)                                      -> x1
+    v52  ImmData(31)                                      -> x2
     v53  Imm(4)                                           -> x0
     v54  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v54)
@@ -82,8 +82,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v62, target=b8, fall=b5 }   (exit_acc=v62)
   block 8  start_pc=0
     v73  Imm(0)                                           -> x0
-    v74  ImmData(34)                                      -> x1
-    v75  ImmData(12)                                      -> x2
+    v74  ImmData(22)                                      -> x1
+    v75  ImmData(8)                                       -> x2
     v76  Imm(3)                                           -> x0
     v77  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v77)
@@ -109,8 +109,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v85, target=b12, fall=b9 }   (exit_acc=v85)
   block 12  start_pc=0
     v96  Imm(0)                                           -> x0
-    v97  ImmData(57)                                      -> x1
-    v98  ImmData(89)                                      -> x2
+    v97  ImmData(40)                                      -> x1
+    v98  ImmData(63)                                      -> x2
     v99  Imm(5)                                           -> x0
     v100 Imm(0)                                           -> x0
     terminator Jmp(b15)   (exit_acc=v100)
@@ -136,8 +136,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v108, target=b16, fall=b13 }   (exit_acc=v108)
   block 16  start_pc=0
     v119 Imm(0)                                           -> x0
-    v120 ImmData(69)                                      -> x1
-    v121 ImmData(94)                                      -> x2
+    v120 ImmData(49)                                      -> x1
+    v121 ImmData(68)                                      -> x2
     v122 Imm(5)                                           -> x0
     v123 Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v123)
@@ -163,8 +163,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v131, target=b20, fall=b17 }   (exit_acc=v131)
   block 20  start_pc=0
     v142 Imm(0)                                           -> x0
-    v143 ImmData(81)                                      -> x1
-    v144 ImmData(99)                                      -> x2
+    v143 ImmData(58)                                      -> x1
+    v144 ImmData(73)                                      -> x2
     v145 Imm(5)                                           -> x0
     v146 Imm(0)                                           -> x0
     terminator Jmp(b23)   (exit_acc=v146)
@@ -273,8 +273,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v246 Imm(0)                                           -> x0
     v247 Imm(0)                                           -> x0
     v248 Imm(0)                                           -> x0
-    v249 ImmData(107)                                     -> x1
-    v250 ImmData(111)                                     -> x2
+    v249 ImmData(81)                                      -> x1
+    v250 ImmData(85)                                      -> x2
     v251 Imm(4)                                           -> x0
     v252 Imm(0)                                           -> x0
     terminator Jmp(b27)   (exit_acc=v252)
@@ -300,8 +300,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v260, target=b28, fall=b25 }   (exit_acc=v260)
   block 28  start_pc=0
     v271 Imm(0)                                           -> x0
-    v272 ImmData(120)                                     -> x1
-    v273 ImmData(123)                                     -> x2
+    v272 ImmData(94)                                      -> x1
+    v273 ImmData(97)                                      -> x2
     v274 Imm(2)                                           -> x0
     v275 Imm(0)                                           -> x0
     terminator Jmp(b31)   (exit_acc=v275)
@@ -327,8 +327,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v283, target=b32, fall=b29 }   (exit_acc=v283)
   block 32  start_pc=0
     v294 Imm(0)                                           -> x0
-    v295 ImmData(127)                                     -> x1
-    v296 ImmData(132)                                     -> x2
+    v295 ImmData(101)                                     -> x1
+    v296 ImmData(106)                                     -> x2
     v297 Imm(4)                                           -> x0
     v298 Imm(0)                                           -> x0
     terminator Jmp(b35)   (exit_acc=v298)

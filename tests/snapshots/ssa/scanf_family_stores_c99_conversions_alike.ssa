@@ -389,11 +389,11 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     v26  StoreLocal { off=-36, value=v23, kind=I64 }      -> -
     v27  StoreLocal { off=-35, value=v23, kind=I32 }      -> -
     v28  LocalAddr(-20)                                   -> x7
-    v29  ImmData(520)                                     -> x6
+    v29  ImmData(519)                                     -> x6
     v30  LocalAddr(-38)                                   -> x2
     v31  CallExt { binding_idx=2, args=[v28, v29, v30], fp_arg_mask=0x0 } -> x0
     v32  LocalAddr(-20)                                   -> x7
-    v33  ImmData(523)                                     -> x6
+    v33  ImmData(522)                                     -> x6
     v34  LocalAddr(-36)                                   -> x2
     v35  CallExt { binding_idx=10, args=[v32, v33, v34], fp_arg_mask=0x0 } -> x0
     v36  BinopI { op=ne, lhs=v35, rhs_imm=1 }             -> x0
@@ -418,8 +418,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     v51  LifetimeEnd(-38)                                 -> -
     terminator Return(v44)   (exit_acc=v44)
   block 56  start_pc=0
-    v52  ImmData(526)                                     -> x7
-    v53  ImmData(533)                                     -> x6
+    v52  ImmData(525)                                     -> x7
+    v53  ImmData(532)                                     -> x6
     v54  LocalAddr(-38)                                   -> x0
     v55  LocalAddr(-37)                                   -> x1
     v56  CallExt { binding_idx=10, args=[v52, v53, v39, v55], fp_arg_mask=0x0 } -> x0
@@ -454,8 +454,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=38
     v79  LifetimeEnd(-38)                                 -> -
     terminator Return(v72)   (exit_acc=v72)
   block 60  start_pc=0
-    v80  ImmData(538)                                     -> x7
-    v81  ImmData(544)                                     -> x6
+    v80  ImmData(537)                                     -> x7
+    v81  ImmData(543)                                     -> x6
     v82  LocalAddr(-4)                                    -> x2
     v83  LocalAddr(-35)                                   -> x1
     v84  CallExt { binding_idx=10, args=[v80, v81, v82, v83], fp_arg_mask=0x0 } -> x0

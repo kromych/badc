@@ -431,7 +431,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v361 Imm(0)                                           -> x0
     v362 Imm(0)                                           -> x0
     v363 Imm(0)                                           -> x0
-    v364 ImmData(152)                                     -> x0
+    v364 ImmData(156)                                     -> x0
     v365 Imm(4)                                           -> x0
     v366 BinopI { op=add, lhs=v364, rhs_imm=4 }           -> x0
     v367 Load { addr=v364, disp=4, kind=I32 pc_rel }      -> x0

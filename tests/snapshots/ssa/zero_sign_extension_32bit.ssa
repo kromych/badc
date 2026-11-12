@@ -113,7 +113,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v107 Imm(1)                                           -> x0
     v108 Imm(0)                                           -> x0
     v109 Imm(0)                                           -> x0
-    v110 ImmData(12)                                      -> x7
+    v110 ImmData(8)                                       -> x7
     v111 CallExt { binding_idx=80, args=[v110], fp_arg_mask=0x0 } -> x3
     v112 Imm(0)                                           -> x0
     v113 Extend { value=v111, kind=I32 }                  -> x0
@@ -126,7 +126,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v230 Store { addr=v228, disp=0, value=v229, kind=I32 pc_rel } -> -
     v231 ImmData(0)                                       -> x0
     v232 Load { addr=v231, disp=0, kind=I64 }             -> x7
-    v233 ImmData(24)                                      -> x6
+    v233 ImmData(20)                                      -> x6
     v234 Imm(93)                                          -> x2
     v235 CallExt { binding_idx=1, args=[v232, v233, v234, v229], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v235)
@@ -142,7 +142,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v242 Store { addr=v240, disp=0, value=v241, kind=I32 pc_rel } -> -
     v243 ImmData(0)                                       -> x0
     v244 Load { addr=v243, disp=0, kind=I64 }             -> x7
-    v245 ImmData(46)                                      -> x6
+    v245 ImmData(42)                                      -> x6
     v246 Imm(94)                                          -> x2
     v247 CallExt { binding_idx=1, args=[v244, v245, v246, v241], fp_arg_mask=0x0 } -> x0
     terminator Jmp(b4)   (exit_acc=v247)
@@ -199,7 +199,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v297 BinopI { op=eq, lhs=v296, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v296, target=b6, fall=b5 }   (low word)   (exit_acc=v297)
   block 5  start_pc=0
-    v346 ImmData(72)                                      -> x7
+    v346 ImmData(68)                                      -> x7
     v347 CallExt { binding_idx=0, args=[v346], fp_arg_mask=0x0 } -> x0
     v348 Imm(0)                                           -> x0
     terminator Return(v348)   (exit_acc=v348)

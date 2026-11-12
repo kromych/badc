@@ -274,7 +274,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   spill_count=12 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=F64, volatile pc_rel } -> [spill 0]
     v4   Imm(0)                                           -> x0
@@ -314,7 +314,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v38  BinopI { op=add, lhs=v1, rhs_imm=72 }            -> x0
     v39  Load { addr=v1, disp=72, kind=F64, volatile pc_rel } -> [spill 9]
     v40  Imm(0)                                           -> x0
-    v41  ImmData(88)                                      -> x0
+    v41  ImmData(96)                                      -> x0
     v42  Load { addr=v41, disp=0, kind=I64, volatile pc_rel } -> x12
     v43  Imm(0)                                           -> x0
     v44  BinopI { op=add, lhs=v41, rhs_imm=8 }            -> x0
@@ -333,7 +333,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v57  Load { addr=v41, disp=40, kind=I64, volatile pc_rel } -> [spill 11]
     v58  Imm(0)                                           -> x0
     v59  Imm(0)                                           -> x0
-    v60  ImmData(136)                                     -> x0
+    v60  ImmData(144)                                     -> x0
     v61  Load { addr=v60, disp=0, kind=F64, volatile pc_rel } -> d0
     v62  BinopI { op=add, lhs=v60, rhs_imm=8 }            -> x0
     v63  Load { addr=v60, disp=8, kind=F64, volatile pc_rel } -> d1
@@ -347,7 +347,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     terminator Jmp(b1)
   block 1  start_pc=0
     v75  Copy { value=v70, fp=false }                     -> x0
-    v76  ImmData(160)                                     -> x0
+    v76  ImmData(176)                                     -> x0
     v77  Imm(0)                                           -> x0
     v78  Load { addr=v76, disp=0, kind=I64, volatile pc_rel } -> x7
     v79  Imm(8)                                           -> x0
@@ -367,7 +367,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     terminator Jmp(b2)
   block 2  start_pc=0
     v97  Copy { value=v92, fp=false }                     -> x0
-    v98  ImmData(136)                                     -> x0
+    v98  ImmData(144)                                     -> x0
     v99  Imm(0)                                           -> x0
     v100 Load { addr=v98, disp=0, kind=F64, volatile pc_rel } -> d0
     v101 Imm(8)                                           -> x0
@@ -383,7 +383,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   block 3  start_pc=0
     v114 Copy { value=v109, fp=false }                    -> x0
     v115 ImmCode(ent_pc=5)                                -> x7
-    v116 ImmData(160)                                     -> x0
+    v116 ImmData(176)                                     -> x0
     v117 Imm(8)                                           -> x0
     v118 BinopI { op=add, lhs=v116, rhs_imm=8 }           -> x0
     v119 Load { addr=v116, disp=8, kind=I64, volatile pc_rel } -> x6
@@ -401,7 +401,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     terminator Jmp(b4)
   block 4  start_pc=0
     v135 Copy { value=v130, fp=false }                    -> x0
-    v136 ImmData(136)                                     -> x0
+    v136 ImmData(144)                                     -> x0
     v137 Imm(0)                                           -> x0
     v138 Load { addr=v136, disp=0, kind=F64, volatile pc_rel } -> d0
     v139 Imm(8)                                           -> x0

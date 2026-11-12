@@ -21,11 +21,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x50]
                	add	x29, sp, #0x50
                	adrp	x0, <page>
-               	ldrsw	x21, [x0, #0x18]
-               	ldrsw	x1, [x0, #0x18]
+               	ldrsw	x21, [x0, #0x14]
+               	ldrsw	x1, [x0, #0x14]
                	add	x1, x1, #0x1
                	sxtw	x12, w1
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0x14]
                	sub	x0, x0, #0x1
                	sxtw	x3, w0
                	lsl	x14, x12, #2

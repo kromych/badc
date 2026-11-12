@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v30  BinopI { op=xor, lhs=v3, rhs_imm=-1 }            -> x6
     v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x0
     v32  Store { addr=v1, disp=516, value=v30, kind=I32 } -> -
-    v33  ImmData(16)                                      -> x0
+    v33  ImmData(20)                                      -> x0
     v34  Load { addr=v33, disp=0, kind=U32, volatile pc_rel } -> x0
     v35  BinopI { op=add, lhs=v34, rhs_imm=1 }            -> x0
     v36  Store { addr=v33, disp=0, value=v35, kind=I32, volatile pc_rel } -> -
@@ -525,7 +525,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v25  Extend { value=v8, kind=I32 }                    -> x9
     v26  Extend { value=v8, kind=I8 }                     -> x9
     v27  Store { addr=v21, disp=0, value=v8, kind=I8 }    -> -
-    v28  ImmData(32)                                      -> x8
+    v28  ImmData(28)                                      -> x8
     v29  Imm(0)                                           -> x8
     v30  Extend { value=v8, kind=I8 }                     -> x8
     v31  Store { addr=v28, disp=0, value=v30, kind=I32, volatile pc_rel } -> -
@@ -576,7 +576,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v62  Extend { value=v43, kind=I32 }                   -> x9
     v63  Extend { value=v43, kind=I8 }                    -> x9
     v64  Store { addr=v55, disp=2047, value=v43, kind=I8 } -> -
-    v65  ImmData(32)                                      -> x8
+    v65  ImmData(28)                                      -> x8
     v66  Imm(0)                                           -> x8
     v67  Imm(0)                                           -> x8
     v68  Imm(2047)                                        -> x8
@@ -616,7 +616,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=1
     v94  Extend { value=v81, kind=I32 }                   -> x9
     v95  Extend { value=v81, kind=I8 }                    -> x9
     v96  Store { addr=v90, disp=0, value=v81, kind=I8 }   -> -
-    v97  ImmData(32)                                      -> x8
+    v97  ImmData(28)                                      -> x8
     v98  Imm(0)                                           -> x8
     v99  Extend { value=v81, kind=I8 }                    -> x8
     v100 Store { addr=v97, disp=0, value=v99, kind=I32, volatile pc_rel } -> -
@@ -723,7 +723,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=1
     v39  Imm(0)                                           -> x0
     v40  Imm(5)                                           -> x0
     v41  Store { addr=v36, disp=0, value=v40, kind=I8 }   -> -
-    v42  ImmData(32)                                      -> x2
+    v42  ImmData(28)                                      -> x2
     v43  Imm(0)                                           -> x2
     v44  Imm(5)                                           -> x2
     v45  Store { addr=v42, disp=0, value=v40, kind=I32, volatile pc_rel } -> -

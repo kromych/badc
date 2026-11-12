@@ -8803,7 +8803,7 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
         // The survivor kept its bytes, and the code that names it points
         // at where the repack put it. `kept_tag` is `const` and holds no
         // relocated slot, so it is carved into `.rodata` and `.data`
-        // keeps only the 8-byte NULL guard.
+        // keeps only the NULL guard.
         let data = elf64_section(&obj, ".data").expect("no .data section");
         let rodata = elf64_section(&obj, ".rodata").expect("no .rodata section");
         let (value, size) =
@@ -8814,7 +8814,7 @@ fn post_inline_orphaned_static_and_its_relocations_drop() {
         );
         assert_eq!(
             data.len(),
-            8,
+            crate::c5::layout::DATA_GUARD,
             "{target:?}: .data should hold only the NULL guard"
         );
         assert_eq!(

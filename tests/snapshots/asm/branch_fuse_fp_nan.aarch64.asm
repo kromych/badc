@@ -25,7 +25,7 @@ Disassembly of section .text:
                	ldr	s3, [x0, #0x48]
                	fdiv	s2, s2, s3
                	adrp	x0, <page>
-               	ldr	s3, [x0, #0x20]
+               	ldr	s3, [x0, #0x24]
                	fcmpe	d0, d1
                	b.pl	<addr>
                	mov	x0, #0x1                // =1

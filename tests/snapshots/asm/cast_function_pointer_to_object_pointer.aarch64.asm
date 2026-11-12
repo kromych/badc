@@ -31,7 +31,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0x14]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x9                // =9

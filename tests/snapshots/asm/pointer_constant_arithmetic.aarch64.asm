@@ -61,7 +61,7 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x58]
                	cbz	w0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x60]
+               	ldrsw	x0, [x0, #0x5c]
                	cbnz	w0, <addr>
                	mov	x0, #0x8                // =8
                	ret

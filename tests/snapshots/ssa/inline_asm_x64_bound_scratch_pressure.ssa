@@ -484,7 +484,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     v5   BinopI { op=lt, lhs=v3, rhs_imm=18 }             -> x1
     terminator Bz { cond=v5, target=b3, fall=b1 }   (exit_acc=v5)
   block 3  start_pc=0
-    v18  ImmData(8)                                       -> x0
+    v18  ImmData(16)                                      -> x0
     v19  Imm(0)                                           -> x0
     v20  Load { addr=v18, disp=0, kind=I64, volatile pc_rel } -> x7
     v21  Imm(8)                                           -> x0
@@ -521,7 +521,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     v48  LifetimeEnd(-18)                                 -> -
     terminator Return(v47)   (exit_acc=v47)
   block 6  start_pc=0
-    v49  ImmData(8)                                       -> x0
+    v49  ImmData(16)                                      -> x0
     v50  Imm(0)                                           -> x0
     v51  Load { addr=v49, disp=0, kind=I64, volatile pc_rel } -> x7
     v52  Imm(8)                                           -> x0
@@ -548,7 +548,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=18
     terminator Return(v69)   (exit_acc=v69)
   block 8  start_pc=0
     v71  LocalAddr(-18)                                   -> x7
-    v72  ImmData(8)                                       -> x0
+    v72  ImmData(16)                                      -> x0
     v73  Imm(16)                                          -> x0
     v74  BinopI { op=add, lhs=v72, rhs_imm=16 }           -> x0
     v75  Load { addr=v72, disp=16, kind=I64, volatile pc_rel } -> x6

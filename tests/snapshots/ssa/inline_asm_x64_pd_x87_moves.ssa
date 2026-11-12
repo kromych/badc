@@ -4,15 +4,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(64)                                      -> x0
-    v2   ImmData(48)                                      -> x0
+    v1   ImmData(48)                                      -> x0
+    v2   ImmData(32)                                      -> x0
     v3   InlineAsm { template="movapd %1, %%xmm1\n\tmovapd %%xmm1, %%xmm2\n\tmovapd %%xmm2, %0", ops=2, args=[v1, v2] } -> -
     v4   Load { addr=v1, disp=0, kind=F64 pc_rel }        -> d0
     v5   Imm(4608308318706860032)                         -> x0
     v6   Binop { op=fne, lhs=v4, rhs=v5 }                 -> x0
     terminator Bnz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v13  ImmData(64)                                      -> x0
+    v13  ImmData(48)                                      -> x0
     v14  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x0
     v15  Load { addr=v13, disp=8, kind=F64 pc_rel }       -> d0
     v16  Imm(-4608308318706860032)                        -> x0
@@ -301,9 +301,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=13
   block 34  start_pc=0
     terminator Jmp(b8)
   block 35  start_pc=0
-    v21  ImmData(80)                                      -> x0
+    v21  ImmData(64)                                      -> x0
     v22  BinopI { op=add, lhs=v21, rhs_imm=8 }            -> x1
-    v23  ImmData(48)                                      -> x2
+    v23  ImmData(32)                                      -> x2
     v24  Mcpy { dst=v22, src=v23, size=16, align=1 }      -> -
     v25  BinopI { op=add, lhs=v21, rhs_imm=24 }           -> x0
     v26  InlineAsm { template="movupd %1, %%xmm3\n\tmovupd %%xmm3, %%xmm4\n\tmovupd %%xmm4, %0", ops=2, args=[v25, v22] } -> -

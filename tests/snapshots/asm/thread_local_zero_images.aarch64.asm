@@ -16,7 +16,7 @@ Disassembly of section .text:
 <block>:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0xe8
+               	add	x0, x0, #0xe4
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0xa8
+               	add	x0, x0, #0xa4
                	ldrsw	x1, [x0]
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6

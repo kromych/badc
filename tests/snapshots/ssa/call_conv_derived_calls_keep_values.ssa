@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=F64)                            -> [spill 1]
     v4   Imm(0)                                           -> x0
-    v5   ImmData(8)                                       -> x0
+    v5   ImmData(16)                                      -> x0
     v6   Imm(0)                                           -> x0
     v7   Load { addr=v5, disp=0, kind=I64, volatile pc_rel } -> x3
     v8   Imm(0)                                           -> x0
@@ -40,7 +40,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v34  BinopI { op=add, lhs=v5, rhs_imm=56 }            -> x0
     v35  Load { addr=v5, disp=56, kind=I64, volatile pc_rel } -> [spill 4]
     v36  Imm(0)                                           -> x0
-    v37  ImmData(72)                                      -> x0
+    v37  ImmData(80)                                      -> x0
     v38  Load { addr=v37, disp=0, kind=F64, volatile pc_rel } -> [spill 5]
     v39  Imm(0)                                           -> x0
     v40  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x0
@@ -332,7 +332,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=F64)                            -> d1
     v6   Imm(0)                                           -> x0
-    v7   ImmData(8)                                       -> x0
+    v7   ImmData(16)                                      -> x0
     v8   Imm(0)                                           -> x0
     v9   Load { addr=v7, disp=0, kind=I64, volatile pc_rel } -> x3
     v10  Imm(0)                                           -> x0
@@ -364,7 +364,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v36  BinopI { op=add, lhs=v7, rhs_imm=56 }            -> x0
     v37  Load { addr=v7, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
     v38  Imm(0)                                           -> x0
-    v39  ImmData(72)                                      -> x0
+    v39  ImmData(80)                                      -> x0
     v40  Load { addr=v39, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
     v41  Imm(0)                                           -> x0
     v42  BinopI { op=add, lhs=v39, rhs_imm=8 }            -> x0
@@ -432,7 +432,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
   spill_count=7 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x3
     v4   Imm(0)                                           -> x0
@@ -464,7 +464,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=3
     v30  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x0
     v31  Load { addr=v1, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
     v32  Imm(0)                                           -> x0
-    v33  ImmData(72)                                      -> x0
+    v33  ImmData(80)                                      -> x0
     v34  Load { addr=v33, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
     v35  Imm(0)                                           -> x0
     v36  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x0
@@ -542,7 +542,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=9 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x3
     v4   Imm(0)                                           -> x0
@@ -574,7 +574,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v30  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x0
     v31  Load { addr=v1, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
     v32  Imm(0)                                           -> x0
-    v33  ImmData(72)                                      -> x0
+    v33  ImmData(80)                                      -> x0
     v34  Load { addr=v33, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
     v35  Imm(0)                                           -> x0
     v36  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x0
@@ -695,7 +695,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   ImmData(8)                                       -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x0
     v5   Load { addr=v3, disp=0, kind=I64, volatile pc_rel } -> x3
     v6   Imm(0)                                           -> x0
@@ -727,7 +727,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v32  BinopI { op=add, lhs=v3, rhs_imm=56 }            -> x0
     v33  Load { addr=v3, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
     v34  Imm(0)                                           -> x0
-    v35  ImmData(72)                                      -> x0
+    v35  ImmData(80)                                      -> x0
     v36  Load { addr=v35, disp=0, kind=F64, volatile pc_rel } -> [spill 3]
     v37  Imm(0)                                           -> x0
     v38  BinopI { op=add, lhs=v35, rhs_imm=8 }            -> x0
@@ -792,7 +792,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=13 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
     v4   Imm(0)                                           -> x1
@@ -824,7 +824,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v30  BinopI { op=add, lhs=v1, rhs_imm=56 }            -> x3
     v31  Load { addr=v1, disp=56, kind=I64, volatile pc_rel } -> x3
     v32  Imm(0)                                           -> [spill 0]
-    v33  ImmData(72)                                      -> [spill 0]
+    v33  ImmData(80)                                      -> [spill 0]
     v34  Load { addr=v33, disp=0, kind=F64, volatile pc_rel } -> d0
     v35  Imm(0)                                           -> [spill 0]
     v36  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> [spill 0]
@@ -907,7 +907,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v109 Load { addr=v108, disp=0, kind=I64 pc_rel }      -> x0
     v110 Imm(4604930618986332160)                         -> x1
     v111 Imm(4602678819172646912)                         -> x2
-    v112 ImmData(8)                                       -> x6
+    v112 ImmData(16)                                      -> x6
     v113 Load { addr=v112, disp=0, kind=I64, volatile pc_rel } -> [spill 1]
     v114 BinopI { op=add, lhs=v112, rhs_imm=8 }           -> x6
     v115 Load { addr=v112, disp=8, kind=I64, volatile pc_rel } -> [spill 2]
@@ -923,7 +923,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v125 Load { addr=v112, disp=48, kind=I64, volatile pc_rel } -> [spill 7]
     v126 BinopI { op=add, lhs=v112, rhs_imm=56 }          -> x6
     v127 Load { addr=v112, disp=56, kind=I64, volatile pc_rel } -> [spill 8]
-    v128 ImmData(72)                                      -> x6
+    v128 ImmData(80)                                      -> x6
     v129 Load { addr=v128, disp=0, kind=F64, volatile pc_rel } -> [spill 9]
     v130 BinopI { op=add, lhs=v128, rhs_imm=8 }           -> x6
     v131 Load { addr=v128, disp=8, kind=F64, volatile pc_rel } -> [spill 10]
@@ -993,7 +993,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v184 ImmData(120)                                     -> x0
     v185 Load { addr=v184, disp=0, kind=I64 pc_rel }      -> x0
-    v186 ImmData(8)                                       -> x1
+    v186 ImmData(16)                                      -> x1
     v187 Load { addr=v186, disp=0, kind=I64, volatile pc_rel } -> [spill 0]
     v188 BinopI { op=add, lhs=v186, rhs_imm=8 }           -> x1
     v189 Load { addr=v186, disp=8, kind=I64, volatile pc_rel } -> [spill 1]
@@ -1009,7 +1009,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v199 Load { addr=v186, disp=48, kind=I64, volatile pc_rel } -> [spill 6]
     v200 BinopI { op=add, lhs=v186, rhs_imm=56 }          -> x1
     v201 Load { addr=v186, disp=56, kind=I64, volatile pc_rel } -> [spill 7]
-    v202 ImmData(72)                                      -> x1
+    v202 ImmData(80)                                      -> x1
     v203 Load { addr=v202, disp=0, kind=F64, volatile pc_rel } -> [spill 8]
     v204 BinopI { op=add, lhs=v202, rhs_imm=8 }           -> x1
     v205 Load { addr=v202, disp=8, kind=F64, volatile pc_rel } -> [spill 9]

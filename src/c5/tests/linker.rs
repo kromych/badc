@@ -1316,10 +1316,7 @@ fn cross_tu_thread_local_resolves_by_symbol() {
         .find(|(n, _, _)| n == "other")
         .map(|(_, off, _)| *off)
         .expect("definer exports `other` as a TLS symbol");
-    assert_eq!(
-        off_other, 8,
-        "`other` follows the 8-byte-aligned `counter` slot"
-    );
+    assert_eq!(off_other, 4, "`other` follows the 4-byte `counter`");
 
     // Accessor: references `other` but defines no TLS storage.
     let acc = unit(
@@ -1342,8 +1339,8 @@ fn cross_tu_thread_local_resolves_by_symbol() {
     // offset (4): the definer is the only TLS contributor, base 0.
     let merged = link_native_objects(&[def, acc]).expect("link resolves cross-unit TLS");
     assert!(
-        merged.macho_tlv_descriptors.contains(&8),
-        "the accessor's `other` descriptor must resolve to offset 8, got {:?}",
+        merged.macho_tlv_descriptors.contains(&4),
+        "the accessor's `other` descriptor must resolve to offset 4, got {:?}",
         merged.macho_tlv_descriptors,
     );
 }
@@ -1393,7 +1390,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
         .find(|(n, _, _)| n == "other")
         .map(|(_, off, _)| *off)
         .expect("definer exports `other` as a TLS symbol");
-    assert_eq!(off_other, 8, "`other` follows the 8-byte-aligned `counter`");
+    assert_eq!(off_other, 4, "`other` follows the 4-byte `counter`");
 
     let acc = unit(
         "#include <stdlib.h>\n\
@@ -3077,7 +3074,8 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
         "the computed address lowers to a register base, not RIP-relative or SIB: {repl:02x?}"
     );
     // `lea sel_data(%rip), %rdi`: ModRM 3D, the disp32 relocated
-    // PC-relative, its addend the object's offset less the end skew.
+    // PC-relative, its addend the object's offset (4, the residue of its
+    // `.data` offset past the NULL guard) less the end skew.
     let (repl, rela) = replacement("sel_data");
     assert_eq!(repl, [0x48, 0x8d, 0x3d, 0, 0, 0, 0], "{repl:02x?}");
     assert_eq!(rela.len(), 24, "one relocation: {rela:02x?}");
@@ -3085,7 +3083,7 @@ fn asm_replacement_lea_of_mem_operand_uses_register_indirect() {
     const R_X86_64_PC32: u64 = 2;
     assert_eq!(
         (field(0), field(8) & 0xffff_ffff, field(16) as i64),
-        (3, R_X86_64_PC32, -4)
+        (3, R_X86_64_PC32, 0)
     );
 }
 
@@ -4756,14 +4754,14 @@ fn thread_local_blocks_merge_on_their_alignment() {
                 main_obj.tls_data.len() + main_obj.tls_bss_size,
                 main_obj.tls_align
             ),
-            (24, 16)
+            (17, 16)
         );
         assert_eq!(
             (
                 other_obj.tls_data.len() + other_obj.tls_bss_size,
                 other_obj.tls_align
             ),
-            (80, 32)
+            (66, 32)
         );
         let mut merged = link_native_objects(&[main_obj, other_obj]).expect("link");
         assert_eq!(
@@ -4772,8 +4770,8 @@ fn thread_local_blocks_merge_on_their_alignment() {
         );
         assert_eq!(
             merged.tls_data.len(),
-            112,
-            "{target:?}: the second block starts at 32, not 24"
+            98,
+            "{target:?}: the second block starts at 32, not 17"
         );
         let other_base = merged
             .section_map
@@ -4816,10 +4814,7 @@ fn thread_local_blocks_merge_on_their_alignment() {
             p_align, 32,
             "{target:?}: PT_TLS p_align is the widest object alignment"
         );
-        assert_eq!(
-            p_memsz, 112,
-            "{target:?}: PT_TLS p_memsz covers both blocks"
-        );
+        assert_eq!(p_memsz, 98, "{target:?}: PT_TLS p_memsz covers both blocks");
         assert_eq!(
             p_vaddr % 32,
             0,
@@ -10227,7 +10222,7 @@ fn named_section_alignment_and_size_data_only_unit() {
     // explicit `aligned(N)`, a natural aggregate alignment, or an
     // aligned typedef -- its sh_size is exactly the members' span, and
     // `.data` holds only the default-placement objects (the NULL guard
-    // slot plus `in_data`'s slot), not a shadow of the moved ones.
+    // slot plus `in_data`'s four bytes), not a shadow of the moved ones.
     // Sizes and alignments match `gcc -c` on the same source.
     let bytes = emit_reloc_for(
         "__attribute__((section(\".d.ro\"), aligned(4096))) char raw[8192];\n\
@@ -10243,7 +10238,7 @@ fn named_section_alignment_and_size_data_only_unit() {
     assert_eq!(sections[".d.c64"], (4, 64));
     assert_eq!(sections[".d.nat"], (16, 16));
     assert_eq!(sections[".d.page"], (4096, 4096));
-    assert_eq!(sections[".data"], (16, 8), "no ghost bytes in .data");
+    assert_eq!(sections[".data"], (12, 8), "no ghost bytes in .data");
     assert_eq!(sections[".bss"].0, 0);
     assert_eq!(syms["raw"].1, 0);
     assert_eq!(syms["in_data"].1, 8);

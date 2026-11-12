@@ -42,7 +42,7 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	strb	w2, [x0]
                	adrp	x2, <page>
-               	str	x0, [x2, #0x58]
+               	str	x0, [x2, #0x50]
                	mov	x3, #0x4                // =4
                	strb	w3, [x0]
                	mov	x4, #0x9                // =9
@@ -51,20 +51,20 @@ Disassembly of section .text:
                	strb	w4, [x0, #0x1]
                	mov	x3, #0x5                // =5
                	strb	w3, [x0]
-               	ldr	x2, [x2, #0x58]
+               	ldr	x2, [x2, #0x50]
                	mov	x3, #0x7                // =7
                	strb	w3, [x2]
                	adrp	x2, <page>
-               	ldrsw	x3, [x2, #0x60]
+               	ldrsw	x3, [x2, #0x58]
                	add	x3, x3, #0x1
-               	str	w3, [x2, #0x60]
+               	str	w3, [x2, #0x58]
                	ldrb	w0, [x0]
                	cmp	w0, #0x7
                	csel	x0, x1, x5, ne
                	adrp	x1, <page>
                	mov	x2, #0x6                // =6
-               	strb	w2, [x1, #0x50]
-               	ldrb	w1, [x1, #0x50]
+               	strb	w2, [x1, #0x4a]
+               	ldrb	w1, [x1, #0x4a]
                	orr	x2, x0, #0x40
                	cmp	w1, #0x6
                	csel	x0, x2, x0, ne

@@ -4,9 +4,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x1
+    v1   ImmData(1)                                       -> x1
     v2   Imm(0)                                           -> x0
-    v3   ImmData(24)                                      -> x2
+    v3   ImmData(13)                                      -> x2
     v4   Imm(12)                                          -> x0
     v5   Imm(12)                                          -> x0
     v6   Imm(0)                                           -> x0
@@ -89,11 +89,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0
     v80  LocalAddr(-2)                                    -> x1
-    v81  ImmData(40)                                      -> x0
+    v81  ImmData(32)                                      -> x0
     v82  Mcpy { dst=v80, src=v81, size=12, align=8 }      -> -
     v83  LocalAddr(-2)                                    -> x0
     v84  Imm(0)                                           -> x0
-    v85  ImmData(24)                                      -> x2
+    v85  ImmData(13)                                      -> x2
     v86  Imm(12)                                          -> x0
     v87  Imm(12)                                          -> x0
     v88  Imm(0)                                           -> x0

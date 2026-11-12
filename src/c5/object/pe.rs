@@ -4191,14 +4191,14 @@ mod tests {
         assert!(index_va >= IMAGE_BASE, "AddressOfIndex below ImageBase");
         assert_eq!(cb_va, 0, "AddressOfCallBacks should be NULL");
         assert_eq!(characteristics, 0, "Characteristics must be 0");
-        // The single `_Thread_local int counter` is 8 bytes (c5 globals are
-        // word-sized). We emit the whole TLS block as init template (zeros)
+        // The single `_Thread_local int counter` is 4 bytes. We emit the
+        // whole TLS block as init template (zeros)
         // rather than as SizeOfZeroFill, so a Windows ARM64 loader path
         // that skips empty-template directories still processes us.
         assert_eq!(
             end_va - start_va,
-            8,
-            "expected 8 bytes of init template (one TLS int slot)"
+            4,
+            "expected 4 bytes of init template (one TLS int)"
         );
         assert_eq!(
             zero_fill, 0,

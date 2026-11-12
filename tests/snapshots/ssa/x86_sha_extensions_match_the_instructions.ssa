@@ -144,7 +144,7 @@ fn ent_pc=915 n_params=3 variadic=false locals=2
     v137 BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x3
     v138 Binop { op=add, lhs=v135, rhs=v69 }              -> x8
     v139 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> x3
-    v140 ImmData(8)                                       -> x3
+    v140 ImmData(16)                                      -> x3
     v141 Imm(0)                                           -> x12
     v142 BinopI { op=and, lhs=v3, rhs_imm=3 }             -> x12
     v143 BinopI { op=shl, lhs=v142, rhs_imm=2 }           -> x13

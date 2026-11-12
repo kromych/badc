@@ -26,7 +26,7 @@ Disassembly of section .text:
 <array_and_struct>:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x18
+               	add	x0, x0, #0x14
                	mov	x1, #0x5                // =5
                	strb	w1, [x0, #0x3]
                	mrs	x1, TPIDR_EL0

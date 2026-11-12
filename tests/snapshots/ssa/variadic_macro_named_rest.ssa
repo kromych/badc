@@ -67,8 +67,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v29  Imm(5)                                           -> x0
     v30  Imm(5)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  ImmData(8)                                       -> x0
-    v33  ImmData(13)                                      -> x1
+    v32  ImmData(1)                                       -> x0
+    v33  ImmData(6)                                       -> x1
     terminator Jmp(b3)   (exit_acc=v33)
   block 1  start_pc=0
     v50  Load { addr=v39, disp=0, kind=I8 }               -> x6

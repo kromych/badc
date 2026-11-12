@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	ldr	s0, [x0, #0x18]
+               	ldr	s0, [x0, #0x14]
                	fcvt	d0, s0
                	fmov	d2, #1.00000000
                	fsub	d3, d0, d2
@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldr	s3, [x0, #0x20]
+               	ldr	s3, [x0, #0x18]
                	fcvt	d3, s3
                	fsub	d3, d3, d2
                	fcmpe	d3, d0
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	ldr	s3, [x0, #0x28]
+               	ldr	s3, [x0, #0x1c]
                	fcvt	d4, s3
                	fmov	d3, #2.50000000
                	fsub	d4, d4, d3
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	ldr	s4, [x0, #0x30]
+               	ldr	s4, [x0, #0x20]
                	fcvt	d4, s4
                	fsub	d4, d4, d2
                	fcmpe	d4, d0
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
-               	ldr	s4, [x0, #0x38]
+               	ldr	s4, [x0, #0x24]
                	fcvt	d4, s4
                	fsub	d4, d4, d2
                	fcmpe	d4, d0
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
-               	ldr	d4, [x0, #0x40]
+               	ldr	d4, [x0, #0x28]
                	fsub	d2, d4, d2
                	fcmpe	d2, d0
                	b.pl	<addr>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x0, <page>
-               	ldr	d2, [x0, #0x48]
+               	ldr	d2, [x0, #0x30]
                	fsub	d2, d2, d3
                	fcmpe	d2, d0
                	b.pl	<addr>
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x0, <page>
-               	ldr	d2, [x0, #0x50]
+               	ldr	d2, [x0, #0x38]
                	fmov	d3, #3.00000000
                	fsub	d2, d2, d3
                	fcmpe	d2, d0

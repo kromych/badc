@@ -9,7 +9,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
     v5   LocalAddr(-1)                                    -> x1
-    v6   ImmData(8)                                       -> x1
+    v6   ImmData(4)                                       -> x1
     v7   Load { addr=v6, disp=0, kind=U32, volatile pc_rel } -> x1
     v8   Imm(0)                                           -> x2
     v9   StoreLocal { off=-1, value=v1, kind=I8 }         -> -
@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v17  Imm(0)                                           -> x0
     v18  Imm(-1)                                          -> x0
-    v19  ImmData(8)                                       -> x0
+    v19  ImmData(4)                                       -> x0
     v20  Load { addr=v6, disp=0, kind=U32, volatile pc_rel } -> x0
     v21  Imm(4294967295)                                  -> x1
     v22  BinopI { op=ult, lhs=v20, rhs_imm=4294967295 }   -> x0
@@ -36,7 +36,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 3  start_pc=0
     v25  Imm(0)                                           -> x0
     v26  Imm(-1)                                          -> x0
-    v27  ImmData(8)                                       -> x0
+    v27  ImmData(4)                                       -> x0
     v28  Load { addr=v6, disp=0, kind=U32, volatile pc_rel } -> x0
     v29  Imm(4294967295)                                  -> x1
     v30  BinopI { op=ult, lhs=v28, rhs_imm=4294967295 }   -> x0
@@ -49,7 +49,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v36  Imm(0)                                           -> x0
     v37  Imm(-1)                                          -> x0
-    v38  ImmData(8)                                       -> x0
+    v38  ImmData(4)                                       -> x0
     v39  Load { addr=v6, disp=0, kind=U32, volatile pc_rel } -> x0
     v40  Imm(4294967295)                                  -> x1
     v41  BinopI { op=ult, lhs=v39, rhs_imm=4294967295 }   -> x0
@@ -64,7 +64,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v47  Imm(0)                                           -> x0
     v48  Imm(-1)                                          -> x0
-    v49  ImmData(16)                                      -> x0
+    v49  ImmData(8)                                       -> x0
     v50  Load { addr=v49, disp=0, kind=U32, volatile pc_rel } -> x0
     v51  Imm(4294967295)                                  -> x0
     v52  Imm(0)                                           -> x0
@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v54  Imm(0)                                           -> x0
     v55  Imm(0)                                           -> x0
     v56  Imm(-1)                                          -> x0
-    v57  ImmData(8)                                       -> x0
+    v57  ImmData(4)                                       -> x0
     v58  Load { addr=v6, disp=0, kind=U32, volatile pc_rel } -> x0
     v59  Imm(4294967295)                                  -> x0
     v60  Imm(1)                                           -> x0
@@ -84,7 +84,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v66  Imm(0)                                           -> x0
     v67  Imm(0)                                           -> x0
     v68  Imm(-1)                                          -> x0
-    v69  ImmData(8)                                       -> x0
+    v69  ImmData(4)                                       -> x0
     v70  Load { addr=v69, disp=0, kind=U32, volatile pc_rel } -> x0
     v71  Imm(4294967295)                                  -> x1
     v72  BinopI { op=uge, lhs=v70, rhs_imm=4294967295 }   -> x0
@@ -100,7 +100,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 8  start_pc=0
     v79  Imm(0)                                           -> x0
     v80  Imm(-1)                                          -> x0
-    v81  ImmData(8)                                       -> x0
+    v81  ImmData(4)                                       -> x0
     v82  Load { addr=v69, disp=0, kind=U32, volatile pc_rel } -> x6
     v83  Imm(4294967295)                                  -> x1
     v84  Binop { op=divu, lhs=v83, rhs=v82 }              -> x0
@@ -112,7 +112,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 9  start_pc=0
     v89  Imm(0)                                           -> x0
     v90  Imm(-1)                                          -> x0
-    v91  ImmData(16)                                      -> x0
+    v91  ImmData(8)                                       -> x0
     v92  Load { addr=v49, disp=0, kind=U32, volatile pc_rel } -> x6
     v93  Imm(4294967295)                                  -> x0
     v94  Binop { op=divu, lhs=v83, rhs=v92 }              -> x0
@@ -133,18 +133,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v105 Imm(0)                                           -> x0
     v106 Imm(-1)                                          -> x0
     v107 Imm(4294967295)                                  -> x0
-    v108 ImmData(8)                                       -> x0
+    v108 ImmData(4)                                       -> x0
     v109 Load { addr=v69, disp=0, kind=U32, volatile pc_rel } -> x0
     v110 BinopI { op=ne, lhs=v109, rhs_imm=4294967295 }   -> x0
     v111 Imm(0)                                           -> x1
     terminator Bnz { cond=v110, target=b13, fall=b12 }   (exit_acc=v110)
   block 12  start_pc=0
-    v112 ImmData(32)                                      -> x0
+    v112 ImmData(20)                                      -> x0
     v113 Imm(0)                                           -> x0
     v114 Store { addr=v112, disp=0, value=v113, kind=I8 pc_rel } -> -
     v115 Imm(0)                                           -> x1
     v116 Imm(-1)                                          -> x1
-    v117 ImmData(8)                                       -> x1
+    v117 ImmData(4)                                       -> x1
     v118 Load { addr=v69, disp=0, kind=U32, volatile pc_rel } -> x1
     v119 Imm(4294967295)                                  -> x2
     v120 BinopI { op=ult, lhs=v118, rhs_imm=4294967295 }  -> x1
@@ -183,7 +183,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v143 LoadLocal { off=-1, kind=U8 }                    -> x2
     v144 BinopI { op=xor, lhs=v126, rhs_imm=-1 }          -> x1
     v145 BinopI { op=and, lhs=v144, rhs_imm=4294967295 }  -> x2
-    v146 ImmData(8)                                       -> x2
+    v146 ImmData(4)                                       -> x2
     v147 Load { addr=v69, disp=0, kind=U32, volatile pc_rel } -> x2
     v148 Binop { op=ugt, lhs=v144, rhs=v147 }             -> x1
     v149 Imm(0)                                           -> x2
@@ -206,7 +206,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v160 StoreLocal { off=-1, value=v159, kind=I8 }       -> -
     v161 Imm(15)                                          -> x1
     v162 Imm(-16)                                         -> x1
-    v163 ImmData(16)                                      -> x1
+    v163 ImmData(8)                                       -> x1
     v164 Load { addr=v163, disp=0, kind=U32, volatile pc_rel } -> x1
     v165 Imm(4294967280)                                  -> x2
     v166 BinopI { op=ult, lhs=v164, rhs_imm=4294967280 }  -> x1
@@ -217,7 +217,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 21  start_pc=0
     v170 Imm(15)                                          -> x1
     v171 Imm(-16)                                         -> x1
-    v172 ImmData(8)                                       -> x1
+    v172 ImmData(4)                                       -> x1
     v173 Load { addr=v172, disp=0, kind=U32, volatile pc_rel } -> x1
     v174 Imm(4294967280)                                  -> x2
     v175 BinopI { op=ult, lhs=v173, rhs_imm=4294967280 }  -> x1

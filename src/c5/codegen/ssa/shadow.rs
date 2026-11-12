@@ -1250,7 +1250,11 @@ pub(crate) fn apply_data_liveness(
     let obj_ends: Vec<i64> = (0..n)
         .map(|i| {
             let next = if i + 1 < n { starts[i + 1] } else { data_len };
-            let floor = if i == 0 { next.min(8) } else { starts[i] };
+            let floor = if i == 0 {
+                next.min(crate::c5::layout::DATA_GUARD as i64)
+            } else {
+                starts[i]
+            };
             pad_lo_by_hi.get(&next).map_or(next, |&lo| lo.max(floor))
         })
         .collect();
@@ -1388,12 +1392,12 @@ pub(crate) fn apply_data_liveness(
     // (`Program::data_relro_len`), which the writers re-protect before
     // the entry point runs. Object 0 must stay at offset 0 (see above),
     // so it leads the first non-empty region, and a region exists at all
-    // only when object 0's bytes past the 8-byte NULL guard are recorded
+    // only when object 0's bytes past the NULL guard are recorded
     // alignment padding -- content glued onto it has no recorded start
     // and must stay writable.
     let guard_immutable = !has_reloc_slot[0] && {
         let end = obj_end(0);
-        let mut covered = end.min(8);
+        let mut covered = end.min(crate::c5::layout::DATA_GUARD as i64);
         for &(lo, hi) in &out.data_pad_ranges {
             if lo <= covered && hi > covered {
                 covered = hi;

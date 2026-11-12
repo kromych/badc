@@ -488,7 +488,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(1)                                           -> x0
-    v5   ImmData(40)                                      -> x0
+    v5   ImmData(48)                                      -> x0
     v6   Imm(0)                                           -> x0
     v7   BinopI { op=add, lhs=v5, rhs_imm=0 }             -> x0
     v8   Imm(0)                                           -> x0
@@ -497,7 +497,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v11  Imm(-128)                                        -> x0
     v12  Imm(-128)                                        -> x0
     v13  Store { addr=v5, disp=0, value=v12, kind=I8 pc_rel } -> -
-    v14  ImmData(56)                                      -> x0
+    v14  ImmData(64)                                      -> x0
     v15  Imm(0)                                           -> x0
     v16  BinopI { op=add, lhs=v14, rhs_imm=0 }            -> x0
     v17  Imm(0)                                           -> x0
@@ -511,7 +511,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v25  Imm(1)                                           -> x0
     v26  Imm(1)                                           -> x0
     v27  Imm(1)                                           -> x0
-    v28  ImmData(40)                                      -> x0
+    v28  ImmData(48)                                      -> x0
     v29  Imm(1)                                           -> x0
     v30  BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
     v31  Imm(17)                                          -> x0
@@ -520,7 +520,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v34  Imm(-111)                                        -> x0
     v35  Imm(-111)                                        -> x0
     v36  Store { addr=v5, disp=1, value=v35, kind=I8 pc_rel } -> -
-    v37  ImmData(56)                                      -> x0
+    v37  ImmData(64)                                      -> x0
     v38  Imm(1)                                           -> x0
     v39  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x0
     v40  Imm(17)                                          -> x0
@@ -534,7 +534,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v48  Imm(2)                                           -> x0
     v49  Imm(2)                                           -> x0
     v50  Imm(1)                                           -> x0
-    v51  ImmData(40)                                      -> x0
+    v51  ImmData(48)                                      -> x0
     v52  Imm(2)                                           -> x0
     v53  BinopI { op=add, lhs=v5, rhs_imm=2 }             -> x0
     v54  Imm(34)                                          -> x0
@@ -543,7 +543,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v57  Imm(-94)                                         -> x0
     v58  Imm(-94)                                         -> x0
     v59  Store { addr=v5, disp=2, value=v58, kind=I8 pc_rel } -> -
-    v60  ImmData(56)                                      -> x0
+    v60  ImmData(64)                                      -> x0
     v61  Imm(2)                                           -> x0
     v62  BinopI { op=add, lhs=v14, rhs_imm=2 }            -> x0
     v63  Imm(34)                                          -> x0
@@ -557,7 +557,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v71  Imm(3)                                           -> x0
     v72  Imm(3)                                           -> x0
     v73  Imm(1)                                           -> x0
-    v74  ImmData(40)                                      -> x0
+    v74  ImmData(48)                                      -> x0
     v75  Imm(3)                                           -> x0
     v76  BinopI { op=add, lhs=v5, rhs_imm=3 }             -> x0
     v77  Imm(51)                                          -> x0
@@ -566,7 +566,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v80  Imm(-77)                                         -> x0
     v81  Imm(-77)                                         -> x0
     v82  Store { addr=v5, disp=3, value=v81, kind=I8 pc_rel } -> -
-    v83  ImmData(56)                                      -> x0
+    v83  ImmData(64)                                      -> x0
     v84  Imm(3)                                           -> x0
     v85  BinopI { op=add, lhs=v14, rhs_imm=3 }            -> x0
     v86  Imm(51)                                          -> x0
@@ -580,7 +580,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v94  Imm(4)                                           -> x0
     v95  Imm(4)                                           -> x0
     v96  Imm(1)                                           -> x0
-    v97  ImmData(40)                                      -> x0
+    v97  ImmData(48)                                      -> x0
     v98  Imm(4)                                           -> x0
     v99  BinopI { op=add, lhs=v97, rhs_imm=4 }            -> x0
     v100 Imm(68)                                          -> x0
@@ -589,7 +589,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v103 Imm(-60)                                         -> x0
     v104 Imm(-60)                                         -> x0
     v105 Store { addr=v97, disp=4, value=v104, kind=I8 pc_rel } -> -
-    v106 ImmData(56)                                      -> x0
+    v106 ImmData(64)                                      -> x0
     v107 Imm(4)                                           -> x0
     v108 BinopI { op=add, lhs=v106, rhs_imm=4 }           -> x0
     v109 Imm(68)                                          -> x0
@@ -603,7 +603,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v117 Imm(5)                                           -> x0
     v118 Imm(5)                                           -> x0
     v119 Imm(1)                                           -> x0
-    v120 ImmData(40)                                      -> x0
+    v120 ImmData(48)                                      -> x0
     v121 Imm(5)                                           -> x0
     v122 BinopI { op=add, lhs=v97, rhs_imm=5 }            -> x0
     v123 Imm(85)                                          -> x0
@@ -612,7 +612,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v126 Imm(-43)                                         -> x0
     v127 Imm(-43)                                         -> x0
     v128 Store { addr=v97, disp=5, value=v127, kind=I8 pc_rel } -> -
-    v129 ImmData(56)                                      -> x0
+    v129 ImmData(64)                                      -> x0
     v130 Imm(5)                                           -> x0
     v131 BinopI { op=add, lhs=v106, rhs_imm=5 }           -> x0
     v132 Imm(85)                                          -> x0
@@ -626,7 +626,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v140 Imm(6)                                           -> x0
     v141 Imm(6)                                           -> x0
     v142 Imm(1)                                           -> x0
-    v143 ImmData(40)                                      -> x0
+    v143 ImmData(48)                                      -> x0
     v144 Imm(6)                                           -> x0
     v145 BinopI { op=add, lhs=v97, rhs_imm=6 }            -> x0
     v146 Imm(102)                                         -> x0
@@ -635,7 +635,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v149 Imm(-26)                                         -> x0
     v150 Imm(-26)                                         -> x0
     v151 Store { addr=v97, disp=6, value=v150, kind=I8 pc_rel } -> -
-    v152 ImmData(56)                                      -> x0
+    v152 ImmData(64)                                      -> x0
     v153 Imm(6)                                           -> x0
     v154 BinopI { op=add, lhs=v106, rhs_imm=6 }           -> x0
     v155 Imm(102)                                         -> x0
@@ -649,7 +649,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v163 Imm(7)                                           -> x0
     v164 Imm(7)                                           -> x0
     v165 Imm(1)                                           -> x0
-    v166 ImmData(40)                                      -> x0
+    v166 ImmData(48)                                      -> x0
     v167 Imm(7)                                           -> x0
     v168 BinopI { op=add, lhs=v97, rhs_imm=7 }            -> x0
     v169 Imm(119)                                         -> x0
@@ -658,7 +658,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v172 Imm(-9)                                          -> x0
     v173 Imm(-9)                                          -> x0
     v174 Store { addr=v97, disp=7, value=v173, kind=I8 pc_rel } -> -
-    v175 ImmData(56)                                      -> x0
+    v175 ImmData(64)                                      -> x0
     v176 Imm(7)                                           -> x0
     v177 BinopI { op=add, lhs=v106, rhs_imm=7 }           -> x0
     v178 Imm(119)                                         -> x0
@@ -672,7 +672,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v186 Imm(8)                                           -> x0
     v187 Imm(8)                                           -> x0
     v188 Imm(1)                                           -> x0
-    v189 ImmData(40)                                      -> x0
+    v189 ImmData(48)                                      -> x0
     v190 Imm(8)                                           -> x0
     v191 BinopI { op=add, lhs=v189, rhs_imm=8 }           -> x0
     v192 Imm(136)                                         -> x0
@@ -681,7 +681,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v195 Imm(8)                                           -> x0
     v196 Imm(8)                                           -> x0
     v197 Store { addr=v189, disp=8, value=v196, kind=I8 pc_rel } -> -
-    v198 ImmData(56)                                      -> x0
+    v198 ImmData(64)                                      -> x0
     v199 Imm(8)                                           -> x0
     v200 BinopI { op=add, lhs=v198, rhs_imm=8 }           -> x0
     v201 Imm(136)                                         -> x0
@@ -695,7 +695,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v209 Imm(9)                                           -> x0
     v210 Imm(9)                                           -> x0
     v211 Imm(1)                                           -> x0
-    v212 ImmData(40)                                      -> x0
+    v212 ImmData(48)                                      -> x0
     v213 Imm(9)                                           -> x0
     v214 BinopI { op=add, lhs=v189, rhs_imm=9 }           -> x0
     v215 Imm(153)                                         -> x0
@@ -704,7 +704,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v218 Imm(25)                                          -> x0
     v219 Imm(25)                                          -> x0
     v220 Store { addr=v189, disp=9, value=v219, kind=I8 pc_rel } -> -
-    v221 ImmData(56)                                      -> x0
+    v221 ImmData(64)                                      -> x0
     v222 Imm(9)                                           -> x0
     v223 BinopI { op=add, lhs=v198, rhs_imm=9 }           -> x0
     v224 Imm(153)                                         -> x0
@@ -718,7 +718,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v232 Imm(10)                                          -> x0
     v233 Imm(10)                                          -> x0
     v234 Imm(1)                                           -> x0
-    v235 ImmData(40)                                      -> x0
+    v235 ImmData(48)                                      -> x0
     v236 Imm(10)                                          -> x0
     v237 BinopI { op=add, lhs=v189, rhs_imm=10 }          -> x0
     v238 Imm(170)                                         -> x0
@@ -727,7 +727,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v241 Imm(42)                                          -> x0
     v242 Imm(42)                                          -> x0
     v243 Store { addr=v189, disp=10, value=v242, kind=I8 pc_rel } -> -
-    v244 ImmData(56)                                      -> x0
+    v244 ImmData(64)                                      -> x0
     v245 Imm(10)                                          -> x0
     v246 BinopI { op=add, lhs=v198, rhs_imm=10 }          -> x0
     v247 Imm(170)                                         -> x0
@@ -741,7 +741,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v255 Imm(11)                                          -> x0
     v256 Imm(11)                                          -> x0
     v257 Imm(1)                                           -> x0
-    v258 ImmData(40)                                      -> x0
+    v258 ImmData(48)                                      -> x0
     v259 Imm(11)                                          -> x0
     v260 BinopI { op=add, lhs=v189, rhs_imm=11 }          -> x0
     v261 Imm(187)                                         -> x0
@@ -750,7 +750,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v264 Imm(59)                                          -> x0
     v265 Imm(59)                                          -> x0
     v266 Store { addr=v189, disp=11, value=v265, kind=I8 pc_rel } -> -
-    v267 ImmData(56)                                      -> x0
+    v267 ImmData(64)                                      -> x0
     v268 Imm(11)                                          -> x0
     v269 BinopI { op=add, lhs=v198, rhs_imm=11 }          -> x0
     v270 Imm(187)                                         -> x0
@@ -764,7 +764,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v278 Imm(12)                                          -> x0
     v279 Imm(12)                                          -> x0
     v280 Imm(1)                                           -> x0
-    v281 ImmData(40)                                      -> x0
+    v281 ImmData(48)                                      -> x0
     v282 Imm(12)                                          -> x0
     v283 BinopI { op=add, lhs=v281, rhs_imm=12 }          -> x0
     v284 Imm(204)                                         -> x0
@@ -773,7 +773,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v287 Imm(76)                                          -> x0
     v288 Imm(76)                                          -> x0
     v289 Store { addr=v281, disp=12, value=v288, kind=I8 pc_rel } -> -
-    v290 ImmData(56)                                      -> x0
+    v290 ImmData(64)                                      -> x0
     v291 Imm(12)                                          -> x0
     v292 BinopI { op=add, lhs=v290, rhs_imm=12 }          -> x0
     v293 Imm(204)                                         -> x0
@@ -787,7 +787,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v301 Imm(13)                                          -> x0
     v302 Imm(13)                                          -> x0
     v303 Imm(1)                                           -> x0
-    v304 ImmData(40)                                      -> x0
+    v304 ImmData(48)                                      -> x0
     v305 Imm(13)                                          -> x0
     v306 BinopI { op=add, lhs=v281, rhs_imm=13 }          -> x0
     v307 Imm(221)                                         -> x0
@@ -796,7 +796,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v310 Imm(93)                                          -> x0
     v311 Imm(93)                                          -> x0
     v312 Store { addr=v281, disp=13, value=v311, kind=I8 pc_rel } -> -
-    v313 ImmData(56)                                      -> x0
+    v313 ImmData(64)                                      -> x0
     v314 Imm(13)                                          -> x0
     v315 BinopI { op=add, lhs=v290, rhs_imm=13 }          -> x0
     v316 Imm(221)                                         -> x0
@@ -810,7 +810,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v324 Imm(14)                                          -> x0
     v325 Imm(14)                                          -> x0
     v326 Imm(1)                                           -> x0
-    v327 ImmData(40)                                      -> x0
+    v327 ImmData(48)                                      -> x0
     v328 Imm(14)                                          -> x0
     v329 BinopI { op=add, lhs=v281, rhs_imm=14 }          -> x0
     v330 Imm(238)                                         -> x0
@@ -819,7 +819,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v333 Imm(110)                                         -> x0
     v334 Imm(110)                                         -> x0
     v335 Store { addr=v281, disp=14, value=v334, kind=I8 pc_rel } -> -
-    v336 ImmData(56)                                      -> x0
+    v336 ImmData(64)                                      -> x0
     v337 Imm(14)                                          -> x0
     v338 BinopI { op=add, lhs=v290, rhs_imm=14 }          -> x0
     v339 Imm(238)                                         -> x0
@@ -833,7 +833,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v347 Imm(15)                                          -> x0
     v348 Imm(15)                                          -> x0
     v349 Imm(1)                                           -> x0
-    v350 ImmData(40)                                      -> x0
+    v350 ImmData(48)                                      -> x0
     v351 Imm(15)                                          -> x0
     v352 BinopI { op=add, lhs=v281, rhs_imm=15 }          -> x0
     v353 Imm(255)                                         -> x0
@@ -842,7 +842,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v356 Imm(127)                                         -> x0
     v357 Imm(127)                                         -> x0
     v358 Store { addr=v281, disp=15, value=v357, kind=I8 pc_rel } -> -
-    v359 ImmData(56)                                      -> x0
+    v359 ImmData(64)                                      -> x0
     v360 Imm(15)                                          -> x0
     v361 BinopI { op=add, lhs=v290, rhs_imm=15 }          -> x0
     v362 Imm(255)                                         -> x0
@@ -856,13 +856,13 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v370 Imm(16)                                          -> x0
     v371 Imm(16)                                          -> x0
     v372 Imm(0)                                           -> x0
-    v373 ImmData(40)                                      -> x7
+    v373 ImmData(48)                                      -> x7
     v374 Imm(8)                                           -> x0
     v375 BinopI { op=add, lhs=v373, rhs_imm=8 }           -> x0
     v376 Imm(-1)                                          -> x0
     v377 Store { addr=v373, disp=8, value=v376, kind=I8 pc_rel } -> -
     v378 Imm(0)                                           -> x0
-    v379 ImmData(32)                                      -> x0
+    v379 ImmData(36)                                      -> x0
     v380 Load { addr=v379, disp=0, kind=I32, volatile pc_rel } -> x6
     v381 Extend { value=v380, kind=I32, nsw }             -> x0
     v382 Call { target_pc=0, args=[v373, v380], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -872,9 +872,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v386 Imm(0)                                           -> x1
     terminator Bnz { cond=v384, target=b3, fall=b1 }   (exit_acc=v384)
   block 1  start_pc=0
-    v387 ImmData(40)                                      -> x7
+    v387 ImmData(48)                                      -> x7
     v388 Imm(8)                                           -> x0
-    v389 ImmData(32)                                      -> x0
+    v389 ImmData(36)                                      -> x0
     v390 Load { addr=v389, disp=0, kind=I32, volatile pc_rel } -> x0
     v391 BinopI { op=add, lhs=v390, rhs_imm=8 }           -> x6
     v392 Extend { value=v391, kind=I32, nsw }             -> x0
@@ -888,9 +888,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v400 Imm(0)                                           -> x1
     terminator Bnz { cond=v395, target=b3, fall=b2 }   (exit_acc=v395)
   block 2  start_pc=0
-    v401 ImmData(40)                                      -> x7
+    v401 ImmData(48)                                      -> x7
     v402 Imm(15)                                          -> x0
-    v403 ImmData(32)                                      -> x0
+    v403 ImmData(36)                                      -> x0
     v404 Load { addr=v403, disp=0, kind=I32, volatile pc_rel } -> x0
     v405 BinopI { op=add, lhs=v404, rhs_imm=15 }          -> x6
     v406 Extend { value=v405, kind=I32, nsw }             -> x0
@@ -908,9 +908,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v416 LifetimeEnd(-3)                                  -> -
     terminator Return(v413)   (exit_acc=v413)
   block 4  start_pc=0
-    v417 ImmData(56)                                      -> x7
+    v417 ImmData(64)                                      -> x7
     v418 Imm(0)                                           -> x0
-    v419 ImmData(32)                                      -> x0
+    v419 ImmData(36)                                      -> x0
     v420 Load { addr=v419, disp=0, kind=I32, volatile pc_rel } -> x6
     v421 Extend { value=v420, kind=I32, nsw }             -> x0
     v422 Call { target_pc=1, args=[v417, v420], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -920,9 +920,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v426 Imm(0)                                           -> x1
     terminator Bnz { cond=v424, target=b7, fall=b5 }   (exit_acc=v424)
   block 5  start_pc=0
-    v427 ImmData(56)                                      -> x7
+    v427 ImmData(64)                                      -> x7
     v428 Imm(8)                                           -> x0
-    v429 ImmData(32)                                      -> x0
+    v429 ImmData(36)                                      -> x0
     v430 Load { addr=v429, disp=0, kind=I32, volatile pc_rel } -> x0
     v431 BinopI { op=add, lhs=v430, rhs_imm=8 }           -> x6
     v432 Extend { value=v431, kind=I32, nsw }             -> x0
@@ -936,9 +936,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v440 Imm(0)                                           -> x1
     terminator Bnz { cond=v433, target=b7, fall=b6 }   (low word)   (exit_acc=v435)
   block 6  start_pc=0
-    v441 ImmData(56)                                      -> x7
+    v441 ImmData(64)                                      -> x7
     v442 Imm(7)                                           -> x0
-    v443 ImmData(32)                                      -> x0
+    v443 ImmData(36)                                      -> x0
     v444 Load { addr=v443, disp=0, kind=I32, volatile pc_rel } -> x0
     v445 BinopI { op=add, lhs=v444, rhs_imm=7 }           -> x6
     v446 Extend { value=v445, kind=I32, nsw }             -> x0
@@ -956,10 +956,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v456 LifetimeEnd(-3)                                  -> -
     terminator Return(v453)   (exit_acc=v453)
   block 8  start_pc=0
-    v457 ImmData(40)                                      -> x0
+    v457 ImmData(48)                                      -> x0
     v458 BinopI { op=add, lhs=v457, rhs_imm=8 }           -> x7
     v459 Imm(-8)                                          -> x0
-    v460 ImmData(32)                                      -> x0
+    v460 ImmData(36)                                      -> x0
     v461 Load { addr=v460, disp=0, kind=I32, volatile pc_rel } -> x0
     v462 BinopI { op=add, lhs=v461, rhs_imm=-8 }          -> x6
     v463 Extend { value=v462, kind=I32, nsw }             -> x0
@@ -970,10 +970,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v468 Imm(0)                                           -> x1
     terminator Bnz { cond=v466, target=b11, fall=b9 }   (exit_acc=v466)
   block 9  start_pc=0
-    v469 ImmData(40)                                      -> x0
+    v469 ImmData(48)                                      -> x0
     v470 BinopI { op=add, lhs=v469, rhs_imm=8 }           -> x7
     v471 Imm(0)                                           -> x0
-    v472 ImmData(32)                                      -> x0
+    v472 ImmData(36)                                      -> x0
     v473 Load { addr=v472, disp=0, kind=I32, volatile pc_rel } -> x6
     v474 Extend { value=v473, kind=I32, nsw }             -> x0
     v475 Call { target_pc=0, args=[v470, v473], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -986,10 +986,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v482 Imm(0)                                           -> x1
     terminator Bnz { cond=v477, target=b11, fall=b10 }   (exit_acc=v477)
   block 10  start_pc=0
-    v483 ImmData(40)                                      -> x0
+    v483 ImmData(48)                                      -> x0
     v484 BinopI { op=add, lhs=v483, rhs_imm=8 }           -> x7
     v485 Imm(7)                                           -> x0
-    v486 ImmData(32)                                      -> x0
+    v486 ImmData(36)                                      -> x0
     v487 Load { addr=v486, disp=0, kind=I32, volatile pc_rel } -> x0
     v488 BinopI { op=add, lhs=v487, rhs_imm=7 }           -> x6
     v489 Extend { value=v488, kind=I32, nsw }             -> x0
@@ -1007,10 +1007,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v499 LifetimeEnd(-3)                                  -> -
     terminator Return(v496)   (exit_acc=v496)
   block 12  start_pc=0
-    v500 ImmData(56)                                      -> x0
+    v500 ImmData(64)                                      -> x0
     v501 BinopI { op=add, lhs=v500, rhs_imm=8 }           -> x7
     v502 Imm(-1)                                          -> x0
-    v503 ImmData(32)                                      -> x0
+    v503 ImmData(36)                                      -> x0
     v504 Load { addr=v503, disp=0, kind=I32, volatile pc_rel } -> x0
     v505 BinopI { op=add, lhs=v504, rhs_imm=-1 }          -> x6
     v506 Extend { value=v505, kind=I32, nsw }             -> x0
@@ -1020,10 +1020,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v510 Imm(0)                                           -> x1
     terminator Bnz { cond=v509, target=b14, fall=b13 }   (exit_acc=v509)
   block 13  start_pc=0
-    v511 ImmData(56)                                      -> x0
+    v511 ImmData(64)                                      -> x0
     v512 BinopI { op=add, lhs=v511, rhs_imm=16 }          -> x7
     v513 Imm(-16)                                         -> x0
-    v514 ImmData(32)                                      -> x0
+    v514 ImmData(36)                                      -> x0
     v515 Load { addr=v514, disp=0, kind=I32, volatile pc_rel } -> x0
     v516 BinopI { op=add, lhs=v515, rhs_imm=-16 }         -> x6
     v517 Extend { value=v516, kind=I32, nsw }             -> x0
@@ -1041,10 +1041,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v527 LifetimeEnd(-3)                                  -> -
     terminator Return(v524)   (exit_acc=v524)
   block 15  start_pc=0
-    v528 ImmData(40)                                      -> x0
+    v528 ImmData(48)                                      -> x0
     v529 BinopI { op=add, lhs=v528, rhs_imm=8 }           -> x7
     v530 Imm(-8)                                          -> x0
-    v531 ImmData(32)                                      -> x0
+    v531 ImmData(36)                                      -> x0
     v532 Load { addr=v531, disp=0, kind=I32, volatile pc_rel } -> x0
     v533 BinopI { op=add, lhs=v532, rhs_imm=-8 }          -> x6
     v534 Call { target_pc=2, args=[v529, v533], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1053,9 +1053,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v537 Imm(0)                                           -> x1
     terminator Bnz { cond=v536, target=b17, fall=b16 }   (exit_acc=v536)
   block 16  start_pc=0
-    v538 ImmData(40)                                      -> x7
+    v538 ImmData(48)                                      -> x7
     v539 Imm(15)                                          -> x0
-    v540 ImmData(32)                                      -> x0
+    v540 ImmData(36)                                      -> x0
     v541 Load { addr=v540, disp=0, kind=I32, volatile pc_rel } -> x0
     v542 BinopI { op=add, lhs=v541, rhs_imm=15 }          -> x6
     v543 Call { target_pc=2, args=[v538, v542], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -1072,9 +1072,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v552 LifetimeEnd(-3)                                  -> -
     terminator Return(v549)   (exit_acc=v549)
   block 18  start_pc=0
-    v553 ImmData(56)                                      -> x7
+    v553 ImmData(64)                                      -> x7
     v554 Imm(7)                                           -> x0
-    v555 ImmData(32)                                      -> x0
+    v555 ImmData(36)                                      -> x0
     v556 Load { addr=v555, disp=0, kind=I32, volatile pc_rel } -> x0
     v557 BinopI { op=add, lhs=v556, rhs_imm=7 }           -> x6
     v558 Extend { value=v557, kind=I32, nsw }             -> x0
@@ -1085,10 +1085,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v563 Imm(0)                                           -> x1
     terminator Bnz { cond=v562, target=b20, fall=b19 }   (exit_acc=v562)
   block 19  start_pc=0
-    v564 ImmData(56)                                      -> x0
+    v564 ImmData(64)                                      -> x0
     v565 BinopI { op=add, lhs=v564, rhs_imm=8 }           -> x7
     v566 Imm(-1)                                          -> x0
-    v567 ImmData(32)                                      -> x0
+    v567 ImmData(36)                                      -> x0
     v568 Load { addr=v567, disp=0, kind=I32, volatile pc_rel } -> x0
     v569 BinopI { op=add, lhs=v568, rhs_imm=-1 }          -> x6
     v570 Extend { value=v569, kind=I32, nsw }             -> x0
@@ -1106,16 +1106,16 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v580 LifetimeEnd(-3)                                  -> -
     terminator Return(v577)   (exit_acc=v577)
   block 21  start_pc=0
-    v581 ImmData(40)                                      -> x0
+    v581 ImmData(48)                                      -> x0
     v582 BinopI { op=add, lhs=v581, rhs_imm=8 }           -> x7
     v583 Imm(-3)                                          -> x0
-    v584 ImmData(32)                                      -> x0
+    v584 ImmData(36)                                      -> x0
     v585 Load { addr=v584, disp=0, kind=I32, volatile pc_rel } -> x0
     v586 BinopI { op=add, lhs=v585, rhs_imm=-3 }          -> x6
     v587 Extend { value=v586, kind=I32, nsw }             -> x0
     v588 Imm(-77)                                         -> x2
     v589 Call { target_pc=5, args=[v582, v586, v588], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v590 ImmData(40)                                      -> x7
+    v590 ImmData(48)                                      -> x7
     v591 Imm(5)                                           -> x0
     v592 BinopI { op=add, lhs=v590, rhs_imm=5 }           -> x0
     v593 Load { addr=v590, disp=5, kind=I8 pc_rel }       -> x0
@@ -1123,9 +1123,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v595 Imm(0)                                           -> x1
     terminator Bnz { cond=v594, target=b23, fall=b22 }   (exit_acc=v594)
   block 22  start_pc=0
-    v596 ImmData(40)                                      -> x0
+    v596 ImmData(48)                                      -> x0
     v597 Imm(5)                                           -> x0
-    v598 ImmData(32)                                      -> x0
+    v598 ImmData(36)                                      -> x0
     v599 Load { addr=v598, disp=0, kind=I32, volatile pc_rel } -> x0
     v600 BinopI { op=add, lhs=v599, rhs_imm=5 }           -> x6
     v601 Extend { value=v600, kind=I32, nsw }             -> x0
@@ -1143,9 +1143,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v611 LifetimeEnd(-3)                                  -> -
     terminator Return(v608)   (exit_acc=v608)
   block 24  start_pc=0
-    v612 ImmData(40)                                      -> x7
+    v612 ImmData(48)                                      -> x7
     v613 Imm(5)                                           -> x0
-    v614 ImmData(32)                                      -> x0
+    v614 ImmData(36)                                      -> x0
     v615 Load { addr=v614, disp=0, kind=I32, volatile pc_rel } -> x0
     v616 BinopI { op=add, lhs=v615, rhs_imm=5 }           -> x6
     v617 Extend { value=v616, kind=I32, nsw }             -> x0
@@ -1162,9 +1162,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v626 LifetimeEnd(-3)                                  -> -
     terminator Return(v623)   (exit_acc=v623)
   block 26  start_pc=0
-    v627 ImmData(40)                                      -> x7
+    v627 ImmData(48)                                      -> x7
     v628 Imm(2)                                           -> x0
-    v629 ImmData(32)                                      -> x0
+    v629 ImmData(36)                                      -> x0
     v630 Load { addr=v629, disp=0, kind=I32, volatile pc_rel } -> x0
     v631 BinopI { op=add, lhs=v630, rhs_imm=2 }           -> x6
     v632 Extend { value=v631, kind=I32, nsw }             -> x0
@@ -1175,7 +1175,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v637 Imm(0)                                           -> x1
     terminator Bnz { cond=v636, target=b28, fall=b27 }   (exit_acc=v636)
   block 27  start_pc=0
-    v638 ImmData(40)                                      -> x0
+    v638 ImmData(48)                                      -> x0
     v639 Imm(2)                                           -> x0
     v640 BinopI { op=add, lhs=v638, rhs_imm=2 }           -> x0
     v641 Load { addr=v638, disp=2, kind=I8 pc_rel }       -> x0
@@ -1191,9 +1191,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v649 LifetimeEnd(-3)                                  -> -
     terminator Return(v646)   (exit_acc=v646)
   block 29  start_pc=0
-    v650 ImmData(56)                                      -> x7
+    v650 ImmData(64)                                      -> x7
     v651 Imm(2)                                           -> x0
-    v652 ImmData(32)                                      -> x0
+    v652 ImmData(36)                                      -> x0
     v653 Load { addr=v652, disp=0, kind=I32, volatile pc_rel } -> x0
     v654 BinopI { op=add, lhs=v653, rhs_imm=2 }           -> x6
     v655 Extend { value=v654, kind=I32, nsw }             -> x0
@@ -1204,7 +1204,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v660 Imm(0)                                           -> x1
     terminator Bnz { cond=v659, target=b31, fall=b30 }   (exit_acc=v659)
   block 30  start_pc=0
-    v661 ImmData(56)                                      -> x0
+    v661 ImmData(64)                                      -> x0
     v662 Imm(2)                                           -> x0
     v663 BinopI { op=add, lhs=v661, rhs_imm=2 }           -> x0
     v664 Load { addr=v661, disp=2, kind=U8 pc_rel }       -> x0
@@ -1222,10 +1222,10 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v674 LifetimeEnd(-3)                                  -> -
     terminator Return(v671)   (exit_acc=v671)
   block 32  start_pc=0
-    v675 ImmData(40)                                      -> x0
+    v675 ImmData(48)                                      -> x0
     v676 BinopI { op=add, lhs=v675, rhs_imm=8 }           -> x7
     v677 Imm(-6)                                          -> x0
-    v678 ImmData(32)                                      -> x0
+    v678 ImmData(36)                                      -> x0
     v679 Load { addr=v678, disp=0, kind=I32, volatile pc_rel } -> x0
     v680 BinopI { op=add, lhs=v679, rhs_imm=-6 }          -> x6
     v681 Extend { value=v680, kind=I32, nsw }             -> x0
@@ -1236,7 +1236,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v686 Imm(0)                                           -> x1
     terminator Bnz { cond=v685, target=b34, fall=b33 }   (exit_acc=v685)
   block 33  start_pc=0
-    v687 ImmData(40)                                      -> x7
+    v687 ImmData(48)                                      -> x7
     v688 Imm(2)                                           -> x0
     v689 BinopI { op=add, lhs=v687, rhs_imm=2 }           -> x0
     v690 Load { addr=v687, disp=2, kind=I8 pc_rel }       -> x0
@@ -1252,12 +1252,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v698 LifetimeEnd(-3)                                  -> -
     terminator Return(v695)   (exit_acc=v695)
   block 35  start_pc=0
-    v699 ImmData(40)                                      -> x0
+    v699 ImmData(48)                                      -> x0
     v700 Imm(4)                                           -> x0
     v701 BinopI { op=add, lhs=v687, rhs_imm=4 }           -> x2
     v702 Imm(50)                                          -> x0
     v703 Store { addr=v701, disp=0, value=v702, kind=I8 } -> -
-    v704 ImmData(32)                                      -> x0
+    v704 ImmData(36)                                      -> x0
     v705 Load { addr=v704, disp=0, kind=I32, volatile pc_rel } -> x0
     v706 BinopI { op=add, lhs=v705, rhs_imm=4 }           -> x6
     v707 Extend { value=v706, kind=I32, nsw }             -> x0
@@ -1274,14 +1274,14 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v716 LifetimeEnd(-3)                                  -> -
     terminator Return(v713)   (exit_acc=v713)
   block 37  start_pc=0
-    v717 ImmData(40)                                      -> x0
+    v717 ImmData(48)                                      -> x0
     v718 Imm(4)                                           -> x1
     v719 BinopI { op=add, lhs=v717, rhs_imm=4 }           -> x2
     v720 Imm(50)                                          -> x1
     v721 Store { addr=v719, disp=0, value=v720, kind=I8 } -> -
     v722 BinopI { op=add, lhs=v717, rhs_imm=8 }           -> x7
     v723 Imm(-4)                                          -> x0
-    v724 ImmData(32)                                      -> x0
+    v724 ImmData(36)                                      -> x0
     v725 Load { addr=v724, disp=0, kind=I32, volatile pc_rel } -> x0
     v726 BinopI { op=add, lhs=v725, rhs_imm=-4 }          -> x6
     v727 Extend { value=v726, kind=I32, nsw }             -> x0
@@ -1298,12 +1298,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v736 LifetimeEnd(-3)                                  -> -
     terminator Return(v733)   (exit_acc=v733)
   block 39  start_pc=0
-    v737 ImmData(56)                                      -> x7
+    v737 ImmData(64)                                      -> x7
     v738 Imm(6)                                           -> x0
     v739 BinopI { op=add, lhs=v737, rhs_imm=6 }           -> x0
     v740 Imm(60)                                          -> x0
     v741 Store { addr=v737, disp=6, value=v740, kind=I8 pc_rel } -> -
-    v742 ImmData(32)                                      -> x0
+    v742 ImmData(36)                                      -> x0
     v743 Load { addr=v742, disp=0, kind=I32, volatile pc_rel } -> x0
     v744 BinopI { op=add, lhs=v743, rhs_imm=6 }           -> x6
     v745 Extend { value=v744, kind=I32, nsw }             -> x0
@@ -1325,12 +1325,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v759 LifetimeEnd(-3)                                  -> -
     terminator Return(v756)   (exit_acc=v756)
   block 41  start_pc=0
-    v760 ImmData(56)                                      -> x7
+    v760 ImmData(64)                                      -> x7
     v761 Imm(6)                                           -> x0
     v762 BinopI { op=add, lhs=v760, rhs_imm=6 }           -> x0
     v763 Imm(60)                                          -> x0
     v764 Store { addr=v760, disp=6, value=v763, kind=I8 pc_rel } -> -
-    v765 ImmData(32)                                      -> x0
+    v765 ImmData(36)                                      -> x0
     v766 Load { addr=v765, disp=0, kind=I32, volatile pc_rel } -> x0
     v767 BinopI { op=add, lhs=v766, rhs_imm=6 }           -> x6
     v768 Extend { value=v767, kind=I32, nsw }             -> x0
@@ -1351,12 +1351,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v781 LifetimeEnd(-3)                                  -> -
     terminator Return(v778)   (exit_acc=v778)
   block 43  start_pc=0
-    v782 ImmData(56)                                      -> x7
+    v782 ImmData(64)                                      -> x7
     v783 Imm(6)                                           -> x0
     v784 BinopI { op=add, lhs=v782, rhs_imm=6 }           -> x0
     v785 Imm(60)                                          -> x0
     v786 Store { addr=v782, disp=6, value=v785, kind=I8 pc_rel } -> -
-    v787 ImmData(32)                                      -> x0
+    v787 ImmData(36)                                      -> x0
     v788 Load { addr=v787, disp=0, kind=I32, volatile pc_rel } -> x0
     v789 BinopI { op=add, lhs=v788, rhs_imm=6 }           -> x6
     v790 Extend { value=v789, kind=I32, nsw }             -> x0
@@ -1376,12 +1376,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v802 LifetimeEnd(-3)                                  -> -
     terminator Return(v799)   (exit_acc=v799)
   block 45  start_pc=0
-    v803 ImmData(56)                                      -> x7
+    v803 ImmData(64)                                      -> x7
     v804 Imm(6)                                           -> x0
     v805 BinopI { op=add, lhs=v803, rhs_imm=6 }           -> x0
     v806 Imm(60)                                          -> x0
     v807 Store { addr=v803, disp=6, value=v806, kind=I8 pc_rel } -> -
-    v808 ImmData(32)                                      -> x0
+    v808 ImmData(36)                                      -> x0
     v809 Load { addr=v808, disp=0, kind=I32, volatile pc_rel } -> x0
     v810 BinopI { op=add, lhs=v809, rhs_imm=6 }           -> x6
     v811 Extend { value=v810, kind=I32, nsw }             -> x0
@@ -1402,12 +1402,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v824 LifetimeEnd(-3)                                  -> -
     terminator Return(v821)   (exit_acc=v821)
   block 47  start_pc=0
-    v825 ImmData(56)                                      -> x7
+    v825 ImmData(64)                                      -> x7
     v826 Imm(6)                                           -> x0
     v827 BinopI { op=add, lhs=v825, rhs_imm=6 }           -> x0
     v828 Imm(255)                                         -> x0
     v829 Store { addr=v825, disp=6, value=v828, kind=I8 pc_rel } -> -
-    v830 ImmData(32)                                      -> x0
+    v830 ImmData(36)                                      -> x0
     v831 Load { addr=v830, disp=0, kind=I32, volatile pc_rel } -> x0
     v832 BinopI { op=add, lhs=v831, rhs_imm=6 }           -> x6
     v833 Extend { value=v832, kind=I32, nsw }             -> x0
@@ -1432,7 +1432,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v848 LocalAddr(-3)                                    -> x0
     v849 LocalAddr(-2)                                    -> x0
     v850 Imm(3)                                           -> x0
-    v851 ImmData(32)                                      -> x0
+    v851 ImmData(36)                                      -> x0
     v852 Load { addr=v851, disp=0, kind=I32, volatile pc_rel } -> x0
     v853 BinopI { op=add, lhs=v852, rhs_imm=3 }           -> x2
     v854 Extend { value=v853, kind=I32, nsw }             -> x0
@@ -1449,12 +1449,12 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v863 LifetimeEnd(-3)                                  -> -
     terminator Return(v860)   (exit_acc=v860)
   block 51  start_pc=0
-    v864 ImmData(56)                                      -> x7
+    v864 ImmData(64)                                      -> x7
     v865 Imm(6)                                           -> x0
     v866 BinopI { op=add, lhs=v864, rhs_imm=6 }           -> x2
     v867 Imm(60)                                          -> x0
     v868 Store { addr=v866, disp=0, value=v867, kind=I8 } -> -
-    v869 ImmData(32)                                      -> x0
+    v869 ImmData(36)                                      -> x0
     v870 Load { addr=v869, disp=0, kind=I32, volatile pc_rel } -> x0
     v871 BinopI { op=add, lhs=v870, rhs_imm=6 }           -> x6
     v872 Extend { value=v871, kind=I32, nsw }             -> x0
@@ -1481,7 +1481,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v889 Imm(60)                                          -> x0
     v890 StoreLocal { off=-1, disp=1, value=v889, kind=I8 } -> -
     v891 Imm(0)                                           -> x0
-    v892 ImmData(32)                                      -> x0
+    v892 ImmData(36)                                      -> x0
     v893 Load { addr=v892, disp=0, kind=I32, volatile pc_rel } -> x0
     v894 BinopI { op=add, lhs=v893, rhs_imm=1 }           -> x6
     v895 Extend { value=v894, kind=I32, nsw }             -> x0
@@ -1499,7 +1499,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v905 LifetimeEnd(-3)                                  -> -
     terminator Return(v902)   (exit_acc=v902)
   block 55  start_pc=0
-    v906 ImmData(72)                                      -> x0
+    v906 ImmData(80)                                      -> x0
     v907 Imm(0)                                           -> x0
     v908 Imm(1)                                           -> x0
     v909 Store { addr=v906, disp=0, value=v908, kind=I8 pc_rel } -> -
@@ -1509,17 +1509,17 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v913 Imm(0)                                           -> x0
     terminator Jmp(b59)   (exit_acc=v912)
   block 56  start_pc=0
-    v922 ImmData(72)                                      -> x7
+    v922 ImmData(80)                                      -> x7
     v923 Extend { value=v914, kind=I32 }                  -> x0
     v924 Binop { op=add, lhs=v922, rhs=v914 }             -> x0
     v925 LoadIndexed { base=v922, index=v914, scale=1, kind=I8 } -> x0
     v926 BinopI { op=eq, lhs=v925, rhs_imm=0 }            -> x1
     terminator Bnz { cond=v925, target=b58, fall=b57 }   (low word)   (exit_acc=v926)
   block 57  start_pc=0
-    v936 ImmData(72)                                      -> x0
+    v936 ImmData(80)                                      -> x0
     v937 Extend { value=v914, kind=I32 }                  -> x0
     v938 Imm(64)                                          -> x0
-    v939 ImmData(32)                                      -> x0
+    v939 ImmData(36)                                      -> x0
     v940 Load { addr=v939, disp=0, kind=I32, volatile pc_rel } -> x0
     v941 BinopI { op=add, lhs=v940, rhs_imm=64 }          -> x2
     v942 Extend { value=v941, kind=I32, nsw }             -> x0
@@ -1538,9 +1538,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v918 BinopI { op=lt, lhs=v916, rhs_imm=64 }           -> x0
     terminator Bz { cond=v918, target=b60, fall=b56 }   (exit_acc=v918)
   block 60  start_pc=0
-    v927 ImmData(72)                                      -> x7
+    v927 ImmData(80)                                      -> x7
     v928 Imm(64)                                          -> x0
-    v929 ImmData(32)                                      -> x0
+    v929 ImmData(36)                                      -> x0
     v930 Load { addr=v929, disp=0, kind=I32, volatile pc_rel } -> x0
     v931 BinopI { op=add, lhs=v930, rhs_imm=64 }          -> x6
     v932 Extend { value=v931, kind=I32, nsw }             -> x0
@@ -1549,9 +1549,9 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v935 Imm(0)                                           -> x1
     terminator Bnz { cond=v934, target=b62, fall=b61 }   (exit_acc=v934)
   block 61  start_pc=0
-    v944 ImmData(72)                                      -> x7
+    v944 ImmData(80)                                      -> x7
     v945 Imm(0)                                           -> x0
-    v946 ImmData(32)                                      -> x0
+    v946 ImmData(36)                                      -> x0
     v947 Load { addr=v946, disp=0, kind=I32, volatile pc_rel } -> x6
     v948 Extend { value=v947, kind=I32, nsw }             -> x0
     v949 Call { target_pc=17, args=[v944, v947], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0

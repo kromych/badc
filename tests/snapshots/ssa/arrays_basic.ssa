@@ -211,7 +211,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v176 LifetimeEnd(-3)                                  -> -
     terminator Return(v172)   (exit_acc=v172)
   block 7  start_pc=0
-    v177 ImmData(40)                                      -> x1
+    v177 ImmData(48)                                      -> x1
     v178 Imm(0)                                           -> x1
     v179 Imm(104)                                         -> x1
     v180 Store { addr=v177, disp=0, value=v179, kind=I8 pc_rel } -> -
@@ -224,14 +224,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v187 Store { addr=v177, disp=2, value=v88, kind=I8 pc_rel } -> -
     v188 Imm(104)                                         -> x0
     v189 Imm(0)                                           -> x0
-    v190 ImmData(40)                                      -> x0
+    v190 ImmData(48)                                      -> x0
     v191 Imm(1)                                           -> x0
     v192 BinopI { op=add, lhs=v177, rhs_imm=1 }           -> x0
     v193 Imm(105)                                         -> x0
     v194 Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v194)
   block 8  start_pc=0
-    v205 ImmData(40)                                      -> x0
+    v205 ImmData(48)                                      -> x0
     v206 Imm(2)                                           -> x0
     v207 BinopI { op=add, lhs=v177, rhs_imm=2 }           -> x0
     v208 Load { addr=v177, disp=2, kind=I8 pc_rel }       -> x0

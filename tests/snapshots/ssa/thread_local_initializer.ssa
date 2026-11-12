@@ -12,7 +12,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
-    v5   TlsAddr(8)                                       -> x2
+    v5   TlsAddr(4)                                       -> x2
     v6   Load { addr=v5, disp=0, kind=I32 }               -> x2
     v7   BinopI { op=ne, lhs=v6, rhs_imm=-3 }             -> x6
     terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
@@ -20,7 +20,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v8   Imm(2)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
   block 4  start_pc=0
-    v9   TlsAddr(16)                                      -> x6
+    v9   TlsAddr(8)                                       -> x6
     v10  Load { addr=v9, disp=0, kind=I32 }               -> x6
     v11  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x7
     terminator Bz { cond=v10, target=b6, fall=b5 }   (low word)   (exit_acc=v11)
@@ -30,7 +30,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v13  TlsAddr(0)                                       -> x6
     v14  Load { addr=v1, disp=0, kind=I32 }               -> x6
-    v15  TlsAddr(8)                                       -> x6
+    v15  TlsAddr(4)                                       -> x6
     v16  Load { addr=v5, disp=0, kind=I32 }               -> x6
     v17  Binop { op=add, lhs=v2, rhs=v6 }                 -> x1
     v18  Extend { value=v17, kind=I32, nsw }              -> x2

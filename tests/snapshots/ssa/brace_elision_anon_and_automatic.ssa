@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(4)                                       -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(1)                                           -> x0
     v4   Imm(0)                                           -> x0
@@ -12,7 +12,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v6   Imm(0)                                           -> x0
     v7   Imm(1)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   ImmData(8)                                       -> x0
+    v9   ImmData(4)                                       -> x0
     v10  Imm(1)                                           -> x0
     v11  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x0
     v12  Imm(0)                                           -> x0
@@ -22,7 +22,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  ImmData(8)                                       -> x0
+    v19  ImmData(4)                                       -> x0
     v20  BinopI { op=add, lhs=v19, rhs_imm=3 }            -> x0
     v21  Imm(64)                                          -> x0
     v22  Imm(0)                                           -> x0
@@ -31,12 +31,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
-    v28  ImmData(16)                                      -> x0
+    v28  ImmData(8)                                       -> x0
     v29  Imm(1)                                           -> x0
     v30  Imm(0)                                           -> x0
     v31  Imm(1)                                           -> x0
     v32  Imm(0)                                           -> x0
-    v33  ImmData(16)                                      -> x0
+    v33  ImmData(8)                                       -> x0
     v34  BinopI { op=add, lhs=v33, rhs_imm=4 }            -> x0
     v35  Imm(2)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -45,7 +45,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
     v41  Imm(0)                                           -> x0
-    v42  ImmData(16)                                      -> x0
+    v42  ImmData(8)                                       -> x0
     v43  BinopI { op=add, lhs=v42, rhs_imm=8 }            -> x0
     v44  Imm(3)                                           -> x0
     v45  Imm(0)                                           -> x0
@@ -112,7 +112,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=20
     v106 LocalAddr(-20)                                   -> x3
     v107 BinopI { op=add, lhs=v106, rhs_imm=40 }          -> x3
     v108 StoreLocal { off=-20, disp=40, value=v55, kind=I32 } -> -
-    v109 ImmData(32)                                      -> x7
+    v109 ImmData(20)                                      -> x7
     v110 LocalAddr(-20)                                   -> x3
     v111 BinopI { op=add, lhs=v110, rhs_imm=48 }          -> x3
     v112 Mcpy { dst=v111, src=v109, size=8, align=4 }     -> -

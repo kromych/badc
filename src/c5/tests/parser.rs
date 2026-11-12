@@ -1306,7 +1306,7 @@ fn thread_local_compiles_to_op_tlslea() {
         let p = super::Compiler::with_target(super::with_prelude(src), target)
             .compile()
             .unwrap_or_else(|e| panic!("`{target:?}` compile failed: {e}"));
-        assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot for {target:?}");
+        assert_eq!(p.tls_data.len(), 4, "single 4-byte TLS slot for {target:?}");
         super::super::object::emit_native_single_tu_for_test(
             &p,
             target,

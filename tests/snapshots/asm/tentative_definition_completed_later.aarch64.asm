@@ -81,7 +81,7 @@ Disassembly of section .text:
                	mov	x8, #0x6                // =6
                	str	x8, [x2, #0x10]
                	adrp	x9, <page>
-               	str	w0, [x9, #0x98]
+               	str	w0, [x9, #0x88]
                	ldr	x1, [x1, #0x10]
                	cmp	x1, #0x4
                	b.ne	<addr>
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	strb	w1, [x4, #0x17]
                	adrp	x2, <page>
-               	str	w0, [x2, #0xa8]
+               	str	w0, [x2, #0x90]
                	ldrb	w2, [x4, #0x17]
                	cmp	w2, #0x7
                	b.ne	<addr>
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	mov	x4, #0x8                // =8
                	str	x4, [x2, #0x10]
                	adrp	x6, <page>
-               	str	w0, [x6, #0xb8]
+               	str	w0, [x6, #0x98]
                	ldr	x2, [x2, #0x10]
                	cmp	x2, #0x8
                	b.eq	<addr>
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	mov	x6, #0x9                // =9
                	str	x6, [x2, #0x10]
                	adrp	x7, <page>
-               	str	w0, [x7, #0xc8]
+               	str	w0, [x7, #0xa0]
                	ldr	x2, [x2, #0x10]
                	cmp	x2, #0x9
                	b.eq	<addr>
@@ -127,8 +127,8 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	adrp	x7, <page>
                	mov	x1, #0xb                // =11
-               	strb	w1, [x7, #0xe0]
-               	strb	w1, [x2, #0xd0]
+               	strb	w1, [x7, #0xa6]
+               	strb	w1, [x2, #0xa4]
                	and	x2, x3, #0x1f
                	cbnz	w2, <addr>
                	ldr	x2, [x3, #0x8]
@@ -138,26 +138,26 @@ Disassembly of section .text:
                	ret
                	adrp	x2, <page>
                	mov	x3, #0x100000000        // =4294967296
-               	str	x3, [x2, #0xe8]
+               	str	x3, [x2, #0x180]
                	adrp	x3, <page>
-               	str	w0, [x3, #0xf0]
-               	ldr	x3, [x2, #0xe8]
+               	str	w0, [x3, #0xa8]
+               	ldr	x3, [x2, #0x180]
                	mov	x17, #0x100000000       // =4294967296
                	cmp	x3, x17
                	b.eq	<addr>
                	mov	x0, x6
                	ret
                	mov	x3, #-0x1               // =-1
-               	str	x3, [x2, #0xe8]
+               	str	x3, [x2, #0x180]
                	adrp	x2, <page>
-               	strb	w5, [x2, #0xf8]
+               	strb	w5, [x2, #0xac]
                	adrp	x3, <page>
                	mov	x4, #0xc                // =12
-               	strb	w4, [x3, #0x100]
-               	ldrb	w2, [x2, #0xf8]
+               	strb	w4, [x3, #0xad]
+               	ldrb	w2, [x2, #0xac]
                	cmp	w2, #0x2
                	b.ne	<addr>
-               	ldrb	w2, [x3, #0x100]
+               	ldrb	w2, [x3, #0xad]
                	cmp	w2, #0xc
                	b.eq	<addr>
                	mov	x0, x1

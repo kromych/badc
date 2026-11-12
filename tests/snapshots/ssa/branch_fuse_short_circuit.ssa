@@ -4,11 +4,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(40)                                      -> x0
+    v1   ImmData(32)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32, volatile pc_rel } -> x0
     terminator Bz { cond=v2, target=b14, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
-    v3   ImmData(32)                                      -> x0
+    v3   ImmData(28)                                      -> x0
     v4   Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v3)
   block 2  start_pc=0
@@ -41,7 +41,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v26  Imm(1)                                           -> x0
     v27  ImmData(8)                                       -> x0
     v28  Load { addr=v10, disp=0, kind=I64, volatile pc_rel } -> x0
-    v29  ImmData(32)                                      -> x1
+    v29  ImmData(28)                                      -> x1
     v30  ImmData(16)                                      -> x1
     v31  Load { addr=v13, disp=0, kind=I64, volatile pc_rel } -> x1
     v32  ImmData(24)                                      -> x1

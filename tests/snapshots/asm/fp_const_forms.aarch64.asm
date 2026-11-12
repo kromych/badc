@@ -369,13 +369,13 @@ Disassembly of section .text:
                	ldp	d8, d9, [sp], #0x30
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x28]
+               	ldrsw	x0, [x0, #0x24]
                	bl	<addr>
                	fmov	d1, #2.50000000
                	fcmp	d0, d1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x28]
+               	ldrsw	x0, [x0, #0x24]
                	cmp	w0, #0x0
                	cset	x0, eq
                	bl	<addr>
@@ -388,13 +388,13 @@ Disassembly of section .text:
                	ldp	d8, d9, [sp], #0x30
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x28]
+               	ldrsw	x0, [x0, #0x24]
                	bl	<addr>
                	fmov	s1, #-0.25000000
                	fcmp	s0, s1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x28]
+               	ldrsw	x0, [x0, #0x24]
                	cmp	w0, #0x0
                	cset	x0, eq
                	bl	<addr>

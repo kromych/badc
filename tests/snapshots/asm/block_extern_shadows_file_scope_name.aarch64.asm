@@ -34,7 +34,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x28]
+               	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

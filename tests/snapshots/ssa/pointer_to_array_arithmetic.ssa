@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(16)                                          -> x1
     v3   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
     v4   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x6
@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v6   Imm(1)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   ImmData(8)                                       -> x2
+    v7   ImmData(16)                                      -> x2
     v8   Imm(0)                                           -> x2
     v9   Imm(0)                                           -> x2
     v10  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
@@ -27,7 +27,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v15  Imm(2)                                           -> x0
     terminator Return(v15)   (exit_acc=v15)
   block 4  start_pc=0
-    v16  ImmData(8)                                       -> x0
+    v16  ImmData(16)                                      -> x0
     v17  Imm(24)                                          -> x0
     v18  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
     v19  Imm(8)                                           -> x0
@@ -62,7 +62,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v39)   (exit_acc=v39)
   block 9  start_pc=0
     v40  Imm(0)                                           -> x0
-    v41  ImmData(8)                                       -> x0
+    v41  ImmData(16)                                      -> x0
     v42  Binop { op=sub, lhs=v10, rhs=v1 }                -> x1
     v43  Imm(8)                                           -> x0
     v44  BinopI { op=shr, lhs=v13, rhs_imm=63 }           -> x0
@@ -75,7 +75,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v49  Imm(5)                                           -> x0
     terminator Return(v49)   (exit_acc=v49)
   block 11  start_pc=0
-    v50  ImmData(8)                                       -> x0
+    v50  ImmData(16)                                      -> x0
     v51  Imm(0)                                           -> x1
     v52  Imm(0)                                           -> x1
     v53  BinopI { op=add, lhs=v50, rhs_imm=8 }            -> x1
@@ -103,7 +103,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v71  Imm(6)                                           -> x0
     terminator Return(v71)   (exit_acc=v71)
   block 14  start_pc=0
-    v72  ImmData(8)                                       -> x1
+    v72  ImmData(16)                                      -> x1
     v73  Imm(32)                                          -> x1
     v74  BinopI { op=add, lhs=v50, rhs_imm=32 }           -> x1
     v75  Imm(0)                                           -> x2

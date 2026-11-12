@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(32)                                      -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(16)                                          -> x1
     v3   Imm(15)                                          -> x1
     v4   BinopI { op=and, lhs=v1, rhs_imm=15 }            -> x0
@@ -17,7 +17,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   LifetimeEnd(-16)                                 -> -
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v10  ImmData(112)                                     -> x0
+    v10  ImmData(96)                                      -> x0
     v11  Imm(16)                                          -> x1
     v12  Imm(15)                                          -> x1
     v13  BinopI { op=and, lhs=v10, rhs_imm=15 }           -> x0
@@ -30,7 +30,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v18  LifetimeEnd(-16)                                 -> -
     terminator Return(v17)   (exit_acc=v17)
   block 4  start_pc=0
-    v19  ImmData(144)                                     -> x0
+    v19  ImmData(128)                                     -> x0
     v20  Imm(16)                                          -> x1
     v21  Imm(15)                                          -> x1
     v22  BinopI { op=and, lhs=v19, rhs_imm=15 }           -> x0
@@ -43,7 +43,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v27  LifetimeEnd(-16)                                 -> -
     terminator Return(v26)   (exit_acc=v26)
   block 6  start_pc=0
-    v28  ImmData(224)                                     -> x0
+    v28  ImmData(208)                                     -> x0
     v29  Imm(16)                                          -> x1
     v30  Imm(15)                                          -> x1
     v31  BinopI { op=and, lhs=v28, rhs_imm=15 }           -> x0
@@ -56,7 +56,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v36  LifetimeEnd(-16)                                 -> -
     terminator Return(v35)   (exit_acc=v35)
   block 8  start_pc=0
-    v37  ImmData(304)                                     -> x0
+    v37  ImmData(288)                                     -> x0
     v38  Imm(16)                                          -> x1
     v39  Imm(15)                                          -> x1
     v40  BinopI { op=and, lhs=v37, rhs_imm=15 }           -> x0
@@ -99,14 +99,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v69  Imm(0)                                           -> x1
     terminator Jmp(b13)   (exit_acc=v69)
   block 13  start_pc=0
-    v72  ImmData(32)                                      -> x1
+    v72  ImmData(16)                                      -> x1
     v73  Load { addr=v1, disp=0, kind=I64 pc_rel }        -> x1
     v74  Extend { value=v73, kind=I32 }                   -> x2
     v75  BinopI { op=ne, lhs=v73, rhs_imm=1 }             -> x1
     v76  Imm(0)                                           -> x2
     terminator Bnz { cond=v75, target=b15, fall=b14 }   (exit_acc=v75)
   block 14  start_pc=0
-    v77  ImmData(112)                                     -> x1
+    v77  ImmData(96)                                      -> x1
     v78  Load { addr=v10, disp=0, kind=I64 pc_rel }       -> x1
     v79  Extend { value=v78, kind=I32 }                   -> x2
     v80  BinopI { op=ne, lhs=v78, rhs_imm=2 }             -> x1
@@ -119,14 +119,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v85  LifetimeEnd(-16)                                 -> -
     terminator Return(v84)   (exit_acc=v84)
   block 16  start_pc=0
-    v86  ImmData(144)                                     -> x1
+    v86  ImmData(128)                                     -> x1
     v87  Load { addr=v19, disp=0, kind=I64 pc_rel }       -> x1
     v88  Extend { value=v87, kind=I32 }                   -> x2
     v89  BinopI { op=ne, lhs=v87, rhs_imm=3 }             -> x1
     v90  Imm(0)                                           -> x2
     terminator Bnz { cond=v89, target=b18, fall=b17 }   (exit_acc=v89)
   block 17  start_pc=0
-    v91  ImmData(224)                                     -> x1
+    v91  ImmData(208)                                     -> x1
     v92  Load { addr=v91, disp=0, kind=I64 pc_rel }       -> x1
     v93  Extend { value=v92, kind=I32 }                   -> x2
     v94  BinopI { op=ne, lhs=v92, rhs_imm=4 }             -> x1
@@ -139,7 +139,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v99  LifetimeEnd(-16)                                 -> -
     terminator Return(v98)   (exit_acc=v98)
   block 19  start_pc=0
-    v100 ImmData(304)                                     -> x1
+    v100 ImmData(288)                                     -> x1
     v101 Load { addr=v100, disp=0, kind=I64 pc_rel }      -> x1
     v102 Extend { value=v101, kind=I32 }                  -> x2
     v103 BinopI { op=ne, lhs=v101, rhs_imm=6 }            -> x1
@@ -149,14 +149,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v105 LifetimeEnd(-16)                                 -> -
     terminator Return(v104)   (exit_acc=v104)
   block 21  start_pc=0
-    v106 ImmData(8)                                       -> x1
+    v106 ImmData(1)                                       -> x1
     v107 Imm(0)                                           -> x1
     v108 Load { addr=v106, disp=0, kind=I8 pc_rel }       -> x1
     v109 BinopI { op=ne, lhs=v108, rhs_imm=49 }           -> x1
     v110 Imm(0)                                           -> x2
     terminator Bnz { cond=v109, target=b23, fall=b22 }   (exit_acc=v109)
   block 22  start_pc=0
-    v111 ImmData(288)                                     -> x1
+    v111 ImmData(272)                                     -> x1
     v112 Imm(0)                                           -> x1
     v113 Load { addr=v111, disp=0, kind=I8 pc_rel }       -> x1
     v114 BinopI { op=ne, lhs=v113, rhs_imm=53 }           -> x1

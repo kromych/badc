@@ -3266,20 +3266,9 @@ impl Compiler {
             );
         }
 
-        // Reserve the first 8 bytes of `.data` so no symbol's
-        // offset is zero. The c5 dialect models pointers as
-        // raw data offsets (no per-segment base in the VM, and
-        // `data_vmaddr` is the base on native targets), so a
-        // global at offset 0 would be indistinguishable from
-        // the integer literal `0` -- which c5 uses for NULL.
-        // Reserving the first 8 bytes pushes every actual
-        // global / string literal to offset >= 8, preserving
-        // the `pointer != 0 <=> non-NULL` invariant that
-        // `int *p = &x; if (p == 0) ...` style code expects.
-        // Native binaries are unaffected (the bytes are just
-        // an unused prefix in `.data`); the VM's address space
-        // gains 8 bytes of reserved padding at offset 0.
-        let data: Vec<u8> = alloc::vec![0u8; 8];
+        // Pointers are data offsets in the interpreter and in constant
+        // folding, so no object may sit at offset 0, the null pointer.
+        let data: Vec<u8> = alloc::vec![0u8; crate::c5::layout::DATA_GUARD];
 
         let lex = {
             let mut l = Lexer::new(preprocessed);

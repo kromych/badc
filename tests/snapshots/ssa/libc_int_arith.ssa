@@ -55,7 +55,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v49  Imm(0)                                           -> x0
     v50  Imm(-17)                                         -> x0
     v51  Imm(0)                                           -> x0
-    v52  ImmData(8)                                       -> x7
+    v52  ImmData(1)                                       -> x7
     v53  Imm(0)                                           -> x0
     v54  Imm(10)                                          -> x0
     v55  Imm(0)                                           -> x6
@@ -68,7 +68,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v72  LifetimeEnd(0)                                   -> -
     terminator Return(v71)   (exit_acc=v71)
   block 2  start_pc=0
-    v73  ImmData(14)                                      -> x7
+    v73  ImmData(7)                                       -> x7
     v74  Imm(0)                                           -> x0
     v75  Imm(16)                                          -> x0
     v76  Imm(0)                                           -> x6

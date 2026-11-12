@@ -561,7 +561,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     terminator Bz { cond=v654, target=b63, fall=b60 }   (exit_acc=v654)
   block 63  start_pc=0
     v661 Imm(1)                                           -> x0
-    v662 ImmData(32)                                      -> x2
+    v662 ImmData(33)                                      -> x2
     v663 Imm(520)                                         -> x0
     v664 Imm(9)                                           -> x1
     v665 Imm(0)                                           -> x0
@@ -585,8 +585,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v675 BinopI { op=ult, lhs=v673, rhs_imm=520 }         -> x6
     terminator Bz { cond=v675, target=b66, fall=b64 }   (exit_acc=v675)
   block 66  start_pc=0
-    v274 ImmData(552)                                     -> x1
-    v275 ImmData(32)                                      -> x2
+    v274 ImmData(553)                                     -> x1
+    v275 ImmData(33)                                      -> x2
     v276 Mcpy { dst=v274, src=v275, size=520, align=1 }   -> -
     v277 Imm(520)                                         -> x0
     v278 Imm(0)                                           -> x0
@@ -607,7 +607,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     terminator Bz { cond=v688, target=b70, fall=b67 }   (exit_acc=v688)
   block 70  start_pc=0
     v695 Imm(1)                                           -> x0
-    v696 ImmData(1072)                                    -> x2
+    v696 ImmData(1073)                                    -> x2
     v697 Imm(524)                                         -> x0
     v698 Imm(10)                                          -> x1
     v699 Imm(0)                                           -> x0
@@ -631,8 +631,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v724 BinopI { op=ult, lhs=v722, rhs_imm=524 }         -> x6
     terminator Bz { cond=v724, target=b73, fall=b71 }   (exit_acc=v724)
   block 73  start_pc=0
-    v279 ImmData(1600)                                    -> x1
-    v280 ImmData(1072)                                    -> x2
+    v279 ImmData(1597)                                    -> x1
+    v280 ImmData(1073)                                    -> x2
     v281 Mcpy { dst=v279, src=v280, size=524, align=1 }   -> -
     v282 Imm(524)                                         -> x0
     v283 Imm(0)                                           -> x0
@@ -653,7 +653,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     terminator Bz { cond=v737, target=b77, fall=b74 }   (exit_acc=v737)
   block 77  start_pc=0
     v744 Imm(1)                                           -> x0
-    v745 ImmData(2128)                                    -> x2
+    v745 ImmData(2121)                                    -> x2
     v746 Imm(1000)                                        -> x0
     v747 Imm(11)                                          -> x1
     v748 Imm(0)                                           -> x0
@@ -677,8 +677,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v773 BinopI { op=ult, lhs=v771, rhs_imm=1000 }        -> x6
     terminator Bz { cond=v773, target=b80, fall=b78 }   (exit_acc=v773)
   block 80  start_pc=0
-    v284 ImmData(3128)                                    -> x1
-    v285 ImmData(2128)                                    -> x2
+    v284 ImmData(3121)                                    -> x1
+    v285 ImmData(2121)                                    -> x2
     v286 Mcpy { dst=v284, src=v285, size=1000, align=1 }  -> -
     v287 BinopI { op=add, lhs=v284, rhs_imm=999 }         -> x0
     v288 Load { addr=v284, disp=999, kind=I8 pc_rel }     -> x0
@@ -691,8 +691,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v295 Imm(0)                                           -> x6
     terminator Bz { cond=v291, target=b95, fall=b81 }   (low word)   (exit_acc=v294)
   block 81  start_pc=0
-    v296 ImmData(2128)                                    -> x0
-    v297 ImmData(3128)                                    -> x0
+    v296 ImmData(2121)                                    -> x0
+    v297 ImmData(3121)                                    -> x0
     v298 Imm(1000)                                        -> x0
     v299 Imm(0)                                           -> x0
     terminator Jmp(b84)   (exit_acc=v299)
@@ -712,7 +712,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     terminator Bz { cond=v786, target=b85, fall=b82 }   (exit_acc=v786)
   block 85  start_pc=0
     v793 Imm(1)                                           -> x0
-    v794 ImmData(4128)                                    -> x2
+    v794 ImmData(4121)                                    -> x2
     v795 Imm(4104)                                        -> x0
     v796 Imm(12)                                          -> x1
     v797 Imm(0)                                           -> x0
@@ -736,8 +736,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v807 BinopI { op=ult, lhs=v805, rhs_imm=4104 }        -> x6
     terminator Bz { cond=v807, target=b88, fall=b86 }   (exit_acc=v807)
   block 88  start_pc=0
-    v318 ImmData(8232)                                    -> x1
-    v319 ImmData(4128)                                    -> x2
+    v318 ImmData(8225)                                    -> x1
+    v319 ImmData(4121)                                    -> x2
     v320 Mcpy { dst=v318, src=v319, size=4104, align=1 }  -> -
     v321 Imm(4104)                                        -> x0
     v322 Imm(0)                                           -> x0

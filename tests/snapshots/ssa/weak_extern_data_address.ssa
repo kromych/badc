@@ -51,12 +51,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v27  ImmData(0)                                       -> x0
     v28  ImmData(0)                                       -> x0
     v29  Imm(0)                                           -> x0
-    v30  ImmData(24)                                      -> x0
+    v30  ImmData(16)                                      -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(44)                                          -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  ImmData(24)                                      -> x0
+    v35  ImmData(16)                                      -> x0
     v36  Imm(4)                                           -> x0
     v37  BinopI { op=add, lhs=v35, rhs_imm=4 }            -> x0
     v38  Imm(55)                                          -> x0

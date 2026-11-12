@@ -110,7 +110,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	w0, [x0, #0x50]
+               	ldr	w0, [x0, #0x48]
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
                	cmp	w0, w17

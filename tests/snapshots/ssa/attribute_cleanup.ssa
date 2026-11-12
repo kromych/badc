@@ -93,14 +93,14 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v77  ImmData(272)                                     -> x0
     v78  Imm(0)                                           -> x0
     v79  Store { addr=v36, disp=0, value=v78, kind=I32 pc_rel } -> -
-    v80  ImmData(280)                                     -> x1
+    v80  ImmData(276)                                     -> x1
     v81  Imm(1)                                           -> x1
     v82  Store { addr=v80, disp=0, value=v81, kind=I32 pc_rel } -> -
     v83  Imm(0)                                           -> x1
     v84  StoreLocal { off=-1, value=v78, kind=I32 }       -> -
     v85  Load { addr=v80, disp=0, kind=I32 pc_rel }       -> x6
     v86  LocalAddr(-1)                                    -> x1
-    v87  ImmData(280)                                     -> x1
+    v87  ImmData(276)                                     -> x1
     v88  Imm(0)                                           -> x1
     v89  Store { addr=v80, disp=0, value=v78, kind=I32 pc_rel } -> -
     v90  Imm(700)                                         -> x1

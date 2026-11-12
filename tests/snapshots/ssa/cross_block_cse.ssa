@@ -446,7 +446,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v346 Imm(45)                                          -> x0
     v347 Imm(45)                                          -> x0
     v348 Imm(45)                                          -> x0
-    v349 ImmData(64)                                      -> x0
+    v349 ImmData(68)                                      -> x0
     v350 Load { addr=v349, disp=0, kind=I32 pc_rel }      -> x0
     v351 BinopI { op=add, lhs=v350, rhs_imm=1 }           -> x0
     v352 Store { addr=v349, disp=0, value=v351, kind=I32 pc_rel } -> -
@@ -463,7 +463,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v363 Imm(135)                                         -> x1
     v364 Imm(135)                                         -> x1
     v365 Imm(0)                                           -> x1
-    v366 ImmData(64)                                      -> x1
+    v366 ImmData(68)                                      -> x1
     v367 Extend { value=v351, kind=I32 }                  -> x0
     v368 BinopI { op=ne, lhs=v367, rhs_imm=1 }            -> x0
     terminator Bz { cond=v368, target=b18, fall=b17 }   (exit_acc=v368)

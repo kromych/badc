@@ -2651,7 +2651,7 @@ impl Compiler {
             req_align.max(self.align_of_type(ty) as i64)
         };
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
-        let decl_align = want_align.max(8);
+        let decl_align = want_align.max(1);
         if decl_align > 8 && defines {
             if thread_local {
                 self.check_thread_local_align(want_align, self.lex.line)?;
@@ -2744,7 +2744,8 @@ impl Compiler {
         }
         if thread_local {
             let obj_align = self.symbols[id_idx].data_align.max(1) as usize;
-            let align = self.data_placement_align(ty, decl_align.max(obj_align));
+            let bytes = self.symbols[id_idx].reserved_data_bytes;
+            let align = self.data_placement_align(ty, decl_align.max(obj_align), bytes, true);
             self.move_to_thread_local_storage(id_idx, align)?;
         }
         Ok(())
@@ -2781,8 +2782,7 @@ impl Compiler {
                 self.symbols[id_idx].array_dims[0] = final_size / inner_product;
             }
         }
-        let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-        let aligned = ((total_bytes + 7) / 8) * 8;
+        let aligned = (self.size_of_type(ty) as i64) * final_size;
         // C99 6.9.2: a prior tentative definition already
         // reserved storage; reuse it so references emitted
         // before this definition observe the initialized object,
@@ -2797,7 +2797,8 @@ impl Compiler {
         {
             self.symbols[id_idx].val
         } else {
-            let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+            let want = decl_align.max(obj_align as usize);
+            let align = self.data_placement_align(ty, want, aligned, true);
             let fresh = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
             self.note_global_relocated(id_idx, was_tentative_glo, fresh);
             self.symbols[id_idx].reserved_data_bytes = aligned;
@@ -2860,9 +2861,8 @@ impl Compiler {
         if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
             *first = count;
         }
-        let elem = self.size_of_type(ty) as i64;
-        let aligned = (((elem + 7) / 8) * 8).max(8);
-        let align = self.data_placement_align(ty, decl_align);
+        let aligned = (self.size_of_type(ty) as i64).max(1);
+        let align = self.data_placement_align(ty, decl_align, aligned, true);
         let store = if thread_local {
             DataStore::ThreadLocal
         } else {
@@ -2919,7 +2919,8 @@ impl Compiler {
         {
             self.symbols[id_idx].val
         } else {
-            self.align_data_to(decl_align.max(obj_align as usize));
+            let want = decl_align.max(obj_align as usize);
+            self.align_data_to(self.data_placement_align(ty, want, needed, true));
             let fresh = self.data.len() as i64;
             self.note_global_relocated(id_idx, was_tentative_glo, fresh);
             self.symbols[id_idx].reserved_data_bytes = needed;
@@ -2947,26 +2948,17 @@ impl Compiler {
         // scalar encoding would otherwise lose it).
         self.symbols[id_idx].is_zero_len_array = total == 0;
         self.reserve_zero_length_array_slot(id_idx);
-        // Pad data to 8-byte alignment so the next
-        // global doesn't land on an odd offset.
-        while !self.data.len().is_multiple_of(8) {
-            self.data.push(0);
-        }
         self.symbols[id_idx].has_initializer = true;
         self.symbols[id_idx].defined_here = true;
         Ok(())
     }
 
-    /// Bytes a file-scope object of `ty` (`array_size` elements when
-    /// positive) reserves: whole 8-byte slots, and one slot for a zero-sized
-    /// object (an empty struct, GNU) so no two objects share a start offset.
-    fn object_storage_bytes(&self, ty: i64, array_size: i64) -> i64 {
-        if array_size > 0 {
-            let total = (self.size_of_type(ty) as i64) * array_size;
-            (((total + 7) / 8) * 8).max(8)
-        } else {
-            (self.slots_of_type(ty) * 8).max(8)
-        }
+    /// Bytes a static-storage object of `ty` (`array_size` elements when
+    /// positive) reserves: its size, and one byte for a zero-sized object
+    /// (an empty struct, GNU) so no two objects share a start offset.
+    pub(super) fn object_storage_bytes(&self, ty: i64, array_size: i64) -> i64 {
+        let elem = self.size_of_type(ty) as i64;
+        (elem * array_size.max(1)).max(1)
     }
 
     /// An object of known size: reserve or reuse its storage, then take the
@@ -2993,7 +2985,7 @@ impl Compiler {
         let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
         if fam_tail > 0 {
             self.symbols[id_idx].fam_init_bytes = fam_tail;
-            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+            bytes += fam_tail;
         }
         // C99 6.9.2: `extern T x;` is no tentative definition. Storage is still
         // reserved so the single-unit compile can write through the name; a
@@ -3024,7 +3016,8 @@ impl Compiler {
         // would add a phantom per-unit copy (one TLS block
         // per object), breaking the shared-state semantics
         // and the multi-object link.
-        let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+        let want = decl_align.max(obj_align as usize);
+        let align = self.data_placement_align(ty, want, bytes, array_size > 0);
         // Nor does an `extern` object aligned past the image's limit; it binds to a definition.
         let extern_tls_ref = was_extern_only_decl
             && (thread_local
@@ -3218,7 +3211,7 @@ impl Compiler {
         let (ty, thread_local) = (s.type_, s.is_thread_local);
         let bytes = self.object_storage_bytes(ty, s.array_size);
         let want = (s.data_align.max(1) as usize).max(self.align_of_type(ty));
-        let align = self.data_placement_align(ty, want);
+        let align = self.data_placement_align(ty, want, bytes, s.array_size > 0);
         let s = &mut self.symbols[id_idx];
         s.data_align = want as i64;
         if bytes <= s.reserved_data_bytes && s.val % align as i64 == 0 {

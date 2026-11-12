@@ -32,17 +32,17 @@ Disassembly of section .text:
 <func_10>:
                	adrp	x1, <page>
                	adrp	x3, <page>
-               	ldrsw	x0, [x1, #0x60]
+               	ldrsw	x0, [x1, #0x50]
                	cmp	w0, #0x5
                	b.gt	<addr>
                	ldrsw	x0, [x2]
                	str	w0, [x2]
-               	ldrsw	x0, [x3, #0x68]
+               	ldrsw	x0, [x3, #0x54]
                	cbnz	x0, <addr>
-               	ldrsw	x0, [x1, #0x60]
+               	ldrsw	x0, [x1, #0x50]
                	add	x0, x0, #0x1
-               	str	w0, [x1, #0x60]
-               	ldrsw	x0, [x1, #0x60]
+               	str	w0, [x1, #0x50]
+               	ldrsw	x0, [x1, #0x50]
                	cmp	w0, #0x5
                	b.le	<addr>
                	adrp	x0, <page>
@@ -68,10 +68,10 @@ Disassembly of section .text:
                	mov	x4, x1
                	bl	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x70]
+               	ldrsw	x0, [x0, #0x58]
                	cbnz	w0, <addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x60]
+               	ldrsw	x0, [x0, #0x50]
                	cmp	w0, #0x6
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

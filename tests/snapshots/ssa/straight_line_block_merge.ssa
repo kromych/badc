@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmData(80)                                      -> x1
+    v3   ImmData(84)                                      -> x1
     v4   Load { addr=v3, disp=0, kind=I32, volatile pc_rel } -> x1
     v5   Imm(0)                                           -> x2
     v6   Binop { op=add, lhs=v4, rhs=v1 }                 -> x1
@@ -1574,7 +1574,7 @@ fn ent_pc=22 n_params=0 variadic=false locals=0
     v1109 Imm(0)                                           -> x0
     terminator Bnz { cond=v683, target=b51, fall=b47 }   (low word)   (exit_acc=v1108)
   block 47  start_pc=0
-    v1110 ImmData(80)                                      -> x0
+    v1110 ImmData(84)                                      -> x0
     v1111 Load { addr=v1110, disp=0, kind=I32, volatile pc_rel } -> x0
     v1112 Extend { value=v689, kind=I32 }                  -> x2
     v1113 Binop { op=eq, lhs=v1111, rhs=v689 }             -> x0

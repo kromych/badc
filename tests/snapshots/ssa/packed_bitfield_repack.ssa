@@ -172,7 +172,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v188 Imm(0)                                           -> x2
     v189 Imm(0)                                           -> x2
     v190 Imm(0)                                           -> x2
-    v191 ImmData(8)                                       -> x2
+    v191 ImmData(1)                                       -> x2
     v192 Load { addr=v191, disp=0, kind=U8 pc_rel }       -> x2
     v193 BinopI { op=shl, lhs=v192, rhs_imm=56 }          -> x6
     v194 Extend { value=v192, kind=I8 }                   -> x2
@@ -180,7 +180,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v196 Imm(0)                                           -> x6
     terminator Bnz { cond=v195, target=b6, fall=b5 }   (exit_acc=v195)
   block 5  start_pc=0
-    v209 ImmData(8)                                       -> x2
+    v209 ImmData(1)                                       -> x2
     v210 BinopI { op=add, lhs=v191, rhs_imm=1 }           -> x2
     v211 Load { addr=v191, disp=1, kind=I8 pc_rel }       -> x2
     v212 BinopI { op=ne, lhs=v211, rhs_imm=7 }            -> x2

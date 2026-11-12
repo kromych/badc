@@ -29,14 +29,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	%eax, <rip> # <addr>
                	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
+               	addq	$-0x8, %rcx
                	movl	(%rcx), %edx
                	cmpl	$0x7, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	%fs:0x0, %rsi
-               	addq	$-0x8, %rsi
+               	addq	$-0x4, %rsi
                	movl	(%rsi), %esi
                	cmpl	$-0x3, %esi
                	je	<addr>

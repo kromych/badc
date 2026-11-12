@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v8   Imm(0)                                           -> x0
     v9   StoreLocal { off=-1, value=v8, kind=I32 }        -> -
     v10  LocalAddr(-1)                                    -> x1
-    v11  ImmData(8)                                       -> x1
+    v11  ImmData(1)                                       -> x1
     v12  StoreLocal { off=-1, value=v11, kind=I64 }       -> -
     v13  LocalAddr(-1)                                    -> x1
     v14  LoadLocal { off=-1, kind=I64 }                   -> x1

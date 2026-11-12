@@ -21,25 +21,25 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x2c]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x38]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x40]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x48]
+               	ldrsw	x0, [x0, #0x38]
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

@@ -150,7 +150,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 20  start_pc=0
     v97  TlsAddr(56)                                      -> x1
     v98  Load { addr=v97, disp=0, kind=I64 }              -> x1
-    v99  ImmData(48)                                      -> x6
+    v99  ImmData(44)                                      -> x6
     v100 Binop { op=ne, lhs=v98, rhs=v99 }                -> x7
     v101 Imm(0)                                           -> x8
     terminator Bnz { cond=v100, target=b22, fall=b21 }   (exit_acc=v100)
@@ -193,7 +193,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v122)   (exit_acc=v122)
   block 29  start_pc=0
     v123 TlsAddr(48)                                      -> x1
-    v124 ImmData(48)                                      -> x1
+    v124 ImmData(44)                                      -> x1
     v125 Store { addr=v84, disp=0, value=v99, kind=I64 }  -> -
     v126 Load { addr=v84, disp=0, kind=I64 }              -> x0
     v127 Load { addr=v99, disp=0, kind=I32 pc_rel }       -> x0

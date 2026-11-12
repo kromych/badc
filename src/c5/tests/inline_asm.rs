@@ -3783,8 +3783,8 @@ fn aarch64_naked_function_binds_register_and_memory_operands() {
             [
                 bss(0, R_AARCH64_ADR_PREL_PG_HI21, 8),
                 bss(4, R_AARCH64_LDST64_ABS_LO12_NC, 8),
-                bss(8, R_AARCH64_ADR_PREL_PG_HI21, 0),
-                bss(12, R_AARCH64_ADD_ABS_LO12_NC, 0),
+                bss(8, R_AARCH64_ADR_PREL_PG_HI21, 4),
+                bss(12, R_AARCH64_ADD_ABS_LO12_NC, 4),
             ]
         );
     }

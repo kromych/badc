@@ -64,7 +64,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Imm(0)                                           -> x0
     v3   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x7
     v4   Imm(1)                                           -> x6
@@ -75,7 +75,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   ImmData(8)                                       -> x0
+    v8   ImmData(16)                                      -> x0
     v9   Imm(8)                                           -> x0
     v10  BinopI { op=add, lhs=v8, rhs_imm=8 }             -> x0
     v11  Load { addr=v8, disp=8, kind=I64, volatile pc_rel } -> x7
@@ -87,7 +87,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v15  Imm(2)                                           -> x0
     terminator Return(v15)   (exit_acc=v15)
   block 4  start_pc=0
-    v16  ImmData(8)                                       -> x0
+    v16  ImmData(16)                                      -> x0
     v17  Imm(16)                                          -> x0
     v18  BinopI { op=add, lhs=v16, rhs_imm=16 }           -> x0
     v19  Load { addr=v16, disp=16, kind=I64, volatile pc_rel } -> x7

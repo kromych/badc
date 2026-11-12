@@ -87,7 +87,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x20]
+               	ldr	x2, [x0, #0x18]
                	mov	x0, #0x7                // =7
                	mov	x1, #0x8                // =8
                	blr	x2
@@ -158,7 +158,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x38]
+               	ldr	x2, [x0, #0x30]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	blr	x2
@@ -169,7 +169,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x38]
+               	ldr	x2, [x0, #0x30]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	blr	x2
@@ -249,7 +249,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x38]
+               	ldr	x2, [x0, #0x30]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	blr	x2
@@ -272,7 +272,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x50]
+               	ldr	x2, [x0, #0x48]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	blr	x2
@@ -307,7 +307,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	x2, [x0, #0x38]
+               	ldr	x2, [x0, #0x30]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x1                // =1
                	blr	x2

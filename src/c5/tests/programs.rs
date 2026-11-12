@@ -6046,11 +6046,11 @@ fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
     let (tls_program, plain_program) = (compile_str(tls), compile_str(plain));
     assert_eq!(
         tls_program.tls_data.len(),
-        8,
+        4,
         "one element in the thread-local image"
     );
     assert_eq!(
-        tls_program.data.len() + 8,
+        tls_program.data.len() + 4,
         plain_program.data.len(),
         "the element leaves `.data`"
     );

@@ -109,7 +109,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v103 Imm(0)                                           -> x1
     v104 Imm(0)                                           -> x1
     v105 Imm(0)                                           -> x1
-    v106 ImmData(56)                                      -> x1
+    v106 ImmData(48)                                      -> x1
     v107 ImmData(40)                                      -> x1
     v108 Store { addr=v106, disp=0, value=v86, kind=I64 pc_rel } -> -
     v109 Imm(4)                                           -> x0
@@ -135,11 +135,11 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v129 ImmData(40)                                      -> x0
     v130 Imm(5)                                           -> x0
     v131 Store { addr=v86, disp=0, value=v130, kind=I8 pc_rel } -> -
-    v132 ImmData(56)                                      -> x0
+    v132 ImmData(48)                                      -> x0
     v133 Load { addr=v106, disp=0, kind=I64 pc_rel }      -> x0
     v134 Imm(7)                                           -> x1
     v135 Store { addr=v133, disp=0, value=v134, kind=I8 } -> -
-    v136 ImmData(64)                                      -> x0
+    v136 ImmData(56)                                      -> x0
     v137 Load { addr=v136, disp=0, kind=I32 pc_rel }      -> x0
     v138 BinopI { op=add, lhs=v137, rhs_imm=1 }           -> x0
     v139 Store { addr=v136, disp=0, value=v138, kind=I32 pc_rel } -> -
@@ -154,7 +154,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     terminator Jmp(b1)
   block 1  start_pc=0
     v164 Copy { value=v147, fp=false }                    -> x1
-    v165 ImmData(48)                                      -> x1
+    v165 ImmData(42)                                      -> x1
     v166 Imm(6)                                           -> x1
     v167 Store { addr=v165, disp=0, value=v166, kind=I8, volatile pc_rel } -> -
     v168 Load { addr=v165, disp=0, kind=U8, volatile pc_rel } -> x1

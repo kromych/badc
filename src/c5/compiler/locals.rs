@@ -345,12 +345,13 @@ impl Compiler {
         }
     }
 
-    /// Placement alignment of a block-scope static's storage: the
-    /// requirement [`Self::apply_static_local_align`] recorded, floored
-    /// at the boundary every object wider than one byte takes.
-    fn static_local_placement_align(&self, loc_idx: usize, ty: i64) -> usize {
-        let decl_align = self.symbols[loc_idx].data_align.max(0) as usize;
-        self.data_placement_align(ty, decl_align)
+    /// Placement alignment of a block-scope static's `bytes` of storage:
+    /// the requirement [`Self::apply_static_local_align`] recorded.
+    fn static_local_placement_align(&self, loc_idx: usize, ty: i64, bytes: i64) -> usize {
+        let s = &self.symbols[loc_idx];
+        let decl_align = s.data_align.max(0) as usize;
+        let array = s.array_size != 0 || !s.array_dims.is_empty();
+        self.data_placement_align(ty, decl_align, bytes, array)
     }
 
     /// Record an over-aligned automatic object's frame slot so it is placed
@@ -1394,14 +1395,11 @@ impl Compiler {
         // zero-sized object (empty struct, GNU) still reserves one slot:
         // the data-DCE interval model and the named-section carve
         // identify objects by start offset, so no two may share one.
-        let mut bytes = if array_size > 0 {
-            let total = (self.size_of_type(ty) as i64) * array_size;
-            (((total + 7) / 8) * 8).max(8)
-        } else if array_size == -1 {
+        let mut bytes = if array_size == -1 {
             // Deferred-size array: handled below after parsing init.
             0
         } else {
-            (self.slots_of_type(ty) * 8).max(8)
+            self.object_storage_bytes(ty, array_size)
         };
         // A flexible array member's initialized elements occupy storage
         // past `sizeof`, as at file scope; without the reservation the
@@ -1409,7 +1407,7 @@ impl Compiler {
         let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
         if fam_tail > 0 {
             self.symbols[loc_idx].fam_init_bytes = fam_tail;
-            bytes = ((bytes + fam_tail + 7) / 8) * 8;
+            bytes += fam_tail;
         }
         self.symbols[loc_idx].array_size = array_size.max(0);
         // A `static _Thread_local` local lives in the TLS block (`.tdata` /
@@ -1424,7 +1422,7 @@ impl Compiler {
             } else {
                 DataStore::Static
             };
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let align = self.static_local_placement_align(loc_idx, ty, bytes);
             let off = self.reserve_data_bytes(store, align, bytes as usize);
             self.symbols[loc_idx].val = off;
             if !is_tls || staged {
@@ -1435,7 +1433,8 @@ impl Compiler {
             self.next()?;
             self.parse_static_local_initializer(loc_idx, ty, array_size)?;
             if staged {
-                let align = self.static_local_placement_align(loc_idx, ty);
+                let bytes = self.symbols[loc_idx].reserved_data_bytes;
+                let align = self.static_local_placement_align(loc_idx, ty, bytes);
                 self.move_to_thread_local_storage(loc_idx, align)?;
             }
         }
@@ -1490,7 +1489,7 @@ impl Compiler {
                 // token may append a string literal's bytes, whose
                 // parser-added NUL must land right after them.
                 let reserved = rows * inner_dim * elem_size as i64;
-                let align = self.static_local_placement_align(loc_idx, ty);
+                let align = self.static_local_placement_align(loc_idx, ty, reserved);
                 let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
                 self.symbols[loc_idx].val = off;
                 self.symbols[loc_idx].reserved_data_bytes = reserved;
@@ -1503,18 +1502,14 @@ impl Compiler {
                 {
                     *first = rows;
                 }
-                while !self.data.len().is_multiple_of(8) {
-                    self.data.push(0);
-                }
                 return Ok(());
             }
             let inner_dims = self.inner_dims_of(loc_idx);
             self.pending.init_inner_dims = inner_dims.clone();
             let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
-            let total_bytes = (self.size_of_type(ty) as i64) * final_size;
-            let aligned = ((total_bytes + 7) / 8) * 8;
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let aligned = (self.size_of_type(ty) as i64) * final_size;
+            let align = self.static_local_placement_align(loc_idx, ty, aligned);
             let off = self.reserve_data_bytes(DataStore::Static, align, aligned as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].reserved_data_bytes = aligned;
@@ -1643,17 +1638,16 @@ impl Compiler {
         } else {
             // Deferred size: count the elements and reserve zeroed storage.
             let (c, _) = self.scan_array_init()?;
-            let align = self.static_local_placement_align(loc_idx, ty);
+            let align = self.static_local_placement_align(loc_idx, ty, c * elem_size);
             let off = self.reserve_data_bytes(DataStore::Static, align, (c * elem_size) as usize);
             self.symbols[loc_idx].val = off;
             self.symbols[loc_idx].array_size = c;
-            while !self.data.len().is_multiple_of(8) {
-                self.data.push(0);
-            }
             // The once-guard below sits past the object's extent.
             self.symbols[loc_idx].reserved_data_bytes = self.data.len() as i64 - off;
             c
         };
+        // The guard is an 8-byte word on its own boundary.
+        self.align_data_to(8);
         let guard_off = self.data.len() as i64 - self.symbols[loc_idx].val;
         for _ in 0..8 {
             self.data.push(0);

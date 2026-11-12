@@ -45,12 +45,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	mov	x1, #0x9                // =9
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x34]
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x18]
                	cmp	w1, #0x3e8
                	b.ne	<addr>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

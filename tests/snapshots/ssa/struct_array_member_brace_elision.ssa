@@ -107,7 +107,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v101 Imm(0)                                           -> x8
     v102 Imm(0)                                           -> x8 [f32]
     v103 Imm(0)                                           -> x8
-    v104 ImmData(32)                                      -> x8
+    v104 ImmData(36)                                      -> x8
     v105 Imm(0)                                           -> x8
     v106 Load { addr=v104, disp=0, kind=F32 pc_rel }      -> d0 [f32]
     v107 Binop { op=feq, lhs=v106, rhs=v2 }               -> x8
@@ -205,7 +205,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v133 LifetimeEnd(-3)                                  -> -
     terminator Return(v128)   (exit_acc=v128)
   block 12  start_pc=0
-    v134 ImmData(80)                                      -> x0
+    v134 ImmData(76)                                      -> x0
     v135 Imm(1)                                           -> x0
     v136 Imm(1065353216)                                  -> x0 [f32]
     v137 Imm(2)                                           -> x1
@@ -259,14 +259,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v153 LifetimeEnd(-3)                                  -> -
     terminator Return(v148)   (exit_acc=v148)
   block 18  start_pc=0
-    v154 ImmData(104)                                     -> x2
+    v154 ImmData(96)                                      -> x2
     v155 Load { addr=v154, disp=0, kind=I32 pc_rel }      -> x2
     v156 BinopI { op=ne, lhs=v155, rhs_imm=7 }            -> x2
     v157 Imm(1)                                           -> x6
     v158 Imm(0)                                           -> x6
     terminator Bnz { cond=v156, target=b23, fall=b19 }   (exit_acc=v156)
   block 19  start_pc=0
-    v159 ImmData(104)                                     -> x2
+    v159 ImmData(96)                                      -> x2
     v160 BinopI { op=add, lhs=v154, rhs_imm=4 }           -> x2
     v161 Imm(0)                                           -> x2
     v162 Load { addr=v154, disp=4, kind=F32 pc_rel }      -> d0 [f32]
@@ -281,7 +281,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v171 Imm(0)                                           -> x2
     terminator Bnz { cond=v165, target=b23, fall=b20 }   (exit_acc=v165)
   block 20  start_pc=0
-    v172 ImmData(104)                                     -> x0
+    v172 ImmData(96)                                      -> x0
     v173 BinopI { op=add, lhs=v154, rhs_imm=4 }           -> x0
     v174 Imm(0)                                           -> x0
     v175 BinopI { op=add, lhs=v154, rhs_imm=8 }           -> x0
@@ -297,7 +297,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v185 Imm(0)                                           -> x1
     terminator Bnz { cond=v179, target=b23, fall=b21 }   (exit_acc=v179)
   block 21  start_pc=0
-    v186 ImmData(104)                                     -> x0
+    v186 ImmData(96)                                      -> x0
     v187 BinopI { op=add, lhs=v154, rhs_imm=4 }           -> x0
     v188 Imm(8)                                           -> x0
     v189 BinopI { op=add, lhs=v154, rhs_imm=12 }          -> x0
@@ -312,7 +312,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v198 Imm(0)                                           -> x2
     terminator Bnz { cond=v193, target=b23, fall=b22 }   (exit_acc=v193)
   block 22  start_pc=0
-    v199 ImmData(104)                                     -> x0
+    v199 ImmData(96)                                      -> x0
     v200 BinopI { op=add, lhs=v154, rhs_imm=4 }           -> x0
     v201 Imm(8)                                           -> x0
     v202 BinopI { op=add, lhs=v154, rhs_imm=12 }          -> x0
@@ -334,7 +334,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v216 LifetimeEnd(-3)                                  -> -
     terminator Return(v211)   (exit_acc=v211)
   block 24  start_pc=0
-    v217 ImmData(128)                                     -> x2
+    v217 ImmData(132)                                     -> x2
     v218 Imm(0)                                           -> x2
     v219 Imm(0)                                           -> x2 [f32]
     v220 Imm(0)                                           -> x2

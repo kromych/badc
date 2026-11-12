@@ -378,20 +378,30 @@ fn take_where<T>(
 }
 
 impl Compiler {
-    /// C99 6.2.8 placement alignment of an object with static storage
-    /// duration: the alignment the declaration settled on when it is
-    /// stricter, and otherwise the 8-byte boundary every object wider than
-    /// a single byte takes. `decl_align` already carries the type's own
-    /// requirement and any lowering a variable-level `aligned(N)` applied,
-    /// so it is taken as given rather than widened again here.
-    pub(super) fn data_placement_align(&self, ty: i64, decl_align: usize) -> usize {
-        if decl_align > 8 {
+    /// C11 6.2.8 placement alignment of an object with static storage
+    /// duration, `bytes` long, of `ty` (the element type of an `array`):
+    /// the alignment the declaration settled on, else the type's own. The
+    /// x86-64 psABI 3.1.2 aligns an array variable of 16 bytes or more on
+    /// 16. `decl_align` already carries any lowering a variable-level
+    /// `aligned(N)` applied, so the type's alignment does not override it.
+    pub(super) fn data_placement_align(
+        &self,
+        ty: i64,
+        decl_align: usize,
+        bytes: i64,
+        array: bool,
+    ) -> usize {
+        let own = if decl_align > 0 {
             decl_align
-        } else if self.size_of_type(ty) > 1 {
-            8
+        } else {
+            self.align_of_type(ty)
+        };
+        let abi = if array && bytes >= 16 && self.target.is_x86_64() {
+            16
         } else {
             1
-        }
+        };
+        own.max(abi).max(1)
     }
 
     /// Reserve `bytes` zeroed bytes in `store`, first padding it so the
@@ -434,11 +444,9 @@ impl Compiler {
     }
 
     /// Reserve `bytes` zeroed bytes in `.data` for an unnamed object of
-    /// `ty` -- a compound literal (C99 6.5.2.5p5). It sits on the type's
-    /// boundary, and never below the 8-byte width the static-initializer
-    /// writes use.
+    /// `ty` -- a compound literal (C99 6.5.2.5p5) -- on the type's boundary.
     pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> i64 {
-        let align = self.align_of_type(ty).max(8);
+        let align = self.align_of_type(ty).max(1);
         self.note_static_align(align, self.lex.line);
         self.reserve_data_bytes(DataStore::Static, align, bytes)
     }
@@ -531,7 +539,8 @@ impl Compiler {
         for s in &self.symbols {
             if s.class == Token::Glo as i64 && s.is_thread_local && s.defined_here {
                 let want = (s.data_align.max(0) as usize).max(self.align_of_type(s.type_));
-                let align = self.data_placement_align(s.type_, want);
+                let array = s.array_size > 0;
+                let align = self.data_placement_align(s.type_, want, s.reserved_data_bytes, array);
                 let at = objects.entry(s.val as usize).or_insert(1);
                 *at = (*at).max(align);
             }
@@ -2894,10 +2903,6 @@ impl Compiler {
         // model identifies an object by its start offset, so it must not
         // share one with whatever is placed next.
         if self.data.len() as i64 == off {
-            self.data.push(0);
-        }
-        // Pad the anonymous array's storage up to an 8-byte boundary.
-        while (self.data.len() as i64 - off) % 8 != 0 {
             self.data.push(0);
         }
         let sym_idx = self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);

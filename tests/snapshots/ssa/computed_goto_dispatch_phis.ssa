@@ -1806,7 +1806,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=16
     v260 LifetimeEnd(-16)                                 -> -
     terminator Return(v259)   (exit_acc=v259)
   block 15  start_pc=0
-    v261 ImmData(328)                                     -> x7
+    v261 ImmData(324)                                     -> x7
     v262 Call { target_pc=5, args=[v261], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v263 BinopI { op=ne, lhs=v262, rhs_imm=15 }           -> x0
     terminator Bz { cond=v263, target=b17, fall=b16 }   (exit_acc=v263)

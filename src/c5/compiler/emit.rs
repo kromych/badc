@@ -423,7 +423,7 @@ impl Compiler {
     /// `aligned(16)` placement for a file-scope object.
     pub(super) fn align_data_to(&mut self, align: usize) {
         let start = self.data.len();
-        while !self.data.len().is_multiple_of(align.max(8)) {
+        while !self.data.len().is_multiple_of(align.max(1)) {
             self.data.push(0);
         }
         self.record_data_pad(start);

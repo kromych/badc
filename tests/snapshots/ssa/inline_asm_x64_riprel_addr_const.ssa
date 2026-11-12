@@ -33,7 +33,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v11  Imm(0)                                           -> x1
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x1
-    v14  ImmData(8)                                       -> x1
+    v14  ImmData(4)                                       -> x1
     v15  BinopI { op=add, lhs=v14, rhs_imm=16 }           -> x1
     v16  InlineAsm { template="leaq %c1(%%rip), %0", ops=2, args=[-, v15] } -> x12
     v17  Imm(0)                                           -> x1
@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v35, target=b4, fall=b2 }   (exit_acc=v35)
   block 2  start_pc=0
     v42  Imm(0)                                           -> x1
-    v43  ImmData(8)                                       -> x1
+    v43  ImmData(4)                                       -> x1
     v44  BinopI { op=add, lhs=v43, rhs_imm=16 }           -> x1
     v45  Binop { op=ne, lhs=v16, rhs=v44 }                -> x1
     v46  BinopI { op=ne, lhs=v45, rhs_imm=0 }             -> x2

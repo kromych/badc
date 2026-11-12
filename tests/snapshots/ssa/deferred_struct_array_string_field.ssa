@@ -133,16 +133,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(208)                                     -> x7
-    v2   ImmData(16)                                      -> x6
-    v3   ImmData(18)                                      -> x2
+    v1   ImmData(192)                                     -> x7
+    v2   ImmData(13)                                      -> x6
+    v3   ImmData(15)                                      -> x2
     v4   Call { target_pc=0, args=[v1, v2, v3], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v5   Extend { value=v4, kind=I32 }                    -> x1
     v6   Imm(1)                                           -> x1
     v7   Imm(0)                                           -> x1
     terminator Bnz { cond=v4, target=b3, fall=b1 }   (low word)   (exit_acc=v5)
   block 1  start_pc=0
-    v8   ImmData(208)                                     -> x0
+    v8   ImmData(192)                                     -> x0
     v9   Imm(0)                                           -> x0
     v10  BinopI { op=add, lhs=v8, rhs_imm=8 }             -> x0
     v11  Load { addr=v8, disp=8, kind=I32 pc_rel }        -> x0
@@ -154,7 +154,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v17  Imm(0)                                           -> x1
     terminator Bnz { cond=v12, target=b3, fall=b2 }   (exit_acc=v12)
   block 2  start_pc=0
-    v18  ImmData(208)                                     -> x0
+    v18  ImmData(192)                                     -> x0
     v19  Imm(16)                                          -> x0
     v20  BinopI { op=add, lhs=v8, rhs_imm=16 }            -> x0
     v21  BinopI { op=add, lhs=v8, rhs_imm=24 }            -> x0
@@ -171,15 +171,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v30  LifetimeEnd(-8)                                  -> -
     terminator Return(v27)   (exit_acc=v27)
   block 4  start_pc=0
-    v31  ImmData(240)                                     -> x7
-    v32  ImmData(40)                                      -> x6
-    v33  ImmData(44)                                      -> x2
+    v31  ImmData(224)                                     -> x7
+    v32  ImmData(33)                                      -> x6
+    v33  ImmData(37)                                      -> x2
     v34  Call { target_pc=0, args=[v31, v32, v33], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v35  Extend { value=v34, kind=I32 }                   -> x1
     v36  Imm(0)                                           -> x1
     terminator Bnz { cond=v34, target=b6, fall=b5 }   (low word)   (exit_acc=v35)
   block 5  start_pc=0
-    v37  ImmData(240)                                     -> x0
+    v37  ImmData(224)                                     -> x0
     v38  Imm(16)                                          -> x0
     v39  BinopI { op=add, lhs=v37, rhs_imm=16 }           -> x0
     v40  BinopI { op=add, lhs=v37, rhs_imm=24 }           -> x0
@@ -197,13 +197,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     terminator Return(v46)   (exit_acc=v46)
   block 7  start_pc=0
     v50  LocalAddr(-8)                                    -> x7
-    v51  ImmData(144)                                     -> x0
+    v51  ImmData(128)                                     -> x0
     v52  Mcpy { dst=v50, src=v51, size=32, align=8 }      -> -
     v53  Imm(5)                                           -> x0
     v54  Imm(0)                                           -> x0
     v55  LocalAddr(-8)                                    -> x0
-    v56  ImmData(69)                                      -> x6
-    v57  ImmData(75)                                      -> x2
+    v56  ImmData(61)                                      -> x6
+    v57  ImmData(67)                                      -> x2
     v58  Call { target_pc=0, args=[v50, v56, v57], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v59  Extend { value=v58, kind=I32 }                   -> x1
     v60  Imm(0)                                           -> x1
@@ -218,7 +218,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  LocalAddr(-4)                                    -> x7
-    v70  ImmData(176)                                     -> x0
+    v70  ImmData(160)                                     -> x0
     v71  Mcpy { dst=v69, src=v70, size=32, align=8 }      -> -
     v72  Imm(8)                                           -> x0
     v73  Imm(0)                                           -> x0
@@ -229,8 +229,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v78  Imm(9)                                           -> x0
     v79  Imm(0)                                           -> x0
     v80  LocalAddr(-4)                                    -> x0
-    v81  ImmData(112)                                     -> x6
-    v82  ImmData(114)                                     -> x2
+    v81  ImmData(103)                                     -> x6
+    v82  ImmData(105)                                     -> x2
     v83  Call { target_pc=0, args=[v69, v81, v82], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v84  Extend { value=v83, kind=I32 }                   -> x1
     v85  Imm(0)                                           -> x1
@@ -274,15 +274,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
     v127 Imm(0)                                           -> x0
-    v128 ImmData(272)                                     -> x7
-    v129 ImmData(122)                                     -> x6
-    v130 ImmData(125)                                     -> x2
+    v128 ImmData(256)                                     -> x7
+    v129 ImmData(113)                                     -> x6
+    v130 ImmData(116)                                     -> x2
     v131 Call { target_pc=0, args=[v128, v129, v130], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v132 Extend { value=v131, kind=I32 }                  -> x1
     v133 Imm(0)                                           -> x1
     terminator Bnz { cond=v131, target=b11, fall=b10 }   (low word)   (exit_acc=v132)
   block 10  start_pc=0
-    v142 ImmData(272)                                     -> x0
+    v142 ImmData(256)                                     -> x0
     v143 Imm(0)                                           -> x0
     v144 BinopI { op=add, lhs=v142, rhs_imm=8 }           -> x0
     v145 Load { addr=v142, disp=8, kind=I32 pc_rel }      -> x0

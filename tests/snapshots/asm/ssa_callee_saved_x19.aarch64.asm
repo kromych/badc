@@ -15,10 +15,10 @@ Disassembly of section .text:
 
 <onExit>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x34]
                	cbz	x1, <addr>
                	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x34]
                	ret
 
 <main>:

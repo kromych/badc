@@ -22,7 +22,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v27  Imm(0)                                           -> x1
     terminator Bz { cond=v24, target=b3, fall=b16 }   (exit_acc=v24)
   block 3  start_pc=0
-    v29  ImmData(8)                                       -> x0
+    v29  ImmData(4)                                       -> x0
     v30  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
     v31  BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x1
     v32  Binop { op=add, lhs=v29, rhs=v31 }               -> x1
@@ -30,13 +30,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v34  CallExt { binding_idx=4, args=[v33], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v34, target=b4, fall=b15 }   (exit_acc=v34)
   block 4  start_pc=0
-    v36  ImmData(8)                                       -> x0
+    v36  ImmData(4)                                       -> x0
     v37  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x1
     v38  BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x1
     v39  Binop { op=add, lhs=v36, rhs=v38 }               -> x1
     v40  LoadIndexed { base=v36, index=v5, scale=4, kind=I32 } -> x7
     v41  CallExt { binding_idx=3, args=[v40], fp_arg_mask=0x0 } -> x0
-    v42  ImmData(8)                                       -> x1
+    v42  ImmData(4)                                       -> x1
     v43  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x2
     v44  BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x2
     v45  Binop { op=add, lhs=v42, rhs=v44 }               -> x2

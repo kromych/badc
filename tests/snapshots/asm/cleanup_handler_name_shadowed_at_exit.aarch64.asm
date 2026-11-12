@@ -15,10 +15,10 @@ Disassembly of section .text:
 
 <cl>:
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x30]
+               	ldrsw	x2, [x1, #0x34]
                	ldrsw	x0, [x0]
                	add	x0, x2, x0
-               	str	w0, [x1, #0x30]
+               	str	w0, [x1, #0x34]
                	ret
 
 <on_return>:
@@ -73,38 +73,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x1, <page>
-               	str	wzr, [x1, #0x30]
+               	str	wzr, [x1, #0x34]
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	cmp	w0, #0xc
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x7
                	cset	x0, ne
                	mov	x1, #0x0                // =0
                	orr	x20, x1, x0
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x30]
+               	str	wzr, [x0, #0x34]
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	cmp	w0, #0x6
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x3
                	cset	x0, ne
                	orr	x20, x20, x0, lsl #1
                	adrp	x0, <page>
-               	str	wzr, [x0, #0x30]
+               	str	wzr, [x0, #0x34]
                	bl	<addr>
                	cmp	w0, #0x2
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x64
                	cset	x0, ne
                	orr	x0, x20, x0, lsl #2

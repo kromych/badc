@@ -20,7 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0x14]
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

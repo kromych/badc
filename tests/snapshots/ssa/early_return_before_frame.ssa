@@ -342,7 +342,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(136)                                     -> x0
+    v1   ImmData(132)                                     -> x0
     v2   Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x0
     v3   BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 pc_rel } -> -
@@ -808,7 +808,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
   block 38  start_pc=0
     v326 Imm(0)                                           -> x0
     v327 Imm(1)                                           -> x0
-    v328 ImmData(136)                                     -> x0
+    v328 ImmData(132)                                     -> x0
     v329 Load { addr=v328, disp=0, kind=I32 pc_rel }      -> x0
     v330 BinopI { op=ne, lhs=v329, rhs_imm=0 }            -> x1
     terminator Bz { cond=v329, target=b40, fall=b39 }   (low word)   (exit_acc=v330)
@@ -872,7 +872,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     v394 ImmData(128)                                     -> x0
     v395 Imm(2)                                           -> x0
     v396 Store { addr=v394, disp=0, value=v395, kind=I32 pc_rel } -> -
-    v397 ImmData(136)                                     -> x0
+    v397 ImmData(132)                                     -> x0
     v398 Load { addr=v397, disp=0, kind=I32 pc_rel }      -> x0
     v399 BinopI { op=ne, lhs=v398, rhs_imm=5 }            -> x0
     v400 Imm(0)                                           -> x1

@@ -15,20 +15,20 @@ Disassembly of section .text:
 
 <first>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x34]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x34]
                	ret
 
 <second>:
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x34]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x1, x1, #0x2
-               	str	w1, [x0, #0x30]
+               	str	w1, [x0, #0x34]
                	ret
 
 <by_atexit>:
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0x5                // =5
                	mov	x2, #0x6                // =6
-               	ldrsw	x0, [x0, #0x30]
+               	ldrsw	x0, [x0, #0x34]
                	cmp	w0, #0x15
                	csel	x0, x1, x2, eq
                	bl	<addr>

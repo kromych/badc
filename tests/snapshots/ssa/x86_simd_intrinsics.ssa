@@ -295,7 +295,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-157)                                  -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(8)                                       -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x1
     v5   Load { addr=v3, disp=0, kind=V128, align=1 }     -> d0
     v6   Imm(0)                                           -> x0
@@ -1233,7 +1233,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v938 StoreLocal { off=-157, disp=160, value=v926, kind=V128 } -> -
     v939 LifetimeEnd(0)                                   -> -
     v940 LocalAddr(-158)                                  -> x0
-    v941 ImmData(24)                                      -> x0
+    v941 ImmData(32)                                      -> x0
     v942 Imm(0)                                           -> x1
     v943 Load { addr=v941, disp=0, kind=V128, align=1 }   -> d0
     v944 Imm(0)                                           -> x0
@@ -1295,7 +1295,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v994 StoreLocal { off=-158, value=v990, kind=V128 }   -> -
     v995 LifetimeEnd(0)                                   -> -
     v996 LocalAddr(-158)                                  -> x0
-    v997 ImmData(40)                                      -> x7
+    v997 ImmData(48)                                      -> x7
     v998 Call { target_pc=1377, args=[v982, v997], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v999 Extend { value=v998, kind=I32 }                  -> x1
     v1000 BinopI { op=eq, lhs=v998, rhs_imm=0 }            -> x1
@@ -1307,7 +1307,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     terminator Return(v1001)   (exit_acc=v1001)
   block 5  start_pc=0
     v1004 LocalAddr(-158)                                  -> x0
-    v1005 ImmData(40)                                      -> x0
+    v1005 ImmData(48)                                      -> x0
     v1006 Imm(0)                                           -> x1
     v1007 Load { addr=v1005, disp=0, kind=V128, align=1 }  -> d0
     v1008 Imm(0)                                           -> x0
@@ -1375,7 +1375,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v1064 StoreLocal { off=-158, value=v1060, kind=V128 }  -> -
     v1065 LifetimeEnd(0)                                   -> -
     v1066 LocalAddr(-158)                                  -> x0
-    v1067 ImmData(24)                                      -> x7
+    v1067 ImmData(32)                                      -> x7
     v1068 Call { target_pc=1377, args=[v1053, v1067], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1069 Extend { value=v1068, kind=I32 }                 -> x1
     v1070 Extend { value=v1068, kind=I32 }                 -> x1
@@ -1390,7 +1390,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmData(56)                                      -> x0
+    v3   ImmData(64)                                      -> x0
     v4   Load { addr=v3, disp=0, kind=V128 }              -> d0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -1398,7 +1398,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
-    v11  ImmData(72)                                      -> x0
+    v11  ImmData(80)                                      -> x0
     v12  Load { addr=v11, disp=0, kind=V128 }             -> d1
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
@@ -1600,7 +1600,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 12  start_pc=0
     v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
-    v189 ImmData(88)                                      -> x0
+    v189 ImmData(96)                                      -> x0
     v190 Load { addr=v189, disp=0, kind=V128 }            -> d1
     v191 Imm(0)                                           -> x0
     v192 Imm(0)                                           -> x0
@@ -1608,7 +1608,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v194 Imm(0)                                           -> x0
     v195 Imm(0)                                           -> x0
     v196 Imm(0)                                           -> x0
-    v197 ImmData(104)                                     -> x0
+    v197 ImmData(112)                                     -> x0
     v198 Load { addr=v197, disp=0, kind=V128 }            -> d0
     v199 Imm(0)                                           -> x0
     v200 Imm(0)                                           -> x0
@@ -1758,7 +1758,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 21  start_pc=0
     v327 Imm(0)                                           -> x0
     v328 Imm(0)                                           -> x0
-    v329 ImmData(120)                                     -> x0
+    v329 ImmData(128)                                     -> x0
     v330 Load { addr=v329, disp=0, kind=V128 }            -> d0
     v331 Imm(0)                                           -> x0
     v332 Imm(0)                                           -> x0
@@ -2016,7 +2016,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 39  start_pc=0
     v549 Imm(0)                                           -> x0
     v550 Imm(0)                                           -> x0
-    v551 ImmData(136)                                     -> x0
+    v551 ImmData(144)                                     -> x0
     v552 Load { addr=v551, disp=0, kind=V128 }            -> d1
     v553 Imm(0)                                           -> x0
     v554 Imm(0)                                           -> x0
@@ -2332,7 +2332,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 60  start_pc=0
     v823 Imm(0)                                           -> x0
     v824 Imm(0)                                           -> x0
-    v825 ImmData(152)                                     -> x0
+    v825 ImmData(160)                                     -> x0
     v826 Load { addr=v825, disp=0, kind=V128 }            -> d0
     v827 Imm(0)                                           -> x0
     v828 Imm(0)                                           -> x0
@@ -2414,7 +2414,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 65  start_pc=0
     v895 Imm(0)                                           -> x0
     v896 Imm(0)                                           -> x0
-    v897 ImmData(168)                                     -> x0
+    v897 ImmData(176)                                     -> x0
     v898 Load { addr=v897, disp=0, kind=V128 }            -> d0
     v899 Imm(0)                                           -> x0
     v900 Imm(0)                                           -> x0
@@ -2422,7 +2422,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v902 Imm(0)                                           -> x0
     v903 Imm(0)                                           -> x0
     v904 Imm(0)                                           -> x0
-    v905 ImmData(184)                                     -> x0
+    v905 ImmData(192)                                     -> x0
     v906 Load { addr=v905, disp=0, kind=V128 }            -> d1
     v907 Imm(0)                                           -> x0
     v908 Imm(0)                                           -> x0
@@ -2492,7 +2492,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 69  start_pc=0
     v965 Imm(0)                                           -> x0
     v966 Imm(0)                                           -> x0
-    v967 ImmData(200)                                     -> x0
+    v967 ImmData(208)                                     -> x0
     v968 Load { addr=v967, disp=0, kind=V128 }            -> d0
     v969 Imm(0)                                           -> x0
     v970 Imm(0)                                           -> x0
@@ -2500,7 +2500,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v972 Imm(0)                                           -> x0
     v973 Imm(0)                                           -> x0
     v974 Imm(0)                                           -> x0
-    v975 ImmData(216)                                     -> x0
+    v975 ImmData(224)                                     -> x0
     v976 Load { addr=v975, disp=0, kind=V128 }            -> d2
     v977 Imm(0)                                           -> x0
     v978 Imm(0)                                           -> x0
@@ -2676,7 +2676,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 80  start_pc=0
     v1127 Imm(0)                                           -> x0
     v1128 Imm(0)                                           -> x0
-    v1129 ImmData(232)                                     -> x0
+    v1129 ImmData(240)                                     -> x0
     v1130 Load { addr=v1129, disp=0, kind=V128 }           -> d0
     v1131 Imm(0)                                           -> x0
     v1132 Imm(0)                                           -> x0
@@ -2772,7 +2772,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 88  start_pc=0
     v1207 Imm(0)                                           -> x0
     v1208 Imm(0)                                           -> x0
-    v1209 ImmData(248)                                     -> x0
+    v1209 ImmData(256)                                     -> x0
     v1210 Load { addr=v1209, disp=0, kind=V128 }           -> d0
     v1211 Imm(0)                                           -> x0
     v1212 Imm(0)                                           -> x0
@@ -2780,7 +2780,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v1214 Imm(0)                                           -> x0
     v1215 Imm(0)                                           -> x0
     v1216 Imm(0)                                           -> x0
-    v1217 ImmData(264)                                     -> x0
+    v1217 ImmData(272)                                     -> x0
     v1218 Load { addr=v1217, disp=0, kind=V128 }           -> d2
     v1219 Imm(0)                                           -> x0
     v1220 Imm(0)                                           -> x0
@@ -2864,7 +2864,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 93  start_pc=0
     v1289 Imm(0)                                           -> x0
     v1290 Imm(0)                                           -> x0
-    v1291 ImmData(280)                                     -> x0
+    v1291 ImmData(288)                                     -> x0
     v1292 Load { addr=v1291, disp=0, kind=V128 }           -> d0
     v1293 Imm(0)                                           -> x0
     v1294 Imm(0)                                           -> x0
@@ -2872,7 +2872,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v1296 Imm(0)                                           -> x0
     v1297 Imm(0)                                           -> x0
     v1298 Imm(0)                                           -> x0
-    v1299 ImmData(296)                                     -> x0
+    v1299 ImmData(304)                                     -> x0
     v1300 Load { addr=v1299, disp=0, kind=V128 }           -> d1
     v1301 Imm(0)                                           -> x0
     v1302 Imm(0)                                           -> x0
@@ -3588,10 +3588,10 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v2002 Imm(16)                                          -> x0
     v2003 Imm(0)                                           -> x0
     v2004 LocalAddr(-12)                                   -> x9
-    v2005 ImmData(376)                                     -> x0
+    v2005 ImmData(384)                                     -> x0
     v2006 Mcpy { dst=v2004, src=v2005, size=16, align=8 }  -> -
     v2007 LocalAddr(-12)                                   -> x0
-    v2008 ImmData(312)                                     -> x7
+    v2008 ImmData(320)                                     -> x7
     v2009 Call { target_pc=1377, args=[v2004, v2008], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2010 Extend { value=v2009, kind=I32 }                 -> x1
     v2011 BinopI { op=eq, lhs=v2009, rhs_imm=0 }           -> x1
@@ -3606,10 +3606,10 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     terminator Return(v2024)   (exit_acc=v2024)
   block 100  start_pc=0
     v2030 LocalAddr(-441)                                  -> x9
-    v2031 ImmData(392)                                     -> x0
+    v2031 ImmData(400)                                     -> x0
     v2032 Mcpy { dst=v2030, src=v2031, size=16, align=8 }  -> -
     v2033 LocalAddr(-441)                                  -> x0
-    v2034 ImmData(328)                                     -> x7
+    v2034 ImmData(336)                                     -> x7
     v2035 Call { target_pc=1377, args=[v2030, v2034], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2036 Extend { value=v2035, kind=I32 }                 -> x1
     v2037 BinopI { op=eq, lhs=v2035, rhs_imm=0 }           -> x1
@@ -3624,10 +3624,10 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     terminator Return(v2038)   (exit_acc=v2038)
   block 102  start_pc=0
     v2044 LocalAddr(-442)                                  -> x9
-    v2045 ImmData(408)                                     -> x0
+    v2045 ImmData(416)                                     -> x0
     v2046 Mcpy { dst=v2044, src=v2045, size=16, align=8 }  -> -
     v2047 LocalAddr(-442)                                  -> x0
-    v2048 ImmData(344)                                     -> x7
+    v2048 ImmData(352)                                     -> x7
     v2049 Call { target_pc=1377, args=[v2044, v2048], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2050 Extend { value=v2049, kind=I32 }                 -> x1
     v2051 BinopI { op=eq, lhs=v2049, rhs_imm=0 }           -> x1
@@ -3642,10 +3642,10 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     terminator Return(v2052)   (exit_acc=v2052)
   block 104  start_pc=0
     v2058 LocalAddr(-443)                                  -> x9
-    v2059 ImmData(424)                                     -> x0
+    v2059 ImmData(432)                                     -> x0
     v2060 Mcpy { dst=v2058, src=v2059, size=16, align=8 }  -> -
     v2061 LocalAddr(-443)                                  -> x0
-    v2062 ImmData(360)                                     -> x7
+    v2062 ImmData(368)                                     -> x7
     v2063 Call { target_pc=1377, args=[v2058, v2062], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v2064 Extend { value=v2063, kind=I32 }                 -> x1
     v2065 BinopI { op=eq, lhs=v2063, rhs_imm=0 }           -> x1
@@ -4943,7 +4943,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 133  start_pc=0
     v3312 Imm(0)                                           -> x0
     v3313 Imm(0)                                           -> x0
-    v3314 ImmData(440)                                     -> x0
+    v3314 ImmData(448)                                     -> x0
     v3315 Load { addr=v3314, disp=0, kind=V128 }           -> d0
     v3316 Imm(0)                                           -> x0
     v3317 Imm(0)                                           -> x0
@@ -5515,7 +5515,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 151  start_pc=0
     v3848 Imm(0)                                           -> x0
     v3849 Imm(0)                                           -> x0
-    v3850 ImmData(456)                                     -> x0
+    v3850 ImmData(464)                                     -> x0
     v3851 Load { addr=v3850, disp=0, kind=V128 }           -> d1
     v3852 Imm(0)                                           -> x0
     v3853 Imm(0)                                           -> x0
@@ -5877,7 +5877,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 173  start_pc=0
     v4166 Imm(0)                                           -> x0
     v4167 Imm(0)                                           -> x0
-    v4168 ImmData(472)                                     -> x0
+    v4168 ImmData(480)                                     -> x0
     v4169 Load { addr=v4168, disp=0, kind=V128 }           -> d1
     v4170 Imm(0)                                           -> x0
     v4171 Imm(0)                                           -> x0
@@ -5885,7 +5885,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4173 Imm(0)                                           -> x0
     v4174 Imm(0)                                           -> x0
     v4175 Imm(0)                                           -> x0
-    v4176 ImmData(488)                                     -> x0
+    v4176 ImmData(496)                                     -> x0
     v4177 Load { addr=v4176, disp=0, kind=V128 }           -> d2
     v4178 Imm(0)                                           -> x0
     v4179 Imm(0)                                           -> x0
@@ -6392,7 +6392,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
   block 196  start_pc=0
     v4635 Imm(0)                                           -> x0
     v4636 Imm(0)                                           -> x0
-    v4637 ImmData(504)                                     -> x0
+    v4637 ImmData(512)                                     -> x0
     v4638 Load { addr=v4637, disp=0, kind=V128 }           -> d0
     v4639 Imm(0)                                           -> x0
     v4640 Imm(0)                                           -> x0
@@ -6663,7 +6663,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     terminator Return(v4875)   (exit_acc=v4875)
   block 209  start_pc=0
     v4881 Imm(0)                                           -> x0
-    v4882 ImmData(520)                                     -> x0
+    v4882 ImmData(528)                                     -> x0
     v4883 Load { addr=v4882, disp=0, kind=V128 }           -> d2
     v4884 Imm(0)                                           -> x0
     v4885 Imm(0)                                           -> x0

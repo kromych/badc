@@ -273,7 +273,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     terminator Return(v47)   (exit_acc=v47)
   block 9  start_pc=0
     v118 Imm(100)                                         -> x0
-    v119 ImmData(8)                                       -> x1
+    v119 ImmData(16)                                      -> x1
     v120 Imm(5)                                           -> x1
     v121 InlineAsm { template="add 8(%1), %0\n\tadd %2, %0", ops=3, args=[v118, v119, v120] } -> x0
     v122 BinopI { op=ne, lhs=v121, rhs_imm=110 }          -> x0

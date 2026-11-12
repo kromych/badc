@@ -20,9 +20,9 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	ldrsw	x1, [x0, #0x60]
+               	ldrsw	x1, [x0, #0x64]
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x60]
+               	str	w1, [x0, #0x64]
                	ldursw	x2, [x29, #-0x8]
                	cmp	w2, #0x3
                	b.ne	<addr>
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x1, x1, #0x1
-               	str	w1, [x0, #0x60]
+               	str	w1, [x0, #0x64]
                	mov	x0, x1
                	cmp	w0, #0x2
                	b.eq	<addr>

@@ -4,21 +4,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(32)                                      -> x2
+    v1   ImmData(20)                                      -> x2
     v2   BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x0
     v3   Imm(0)                                           -> x0
     v4   Store { addr=v1, disp=4, value=v3, kind=I32 pc_rel } -> -
     v5   Imm(9)                                           -> x1
     v6   Imm(9)                                           -> x6
-    v7   ImmData(64)                                      -> x1
-    v8   ImmData(32)                                      -> x1
-    v9   ImmData(8)                                       -> x1
+    v7   ImmData(48)                                      -> x1
+    v8   ImmData(20)                                      -> x1
+    v9   ImmData(4)                                       -> x1
     v10  Mcpy { dst=v1, src=v9, size=12, align=4 }        -> -
     v11  Store { addr=v7, disp=0, value=v6, kind=I32 pc_rel } -> -
     v12  Imm(9)                                           -> x2
     v13  Imm(9)                                           -> x2
     v14  Imm(9)                                           -> x2
-    v15  ImmData(32)                                      -> x2
+    v15  ImmData(20)                                      -> x2
     v16  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x2
     v17  Load { addr=v1, disp=4, kind=I32 pc_rel }        -> x2
     v18  BinopI { op=ne, lhs=v17, rhs_imm=15 }            -> x2
@@ -27,21 +27,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v19  Imm(1)                                           -> x0
     terminator Return(v19)   (exit_acc=v19)
   block 2  start_pc=0
-    v20  ImmData(48)                                      -> x2
+    v20  ImmData(32)                                      -> x2
     v21  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x6
     v22  Imm(0)                                           -> x6
     v23  Store { addr=v20, disp=4, value=v3, kind=I32 pc_rel } -> -
     v24  Imm(3)                                           -> x0
     v25  Imm(3)                                           -> x0
-    v26  ImmData(48)                                      -> x6
-    v27  ImmData(8)                                       -> x6
+    v26  ImmData(32)                                      -> x6
+    v27  ImmData(4)                                       -> x6
     v28  Mcpy { dst=v20, src=v9, size=12, align=4 }       -> -
     v29  Store { addr=v20, disp=0, value=v25, kind=I8 pc_rel } -> -
     v30  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x1
     v31  Load { addr=v20, disp=4, kind=I32 pc_rel }       -> x1
     v32  Extend { value=v31, kind=I32 }                   -> x2
     v33  Extend { value=v31, kind=I32 }                   -> x2
-    v34  ImmData(48)                                      -> x2
+    v34  ImmData(32)                                      -> x2
     v35  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x2
     v36  Load { addr=v20, disp=4, kind=I32 pc_rel }       -> x2
     v37  BinopI { op=ne, lhs=v31, rhs_imm=15 }            -> x1
@@ -50,21 +50,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v38  Imm(2)                                           -> x0
     terminator Return(v38)   (exit_acc=v38)
   block 4  start_pc=0
-    v39  ImmData(32)                                      -> x1
+    v39  ImmData(20)                                      -> x1
     v40  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v41  Imm(0)                                           -> x1
     v42  Store { addr=v1, disp=4, value=v41, kind=I32 pc_rel } -> -
     v43  Imm(1)                                           -> x2
-    v44  ImmData(72)                                      -> x2
+    v44  ImmData(52)                                      -> x2
     v45  Imm(1)                                           -> x2
-    v46  ImmData(32)                                      -> x6
-    v47  ImmData(8)                                       -> x7
+    v46  ImmData(20)                                      -> x6
+    v47  ImmData(4)                                       -> x7
     v48  Mcpy { dst=v46, src=v47, size=12, align=4 }      -> -
     v49  Store { addr=v44, disp=0, value=v45, kind=I8 pc_rel } -> -
     v50  Imm(1)                                           -> x2
     v51  Imm(1)                                           -> x2
     v52  Imm(1)                                           -> x2
-    v53  ImmData(32)                                      -> x2
+    v53  ImmData(20)                                      -> x2
     v54  BinopI { op=add, lhs=v46, rhs_imm=4 }            -> x2
     v55  Load { addr=v46, disp=4, kind=I32 pc_rel }       -> x2
     v56  BinopI { op=ne, lhs=v55, rhs_imm=15 }            -> x2

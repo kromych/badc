@@ -73,6 +73,11 @@ pub(crate) fn pad_to_align(out: &mut Vec<u8>, align: usize) {
 /// places in `.data`.
 pub(crate) const DATA_ALIGN_MIN: usize = 8;
 
+/// Bytes `.data` opens with so that no object's offset is 0: an offset is
+/// an address in the interpreter and in constant folding, where 0 is the
+/// null pointer constant.
+pub(crate) const DATA_GUARD: usize = 1;
+
 /// Minimum alignment of the `.bss` image and of a compacted object's
 /// packed base. Covers `_Alignas(16)` and 16-byte aggregates.
 pub(crate) const BSS_ALIGN_MIN: usize = 16;

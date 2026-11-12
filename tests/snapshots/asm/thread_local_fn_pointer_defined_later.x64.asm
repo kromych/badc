@@ -45,7 +45,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
-               	addq	$-0x48, %rax
+               	addq	$-0x50, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpq	$0x64, %rax
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x40, %rax
+               	addq	$-0x48, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpq	$0xc8, %rax
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x38, %rax
+               	addq	$-0x40, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpq	$0x12c, %rax            # imm = 0x12C
@@ -75,7 +75,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x38, %rax
+               	addq	$-0x40, %rax
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	cmpq	$0x64, %rax
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x28, %rax
+               	addq	$-0x30, %rax
                	movl	(%rax), %eax
                	cmpl	$0x7, %eax
                	sete	%al
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x28, %rax
+               	addq	$-0x30, %rax
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	cmpq	$0x12c, %rax            # imm = 0x12C
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rcx
-               	addq	$-0x18, %rcx
+               	addq	$-0x20, %rcx
                	movq	(%rcx), %rcx
                	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
@@ -117,7 +117,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rcx
-               	addq	$-0x18, %rcx
+               	addq	$-0x20, %rcx
                	movq	0x8(%rcx), %rcx
                	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%fs:0x0, %rax
-               	addq	$-0x18, %rax
+               	addq	$-0x20, %rax
                	movq	0x10(%rax), %rax
                	leaq	-<rip>, %rcx # <addr>
                	subq	%rcx, %rax

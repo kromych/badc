@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x18]
+               	ldrsw	x0, [x0, #0x14]
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	stur	wzr, [x29, #-0x8]

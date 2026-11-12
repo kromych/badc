@@ -119,12 +119,11 @@ Disassembly of section .text:
 
 <text_tbl>:
                	enter	$-0x2, $-0x1
-               	movl	$0x1000001a, %esp       # imm = 0x1000001A
+               	movl	$0x1000001a, %eax       # imm = 0x1000001A
                	addb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%dh, 0x1a(%rax)
-               	addb	%al, (%rax)
+               	addb	%ch, (%rdx,%rbx)
                	addb	%al, (%rax)
 
 <text_end>:

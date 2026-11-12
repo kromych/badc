@@ -89,12 +89,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
     v89  Imm(0)                                           -> x0
-    v90  ImmData(8)                                       -> x3
+    v90  ImmData(16)                                      -> x3
     v91  Extend { value=v50, kind=I32 }                   -> x0
     v92  BinopI { op=shl, lhs=v50, rhs_imm=3 }            -> x0
     v93  Binop { op=add, lhs=v90, rhs=v92 }               -> x3
     v94  Load { addr=v93, disp=0, kind=I64 }              -> x3
-    v95  ImmData(56)                                      -> x12
+    v95  ImmData(64)                                      -> x12
     v96  Binop { op=add, lhs=v95, rhs=v92 }               -> x0
     v97  Load { addr=v96, disp=0, kind=I64 }              -> x12
     v98  Imm(20)                                          -> x0
@@ -158,12 +158,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v157 Imm(0)                                           -> x0
     v158 Imm(0)                                           -> x0
     v159 Imm(0)                                           -> x0
-    v160 ImmData(104)                                     -> x12
+    v160 ImmData(112)                                     -> x12
     v161 Extend { value=v50, kind=I32 }                   -> x0
     v162 BinopI { op=shl, lhs=v50, rhs_imm=3 }            -> x0
     v163 Binop { op=add, lhs=v160, rhs=v162 }             -> x12
     v164 Load { addr=v163, disp=0, kind=I64 }             -> x12
-    v165 ImmData(152)                                     -> [spill 1]
+    v165 ImmData(160)                                     -> [spill 1]
     v166 Binop { op=add, lhs=v165, rhs=v162 }             -> x0
     v167 Load { addr=v166, disp=0, kind=I64 }             -> [spill 1]
     v168 Imm(30)                                          -> x0
@@ -228,12 +228,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v208 Imm(0)                                           -> x0
     v209 Imm(0)                                           -> x0
     v210 Imm(0)                                           -> x0
-    v211 ImmData(200)                                     -> x9
+    v211 ImmData(208)                                     -> x9
     v212 Extend { value=v50, kind=I32 }                   -> x0
     v213 BinopI { op=shl, lhs=v50, rhs_imm=3 }            -> x0
     v214 Binop { op=add, lhs=v211, rhs=v213 }             -> x9
     v215 Load { addr=v214, disp=0, kind=I64 }             -> x9
-    v216 ImmData(248)                                     -> x3
+    v216 ImmData(256)                                     -> x3
     v217 Binop { op=add, lhs=v216, rhs=v213 }             -> x0
     v218 Load { addr=v217, disp=0, kind=I64 }             -> x3
     v219 Imm(40)                                          -> x0
@@ -300,9 +300,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0
-    v116 ImmData(8)                                       -> x0
+    v116 ImmData(16)                                      -> x0
     v117 Imm(4822678189205111)                            -> x0
-    v118 ImmData(56)                                      -> x0
+    v118 ImmData(64)                                      -> x0
     v119 Imm(-8603657889541918977)                        -> x0
     v120 Imm(1)                                           -> x0
     v121 Imm(0)                                           -> x0
@@ -355,11 +355,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v248 Imm(0)                                           -> x2
     v249 Imm(0)                                           -> x2
     v250 Imm(0)                                           -> x2
-    v251 ImmData(8)                                       -> x2
+    v251 ImmData(16)                                      -> x2
     v252 Imm(8)                                           -> x2
     v253 BinopI { op=add, lhs=v251, rhs_imm=8 }           -> x2
     v254 Imm(9645356378410222)                            -> x2
-    v255 ImmData(56)                                      -> x2
+    v255 ImmData(64)                                      -> x2
     v256 BinopI { op=add, lhs=v255, rhs_imm=8 }           -> x2
     v257 Imm(1239428294625713662)                         -> x2
     v258 Imm(2)                                           -> x2
@@ -413,11 +413,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v280 Imm(0)                                           -> x0
     v281 Imm(0)                                           -> x0
     v282 Imm(0)                                           -> x0
-    v283 ImmData(8)                                       -> x0
+    v283 ImmData(16)                                      -> x0
     v284 Imm(16)                                          -> x0
     v285 BinopI { op=add, lhs=v283, rhs_imm=16 }          -> x0
     v286 Imm(-9223372036854775808)                        -> x0
-    v287 ImmData(56)                                      -> x0
+    v287 ImmData(64)                                      -> x0
     v288 BinopI { op=add, lhs=v287, rhs_imm=16 }          -> x0
     v289 Imm(-9220960697760173253)                        -> x0
     v290 Imm(3)                                           -> x0
@@ -468,11 +468,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v309 Imm(0)                                           -> x0
     v310 Imm(0)                                           -> x0
     v311 Imm(0)                                           -> x0
-    v312 ImmData(8)                                       -> x0
+    v312 ImmData(16)                                      -> x0
     v313 Imm(24)                                          -> x0
     v314 BinopI { op=add, lhs=v312, rhs_imm=24 }          -> x0
     v315 Imm(0)                                           -> x0
-    v316 ImmData(56)                                      -> x0
+    v316 ImmData(64)                                      -> x0
     v317 BinopI { op=add, lhs=v316, rhs_imm=24 }          -> x0
     v318 Imm(4822678189205111)                            -> x0
     v319 Imm(4)                                           -> x0
@@ -522,11 +522,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v350 Imm(0)                                           -> x0
     v351 Imm(0)                                           -> x0
     v352 Imm(0)                                           -> x0
-    v353 ImmData(8)                                       -> x0
+    v353 ImmData(16)                                      -> x0
     v354 Imm(32)                                          -> x0
     v355 BinopI { op=add, lhs=v353, rhs_imm=32 }          -> x0
     v356 Imm(0)                                           -> x0
-    v357 ImmData(56)                                      -> x0
+    v357 ImmData(64)                                      -> x0
     v358 BinopI { op=add, lhs=v357, rhs_imm=32 }          -> x0
     v359 Imm(9645356378410222)                            -> x0
     v360 Imm(5)                                           -> x0
@@ -576,11 +576,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v391 Imm(0)                                           -> x0
     v392 Imm(0)                                           -> x0
     v393 Imm(0)                                           -> x0
-    v394 ImmData(8)                                       -> x0
+    v394 ImmData(16)                                      -> x0
     v395 Imm(40)                                          -> x0
     v396 BinopI { op=add, lhs=v394, rhs_imm=40 }          -> x0
     v397 Imm(0)                                           -> x0
-    v398 ImmData(56)                                      -> x0
+    v398 ImmData(64)                                      -> x0
     v399 BinopI { op=add, lhs=v398, rhs_imm=40 }          -> x0
     v400 Imm(-9223372036854775808)                        -> x0
     v401 Imm(6)                                           -> x0
@@ -632,11 +632,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v434 Imm(0)                                           -> x1
     v435 Imm(0)                                           -> x1
     v436 Imm(0)                                           -> x1
-    v437 ImmData(104)                                     -> x1
+    v437 ImmData(112)                                     -> x1
     v438 Imm(8)                                           -> x1
     v439 BinopI { op=add, lhs=v437, rhs_imm=8 }           -> x1
     v440 Imm(-9220960697760173253)                        -> x1
-    v441 ImmData(152)                                     -> x1
+    v441 ImmData(160)                                     -> x1
     v442 BinopI { op=add, lhs=v441, rhs_imm=8 }           -> x1
     v443 Imm(4921543092083816319)                         -> x1
     v444 Imm(7)                                           -> x1
@@ -687,11 +687,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v463 Imm(0)                                           -> x0
     v464 Imm(0)                                           -> x0
     v465 Imm(0)                                           -> x0
-    v466 ImmData(104)                                     -> x0
+    v466 ImmData(112)                                     -> x0
     v467 Imm(24)                                          -> x0
     v468 BinopI { op=add, lhs=v466, rhs_imm=24 }          -> x0
     v469 Imm(-8603657889541918977)                        -> x0
-    v470 ImmData(152)                                     -> x0
+    v470 ImmData(160)                                     -> x0
     v471 BinopI { op=add, lhs=v470, rhs_imm=24 }          -> x0
     v472 Imm(0)                                           -> x0
     v473 Imm(8)                                           -> x0
@@ -741,11 +741,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v493 Imm(0)                                           -> x1
     v494 Imm(0)                                           -> x1
     v495 Imm(0)                                           -> x1
-    v496 ImmData(104)                                     -> x1
+    v496 ImmData(112)                                     -> x1
     v497 Imm(40)                                          -> x1
     v498 BinopI { op=add, lhs=v496, rhs_imm=40 }          -> x1
     v499 Imm(1)                                           -> x1
-    v500 ImmData(152)                                     -> x1
+    v500 ImmData(160)                                     -> x1
     v501 BinopI { op=add, lhs=v500, rhs_imm=40 }          -> x1
     v502 Imm(0)                                           -> x1
     v503 Imm(9)                                           -> x1
@@ -797,11 +797,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v525 Imm(0)                                           -> x0
     v526 Imm(0)                                           -> x0
     v527 Imm(0)                                           -> x0
-    v528 ImmData(200)                                     -> x0
+    v528 ImmData(208)                                     -> x0
     v529 Imm(8)                                           -> x0
     v530 BinopI { op=add, lhs=v528, rhs_imm=8 }           -> x0
     v531 Imm(0)                                           -> x0
-    v532 ImmData(248)                                     -> x0
+    v532 ImmData(256)                                     -> x0
     v533 BinopI { op=add, lhs=v532, rhs_imm=8 }           -> x0
     v534 Imm(-4611686018427387904)                        -> x0
     v535 Imm(10)                                          -> x0
@@ -834,11 +834,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v562 Imm(0)                                           -> x0
     v563 Imm(0)                                           -> x0
     v564 Imm(0)                                           -> x0
-    v565 ImmData(200)                                     -> x0
+    v565 ImmData(208)                                     -> x0
     v566 Imm(24)                                          -> x0
     v567 BinopI { op=add, lhs=v565, rhs_imm=24 }          -> x0
     v568 Imm(-9223372036854775808)                        -> x0
-    v569 ImmData(248)                                     -> x0
+    v569 ImmData(256)                                     -> x0
     v570 BinopI { op=add, lhs=v569, rhs_imm=24 }          -> x0
     v571 Imm(-1)                                          -> x0
     v572 Imm(11)                                          -> x0
@@ -871,11 +871,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v599 Imm(0)                                           -> x0
     v600 Imm(0)                                           -> x0
     v601 Imm(0)                                           -> x0
-    v602 ImmData(200)                                     -> x0
+    v602 ImmData(208)                                     -> x0
     v603 Imm(40)                                          -> x0
     v604 BinopI { op=add, lhs=v602, rhs_imm=40 }          -> x0
     v605 Imm(-1)                                          -> x0
-    v606 ImmData(248)                                     -> x0
+    v606 ImmData(256)                                     -> x0
     v607 BinopI { op=add, lhs=v606, rhs_imm=40 }          -> x0
     v608 Imm(-1)                                          -> x0
     v609 Imm(12)                                          -> x0

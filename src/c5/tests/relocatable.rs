@@ -376,7 +376,12 @@ fn a_thread_local_aggregate_initializer_fills_the_thread_local_template() {
     assert_eq!(&words[8..10], &[9, 10], "the block-scope array");
     assert_eq!(tdata.relocs.len(), 1, "ts.p");
     assert_eq!(tdata.relocs[0].offset, 24);
-    assert_eq!(sec(".data").bytes.len(), 16, "the null guard and g alone");
+    // The NULL guard, padding to `g`'s boundary, and `g`.
+    assert_eq!(
+        sec(".data").bytes.len(),
+        4 + 8,
+        "the null guard and g alone"
+    );
 }
 
 #[test]
@@ -2230,4 +2235,58 @@ fn a_relocatable_link_renders_gnu_ld_map_rows() {
 
     assert!(map.contains("LOAD a.o"), "inputs are listed:\n{map}");
     assert!(map.contains("OUTPUT(out.o "), "output is named:\n{map}");
+}
+
+/// C11 6.2.8: a file-scope object sits on its own type's boundary and
+/// spans its own size, and a negative initializer leaves the bytes past
+/// its object zero. The x86-64 psABI 3.1.2 puts an array variable of 16
+/// bytes or more on 16.
+#[test]
+fn file_scope_objects_take_their_own_size_and_boundary() {
+    let src = "char c1 = -1; char c2; short s1; int i1; int i2; static int i3; int *p;\n\
+               char t1 = -1; int arr[4] = {-1}; short s2 = -1;\n\
+               int use(void) { return c1 + c2 + s1 + i1 + i2 + i3 + (p != 0) + t1 + arr[0] + s2; }\n";
+    let objects = [
+        ("c1", 1, 1),
+        ("c2", 1, 1),
+        ("s1", 2, 2),
+        ("i1", 4, 4),
+        ("i2", 4, 4),
+        ("i3", 4, 4),
+        ("p", 8, 8),
+        ("t1", 1, 1),
+        ("arr", 16, 4),
+        ("s2", 2, 2),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
+        let data = obj
+            .sections
+            .iter()
+            .position(|s| s.name == ".data")
+            .expect(".data");
+        let mut written = alloc::vec![false; obj.sections[data].bytes.len()];
+        for (name, size, align) in objects {
+            let s = obj.symbols.iter().find(|s| s.name == name).expect(name);
+            let align = if name == "arr" && target == Target::LinuxX64 {
+                16
+            } else {
+                align
+            };
+            assert_eq!(s.size, size, "{target:?}: sizeof {name}");
+            assert_eq!(s.value % align, 0, "{target:?}: {name} at {}", s.value);
+            if matches!(s.sec, EtSymRef::Section(i) if i == data) {
+                let at = s.value as usize;
+                written[at..at + size as usize].fill(true);
+            }
+        }
+        let bytes = &obj.sections[data].bytes;
+        let stray: Vec<usize> = (0..bytes.len())
+            .filter(|&i| !written[i] && bytes[i] != 0)
+            .collect();
+        assert!(
+            stray.is_empty(),
+            "{target:?}: nonzero padding at {stray:?}: {bytes:02x?}"
+        );
+    }
 }

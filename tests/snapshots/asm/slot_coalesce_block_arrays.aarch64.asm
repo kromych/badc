@@ -141,7 +141,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	adrp	x0, <page>
-               	ldrsw	x21, [x0, #0x18]
+               	ldrsw	x21, [x0, #0x14]
                	mov	x20, #0x3e8             // =1000
                	mov	x0, #0x0                // =0
                	mov	x1, x20

@@ -995,7 +995,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v320 Imm(36)                                          -> x0
     terminator Return(v320)   (exit_acc=v320)
   block 78  start_pc=0
-    v321 ImmData(8)                                       -> x2
+    v321 ImmData(4)                                       -> x2
     v322 Imm(8)                                           -> x0
     v323 Imm(8)                                           -> x0
     v324 Imm(0)                                           -> x0
@@ -1032,7 +1032,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     v325 Imm(37)                                          -> x0
     terminator Return(v325)   (exit_acc=v325)
   block 84  start_pc=0
-    v326 ImmData(8)                                       -> x0
+    v326 ImmData(4)                                       -> x0
     v327 Imm(0)                                           -> x0
     v328 Imm(0)                                           -> x0
     v329 Imm(0)                                           -> x0

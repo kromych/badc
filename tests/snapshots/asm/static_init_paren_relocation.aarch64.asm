@@ -53,7 +53,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	ldr	x2, [x1, #0x50]
+               	ldr	x2, [x1, #0x48]
                	mov	x1, x0
                	blr	x2
                	cmp	w0, #0x7

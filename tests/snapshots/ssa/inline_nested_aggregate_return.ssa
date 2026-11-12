@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v9   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x1
     v10  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x2
     v11  Imm(0)                                           -> x1
-    v12  ImmData(16)                                      -> x1
+    v12  ImmData(20)                                      -> x1
     v13  Load { addr=v12, disp=0, kind=I32 pc_rel }       -> x1
     v14  BinopI { op=add, lhs=v13, rhs_imm=1 }            -> x1
     v15  Store { addr=v12, disp=0, value=v14, kind=I32 pc_rel } -> -
@@ -109,7 +109,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v76  Imm(0)                                           -> x0
     v77  Imm(6)                                           -> x0
     v78  Imm(0)                                           -> x0
-    v79  ImmData(16)                                      -> x0
+    v79  ImmData(20)                                      -> x0
     v80  Load { addr=v79, disp=0, kind=I32 pc_rel }       -> x0
     v81  BinopI { op=add, lhs=v80, rhs_imm=1 }            -> x0
     v82  Store { addr=v79, disp=0, value=v81, kind=I32 pc_rel } -> -
@@ -462,7 +462,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b6)
   block 6  start_pc=0
     v354 Copy { value=v345, fp=false }                    -> x1
-    v355 ImmData(16)                                      -> x1
+    v355 ImmData(20)                                      -> x1
     v356 Load { addr=v355, disp=0, kind=I32 pc_rel }      -> x1
     v357 Imm(4)                                           -> x1
     v358 Imm(6)                                           -> x1

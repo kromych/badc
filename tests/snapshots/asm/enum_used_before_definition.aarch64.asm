@@ -28,7 +28,7 @@ Disassembly of section .text:
 <store>:
                	adrp	x1, <page>
                	mov	w0, w0
-               	str	x0, [x1, #0x80]
+               	str	x0, [x1, #0x78]
                	ret
 
 <id>:
@@ -76,15 +76,15 @@ Disassembly of section .text:
                	mov	x0, #0x80000000         // =2147483648
                	bl	<addr>
                	adrp	x0, <page>
-               	ldr	x1, [x0, #0x80]
+               	ldr	x1, [x0, #0x78]
                	mov	x2, #0x80000000         // =2147483648
                	cmp	x1, x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
-               	str	xzr, [x0, #0x80]
+               	str	xzr, [x0, #0x78]
                	mov	x1, #0x80000000         // =2147483648
-               	str	x1, [x0, #0x80]
+               	str	x1, [x0, #0x78]
                	adrp	x0, <page>
                	ldr	x20, [x0, #0x18]
                	ldr	w0, [x20]
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	b	<addr>
                	adrp	x0, <page>
-               	str	xzr, [x0, #0x80]
+               	str	xzr, [x0, #0x78]
                	mov	x0, #0x80000000         // =2147483648
                	bl	<addr>
                	adrp	x0, <page>
@@ -128,8 +128,8 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	mov	x1, #0x80000000         // =2147483648
-               	str	w1, [x0, #0x78]
-               	ldr	w0, [x0, #0x78]
+               	str	w1, [x0, #0x84]
+               	ldr	w0, [x0, #0x84]
                	cmp	w0, w1
                	b.eq	<addr>
                	mov	x0, #0xd                // =13

@@ -933,9 +933,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	movzbq	-0x3d(%rbp), %rcx
                	movl	%ecx, (%rsp)
                	movl	$0x6, 0x4(%rsp)
@@ -961,9 +960,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	movl	-0x58(%rbp), %eax
                	movl	%eax, (%rsp)
                	movl	$0x1, 0x4(%rsp)
@@ -989,9 +987,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	movslq	-0x58(%rbp), %rcx
                	movq	%rcx, (%rsp)
                	movq	$0x2, 0x8(%rsp)
@@ -1012,9 +1009,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	movb	$-0x80, (%rsp)
                	movb	$0x1e, 0x1(%rsp)
                	movb	$0x1d, 0x2(%rsp)
@@ -1063,9 +1059,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
                	movzbq	-0x40(%rbp), %rax
                	movb	%al, (%rsp)
                	movb	$0x1, 0x1(%rsp)

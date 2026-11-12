@@ -222,8 +222,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xf0(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%rax)
                	leaq	-0xb0(%rbp), %rdi
                	movups	0x20(%rsp), %xmm0
                	vmovdqa	%xmm0, %xmm0

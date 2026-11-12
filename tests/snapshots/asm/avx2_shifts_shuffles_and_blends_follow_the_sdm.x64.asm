@@ -426,23 +426,15 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax,%rbx,8), %rax
                	leaq	(%rsp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	%xmm14, 0x10(%rcx)
-               	movups	%xmm14, 0x20(%rcx)
-               	movups	%xmm14, 0x30(%rcx)
-               	movups	%xmm14, 0x40(%rcx)
-               	movups	%xmm14, 0x50(%rcx)
-               	movups	%xmm14, 0x60(%rcx)
-               	movups	%xmm14, 0x70(%rcx)
-               	movups	%xmm14, 0x80(%rcx)
-               	movups	%xmm14, 0x90(%rcx)
-               	movups	%xmm14, 0xa0(%rcx)
-               	movups	%xmm14, 0xb0(%rcx)
-               	movups	%xmm14, 0xc0(%rcx)
-               	movups	%xmm14, 0xd0(%rcx)
-               	movups	%xmm14, 0xe0(%rcx)
-               	movups	%xmm14, 0xf0(%rcx)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
+               	vmovups	%ymm14, 0x20(%rcx)
+               	vmovups	%ymm14, 0x40(%rcx)
+               	vmovups	%ymm14, 0x60(%rcx)
+               	vmovups	%ymm14, 0x80(%rcx)
+               	vmovups	%ymm14, 0xa0(%rcx)
+               	vmovups	%ymm14, 0xc0(%rcx)
+               	vmovups	%ymm14, 0xe0(%rcx)
                	xorl	%ecx, %ecx
                	vmovq	%r13, %xmm0
                	vpinsrq	$0x1, %r14, %xmm0, %xmm0
@@ -5993,31 +5985,19 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movups	(%rbx), %xmm0
                	leaq	(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
-               	movups	%xmm14, 0x80(%rax)
-               	movups	%xmm14, 0x90(%rax)
-               	movups	%xmm14, 0xa0(%rax)
-               	movups	%xmm14, 0xb0(%rax)
-               	movups	%xmm14, 0xc0(%rax)
-               	movups	%xmm14, 0xd0(%rax)
-               	movups	%xmm14, 0xe0(%rax)
-               	movups	%xmm14, 0xf0(%rax)
-               	movups	%xmm14, 0x100(%rax)
-               	movups	%xmm14, 0x110(%rax)
-               	movups	%xmm14, 0x120(%rax)
-               	movups	%xmm14, 0x130(%rax)
-               	movups	%xmm14, 0x140(%rax)
-               	movups	%xmm14, 0x150(%rax)
-               	movups	%xmm14, 0x160(%rax)
-               	movups	%xmm14, 0x170(%rax)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, 0x20(%rax)
+               	vmovups	%ymm14, 0x40(%rax)
+               	vmovups	%ymm14, 0x60(%rax)
+               	vmovups	%ymm14, 0x80(%rax)
+               	vmovups	%ymm14, 0xa0(%rax)
+               	vmovups	%ymm14, 0xc0(%rax)
+               	vmovups	%ymm14, 0xe0(%rax)
+               	vmovups	%ymm14, 0x100(%rax)
+               	vmovups	%ymm14, 0x120(%rax)
+               	vmovups	%ymm14, 0x140(%rax)
+               	vmovups	%ymm14, 0x160(%rax)
                	pmovsxbw	%xmm0, %xmm1
                	movapd	%xmm0, %xmm2
                	psrldq	$0x8, %xmm2             # xmm2 = xmm2[8,9,10,11,12,13,14,15],zero,zero,zero,zero,zero,zero,zero,zero

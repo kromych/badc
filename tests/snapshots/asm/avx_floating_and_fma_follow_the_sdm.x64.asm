@@ -6298,9 +6298,8 @@ Disassembly of section .text:
                	vpextrd	$0x3, %xmm14, %eax
                	movslq	%eax, %rax
                	leaq	0x80(%rsp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	%xmm14, 0x10(%rcx)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rcx)
                	movl	%eax, 0x80(%rsp)
                	movl	%eax, 0x84(%rsp)
                	movl	%eax, 0x88(%rsp)

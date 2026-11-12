@@ -579,8 +579,8 @@ Disassembly of section .text:
                	movups	%xmm14, -0x70(%rbp)
                	vmovups	-0x90(%rbp), %ymm14
                	vmovdqa	%xmm14, %xmm0
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%r12)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%r12)
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
                	movss	%xmm1, -0x40(%rbp)
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
@@ -590,8 +590,8 @@ Disassembly of section .text:
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movss	%xmm0, -0x34(%rbp)
                	leaq	-0x20(%rbp), %r13
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%r13)
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%xmm14, (%r13)
                	leaq	-0x58(%rbp), %rax
                	stmxcsr	(%rax)
                	movl	-0x58(%rbp), %r14d

@@ -698,13 +698,25 @@ Disassembly of section .text:
                	cmpl	$0xa, %r12d
                	jl	<addr>
                	leaq	0x1c0(%rsp), %rax
-               	xorps	%xmm14, %xmm14
-               	movq	%rax, %r10
-               	leaq	0x240(%r10), %r11
-               	movups	%xmm14, (%r10)
-               	addq	$0x10, %r10
-               	cmpq	%r11, %r10
-               	jb	<addr>
+               	vxorps	%ymm14, %ymm14, %ymm14
+               	vmovups	%ymm14, (%rax)
+               	vmovups	%ymm14, 0x20(%rax)
+               	vmovups	%ymm14, 0x40(%rax)
+               	vmovups	%ymm14, 0x60(%rax)
+               	vmovups	%ymm14, 0x80(%rax)
+               	vmovups	%ymm14, 0xa0(%rax)
+               	vmovups	%ymm14, 0xc0(%rax)
+               	vmovups	%ymm14, 0xe0(%rax)
+               	vmovups	%ymm14, 0x100(%rax)
+               	vmovups	%ymm14, 0x120(%rax)
+               	vmovups	%ymm14, 0x140(%rax)
+               	vmovups	%ymm14, 0x160(%rax)
+               	vmovups	%ymm14, 0x180(%rax)
+               	vmovups	%ymm14, 0x1a0(%rax)
+               	vmovups	%ymm14, 0x1c0(%rax)
+               	vmovups	%ymm14, 0x1e0(%rax)
+               	vmovups	%ymm14, 0x200(%rax)
+               	vmovups	%ymm14, 0x220(%rax)
                	vmovups	-0x460(%rbp), %ymm14
                	vmovups	%ymm14, 0x1c0(%rsp)
                	vmovups	-0x440(%rbp), %ymm14

@@ -1172,6 +1172,14 @@ pub(crate) fn emit_vex_0f(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: 
     }
 }
 
+/// `VXORPS ymm, ymm, ymm`: `VEX.256.0F 57 /r`, zeroing the whole register
+/// when both sources are `x`.
+pub(crate) fn emit_vxorps_ymm(code: &mut Vec<u8>, x: Reg) {
+    emit_vex_0f(code, x, x, x, 0, true);
+    emit_byte(code, 0x57);
+    emit_byte(code, modrm(0b11, x.lo(), x.lo()));
+}
+
 /// `VMOVUPS xmm, m128`: `VEX.128.0F 10 /r`.
 pub(crate) fn emit_vmovups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_vex_0f(code, xmm, Reg(0), base, 0, false);

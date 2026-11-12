@@ -1335,7 +1335,14 @@ pub(super) fn emit_mzero(
     let unit = super::super::access_chunk(align, strict_align, 8);
     let total = size as u64;
     let xmm = xmm.filter(|_| unit == 8 && total >= 16).map(Reg);
-    let widest = if xmm.is_some() { 16 } else { unit };
+    // A body holding 256-bit values fills 32-byte units, VEX-encoded, as
+    // its copies move them.
+    let vex = frame.wide_regs;
+    let widest = match xmm {
+        Some(_) if vex && total >= 32 => 32,
+        Some(_) => 16,
+        None => unit,
+    };
     let width = |left: u32| {
         let mut w = widest;
         while w > left {
@@ -1344,11 +1351,15 @@ pub(super) fn emit_mzero(
         w
     };
     let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: i32| match xmm {
+        Some(x) if w == 32 => super::encode::emit_vmovups_mem_ymm(code, base, off, x),
+        Some(x) if w == 16 && vex => super::encode::emit_vmovups_mem_xmm(code, base, off, x),
         Some(x) if w == 16 => emit_movups_mem_xmm(code, base, off, x),
         _ => emit_mi(code, Mnem::Mov, w as u8, base, off, 0),
     };
-    if let Some(x) = xmm {
-        emit_xorps(code, x, x);
+    match xmm {
+        Some(x) if vex => super::encode::emit_vxorps_ymm(code, x),
+        Some(x) => emit_xorps(code, x, x),
+        None => {}
     }
     let stores = total / u64::from(widest) + u64::from((total % u64::from(widest)).count_ones());
     if stores <= crate::c5::ast::MAX_MEM_FILL_ACCESSES as u64 {

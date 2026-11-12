@@ -1022,6 +1022,12 @@ mod two_address_tests {
 
     /// The function of `src` holding a copy, the copy's id and the allocation.
     fn copy_of(src: &str) -> (FunctionSsa, u32, Allocation) {
+        inst_of(src, |i| matches!(i, Inst::Mcpy { .. }))
+    }
+
+    /// The function of `src` holding an instruction `is` accepts, that
+    /// instruction's id and an allocation of the function.
+    fn inst_of(src: &str, is: fn(&Inst) -> bool) -> (FunctionSsa, u32, Allocation) {
         let target = Target::LinuxX64;
         let program = crate::Compiler::with_target(
             alloc::format!("{src} int main(void){{ return 0; }}"),
@@ -1032,12 +1038,11 @@ mod two_address_tests {
         let funcs =
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("ssa");
-        let is_copy = |i: &Inst| matches!(i, Inst::Mcpy { .. });
         let func = funcs
             .into_iter()
-            .find(|f| f.insts.iter().any(is_copy))
-            .expect("a function with a copy");
-        let v = func.insts.iter().position(is_copy).expect("the copy") as u32;
+            .find(|f| f.insts.iter().any(is))
+            .expect("a function with the instruction");
+        let v = func.insts.iter().position(is).expect("the instruction") as u32;
         let mut alloc = super::super::ssa::reg_alloc::allocate(
             &func,
             target,
@@ -1084,6 +1089,31 @@ mod two_address_tests {
             0xc5, 0x7c, 0x10, 0x36, // vmovups (%rsi), %ymm14
             0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
             0xc5, 0x78, 0x10, 0x76, 0x20, // vmovups 0x20(%rsi), %xmm14
+            0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
+        ];
+        assert_eq!(code, want, "{code:02x?}");
+    }
+
+    /// In a body holding 256-bit values a zero fill clears the ymm and
+    /// stores it as a copy moves, VEX-encoded. Encodings are clang's.
+    #[test]
+    fn a_wide_body_zero_fills_with_vex_moves() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = inst_of(
+            "typedef struct { long v[6]; } Value; void zero(Value *d) { *d = (Value){0}; }",
+            |i| matches!(i, Inst::Mzero { .. }),
+        );
+        let Inst::Mzero { dst, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[dst as usize] = Place::IntReg(Reg::RDI.0);
+        let mut frame = compute_frame(&func, &alloc, target.abi(), target);
+        frame.wide_regs = true;
+        let mut code = Vec::new();
+        emit_mzero(&mut code, dst, 48, 8, Some(14), false, &alloc, frame).expect("emit_mzero");
+        let want = [
+            0xc4, 0x41, 0x0c, 0x57, 0xf6, // vxorps %ymm14, %ymm14, %ymm14
+            0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
             0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
         ];
         assert_eq!(code, want, "{code:02x?}");

@@ -1172,6 +1172,20 @@ pub(crate) fn emit_vex_0f(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: 
     }
 }
 
+/// `VMOVUPS xmm, m128`: `VEX.128.0F 10 /r`.
+pub(crate) fn emit_vmovups_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    emit_vex_0f(code, xmm, Reg(0), base, 0, false);
+    emit_byte(code, 0x10);
+    emit_modrm_mem(code, xmm, base, disp);
+}
+
+/// `VMOVUPS m128, xmm`: `VEX.128.0F 11 /r`.
+pub(crate) fn emit_vmovups_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    emit_vex_0f(code, xmm, Reg(0), base, 0, false);
+    emit_byte(code, 0x11);
+    emit_modrm_mem(code, xmm, base, disp);
+}
+
 /// `VMOVUPS ymm, m256`: `VEX.256.0F 10 /r`.
 pub(crate) fn emit_vmovups_ymm_mem(code: &mut Vec<u8>, ymm: Reg, base: Reg, disp: i32) {
     emit_vex_0f(code, ymm, Reg(0), base, 0, true);

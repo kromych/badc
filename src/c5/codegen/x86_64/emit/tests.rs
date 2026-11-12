@@ -1047,6 +1047,48 @@ mod two_address_tests {
         (func, v, alloc)
     }
 
+    /// In a body holding 256-bit values a copy moves 32-byte units through
+    /// the ymm and a 16-byte rest through its xmm, all VEX-encoded: a
+    /// legacy SSE access between 256-bit ones carries their upper halves.
+    /// Encodings are clang's.
+    #[test]
+    fn a_wide_body_copies_with_vex_moves() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = copy_of(
+            "typedef struct { long v[6]; } Value; void copy(Value *d, const Value *s) { *d = *s; }",
+        );
+        let Inst::Mcpy { dst, src, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        alloc.places[dst as usize] = Place::IntReg(Reg::RDI.0);
+        alloc.places[src as usize] = Place::IntReg(Reg::RSI.0);
+        let mut frame = compute_frame(&func, &alloc, target.abi(), target);
+        frame.wide_regs = true;
+        let mut code = Vec::new();
+        emit_mcpy(
+            &mut code,
+            v,
+            Place::None,
+            dst,
+            src,
+            48,
+            8,
+            Some(14),
+            false,
+            &alloc,
+            frame,
+            target.abi(),
+        )
+        .expect("emit_mcpy");
+        let want = [
+            0xc5, 0x7c, 0x10, 0x36, // vmovups (%rsi), %ymm14
+            0xc5, 0x7c, 0x11, 0x37, // vmovups %ymm14, (%rdi)
+            0xc5, 0x78, 0x10, 0x76, 0x20, // vmovups 0x20(%rsi), %xmm14
+            0xc5, 0x78, 0x11, 0x77, 0x20, // vmovups %xmm14, 0x20(%rdi)
+        ];
+        assert_eq!(code, want, "{code:02x?}");
+    }
+
     /// A copy moves 16 bytes through the xmm the zero fill uses and takes
     /// a general register only for the units below that: the writer's
     /// scratch while the bases sit in value registers, the first bank

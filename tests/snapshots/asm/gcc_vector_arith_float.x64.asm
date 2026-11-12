@@ -33,12 +33,12 @@ Disassembly of section .text:
                	andq	$-0x20, %rsp
                	leaq	0x20(%rsp), %rax
                	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
+               	vmovups	(%rcx), %xmm14
+               	vmovups	%xmm14, (%rax)
                	leaq	0x30(%rsp), %rax
                	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
+               	vmovups	(%rcx), %xmm14
+               	vmovups	%xmm14, (%rax)
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax
@@ -502,8 +502,8 @@ Disassembly of section .text:
                	leaq	0x40(%rsp), %rdx
                	movups	%xmm1, 0x40(%rsp)
                	leaq	(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
                	movups	(%rsp), %xmm1
                	movups	0x30(%rsp), %xmm2
                	mulps	%xmm2, %xmm1
@@ -523,8 +523,8 @@ Disassembly of section .text:
                	leaq	0x40(%rsp), %rdx
                	movups	%xmm1, 0x40(%rsp)
                	leaq	(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
                	movups	(%rsp), %xmm1
                	movups	0x30(%rsp), %xmm2
                	addps	%xmm2, %xmm1
@@ -556,8 +556,8 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	0x20(%rsp), %rax
                	leaq	0x40(%rsp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movss	0x40(%rsp), %xmm1
                	movq	%rax, %xmm15

@@ -1446,7 +1446,15 @@ pub(super) fn emit_mcpy(
     };
     let unit = super::super::access_chunk(align, strict_align, 8);
     let xmm = xmm.filter(|_| unit == 8 && bytes >= 16).map(Reg);
-    let widest = if xmm.is_some() { 16 } else { unit };
+    // A body holding 256-bit values runs with AVX: its copies move 32-byte
+    // units and take the VEX encodings, as a legacy SSE access between
+    // 256-bit ones carries their upper halves.
+    let vex = frame.wide_regs;
+    let widest = match xmm {
+        Some(_) if vex && bytes >= 32 => 32,
+        Some(_) => 16,
+        None => unit,
+    };
     let candidates = copy_temps(abi);
     let taken = [dst_r.0, src_r.0];
     let mut regs = SiteRegs::new(alloc, v, &candidates, &taken, frame.fixed_regs);
@@ -1460,6 +1468,14 @@ pub(super) fn emit_mcpy(
     let access = |code: &mut Vec<u8>, w: u32, temp: Option<Reg>, s: Reg, d: Reg, off: i32| match (
         w, xmm, temp,
     ) {
+        (32, Some(x), _) => {
+            super::encode::emit_vmovups_ymm_mem(code, x, s, off);
+            super::encode::emit_vmovups_mem_ymm(code, d, off, x);
+        }
+        (16, Some(x), _) if vex => {
+            super::encode::emit_vmovups_xmm_mem(code, x, s, off);
+            super::encode::emit_vmovups_mem_xmm(code, d, off, x);
+        }
         (16, Some(x), _) => {
             emit_movups_xmm_mem(code, x, s, off);
             emit_movups_mem_xmm(code, d, off, x);

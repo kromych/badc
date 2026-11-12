@@ -398,8 +398,8 @@ Disassembly of section .text:
                	movups	%xmm0, 0x80(%rsp)
                	leaq	-0x10(%rbp), %rcx
                	leaq	0x40(%rsp), %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%rcx)
                	movb	$-0x3c, -0xd(%rbp)
                	movb	$-0x3d, -0x1(%rbp)
                	xorl	%eax, %eax
@@ -523,8 +523,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %r9
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r9)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
                	movl	$0x75bcd15, %edi        # imm = 0x75BCD15
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
@@ -567,8 +567,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %r9
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r9)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	vzeroupper
@@ -616,8 +616,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %r9
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r9)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
                	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm1
                	movq	%r9, %r10
@@ -672,8 +672,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %r9
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r9)
+               	vmovups	(%rax), %xmm14
+               	vmovups	%xmm14, (%r9)
                	movabsq	$0x4020800000000000, %rax # imm = 0x4020800000000000
                	movq	%rax, %xmm1
                	movq	%r9, %r10
@@ -772,10 +772,8 @@ Disassembly of section .text:
                	retq
                	leaq	0x80(%rsp), %r9
                	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r9)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%r9)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%r9)
                	movabsq	$-0x3fe8000000000000, %rax # imm = 0xC018000000000000
                	movq	%rax, %xmm1
                	movq	%r9, %r10
@@ -899,14 +897,10 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	leaq	0x80(%rsp), %rax
                	leaq	0x40(%rsp), %rdx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
-               	movups	0x20(%rax), %xmm14
-               	movups	%xmm14, 0x20(%rdx)
-               	movups	0x30(%rax), %xmm14
-               	movups	%xmm14, 0x30(%rdx)
+               	vmovups	(%rax), %ymm14
+               	vmovups	%ymm14, (%rdx)
+               	vmovups	0x20(%rax), %ymm14
+               	vmovups	%ymm14, 0x20(%rdx)
                	xorl	%eax, %eax
                	movl	(%rdx,%rax,4), %esi
                	cmpl	$0xd, %eax

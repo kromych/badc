@@ -115,11 +115,13 @@ typedef struct uint8x16x4_t {
     insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(1) ", " __BADC_NEON_V_##C(2)
 #define __BADC_NEON_I3R(insn, A, B, C)                                    \
     insn " " __BADC_NEON_V_##A(0) ", " __BADC_NEON_V_##B(2) ", " __BADC_NEON_V_##C(1)
-/* The signed or unsigned choice by kind; a polynomial lane is unsigned. */
+/* The signed or unsigned choice by kind; a polynomial lane is unsigned,
+ * and a floating one takes the first, as a lane permute does. */
 #define __BADC_NEON_PICK(k, s, u) __BADC_NEON_PICK_##k(s, u)
 #define __BADC_NEON_PICK_s(s, u) s
 #define __BADC_NEON_PICK_u(s, u) u
 #define __BADC_NEON_PICK_p(s, u) u
+#define __BADC_NEON_PICK_f(s, u) s
 /* The kind's instruction over three operands in arrangement A. */
 #define __BADC_NEON_K3(k, si, ui, A) __BADC_NEON_I3(__BADC_NEON_PICK(k, si, ui), A, A, A)
 /* The compiler's row of the instruction a builtin stem names, in
@@ -317,20 +319,20 @@ __BADC_NEON_ALL(__BADC_NEON_F_HALF, _)
 __BADC_NEON_ALL(__BADC_NEON_F_CASTS, _)
 
 /* Permutes (none of a single lane); the pairs return both halves. */
-#define __BADC_NEON_F_PERM(op, insn, sfx, k, E, D, Q, AD, AQ, ...)        \
-    __BADC_NEON_FN2(op##_##sfx, D, D, D, __BADC_NEON_I3(insn, AD, AD, AD)) \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, Q, __BADC_NEON_I3(insn, AQ, AQ, AQ))
-#define __BADC_NEON_F_PERMQ(op, insn, sfx, k, E, D, Q, AD, AQ, ...)       \
-    __BADC_NEON_FN2(op##q_##sfx, Q, Q, Q, __BADC_NEON_I3(insn, AQ, AQ, AQ))
-#define __BADC_NEON_PERMS(op, insn)                                       \
-    __BADC_NEON_LANES(__BADC_NEON_F_PERM, op, insn)                       \
-    __BADC_NEON_E64(__BADC_NEON_F_PERMQ, op, insn)
-__BADC_NEON_PERMS(vzip1, "zip1")
-__BADC_NEON_PERMS(vzip2, "zip2")
-__BADC_NEON_PERMS(vuzp1, "uzp1")
-__BADC_NEON_PERMS(vuzp2, "uzp2")
-__BADC_NEON_PERMS(vtrn1, "trn1")
-__BADC_NEON_PERMS(vtrn2, "trn2")
+#define __BADC_NEON_F_PERM(op, si, sfx, k, E, D, Q, AD, AQ, ...)          \
+    __BADC_NEON_B2(op##_##sfx, D, D, D, k, si, si, AD)                    \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, si, AQ)
+#define __BADC_NEON_F_PERMQ(op, si, sfx, k, E, D, Q, AD, AQ, ...)         \
+    __BADC_NEON_B2(op##q_##sfx, Q, Q, Q, k, si, si, AQ)
+#define __BADC_NEON_PERMS(op, si)                                         \
+    __BADC_NEON_LANES(__BADC_NEON_F_PERM, op, si)                         \
+    __BADC_NEON_E64(__BADC_NEON_F_PERMQ, op, si)
+__BADC_NEON_PERMS(vzip1, __builtin_neon_zip1)
+__BADC_NEON_PERMS(vzip2, __builtin_neon_zip2)
+__BADC_NEON_PERMS(vuzp1, __builtin_neon_uzp1)
+__BADC_NEON_PERMS(vuzp2, __builtin_neon_uzp2)
+__BADC_NEON_PERMS(vtrn1, __builtin_neon_trn1)
+__BADC_NEON_PERMS(vtrn2, __builtin_neon_trn2)
 #define __BADC_NEON_PAIR(op, sfx, DN, QN)                                 \
     static inline DN##x2_t op##_##sfx(DN##_t __a, DN##_t __b) {           \
         return (DN##x2_t){{op##1_##sfx(__a, __b), op##2_##sfx(__a, __b)}}; \

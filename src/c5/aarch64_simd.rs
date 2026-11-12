@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{AcrossOp, FOp, Form, LongOp, NarrowKind, Ret, Sem, SimdOp};
+use super::simd::{AcrossOp, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -484,12 +484,114 @@ const NARROW: &[SimdOp] = &[
     unary("__builtin_neon_rev64_4s", "rev64", Ret::V4si, Sem::Rev(4, 8), 16),
 ];
 
+/// A permutation's row over `bytes`-byte vectors of `ret`'s `w`-byte lanes.
+const fn perm(
+    name: &'static str,
+    mnem: &'static str,
+    ret: Ret,
+    op: PermOp,
+    second: bool,
+    w: u8,
+    bytes: u8,
+) -> SimdOp {
+    row(
+        name,
+        mnem,
+        Form::Vv,
+        ret,
+        Sem::Perm(op, w, second, bytes),
+        bytes,
+    )
+}
+
+/// The rows of a permutation, one per arrangement with two lanes or more.
+macro_rules! perms {
+    ($m:literal, $op:ident, $second:expr) => {
+        [
+            perm(
+                concat!("__builtin_neon_", $m, "_8b"),
+                $m,
+                Ret::V8qi,
+                PermOp::$op,
+                $second,
+                1,
+                8,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_16b"),
+                $m,
+                Ret::V16qi,
+                PermOp::$op,
+                $second,
+                1,
+                16,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_4h"),
+                $m,
+                Ret::V4hi,
+                PermOp::$op,
+                $second,
+                2,
+                8,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_8h"),
+                $m,
+                Ret::V8hi,
+                PermOp::$op,
+                $second,
+                2,
+                16,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_2s"),
+                $m,
+                Ret::V2si,
+                PermOp::$op,
+                $second,
+                4,
+                8,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_4s"),
+                $m,
+                Ret::V4si,
+                PermOp::$op,
+                $second,
+                4,
+                16,
+            ),
+            perm(
+                concat!("__builtin_neon_", $m, "_2d"),
+                $m,
+                Ret::V2di,
+                PermOp::$op,
+                $second,
+                8,
+                16,
+            ),
+        ]
+    };
+}
+
+#[rustfmt::skip]
+const PERMS: &[[SimdOp; 7]] = &[
+    perms!("zip1", Zip, false),
+    perms!("zip2", Zip, true),
+    perms!("uzp1", Uzp, false),
+    perms!("uzp2", Uzp, true),
+    perms!("trn1", Trn, false),
+    perms!("trn2", Trn, true),
+];
+
 /// The row at index `i` of the rows [`OPS`], then the widening, the
-/// narrowing and other one-source, and the reduction ones, numbered in
-/// that order.
+/// narrowing and other one-source, the reduction and the permutation
+/// ones, numbered in that order.
 pub(crate) fn get(i: usize) -> &'static SimdOp {
     let long = LONG.len() * 3;
     let narrow = long + NARROW.len();
+    let across = narrow + ACROSS.len() * 5;
     if i < OPS.len() {
         &OPS[i]
     } else if i < OPS.len() + long {
@@ -497,9 +599,12 @@ pub(crate) fn get(i: usize) -> &'static SimdOp {
         &LONG[k / 3][k % 3]
     } else if i < OPS.len() + narrow {
         &NARROW[i - OPS.len() - long]
-    } else {
+    } else if i < OPS.len() + across {
         let k = i - OPS.len() - narrow;
         &ACROSS[k / 5][k % 5]
+    } else {
+        let k = i - OPS.len() - across;
+        &PERMS[k / 7][k % 7]
     }
 }
 
@@ -509,6 +614,7 @@ pub(crate) fn rows() -> impl Iterator<Item = &'static SimdOp> {
         .chain(LONG.iter().flatten())
         .chain(NARROW)
         .chain(ACROSS.iter().flatten())
+        .chain(PERMS.iter().flatten())
 }
 
 /// The table index of `name`, or `None` when it is not an AArch64 SIMD

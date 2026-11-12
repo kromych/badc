@@ -41,6 +41,41 @@ fn the_intrinsics_emit_their_instruction() {
     }
 }
 
+/// Each lane permute is its one instruction on the argument registers
+/// under `-O`, a floating one the integer form of its lane width.
+#[cfg(feature = "full")]
+#[test]
+fn the_permutes_emit_their_instruction() {
+    use crate::{NativeOptions, Target};
+    let src = "#include <arm_neon.h>\n\
+        int8x16_t f(int8x16_t a, int8x16_t b) { return vzip1q_s8(a, b); }\n\
+        uint16x4_t g(uint16x4_t a, uint16x4_t b) { return vuzp2_u16(a, b); }\n\
+        int64x2_t h(int64x2_t a, int64x2_t b) { return vtrn1q_s64(a, b); }\n\
+        float32x2_t k(float32x2_t a, float32x2_t b) { return vtrn2_f32(a, b); }\n\
+        int main(void) { return 0; }";
+    let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("<arm_neon.h> must compile for an AArch64 target");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native for linux-aarch64");
+    for (word, what) in [
+        (0x4e01_3800u32, "zip1 v0.16b, v0.16b, v1.16b"),
+        (0x0e41_5800, "uzp2 v0.4h, v0.4h, v1.4h"),
+        (0x4ec1_2800, "trn1 v0.2d, v0.2d, v1.2d"),
+        (0x0e81_6800, "trn2 v0.2s, v0.2s, v1.2s"),
+    ] {
+        let needle = word.to_le_bytes();
+        assert!(
+            bytes.windows(4).any(|w| w == needle),
+            "{what}: expected {word:#010x} in the emitted code"
+        );
+    }
+}
+
 /// The interpreter evaluates the rows the emit encodes: saturation at both
 /// bounds, halving and rounding, absolute difference, the pairwise forms
 /// over both operands, 64-bit lanes, the bitwise forms, and the signed and
@@ -280,6 +315,20 @@ fn the_interpreter_runs_the_reductions() {
         super::Vm::new(program).run().expect("interpreted run"),
         0,
         "a failing group sets its bit in the exit code"
+    );
+}
+
+/// The lane permutes, checked against the permutations computed lane by
+/// lane: the fixture runs natively on the AArch64 lanes, and here under
+/// the interpreter.
+#[test]
+fn the_interpreter_runs_the_permutes() {
+    let src = super::load_fixture("arm_neon_permutes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "a failing type sets its bit in the exit code"
     );
 }
 

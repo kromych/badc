@@ -440,6 +440,8 @@ const fn unary(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem, bytes
 
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
+    row("__builtin_neon_ext_8b", "ext", Form::VvI, Ret::V8qi, Sem::Ext(8), 8),
+    row("__builtin_neon_ext_16b", "ext", Form::VvI, Ret::V16qi, Sem::Ext(16), 16),
     narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_4s", "xtn", Ret::V4hi, 4, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_2d", "xtn", Ret::V2si, 8, NarrowKind::Trunc),
@@ -586,8 +588,8 @@ const PERMS: &[[SimdOp; 7]] = &[
 ];
 
 /// The row at index `i` of the rows [`OPS`], then the widening, the
-/// narrowing and other one-source, the reduction and the permutation
-/// ones, numbered in that order.
+/// narrowing and other single, the reduction and the permutation ones,
+/// numbered in that order.
 pub(crate) fn get(i: usize) -> &'static SimdOp {
     let long = LONG.len() * 3;
     let narrow = long + NARROW.len();

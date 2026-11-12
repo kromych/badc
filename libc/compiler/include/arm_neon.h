@@ -615,11 +615,9 @@ __BADC_NEON_I32(__BADC_NEON_F_ADDLV2, _)
 })
 /* The window of the concatenation __b:__a starting at lane __n. */
 #define __BADC_NEON_EXT(T, A, __a, __b, __n) __extension__({              \
-    T __ea = (__a), __eb = (__b), __er;                                   \
+    T __ea = (__a), __eb = (__b);                                         \
     __BADC_NEON_LANE(__n, __BADC_NEON_NLANES(__ea));                      \
-    __asm__(__BADC_NEON_I3("ext", A, A, A) ", #%3"                        \
-            : "=w"(__er) : "w"(__ea), "w"(__eb), "i"((__n) * sizeof __ea[0])); \
-    __er;                                                                 \
+    (T)__builtin_neon_ext_##A(__ea, __eb, (__n) * sizeof __ea[0]);        \
 })
 
 #define vget_lane_s8(__v, __n) __BADC_NEON_GETI(int8x8_t, "w", "b", __v, __n)

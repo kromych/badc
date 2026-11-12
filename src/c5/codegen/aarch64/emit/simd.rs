@@ -11,13 +11,14 @@ use crate::c5::ir::ValueId;
 use crate::c5::simd::{self, Form, SimdOp};
 
 /// The vector operands a row's form reads, and whether its last operand is
-/// a shift count.
+/// an immediate: a shift count, or `ext`'s byte position.
 fn sources(row: &SimdOp) -> Option<(usize, bool)> {
     match row.form {
         Form::V => Some((1, false)),
         Form::Vv => Some((2, false)),
         Form::Vvv => Some((3, false)),
         Form::Shift => Some((1, true)),
+        Form::VvI => Some((2, true)),
         _ => None,
     }
 }
@@ -60,7 +61,10 @@ fn count(row: &SimdOp, imm: Option<u8>, shift: bool) -> Result<Option<u8>, alloc
     match (shift, imm) {
         (false, _) => Ok(None),
         (true, Some(n)) => Ok(Some(n)),
-        (true, None) => Err(alloc::format!("{}: the count must be a constant", row.name)),
+        (true, None) => Err(alloc::format!(
+            "{}: the immediate must be a constant",
+            row.name
+        )),
     }
 }
 

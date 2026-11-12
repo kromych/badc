@@ -1,5 +1,5 @@
-/* <arm_neon.h> lane permutes -- vzip1/2, vuzp1/2, vtrn1/2 and the pairs
- * returning both halves -- on every element type and vector width they
+/* <arm_neon.h> lane permutes -- vzip1/2, vuzp1/2, vtrn1/2, the pairs
+ * returning both halves, and vext -- on every element type and vector width they
  * are defined for: each result checked against the permutation computed
  * lane by lane in C. The exit code has a bit per failing type; elsewhere
  * than AArch64 the unit is empty. */
@@ -68,11 +68,39 @@ static int check_pairs(void) {
     return 0;
 }
 
+/* vext: lane i of the result is lane i + n of the concatenation a:b. */
+static int check_ext(void) {
+    unsigned char lo[16], hi[16];
+    for (int i = 0; i < 16; i++) {
+        lo[i] = A[i];
+        hi[i] = (unsigned char)(A[i] + 1);
+    }
+    uint8x16_t a, b;
+    uint8x8_t c, d;
+    int16x4_t h, k;
+    memcpy(&a, lo, 16); memcpy(&b, hi, 16); memcpy(&c, lo, 8); memcpy(&d, hi, 8);
+    memcpy(&h, lo, 8); memcpy(&k, hi, 8);
+    uint8x16_t r = vextq_u8(a, b, 5);
+    uint8x8_t s = vext_u8(c, d, 3);
+    int16x4_t t = vext_s16(h, k, 3);
+    int16_t hh[4], kk[4];
+    memcpy(hh, lo, 8); memcpy(kk, hi, 8);
+    for (int i = 0; i < 16; i++)
+        if (r[i] != (i + 5 < 16 ? lo[i + 5] : hi[i - 11])) return 1;
+    for (int i = 0; i < 8; i++)
+        if (s[i] != (i + 3 < 8 ? lo[i + 3] : hi[i - 5])) return 1;
+    for (int i = 0; i < 4; i++)
+        if (t[i] != (i + 3 < 4 ? hh[i + 3] : kk[i - 1])) return 1;
+    float64x2_t f = {1.5, 2.5}, g = {3.5, 4.5};
+    float64x2_t u = vextq_f64(f, g, 1);
+    return u[0] != 2.5 || u[1] != 3.5;
+}
+
 int main(void) {
     return check_s8() | check_s8q() << 1 | check_u8() << 2 | check_u8q() << 3 | check_s16() << 4
          | check_s16q() << 5 | check_u16() << 6 | check_u16q() << 7 | check_s32() << 8
          | check_u32q() << 9 | check_f32() << 10 | check_f32q() << 11 | check_s64q() << 12
-         | check_f64q() << 13 | check_pairs() << 14;
+         | check_f64q() << 13 | check_pairs() << 14 | check_ext() << 15;
 }
 #else
 int main(void) { return 0; }

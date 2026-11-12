@@ -424,6 +424,9 @@ pub(crate) enum Sem {
     /// A permutation of two vectors' lanes of the width, the second form
     /// when `true`, over vectors of the last width (`zip1`, `uzp2`, ...).
     Perm(PermOp, u8, bool, u8),
+    /// The bytes of two vectors of the width, the first low, from the
+    /// immediate's byte on (`ext`).
+    Ext(u8),
 }
 
 /// The permutation of a [`Sem::Perm`] form.
@@ -1370,6 +1373,16 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     false => (lane(a, w, 2 * i) as i128, lane(a, w, 2 * i + 1) as i128),
                 };
                 set_lane(&mut o, 2 * w, i, (x + y) as u64 & mask(2 * w));
+            }
+        }
+        Sem::Ext(bytes) => {
+            let (n, at) = (usize::from(bytes), usize::from(imm));
+            for (i, byte) in o.iter_mut().take(n).enumerate() {
+                *byte = match i + at {
+                    k if k < n => a[k],
+                    k if k < 2 * n => b[k - n],
+                    _ => 0,
+                };
             }
         }
         Sem::Perm(op, w, second, bytes) => {

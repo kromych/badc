@@ -47,10 +47,8 @@ Disassembly of section .text:
                	retq
 
 <rotl_var>:
-               	movl	%esi, %eax
-               	movl	$0x20, %ecx
-               	subq	%rax, %rcx
-               	movl	%ecx, %ecx
+               	movq	%rsi, %rcx
+               	negq	%rcx
                	movq	%rdi, %rax
                	rorl	%cl, %eax
                	retq

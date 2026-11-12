@@ -31,10 +31,7 @@ Disassembly of section .text:
                	ret
 
 <rotl_var>:
-               	mov	w1, w1
-               	mov	x2, #0x20               // =32
-               	sub	x1, x2, x1
-               	mov	w1, w1
+               	neg	x1, x1
                	ror	w0, w0, w1
                	ret
 

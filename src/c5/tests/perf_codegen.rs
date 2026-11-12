@@ -3268,21 +3268,25 @@ d2 dz(double x) { return (d2){x}; }\n";
 }
 
 /// A 32-bit unsigned rotate by a constant is the 32-bit rotate
-/// instruction, as with gcc 16: `ror w0, w0, #2` and `rorl $2, %eax`.
+/// instruction, as with gcc 16: `ror w0, w0, #2` and `rorl $2, %eax`; by
+/// a runtime count to the left, the rotate right by its negation.
 #[test]
 fn a_32_bit_rotate_is_one_instruction() {
     const SRC: &str = "unsigned r(unsigned x) { return x << 30 | x >> 2; }\n\
-unsigned l(unsigned x) { return (x << 13) | (x >> 19); }\n";
+unsigned l(unsigned x) { return (x << 13) | (x >> 19); }\n\
+unsigned v(unsigned x, unsigned n) { return x << n | x >> (32 - n); }\n";
     const RET: u32 = 0xD65F_03C0;
     let mut m = Misses::default();
-    for (name, want) in [
-        ("r", &[0x1380_0800u32, RET][..]),
-        ("l", &[0x1380_4C00, RET]),
+    // x86-64 takes the runtime count in cl.
+    for (name, want, x86) in [
+        ("r", &[0x1380_0800u32, RET][..], 3),
+        ("l", &[0x1380_4C00, RET], 3),
+        ("v", &[0xCB01_03E1, 0x1AC1_2C00, RET], 5),
     ] {
         let words = a64(SRC, name);
         m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
         let insns = x64(SRC, name);
-        m.expect(insns.len() <= 3, || format!("x86-64 {name}: {insns:x?}"));
+        m.expect(insns.len() <= x86, || format!("x86-64 {name}: {insns:x?}"));
     }
     m.finish();
 }

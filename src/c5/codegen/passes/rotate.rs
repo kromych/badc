@@ -292,6 +292,28 @@ fn match_rotate32(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateB
     try_one(lhs, rhs).or_else(|| try_one(rhs, lhs))
 }
 
+/// A 32-bit rotate's runtime count `32 - n`, the right shift's, as `-n`:
+/// the rotate reads the count's low five bits, where the two agree. The
+/// subtraction is rewritten in place when the shift and its truncation
+/// were its only readers; returns the count the rotate takes.
+fn negate_count(func: &mut FunctionSsa, uses: &[u32], count: ValueId) -> ValueId {
+    let sub = low_word(func, count);
+    let Some(&Inst::Binop {
+        op: BinOp::Sub,
+        lhs,
+        rhs,
+    }) = func.insts.get(sub as usize)
+    else {
+        return count;
+    };
+    let only = |v: ValueId| uses.get(v as usize) == Some(&1);
+    if const_imm(func, lhs) != Some(32) || !only(sub) || !(sub == count || only(count)) {
+        return count;
+    }
+    func.insts[sub as usize] = Inst::Neg(low_word(func, rhs));
+    sub
+}
+
 /// Walk every function, rewrite recognized rotates to `Ror` and the
 /// 32-bit ones to `Ror32`.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
@@ -305,7 +327,19 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 rewrites.push((idx, x, by, BinOp::Ror32));
             }
         }
+        let mut uses = alloc::vec![0u32; n];
+        func.insts.iter().for_each(|inst| {
+            inst.for_each_operand(|v| {
+                if let Some(u) = uses.get_mut(v as usize) {
+                    *u += 1;
+                }
+            })
+        });
         for (idx, x, by, op) in rewrites {
+            let by = match (op, by) {
+                (BinOp::Ror32, RotateBy::Val(c)) => RotateBy::Val(negate_count(func, &uses, c)),
+                (_, by) => by,
+            };
             func.insts[idx] = match by {
                 RotateBy::Imm(c) => Inst::BinopI {
                     op,

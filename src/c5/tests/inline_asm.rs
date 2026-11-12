@@ -1382,8 +1382,8 @@ fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
     assert!(found, "expected `brk #0x401` (0xD4208020)");
 }
 
-/// The AArch64 `w` constraint class: `<arm_neon.h>`'s float broadcasts are
-/// one `dup` from the scalar's `s` or `d` view; `x` and `y` operands take
+/// The AArch64 `w` constraint class: a float broadcast's `dup` reads a
+/// scalar `w` input in its `s` or `d` view; `x` and `y` operands take
 /// v0-v15 and v0-v7; a bare `%N` of a `w` operand names `vN`, which no
 /// scalar instruction takes; and a `w` operand is a scalar of up to 8 bytes
 /// or an 8- or 16-byte vector.
@@ -1402,9 +1402,12 @@ fn aarch64_w_operands_take_gccs_widths_views_and_classes() {
         w.iter().map(|w| u32::from_le_bytes(*w)).collect()
     };
     let dup = "#include <arm_neon.h>\n\
-               float32x4_t q(float x) { return vdupq_n_f32(x); }\n\
-               float32x2_t d(float x) { return vdup_n_f32(x); }\n\
-               float64x2_t q2(double x) { return vdupq_n_f64(x); }\n\
+               float32x4_t q(float x) { float32x4_t r;\n\
+               __asm__(\"dup %0.4s, %1.s[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+               float32x2_t d(float x) { float32x2_t r;\n\
+               __asm__(\"dup %0.2s, %1.s[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+               float64x2_t q2(double x) { float64x2_t r;\n\
+               __asm__(\"dup %0.2d, %1.d[0]\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
                int main(void) { return 0; }\n";
     let xy = "#include <arm_neon.h>\n\
               float f(float a, float b) { float r;\n\

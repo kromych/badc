@@ -56,8 +56,8 @@ Disassembly of section .text:
                	mov	x21, x2
                	mov	x24, x4
                	mov	x23, x3
-               	mov	x16, #0x1d              // =29
-               	dup	v16.16b, w16
+               	mov	x0, #0x1d               // =29
+               	dup	v16.16b, w0
                	str	q16, [sp, #0x30]
                	mov	x20, #0x0               // =0
                	mov	x22, x20
@@ -93,10 +93,9 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x40]
                	str	q16, [x1]
                	add	x1, x24, x20
-               	ldr	q16, [sp, #0x50]
-               	str	q16, [x1]
-               	ldr	q16, [sp, #0x50]
-               	mov	x1, v16.d[0]
+               	ldr	q0, [sp, #0x50]
+               	str	q0, [x1]
+               	mov	x1, v0.d[0]
                	and	x1, x1, #0xff
                	add	x22, x0, x1
                	add	x20, x20, #0x10
@@ -261,29 +260,25 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x2, x29, #0x10
-               	sub	x16, x29, #0x40
-               	ldr	q0, [x16]
-               	sub	x3, x29, #0xa0
-               	sub	x16, x29, #0xa0
-               	ldr	q1, [x16]
-               	sub	x4, x29, #0x90
-               	sub	x16, x29, #0x90
-               	ldr	q2, [x16]
+               	sub	x3, x29, #0x40
+               	ldur	q0, [x29, #-0x40]
+               	sub	x4, x29, #0xa0
+               	ldur	q1, [x29, #-0xa0]
+               	sub	x5, x29, #0x90
+               	ldur	q2, [x29, #-0x90]
                	tbx	v0.16b, { v1.16b }, v2.16b
-               	sub	x16, x29, #0x10
-               	str	q0, [x16]
+               	stur	q0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
-               	ldrb	w5, [x2, x0]
-               	ldrb	w1, [x4, x0]
+               	ldrb	w6, [x2, x0]
+               	ldrb	w1, [x5, x0]
                	cmp	w1, #0x10
                	b.ge	<addr>
-               	ldrb	w1, [x3, x1]
-               	cmp	w5, w1
+               	ldrb	w1, [x4, x1]
+               	cmp	w6, w1
                	b.eq	<addr>
                	b	<addr>
-               	sub	x1, x29, #0x40
-               	ldrb	w1, [x1, x0]
-               	cmp	w5, w1
+               	ldrb	w1, [x3, x0]
+               	cmp	w6, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

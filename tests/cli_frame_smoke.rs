@@ -1088,8 +1088,8 @@ fn function_dump<'a>(stderr: &'a str, name: &str) -> (&'a str, &'a str) {
 }
 
 /// A function whose vectors are values: no object address and no 16-byte
-/// copy remain, a 128-bit phi carries the loop, an asm statement defines
-/// its output, and the frame holds no locals and no over-aligned region.
+/// copy remain, a 128-bit phi carries the loop, and the frame holds no
+/// locals and no over-aligned region.
 fn assert_vectors_in_registers(body: &str, report: &str) {
     for form in ["LocalAddr(", "Mcpy {"] {
         assert!(!body.contains(form), "{form} remains:\n{body}");
@@ -1099,19 +1099,16 @@ fn assert_vectors_in_registers(body: &str, report: &str) {
             .any(|l| l.contains("Phi {") && l.contains("kind=V128")),
         "no 128-bit phi:\n{body}"
     );
-    assert!(
-        body.lines()
-            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
-        "no asm value output:\n{body}"
-    );
     for region in ["in locals", "over-aligned region"] {
         assert!(!report.contains(region), "{report}");
     }
 }
 
 /// NEON intrinsic chains at -O: the loop's vectors live in SIMD registers,
-/// the two live across the call spill whole, and the wrapper bodies inline
-/// away. A vector whose address reaches a call stays an object.
+/// the two live across the call spill whole, the wrapper bodies inline
+/// away, and the constant broadcast is one, each lane's conversion of its
+/// constant being one value. A vector whose address reaches a call stays an
+/// object.
 #[test]
 fn neon_vectors_live_in_registers_at_opt() {
     let stderr = dump_opt(
@@ -1144,6 +1141,10 @@ fn neon_vectors_live_in_registers_at_opt() {
     );
     let (body, report) = function_dump(&stderr, "gen");
     assert_vectors_in_registers(body, report);
+    assert!(
+        body.contains("VecSplat") && !body.contains("VecInsert"),
+        "the broadcast is lane by lane:\n{body}"
+    );
     assert!(report.contains("in spill slots"), "{report}");
     assert!(
         !stderr.contains("; name=veorq_u8"),
@@ -1197,6 +1198,11 @@ fn x86_64_asm_vector_operands_live_in_registers_at_opt() {
     );
     let (body, report) = function_dump(&stderr, "chain");
     assert_vectors_in_registers(body, report);
+    assert!(
+        body.lines()
+            .any(|l| l.contains("InlineAsm {") && l.contains("args=[-")),
+        "no asm value output:\n{body}"
+    );
     assert!(
         body.lines()
             .any(|l| l.contains("paddb") && !l.contains("args=[-")),

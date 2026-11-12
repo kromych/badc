@@ -243,10 +243,65 @@ pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
     }
 }
 
+/// Whether `a` and `b` are one value: the same id, or the same constant,
+/// copy, extension or immediate operation of one value, as each element of
+/// a compound literal converts its initializer anew; `depth` bounds the
+/// operands compared.
+fn same_value(func: &FunctionSsa, a: ValueId, b: ValueId, depth: u32) -> bool {
+    let same = |x: &ValueId, y: &ValueId| depth > 0 && same_value(func, *x, *y, depth - 1);
+    a == b
+        || match (&func.insts[a as usize], &func.insts[b as usize]) {
+            (Inst::Imm(x), Inst::Imm(y)) => x == y,
+            (Inst::Copy { value: x, is_fp: f }, Inst::Copy { value: y, is_fp: g }) => {
+                same(x, y) && f == g
+            }
+            (
+                Inst::Extend {
+                    value: x,
+                    kind: k,
+                    nsw: n,
+                },
+                Inst::Extend {
+                    value: y,
+                    kind: l,
+                    nsw: m,
+                },
+            ) => same(x, y) && k == l && n == m,
+            (
+                Inst::BinopI {
+                    op: o,
+                    lhs: x,
+                    rhs_imm: i,
+                },
+                Inst::BinopI {
+                    op: p,
+                    lhs: y,
+                    rhs_imm: j,
+                },
+            ) => o == p && same(x, y) && i == j,
+            _ => false,
+        }
+}
+
 /// Each chain of lane inserts writing one value into every lane of a vector
-/// of at most `max` bytes, as one [`Inst::VecSplat`]; the inserts it
-/// replaced are left to the dead-code pass.
+/// of at most `max` bytes, as one [`Inst::VecSplat`]; an insert of the
+/// chain nothing else reads becomes `Undef`.
 pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
+    let mut uses = alloc::vec![0u32; func.insts.len()];
+    let mut count = |a: ValueId| {
+        if let Some(u) = uses.get_mut(a as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    for b in &func.blocks {
+        b.terminator.for_each_operand(&mut count);
+        if b.exit_acc != NO_VALUE {
+            count(b.exit_acc);
+        }
+    }
     for i in 0..func.insts.len() {
         let Inst::VecInsert {
             value, kind, bytes, ..
@@ -268,14 +323,28 @@ pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
                     off,
                     kind: k,
                     bytes: b,
-                } if v == value && k == kind && b == bytes => {
+                } if k == kind && b == bytes && same_value(func, v, value, 3) => {
                     seen |= 1 << (off / width);
                     at = vec;
                 }
                 _ => break,
             }
             if seen == all {
+                let Inst::VecInsert { mut vec, .. } = func.insts[i] else {
+                    break;
+                };
                 func.insts[i] = Inst::VecSplat { value, kind, bytes };
+                while let Some(u) = uses.get_mut(vec as usize) {
+                    *u -= 1;
+                    let Inst::VecInsert { vec: next, .. } = func.insts[vec as usize] else {
+                        break;
+                    };
+                    if *u != 0 {
+                        break;
+                    }
+                    func.insts[vec as usize] = Inst::Undef;
+                    vec = next;
+                }
                 break;
             }
         }

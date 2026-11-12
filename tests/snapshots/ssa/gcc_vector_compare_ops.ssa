@@ -6174,7 +6174,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6878 Imm(0)                                           -> x0
     v6879 Imm(-1)                                          -> x0
     v6880 Undef                                            -> x1
-    v6881 VecInsert { vec=v6880, value=v6879, off=0, kind=I64, bytes=16 } -> d3
+    v6881 Undef                                            -> x1
     v6882 Imm(0)                                           -> x1
     v6883 Imm(8)                                           -> x1
     v6884 Imm(0)                                           -> x1

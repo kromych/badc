@@ -38,16 +38,7 @@ Disassembly of section .text:
 
 <s8us>:
                	and	x0, x0, #0xffff
-               	mov	x1, #0x0                // =0
-               	fmov	d0, x1
-               	mov	v0.h[0], w0
-               	mov	v0.h[1], w0
-               	mov	v0.h[2], w0
-               	mov	v0.h[3], w0
-               	mov	v0.h[4], w0
-               	mov	v0.h[5], w0
-               	mov	v0.h[6], w0
-               	mov	v0.h[7], w0
+               	dup	v0.8h, w0
                	ret
 
 <s4i>:

@@ -1513,12 +1513,12 @@ Disassembly of section .text:
                	vpextrd	$0x3, %xmm0, %ecx
                	movslq	%ecx, %rcx
                	vmovd	%ecx, %xmm1
-               	vpextrd	$0x2, %xmm0, %r8d
-               	movslq	%r8d, %r8
-               	vpinsrd	$0x1, %r8d, %xmm1, %xmm1
-               	vpextrd	$0x1, %xmm0, %edi
+               	vpextrd	$0x2, %xmm0, %edi
                	movslq	%edi, %rdi
-               	vpinsrd	$0x2, %edi, %xmm1, %xmm1
+               	vpinsrd	$0x1, %edi, %xmm1, %xmm1
+               	vpextrd	$0x1, %xmm0, %r8d
+               	movslq	%r8d, %r8
+               	vpinsrd	$0x2, %r8d, %xmm1, %xmm1
                	vmovd	%xmm0, %r9d
                	movslq	%r9d, %r9
                	movapd	%xmm1, %xmm0
@@ -1535,7 +1535,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
                	xorl	%eax, %eax
-               	vmovd	%r8d, %xmm0
+               	vmovd	%edi, %xmm0
                	vpinsrd	$0x1, %eax, %xmm0, %xmm0
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
@@ -1550,14 +1550,12 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	xorl	%eax, %eax
-               	vmovd	%edi, %xmm0
-               	vpinsrd	$0x1, %edi, %xmm0, %xmm0
-               	vpinsrd	$0x2, %edi, %xmm0, %xmm0
-               	vpinsrd	$0x3, %edi, %xmm0, %xmm0
+               	vmovd	%r8d, %xmm0
+               	vpbroadcastd	%xmm0, %xmm0
                	leaq	-0xa0(%rbp), %rdx
                	movups	%xmm0, -0xa0(%rbp)
                	movq	<rip>, %rcx # <addr>
+               	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rsi
                	xorq	%rsi, %rcx
                	movabsq	$0x100000001b3, %r11    # imm = 0x100000001B3
@@ -1571,8 +1569,8 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	xorl	%eax, %eax
                	vmovd	%r9d, %xmm0
-               	vpinsrd	$0x1, %edi, %xmm0, %xmm0
-               	vpinsrd	$0x2, %r8d, %xmm0, %xmm0
+               	vpinsrd	$0x1, %r8d, %xmm0, %xmm0
+               	vpinsrd	$0x2, %edi, %xmm0, %xmm0
                	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
                	leaq	-0xa0(%rbp), %rdx
                	movups	%xmm0, -0xa0(%rbp)

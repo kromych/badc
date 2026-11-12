@@ -392,6 +392,58 @@ fn the_interpreter_runs_the_immediate_shifts() {
     );
 }
 
+/// The whole-vector loads, stores and broadcasts are C the interpreter
+/// runs, as are the rows of the halfword fixture.
+#[test]
+fn the_interpreter_runs_the_loads_stores_and_broadcasts() {
+    let src = super::load_fixture("arm_neon_halfword_lanes.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        42,
+        "the fixture's own status"
+    );
+}
+
+/// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
+/// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
+/// between them and the operations that use them: `ldr q`, `str q`,
+/// `dup v0.4s, w0`, `ldrh` and `dup v0.8h`, and in a loop the loads, `fmla`
+/// and the store around a broadcast made before it.
+#[cfg(feature = "full")]
+#[test]
+fn the_loads_stores_and_broadcasts_are_their_instructions() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        uint8x16_t ld(const uint8_t *p) { return vld1q_u8(p); }\n\
+        void st(uint8_t *p, uint8x16_t v) { vst1q_u8(p, v); }\n\
+        uint32x4_t dup(uint32_t x) { return vdupq_n_u32(x); }\n\
+        float32x4_t fdup(float x) { return vdupq_n_f32(x); }\n\
+        uint16x8_t ldr(const uint16_t *p) { return vld1q_dup_u16(p); }\n\
+        void axpy(float *y, const float *x, float a, int n) {\n\
+            float32x4_t va = vdupq_n_f32(a);\n\
+            for (int i = 0; i < n; i += 4)\n\
+                vst1q_f32(y + i, vfmaq_f32(vld1q_f32(y + i), vld1q_f32(x + i), va));\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("ld", &[0x3DC0_0000u32, RET][..]),
+        ("st", &[0x3D80_0000, RET]),
+        ("dup", &[0x4E04_0C00, RET]),
+        ("fdup", &[0x4E04_0400, RET]),
+        ("ldr", &[0x7940_0000, 0x4E02_0C00, RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+    let words = super::perf_codegen::a64_at(SRC, "axpy", true);
+    let fmla = words.iter().position(|w| w & 0xFFE0_FC00 == 0x4E20_CC00);
+    let dup = words.iter().position(|w| w & 0xFFFF_FC00 == 0x4E04_0400);
+    assert!(
+        dup.is_some_and(|d| fmla.is_some_and(|f| d < f)) && words.len() <= 16,
+        "axpy: {words:08x?}"
+    );
+}
+
 /// A lane of an 8-byte vector is read and written in its register, as a
 /// 16-byte vector's is: `smov` and `ins` on the D register.
 #[cfg(feature = "full")]

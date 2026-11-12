@@ -14579,7 +14579,7 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12678 Imm(0)                                           -> x0
     v12679 Imm(-1)                                          -> x0
     v12680 Undef                                            -> x1
-    v12681 VecInsert { vec=v12680, value=v12679, off=0, kind=I64, bytes=16 } -> d4
+    v12681 Undef                                            -> x1
     v12682 VecSplat { value=v12679, kind=I64, bytes=16 }    -> d4
     v12683 Imm(0)                                           -> x1
     v12684 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12656, rhs=v12682 } -> d2
@@ -14602,7 +14602,7 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12701 Imm(0)                                           -> x1
     v12702 Imm(-1)                                          -> x1
     v12703 Undef                                            -> x1
-    v12704 VecInsert { vec=v12703, value=v12679, off=0, kind=I64, bytes=16 } -> d3
+    v12704 Undef                                            -> x1
     v12705 VecSplat { value=v12679, kind=I64, bytes=16 }    -> d3
     v12706 Imm(0)                                           -> x0
     v12707 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12693, rhs=v12705 } -> d0

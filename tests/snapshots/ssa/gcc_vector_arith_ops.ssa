@@ -9038,7 +9038,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10462 Imm(0)                                           -> x0
     v10463 Imm(-1)                                          -> x0
     v10464 Undef                                            -> x2
-    v10465 VecInsert { vec=v10464, value=v10463, off=0, kind=I64, bytes=16 } -> d0
+    v10465 Undef                                            -> x2
     v10466 Imm(0)                                           -> x2
     v10467 Imm(8)                                           -> x2
     v10468 Imm(0)                                           -> x2
@@ -9109,7 +9109,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10528 Imm(0)                                           -> x0
     v10529 Imm(-1)                                          -> x0
     v10530 Undef                                            -> x2
-    v10531 VecInsert { vec=v10530, value=v10529, off=0, kind=I64, bytes=16 } -> d0
+    v10531 Undef                                            -> x2
     v10532 Imm(0)                                           -> x2
     v10533 Imm(8)                                           -> x2
     v10534 Imm(0)                                           -> x2

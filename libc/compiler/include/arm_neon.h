@@ -104,7 +104,6 @@ typedef struct uint8x16x4_t {
 
 /* Operand n of a template in arrangement A; `d` is the 64-bit scalar view
  * the single-lane 64-bit forms take. */
-#define __BADC_NEON_V(A, n) __BADC_NEON_V_##A(n)
 #define __BADC_NEON_V_8b(n) "%" #n ".8b"
 #define __BADC_NEON_V_16b(n) "%" #n ".16b"
 #define __BADC_NEON_V_4h(n) "%" #n ".4h"
@@ -172,22 +171,6 @@ typedef struct uint8x16x4_t {
         __asm__(tmpl : "+w"(__a) : "w"(__b), "w"(__c));                   \
         return __a;                                                       \
     }
-#define __BADC_NEON_FROMR(name, R, E, tmpl)                               \
-    __BADC_INTRIN R name(E __x) {                                         \
-        R __r;                                                            \
-        __asm__(tmpl : "=w"(__r) : "r"(__x));                             \
-        return __r;                                                       \
-    }
-#define __BADC_NEON_LOAD(name, T, E, tmpl)                                \
-    __BADC_INTRIN T name(const E *__p) {                                  \
-        T __r;                                                            \
-        __asm__(tmpl : "=w"(__r) : "r"(__p) : "memory");                  \
-        return __r;                                                       \
-    }
-#define __BADC_NEON_STORE(name, T, E, view)                               \
-    __BADC_INTRIN void name(E *__p, T __v) {                              \
-        __asm__("str %" view "1, [%0]" : : "r"(__p), "w"(__v) : "memory"); \
-    }
 
 /* One row per element type: suffix, kind (s, u, p, f), element, the 64- and
  * 128-bit vectors and their arrangements, and the unsigned and the signed
@@ -242,42 +225,41 @@ typedef struct uint8x16x4_t {
     __BADC_NEON_E8(F, __VA_ARGS__) __BADC_NEON_E16(F, __VA_ARGS__) __BADC_NEON_E32(F, __VA_ARGS__)
 #define __BADC_NEON_ALL(F, ...) __BADC_NEON_LANES(F, __VA_ARGS__) __BADC_NEON_E64(F, __VA_ARGS__)
 
-/* Loads and stores: ldr/str of the vector, ld1r of one element. */
-#define __BADC_NEON_F_MEM(_, sfx, k, E, D, Q, AD, AQ, ...)                \
-    __BADC_NEON_LOAD(vld1_##sfx, D, E, "ldr %d0, [%1]")                   \
-    __BADC_NEON_LOAD(vld1q_##sfx, Q, E, "ldr %q0, [%1]")                  \
-    __BADC_NEON_STORE(vst1_##sfx, D, E, "d")                              \
-    __BADC_NEON_STORE(vst1q_##sfx, Q, E, "q")                             \
-    __BADC_NEON_LOAD(vld1q_dup_##sfx, Q, E, "ld1r {" __BADC_NEON_V(AQ, 0) "}, [%1]")
-#define __BADC_NEON_F_LD1R(_, sfx, k, E, D, Q, AD, ...)                   \
-    __BADC_NEON_LOAD(vld1_dup_##sfx, D, E, "ld1r {" __BADC_NEON_V(AD, 0) "}, [%1]")
-#define __BADC_NEON_F_LD1R1(_, sfx, k, E, D, ...)                         \
-    __BADC_NEON_LOAD(vld1_dup_##sfx, D, E, "ldr %d0, [%1]")
-__BADC_NEON_ALL(__BADC_NEON_F_MEM, _)
-__BADC_NEON_LANES(__BADC_NEON_F_LD1R, _)
-__BADC_NEON_E64(__BADC_NEON_F_LD1R1, _)
-
-/* Broadcasts: dup from a general register or a float's lane 0; fmov for one
- * 64-bit lane. */
+/* Broadcasts: the value in every lane, as a compound literal of as many
+ * elements as the arrangement has lanes. */
+#define __BADC_NEON_N_d(x) x
+#define __BADC_NEON_N_2d(x) x, x
+#define __BADC_NEON_N_2s(x) x, x
+#define __BADC_NEON_N_4s(x) x, x, x, x
+#define __BADC_NEON_N_4h(x) x, x, x, x
+#define __BADC_NEON_N_8h(x) __BADC_NEON_N_4h(x), __BADC_NEON_N_4h(x)
+#define __BADC_NEON_N_8b(x) __BADC_NEON_N_4h(x), __BADC_NEON_N_4h(x)
+#define __BADC_NEON_N_16b(x) __BADC_NEON_N_8b(x), __BADC_NEON_N_8b(x)
 #define __BADC_NEON_F_DUP(_, sfx, k, E, D, Q, AD, AQ, ...)                \
-    __BADC_NEON_FROMR(vdup_n_##sfx, D, E, "dup " __BADC_NEON_V(AD, 0) ", %w1") \
-    __BADC_NEON_FROMR(vdupq_n_##sfx, Q, E, "dup " __BADC_NEON_V(AQ, 0) ", %w1")
-#define __BADC_NEON_F_DUP64(_, sfx, k, E, D, Q, ...)                      \
-    __BADC_NEON_FROMR(vdup_n_##sfx, D, E, "fmov %d0, %x1")                \
-    __BADC_NEON_FROMR(vdupq_n_##sfx, Q, E, "dup %0.2d, %x1")
-#define __BADC_NEON_F_MOV(_, sfx, k, E, D, Q, ...)                        \
+    __BADC_INTRIN D vdup_n_##sfx(E __x) { return (D){__BADC_NEON_N_##AD(__x)}; } \
+    __BADC_INTRIN Q vdupq_n_##sfx(E __x) { return (Q){__BADC_NEON_N_##AQ(__x)}; } \
     __BADC_INTRIN D vmov_n_##sfx(E __x) { return vdup_n_##sfx(__x); }     \
     __BADC_INTRIN Q vmovq_n_##sfx(E __x) { return vdupq_n_##sfx(__x); }
-__BADC_NEON_INT_8_32(__BADC_NEON_F_DUP, _)
-__BADC_NEON_R_p8(__BADC_NEON_F_DUP, _)
-__BADC_NEON_R_p16(__BADC_NEON_F_DUP, _)
-__BADC_NEON_I64(__BADC_NEON_F_DUP64, _)
-__BADC_NEON_R_p64(__BADC_NEON_F_DUP64, _)
-__BADC_NEON_FN1(vdup_n_f32, float32x2_t, float32_t, "dup %0.2s, %1.s[0]")
-__BADC_NEON_FN1(vdupq_n_f32, float32x4_t, float32_t, "dup %0.4s, %1.s[0]")
-__BADC_NEON_FN1(vdup_n_f64, float64x1_t, float64_t, "fmov %d0, %d1")
-__BADC_NEON_FN1(vdupq_n_f64, float64x2_t, float64_t, "dup %0.2d, %1.d[0]")
-__BADC_NEON_ALL(__BADC_NEON_F_MOV, _)
+__BADC_NEON_ALL(__BADC_NEON_F_DUP, _)
+
+/* Loads and stores: the vector's bytes at any address, and one element in
+ * every lane. */
+#define __BADC_NEON_F_MEM(_, sfx, k, E, D, Q, ...)                        \
+    __BADC_INTRIN D vld1_##sfx(const E *__p) {                            \
+        D __r;                                                            \
+        __builtin_memcpy(&__r, __p, sizeof __r);                          \
+        return __r;                                                       \
+    }                                                                     \
+    __BADC_INTRIN Q vld1q_##sfx(const E *__p) {                           \
+        Q __r;                                                            \
+        __builtin_memcpy(&__r, __p, sizeof __r);                          \
+        return __r;                                                       \
+    }                                                                     \
+    __BADC_INTRIN void vst1_##sfx(E *__p, D __v) { __builtin_memcpy(__p, &__v, sizeof __v); } \
+    __BADC_INTRIN void vst1q_##sfx(E *__p, Q __v) { __builtin_memcpy(__p, &__v, sizeof __v); } \
+    __BADC_INTRIN D vld1_dup_##sfx(const E *__p) { return vdup_n_##sfx(*__p); } \
+    __BADC_INTRIN Q vld1q_dup_##sfx(const E *__p) { return vdupq_n_##sfx(*__p); }
+__BADC_NEON_ALL(__BADC_NEON_F_MEM, _)
 
 /* Halves and the concatenation of two. */
 #define __BADC_NEON_F_HALF(_, sfx, k, E, D, Q, ...)                       \

@@ -10493,7 +10493,8 @@ fn a_builtin_calls_the_units_later_definition() {
 
 /// Each basic `<arm_neon.h>` floating form is the AArch64 instruction gcc 16
 /// emits for it, in the caller at every optimization level, since the
-/// intrinsics are always inlined. The masks clear the register fields.
+/// intrinsics are always inlined; the load and the store at -O. The masks
+/// clear the register fields.
 #[cfg(feature = "full")]
 #[test]
 fn arm_neon_float_intrinsics_are_their_instructions() {
@@ -10529,6 +10530,10 @@ fn arm_neon_float_intrinsics_are_their_instructions() {
             ("st", "vst1q_f32", 0xFFC0_0000, 0x3D80_0000, "str q"),
             ("sel", "vbslq_f32", THREE, 0x6E60_1C00, "bsl .16b"),
         ] {
+            // At -O0 a load or store is the 16-byte copy its `memcpy` is.
+            if !optimize && matches!(caller, "ld" | "st") {
+                continue;
+            }
             let words = super::perf_codegen::a64_at(SRC, caller, optimize);
             assert!(
                 words.iter().any(|w| w & mask == want),

@@ -309,8 +309,8 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xe0
                	ret
-               	mov	x16, #0x0               // =0
-               	dup	v0.16b, w16
+               	mov	x0, #0x0                // =0
+               	dup	v0.16b, w0
                	ldur	q1, [x29, #-0x80]
                	aese	v1.16b, v0.16b
                	mov	v16.16b, v1.16b

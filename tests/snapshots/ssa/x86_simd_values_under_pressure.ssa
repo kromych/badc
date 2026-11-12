@@ -2389,17 +2389,17 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2080 Imm(0)                                           -> x1
     v2081 Imm(0)                                           -> x1
     v2082 Imm(0)                                           -> x1
-    v2083 VecInsert { vec=v2079, value=v2077, off=0, kind=I32, bytes=16 } -> d0
+    v2083 Undef                                            -> x1
     v2084 Imm(0)                                           -> x1
     v2085 Imm(0)                                           -> x1
     v2086 Imm(4)                                           -> x1
     v2087 Imm(0)                                           -> x1
-    v2088 VecInsert { vec=v2083, value=v2077, off=4, kind=I32, bytes=16 } -> d0
+    v2088 Undef                                            -> x1
     v2089 Imm(0)                                           -> x1
     v2090 Imm(0)                                           -> x1
     v2091 Imm(8)                                           -> x1
     v2092 Imm(0)                                           -> x1
-    v2093 VecInsert { vec=v2088, value=v2077, off=8, kind=I32, bytes=16 } -> d0
+    v2093 Undef                                            -> x1
     v2094 Imm(0)                                           -> x1
     v2095 Imm(0)                                           -> x1
     v2096 Imm(12)                                          -> x1

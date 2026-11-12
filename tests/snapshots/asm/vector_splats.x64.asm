@@ -58,16 +58,8 @@ Disassembly of section .text:
 
 <s8us>:
                	andq	$0xffff, %rdi           # imm = 0xFFFF
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm0
-               	vpinsrw	$0x0, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x1, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x2, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x3, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x4, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x5, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x6, %edi, %xmm0, %xmm0
-               	vpinsrw	$0x7, %edi, %xmm0, %xmm0
+               	vmovd	%edi, %xmm0
+               	vpbroadcastw	%xmm0, %xmm0
                	retq
 
 <s4i>:
@@ -90,43 +82,8 @@ Disassembly of section .text:
 
 <s32uc>:
                	andq	$0xff, %rdi
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm0
-               	vpinsrb	$0x0, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x1, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x2, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x3, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x4, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x5, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x6, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x7, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x8, %edi, %xmm0, %xmm0
-               	vpinsrb	$0x9, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xa, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xb, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xc, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xd, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xe, %edi, %xmm0, %xmm0
-               	vpinsrb	$0xf, %edi, %xmm0, %xmm0
-               	vmovdqa	%xmm0, %xmm0
-               	movq	%rax, %xmm1
-               	vpinsrb	$0x0, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x1, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x2, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x3, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x4, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x5, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x6, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x7, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x8, %edi, %xmm1, %xmm1
-               	vpinsrb	$0x9, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xa, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xb, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xc, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xd, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xe, %edi, %xmm1, %xmm1
-               	vpinsrb	$0xf, %edi, %xmm1, %xmm1
-               	vinserti128	$0x1, %xmm1, %ymm0, %ymm0
+               	vmovd	%edi, %xmm0
+               	vpbroadcastb	%xmm0, %ymm0
                	retq
 
 <s8i>:

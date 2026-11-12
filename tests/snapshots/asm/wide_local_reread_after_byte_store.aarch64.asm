@@ -650,33 +650,31 @@ Disassembly of section .text:
 <vector_reread>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
+               	sub	sp, sp, #0x10
                	adrp	x0, <page>
                	ldrb	w0, [x0, #0x30]
                	dup	v0.16b, w0
-               	sub	x0, x29, #0x20
-               	stur	q0, [x29, #-0x20]
+               	sub	x0, x29, #0x10
+               	stur	q0, [x29, #-0x10]
                	bl	<addr>
-               	ldur	q0, [x29, #-0x20]
+               	ldur	q0, [x29, #-0x10]
                	mov	x0, #0x60               // =96
-               	sturb	w0, [x29, #-0x17]
-               	ldur	q1, [x29, #-0x20]
+               	sturb	w0, [x29, #-0x7]
+               	ldur	q1, [x29, #-0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	shl	v0.16b, v0.16b, #0x1
                	eor	v0.16b, v0.16b, v1.16b
                	str	q0, [x0]
                	ldr	q0, [x0]
-               	sub	x16, x29, #0x10
-               	str	q0, [x16]
-               	ldurb	w0, [x29, #-0x7]
+               	umov	w0, v0.b[9]
                	cmp	w0, #0x62
                	b.ne	<addr>
-               	ldurb	w0, [x29, #-0xd]
+               	umov	w0, v0.b[3]
                	cmp	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2

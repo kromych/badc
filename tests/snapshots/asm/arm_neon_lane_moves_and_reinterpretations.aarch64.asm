@@ -187,7 +187,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_s8>:
-               	ld1r	{ v0.8b }, [x1]
+               	ldrsb	x1, [x1]
+               	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
@@ -215,7 +216,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_s8>:
-               	ld1r	{ v0.16b }, [x1]
+               	ldrsb	x1, [x1]
+               	dup	v0.16b, w1
                	str	q0, [x0]
                	ret
 
@@ -243,7 +245,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_u8>:
-               	ld1r	{ v0.8b }, [x1]
+               	ldrb	w1, [x1]
+               	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
@@ -271,7 +274,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_u8>:
-               	ld1r	{ v0.16b }, [x1]
+               	ldrb	w1, [x1]
+               	dup	v0.16b, w1
                	str	q0, [x0]
                	ret
 
@@ -299,7 +303,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_p8>:
-               	ld1r	{ v0.8b }, [x1]
+               	ldrb	w1, [x1]
+               	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
@@ -327,7 +332,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_p8>:
-               	ld1r	{ v0.16b }, [x1]
+               	ldrb	w1, [x1]
+               	dup	v0.16b, w1
                	str	q0, [x0]
                	ret
 
@@ -355,7 +361,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_s16>:
-               	ld1r	{ v0.4h }, [x1]
+               	ldrsh	x1, [x1]
+               	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
@@ -383,7 +390,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_s16>:
-               	ld1r	{ v0.8h }, [x1]
+               	ldrsh	x1, [x1]
+               	dup	v0.8h, w1
                	str	q0, [x0]
                	ret
 
@@ -411,7 +419,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_u16>:
-               	ld1r	{ v0.4h }, [x1]
+               	ldrh	w1, [x1]
+               	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
@@ -439,7 +448,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_u16>:
-               	ld1r	{ v0.8h }, [x1]
+               	ldrh	w1, [x1]
+               	dup	v0.8h, w1
                	str	q0, [x0]
                	ret
 
@@ -467,7 +477,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_p16>:
-               	ld1r	{ v0.4h }, [x1]
+               	ldrh	w1, [x1]
+               	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
@@ -495,7 +506,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_p16>:
-               	ld1r	{ v0.8h }, [x1]
+               	ldrh	w1, [x1]
+               	dup	v0.8h, w1
                	str	q0, [x0]
                	ret
 
@@ -523,7 +535,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_s32>:
-               	ld1r	{ v0.2s }, [x1]
+               	ldrsw	x1, [x1]
+               	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
 
@@ -551,7 +564,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_s32>:
-               	ld1r	{ v0.4s }, [x1]
+               	ldrsw	x1, [x1]
+               	dup	v0.4s, w1
                	str	q0, [x0]
                	ret
 
@@ -579,7 +593,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_u32>:
-               	ld1r	{ v0.2s }, [x1]
+               	ldr	w1, [x1]
+               	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
 
@@ -607,7 +622,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_u32>:
-               	ld1r	{ v0.4s }, [x1]
+               	ldr	w1, [x1]
+               	dup	v0.4s, w1
                	str	q0, [x0]
                	ret
 
@@ -635,7 +651,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_dup_f32>:
-               	ld1r	{ v0.2s }, [x1]
+               	ldr	s0, [x1]
+               	dup	v0.2s, v0.s[0]
                	str	d0, [x0]
                	ret
 
@@ -663,7 +680,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_f32>:
-               	ld1r	{ v0.4s }, [x1]
+               	ldr	s0, [x1]
+               	dup	v0.4s, v0.s[0]
                	str	q0, [x0]
                	ret
 
@@ -719,7 +737,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_s64>:
-               	ld1r	{ v0.2d }, [x1]
+               	ldr	x1, [x1]
+               	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
 
@@ -775,7 +794,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_u64>:
-               	ld1r	{ v0.2d }, [x1]
+               	ldr	x1, [x1]
+               	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
 
@@ -831,7 +851,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_p64>:
-               	ld1r	{ v0.2d }, [x1]
+               	ldr	x1, [x1]
+               	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
 
@@ -887,7 +908,8 @@ Disassembly of section .text:
                	ret
 
 <w_vld1q_dup_f64>:
-               	ld1r	{ v0.2d }, [x1]
+               	ldr	d0, [x1]
+               	dup	v0.2d, v0.d[0]
                	str	q0, [x0]
                	ret
 
@@ -1147,7 +1169,6 @@ Disassembly of section .text:
 <w_vdup_n_s32>:
                	ldr	d0, [x1]
                	smov	x1, v0.s[0]
-               	sxtw	x1, w1
                	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
@@ -1155,7 +1176,6 @@ Disassembly of section .text:
 <w_vmovq_n_s32>:
                	ldr	q0, [x1]
                	smov	x1, v0.s[0]
-               	sxtw	x1, w1
                	dup	v0.4s, w1
                	str	q0, [x0]
                	ret
@@ -1187,7 +1207,6 @@ Disassembly of section .text:
 <w_vdup_n_u32>:
                	ldr	d0, [x1]
                	mov	w1, v0.s[0]
-               	mov	w1, w1
                	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
@@ -1195,7 +1214,6 @@ Disassembly of section .text:
 <w_vmovq_n_u32>:
                	ldr	q0, [x1]
                	mov	w1, v0.s[0]
-               	mov	w1, w1
                	dup	v0.4s, w1
                	str	q0, [x0]
                	ret
@@ -1263,10 +1281,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_s64>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mov	x1, v0.d[0]
-               	fmov	d0, x1
+               	stur	xzr, [x29, #-0x8]
+               	stur	x1, [x29, #-0x8]
+               	ldur	d0, [x29, #-0x8]
                	str	d0, [x0]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmovq_n_s64>:
@@ -1301,10 +1326,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_u64>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mov	x1, v0.d[0]
-               	fmov	d0, x1
+               	stur	xzr, [x29, #-0x8]
+               	stur	x1, [x29, #-0x8]
+               	ldur	d0, [x29, #-0x8]
                	str	d0, [x0]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmovq_n_u64>:
@@ -1339,10 +1371,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_p64>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
                	mov	x1, v0.d[0]
-               	fmov	d0, x1
+               	stur	xzr, [x29, #-0x8]
+               	stur	x1, [x29, #-0x8]
+               	ldur	d0, [x29, #-0x8]
                	str	d0, [x0]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmovq_n_p64>:
@@ -1378,7 +1417,6 @@ Disassembly of section .text:
 
 <w_vdup_n_f64>:
                	ldr	d0, [x1]
-               	fmov	d0, d0
                	str	d0, [x0]
                	ret
 

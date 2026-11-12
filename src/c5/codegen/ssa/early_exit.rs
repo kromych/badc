@@ -99,6 +99,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
+        | Inst::VecSplat { .. }
         | Inst::VecExtract { .. }
         | Inst::Select { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {

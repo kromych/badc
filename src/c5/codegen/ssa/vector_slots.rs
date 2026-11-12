@@ -243,6 +243,45 @@ pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
     }
 }
 
+/// Each chain of lane inserts writing one value into every lane of a vector
+/// of at most `max` bytes, as one [`Inst::VecSplat`]; the inserts it
+/// replaced are left to the dead-code pass.
+pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            value, kind, bytes, ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let Some(width) = lane_store_bytes(kind).filter(|&w| w <= bytes && bytes <= max) else {
+            continue;
+        };
+        let lanes = u32::from(bytes / width);
+        let all = u64::MAX >> (64 - lanes);
+        let (mut seen, mut at) = (0u64, i as ValueId);
+        for _ in 0..2 * lanes {
+            match func.insts[at as usize] {
+                Inst::VecInsert {
+                    vec,
+                    value: v,
+                    off,
+                    kind: k,
+                    bytes: b,
+                } if v == value && k == kind && b == bytes => {
+                    seen |= 1 << (off / width);
+                    at = vec;
+                }
+                _ => break,
+            }
+            if seen == all {
+                func.insts[i] = Inst::VecSplat { value, kind, bytes };
+                break;
+            }
+        }
+    }
+}
+
 /// The reads half of [`split_wide_lanes`].
 fn split_wide_reads(func: &mut FunctionSsa) {
     let sites: Vec<ValueId> = func

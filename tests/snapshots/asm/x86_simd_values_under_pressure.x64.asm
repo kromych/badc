@@ -597,42 +597,40 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x14, %r8d
                	jl	<addr>
-               	movq	$-0x1, %rcx
-               	xorl	%eax, %eax
-               	vmovd	%ecx, %xmm0
-               	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
-               	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
+               	movq	$-0x1, %rax
+               	vmovd	%eax, %xmm0
+               	vpbroadcastd	%xmm0, %xmm0
                	pcmpeqd	%xmm1, %xmm0
-               	pmovmskb	%xmm0, %ecx
-               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
+               	pmovmskb	%xmm0, %eax
+               	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x1e, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm0
+               	leaq	<rip>, %rax
+               	movups	(%rax), %xmm0
                	sqrtss	%xmm0, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	movl	$0x40800000, %ecx       # imm = 0x40800000
-               	movq	%rcx, %xmm15
+               	movl	$0x40800000, %eax       # imm = 0x40800000
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	movl	$0x40000000, %edx       # imm = 0x40000000
-               	movq	%rdx, %xmm15
+               	movl	$0x40000000, %ecx       # imm = 0x40000000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1f, %eax
                	leave
                	retq
+               	xorl	%eax, %eax
                	leave
                	retq
                	leaq	0x1(%r8), %rax

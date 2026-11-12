@@ -4296,9 +4296,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v2899 Call { target_pc=796, args=[v2894, v2898, v2885], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v2900 Extend { value=v2899, kind=I32 }                 -> x1
     v2901 Neg(v2899)                                       -> x0
-    v2902 Extend { value=v2901, kind=I32, nsw }            -> x0
+    v2902 Extend { value=v2901, kind=I32, nsw }            -> x1
     v2903 Imm(0)                                           -> x1
-    v2904 VecInsert { vec=v2841, value=v2902, off=0, kind=I32, bytes=16 } -> d0
+    v2904 VecInsert { vec=v2841, value=v2901, off=0, kind=I32, bytes=16 } -> d0
     v2905 Imm(0)                                           -> x0
     v2906 Imm(0)                                           -> x0
     v2907 LifetimeEnd(0)                                   -> -
@@ -4677,9 +4677,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v3190 Call { target_pc=796, args=[v3185, v3189, v3176], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v3191 Extend { value=v3190, kind=I32 }                 -> x1
     v3192 Neg(v3190)                                       -> x0
-    v3193 Extend { value=v3192, kind=I32, nsw }            -> x0
+    v3193 Extend { value=v3192, kind=I32, nsw }            -> x1
     v3194 Imm(0)                                           -> x1
-    v3195 VecInsert { vec=v3132, value=v3193, off=0, kind=I32, bytes=16 } -> d0
+    v3195 VecInsert { vec=v3132, value=v3192, off=0, kind=I32, bytes=16 } -> d0
     v3196 Imm(0)                                           -> x0
     v3197 Imm(0)                                           -> x0
     v3198 LifetimeEnd(0)                                   -> -
@@ -5058,9 +5058,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v3481 Call { target_pc=796, args=[v3476, v3480, v3467], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v3482 Extend { value=v3481, kind=I32 }                 -> x1
     v3483 Neg(v3481)                                       -> x0
-    v3484 Extend { value=v3483, kind=I32, nsw }            -> x0
+    v3484 Extend { value=v3483, kind=I32, nsw }            -> x1
     v3485 Imm(0)                                           -> x1
-    v3486 VecInsert { vec=v3423, value=v3484, off=0, kind=I32, bytes=16 } -> d0
+    v3486 VecInsert { vec=v3423, value=v3483, off=0, kind=I32, bytes=16 } -> d0
     v3487 Imm(0)                                           -> x0
     v3488 Imm(0)                                           -> x0
     v3489 LifetimeEnd(0)                                   -> -
@@ -5439,9 +5439,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v3772 Call { target_pc=796, args=[v3767, v3771, v3758], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v3773 Extend { value=v3772, kind=I32 }                 -> x1
     v3774 Neg(v3772)                                       -> x0
-    v3775 Extend { value=v3774, kind=I32, nsw }            -> x0
+    v3775 Extend { value=v3774, kind=I32, nsw }            -> x1
     v3776 Imm(0)                                           -> x1
-    v3777 VecInsert { vec=v3714, value=v3775, off=0, kind=I32, bytes=16 } -> d0
+    v3777 VecInsert { vec=v3714, value=v3774, off=0, kind=I32, bytes=16 } -> d0
     v3778 Imm(0)                                           -> x0
     v3779 Imm(0)                                           -> x0
     v3780 LifetimeEnd(0)                                   -> -
@@ -5820,9 +5820,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v4063 Call { target_pc=796, args=[v4058, v4062, v4049], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v4064 Extend { value=v4063, kind=I32 }                 -> x1
     v4065 Neg(v4063)                                       -> x0
-    v4066 Extend { value=v4065, kind=I32, nsw }            -> x0
+    v4066 Extend { value=v4065, kind=I32, nsw }            -> x1
     v4067 Imm(0)                                           -> x1
-    v4068 VecInsert { vec=v4005, value=v4066, off=0, kind=I32, bytes=16 } -> d0
+    v4068 VecInsert { vec=v4005, value=v4065, off=0, kind=I32, bytes=16 } -> d0
     v4069 Imm(0)                                           -> x0
     v4070 Imm(0)                                           -> x0
     v4071 LifetimeEnd(0)                                   -> -
@@ -6201,9 +6201,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v4354 Call { target_pc=796, args=[v4349, v4353, v4340], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v4355 Extend { value=v4354, kind=I32 }                 -> x1
     v4356 Neg(v4354)                                       -> x0
-    v4357 Extend { value=v4356, kind=I32, nsw }            -> x0
+    v4357 Extend { value=v4356, kind=I32, nsw }            -> x1
     v4358 Imm(0)                                           -> x1
-    v4359 VecInsert { vec=v4296, value=v4357, off=0, kind=I32, bytes=16 } -> d0
+    v4359 VecInsert { vec=v4296, value=v4356, off=0, kind=I32, bytes=16 } -> d0
     v4360 Imm(0)                                           -> x0
     v4361 Imm(0)                                           -> x0
     v4362 LifetimeEnd(0)                                   -> -
@@ -6542,9 +6542,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v4641 Call { target_pc=796, args=[v4636, v4640, v4627], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v4642 Extend { value=v4641, kind=I32 }                 -> x1
     v4643 Neg(v4641)                                       -> x0
-    v4644 Extend { value=v4643, kind=I32, nsw }            -> x0
+    v4644 Extend { value=v4643, kind=I32, nsw }            -> x1
     v4645 Imm(0)                                           -> x1
-    v4646 VecInsert { vec=v4583, value=v4644, off=0, kind=I32, bytes=16 } -> d0
+    v4646 VecInsert { vec=v4583, value=v4643, off=0, kind=I32, bytes=16 } -> d0
     v4647 Imm(0)                                           -> x0
     v4648 Imm(0)                                           -> x0
     v4649 LifetimeEnd(0)                                   -> -
@@ -6823,9 +6823,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v4922 Call { target_pc=796, args=[v4917, v4921, v4908], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v4923 Extend { value=v4922, kind=I32 }                 -> x1
     v4924 Neg(v4922)                                       -> x0
-    v4925 Extend { value=v4924, kind=I32, nsw }            -> x0
+    v4925 Extend { value=v4924, kind=I32, nsw }            -> x1
     v4926 Imm(0)                                           -> x1
-    v4927 VecInsert { vec=v4864, value=v4925, off=0, kind=I32, bytes=16 } -> d0
+    v4927 VecInsert { vec=v4864, value=v4924, off=0, kind=I32, bytes=16 } -> d0
     v4928 Imm(0)                                           -> x0
     v4929 Imm(0)                                           -> x0
     v4930 LifetimeEnd(0)                                   -> -
@@ -7104,9 +7104,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v5203 Call { target_pc=796, args=[v5198, v5202, v5189], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v5204 Extend { value=v5203, kind=I32 }                 -> x1
     v5205 Neg(v5203)                                       -> x0
-    v5206 Extend { value=v5205, kind=I32, nsw }            -> x0
+    v5206 Extend { value=v5205, kind=I32, nsw }            -> x1
     v5207 Imm(0)                                           -> x1
-    v5208 VecInsert { vec=v5145, value=v5206, off=0, kind=I32, bytes=16 } -> d0
+    v5208 VecInsert { vec=v5145, value=v5205, off=0, kind=I32, bytes=16 } -> d0
     v5209 Imm(0)                                           -> x0
     v5210 Imm(0)                                           -> x0
     v5211 LifetimeEnd(0)                                   -> -
@@ -7385,9 +7385,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v5484 Call { target_pc=796, args=[v5479, v5483, v5470], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v5485 Extend { value=v5484, kind=I32 }                 -> x1
     v5486 Neg(v5484)                                       -> x0
-    v5487 Extend { value=v5486, kind=I32, nsw }            -> x0
+    v5487 Extend { value=v5486, kind=I32, nsw }            -> x1
     v5488 Imm(0)                                           -> x1
-    v5489 VecInsert { vec=v5426, value=v5487, off=0, kind=I32, bytes=16 } -> d0
+    v5489 VecInsert { vec=v5426, value=v5486, off=0, kind=I32, bytes=16 } -> d0
     v5490 Imm(0)                                           -> x0
     v5491 Imm(0)                                           -> x0
     v5492 LifetimeEnd(0)                                   -> -
@@ -7666,9 +7666,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v5765 Call { target_pc=796, args=[v5760, v5764, v5751], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v5766 Extend { value=v5765, kind=I32 }                 -> x1
     v5767 Neg(v5765)                                       -> x0
-    v5768 Extend { value=v5767, kind=I32, nsw }            -> x0
+    v5768 Extend { value=v5767, kind=I32, nsw }            -> x1
     v5769 Imm(0)                                           -> x1
-    v5770 VecInsert { vec=v5707, value=v5768, off=0, kind=I32, bytes=16 } -> d0
+    v5770 VecInsert { vec=v5707, value=v5767, off=0, kind=I32, bytes=16 } -> d0
     v5771 Imm(0)                                           -> x0
     v5772 Imm(0)                                           -> x0
     v5773 LifetimeEnd(0)                                   -> -
@@ -7947,9 +7947,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v6046 Call { target_pc=796, args=[v6041, v6045, v6032], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v6047 Extend { value=v6046, kind=I32 }                 -> x1
     v6048 Neg(v6046)                                       -> x0
-    v6049 Extend { value=v6048, kind=I32, nsw }            -> x0
+    v6049 Extend { value=v6048, kind=I32, nsw }            -> x1
     v6050 Imm(0)                                           -> x1
-    v6051 VecInsert { vec=v5988, value=v6049, off=0, kind=I32, bytes=16 } -> d0
+    v6051 VecInsert { vec=v5988, value=v6048, off=0, kind=I32, bytes=16 } -> d0
     v6052 Imm(0)                                           -> x0
     v6053 Imm(0)                                           -> x0
     v6054 LifetimeEnd(0)                                   -> -
@@ -8228,9 +8228,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v6327 Call { target_pc=796, args=[v6322, v6326, v6313], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v6328 Extend { value=v6327, kind=I32 }                 -> x1
     v6329 Neg(v6327)                                       -> x0
-    v6330 Extend { value=v6329, kind=I32, nsw }            -> x0
+    v6330 Extend { value=v6329, kind=I32, nsw }            -> x1
     v6331 Imm(0)                                           -> x1
-    v6332 VecInsert { vec=v6269, value=v6330, off=0, kind=I32, bytes=16 } -> d0
+    v6332 VecInsert { vec=v6269, value=v6329, off=0, kind=I32, bytes=16 } -> d0
     v6333 Imm(0)                                           -> x0
     v6334 Imm(0)                                           -> x0
     v6335 LifetimeEnd(0)                                   -> -
@@ -8509,9 +8509,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v6608 Call { target_pc=796, args=[v6603, v6607, v6594], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v6609 Extend { value=v6608, kind=I32 }                 -> x1
     v6610 Neg(v6608)                                       -> x0
-    v6611 Extend { value=v6610, kind=I32, nsw }            -> x0
+    v6611 Extend { value=v6610, kind=I32, nsw }            -> x1
     v6612 Imm(0)                                           -> x1
-    v6613 VecInsert { vec=v6550, value=v6611, off=0, kind=I32, bytes=16 } -> d0
+    v6613 VecInsert { vec=v6550, value=v6610, off=0, kind=I32, bytes=16 } -> d0
     v6614 Imm(0)                                           -> x0
     v6615 Imm(0)                                           -> x0
     v6616 LifetimeEnd(0)                                   -> -
@@ -8790,9 +8790,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v6889 Call { target_pc=796, args=[v6884, v6888, v6875], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v6890 Extend { value=v6889, kind=I32 }                 -> x1
     v6891 Neg(v6889)                                       -> x0
-    v6892 Extend { value=v6891, kind=I32, nsw }            -> x0
+    v6892 Extend { value=v6891, kind=I32, nsw }            -> x1
     v6893 Imm(0)                                           -> x1
-    v6894 VecInsert { vec=v6831, value=v6892, off=0, kind=I32, bytes=16 } -> d0
+    v6894 VecInsert { vec=v6831, value=v6891, off=0, kind=I32, bytes=16 } -> d0
     v6895 Imm(0)                                           -> x0
     v6896 Imm(0)                                           -> x0
     v6897 LifetimeEnd(0)                                   -> -
@@ -9071,9 +9071,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v7170 Call { target_pc=796, args=[v7165, v7169, v7156], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v7171 Extend { value=v7170, kind=I32 }                 -> x1
     v7172 Neg(v7170)                                       -> x0
-    v7173 Extend { value=v7172, kind=I32, nsw }            -> x0
+    v7173 Extend { value=v7172, kind=I32, nsw }            -> x1
     v7174 Imm(0)                                           -> x1
-    v7175 VecInsert { vec=v7112, value=v7173, off=0, kind=I32, bytes=16 } -> d0
+    v7175 VecInsert { vec=v7112, value=v7172, off=0, kind=I32, bytes=16 } -> d0
     v7176 Imm(0)                                           -> x0
     v7177 Imm(0)                                           -> x0
     v7178 LifetimeEnd(0)                                   -> -
@@ -9352,9 +9352,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v7451 Call { target_pc=796, args=[v7446, v7450, v7437], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v7452 Extend { value=v7451, kind=I32 }                 -> x1
     v7453 Neg(v7451)                                       -> x0
-    v7454 Extend { value=v7453, kind=I32, nsw }            -> x0
+    v7454 Extend { value=v7453, kind=I32, nsw }            -> x1
     v7455 Imm(0)                                           -> x1
-    v7456 VecInsert { vec=v7393, value=v7454, off=0, kind=I32, bytes=16 } -> d0
+    v7456 VecInsert { vec=v7393, value=v7453, off=0, kind=I32, bytes=16 } -> d0
     v7457 Imm(0)                                           -> x0
     v7458 Imm(0)                                           -> x0
     v7459 LifetimeEnd(0)                                   -> -
@@ -9633,9 +9633,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v7732 Call { target_pc=796, args=[v7727, v7731, v7718], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v7733 Extend { value=v7732, kind=I32 }                 -> x1
     v7734 Neg(v7732)                                       -> x0
-    v7735 Extend { value=v7734, kind=I32, nsw }            -> x0
+    v7735 Extend { value=v7734, kind=I32, nsw }            -> x1
     v7736 Imm(0)                                           -> x1
-    v7737 VecInsert { vec=v7674, value=v7735, off=0, kind=I32, bytes=16 } -> d0
+    v7737 VecInsert { vec=v7674, value=v7734, off=0, kind=I32, bytes=16 } -> d0
     v7738 Imm(0)                                           -> x0
     v7739 Imm(0)                                           -> x0
     v7740 LifetimeEnd(0)                                   -> -
@@ -9914,9 +9914,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v8013 Call { target_pc=796, args=[v8008, v8012, v7999], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v8014 Extend { value=v8013, kind=I32 }                 -> x1
     v8015 Neg(v8013)                                       -> x0
-    v8016 Extend { value=v8015, kind=I32, nsw }            -> x0
+    v8016 Extend { value=v8015, kind=I32, nsw }            -> x1
     v8017 Imm(0)                                           -> x1
-    v8018 VecInsert { vec=v7955, value=v8016, off=0, kind=I32, bytes=16 } -> d0
+    v8018 VecInsert { vec=v7955, value=v8015, off=0, kind=I32, bytes=16 } -> d0
     v8019 Imm(0)                                           -> x0
     v8020 Imm(0)                                           -> x0
     v8021 LifetimeEnd(0)                                   -> -
@@ -10195,9 +10195,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v8294 Call { target_pc=796, args=[v8289, v8293, v8280], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v8295 Extend { value=v8294, kind=I32 }                 -> x1
     v8296 Neg(v8294)                                       -> x0
-    v8297 Extend { value=v8296, kind=I32, nsw }            -> x0
+    v8297 Extend { value=v8296, kind=I32, nsw }            -> x1
     v8298 Imm(0)                                           -> x1
-    v8299 VecInsert { vec=v8236, value=v8297, off=0, kind=I32, bytes=16 } -> d0
+    v8299 VecInsert { vec=v8236, value=v8296, off=0, kind=I32, bytes=16 } -> d0
     v8300 Imm(0)                                           -> x0
     v8301 Imm(0)                                           -> x0
     v8302 LifetimeEnd(0)                                   -> -
@@ -10476,9 +10476,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v8575 Call { target_pc=796, args=[v8570, v8574, v8561], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v8576 Extend { value=v8575, kind=I32 }                 -> x1
     v8577 Neg(v8575)                                       -> x0
-    v8578 Extend { value=v8577, kind=I32, nsw }            -> x0
+    v8578 Extend { value=v8577, kind=I32, nsw }            -> x1
     v8579 Imm(0)                                           -> x1
-    v8580 VecInsert { vec=v8517, value=v8578, off=0, kind=I32, bytes=16 } -> d0
+    v8580 VecInsert { vec=v8517, value=v8577, off=0, kind=I32, bytes=16 } -> d0
     v8581 Imm(0)                                           -> x0
     v8582 Imm(0)                                           -> x0
     v8583 LifetimeEnd(0)                                   -> -
@@ -10757,9 +10757,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v8856 Call { target_pc=796, args=[v8851, v8855, v8842], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v8857 Extend { value=v8856, kind=I32 }                 -> x1
     v8858 Neg(v8856)                                       -> x0
-    v8859 Extend { value=v8858, kind=I32, nsw }            -> x0
+    v8859 Extend { value=v8858, kind=I32, nsw }            -> x1
     v8860 Imm(0)                                           -> x1
-    v8861 VecInsert { vec=v8798, value=v8859, off=0, kind=I32, bytes=16 } -> d0
+    v8861 VecInsert { vec=v8798, value=v8858, off=0, kind=I32, bytes=16 } -> d0
     v8862 Imm(0)                                           -> x0
     v8863 Imm(0)                                           -> x0
     v8864 LifetimeEnd(0)                                   -> -
@@ -11038,9 +11038,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v9137 Call { target_pc=796, args=[v9132, v9136, v9123], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v9138 Extend { value=v9137, kind=I32 }                 -> x1
     v9139 Neg(v9137)                                       -> x0
-    v9140 Extend { value=v9139, kind=I32, nsw }            -> x0
+    v9140 Extend { value=v9139, kind=I32, nsw }            -> x1
     v9141 Imm(0)                                           -> x1
-    v9142 VecInsert { vec=v9079, value=v9140, off=0, kind=I32, bytes=16 } -> d0
+    v9142 VecInsert { vec=v9079, value=v9139, off=0, kind=I32, bytes=16 } -> d0
     v9143 Imm(0)                                           -> x0
     v9144 Imm(0)                                           -> x0
     v9145 LifetimeEnd(0)                                   -> -
@@ -11319,9 +11319,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v9418 Call { target_pc=796, args=[v9413, v9417, v9404], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v9419 Extend { value=v9418, kind=I32 }                 -> x1
     v9420 Neg(v9418)                                       -> x0
-    v9421 Extend { value=v9420, kind=I32, nsw }            -> x0
+    v9421 Extend { value=v9420, kind=I32, nsw }            -> x1
     v9422 Imm(0)                                           -> x1
-    v9423 VecInsert { vec=v9360, value=v9421, off=0, kind=I32, bytes=16 } -> d0
+    v9423 VecInsert { vec=v9360, value=v9420, off=0, kind=I32, bytes=16 } -> d0
     v9424 Imm(0)                                           -> x0
     v9425 Imm(0)                                           -> x0
     v9426 LifetimeEnd(0)                                   -> -
@@ -11600,9 +11600,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v9699 Call { target_pc=796, args=[v9694, v9698, v9685], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v9700 Extend { value=v9699, kind=I32 }                 -> x1
     v9701 Neg(v9699)                                       -> x0
-    v9702 Extend { value=v9701, kind=I32, nsw }            -> x0
+    v9702 Extend { value=v9701, kind=I32, nsw }            -> x1
     v9703 Imm(0)                                           -> x1
-    v9704 VecInsert { vec=v9641, value=v9702, off=0, kind=I32, bytes=16 } -> d0
+    v9704 VecInsert { vec=v9641, value=v9701, off=0, kind=I32, bytes=16 } -> d0
     v9705 Imm(0)                                           -> x0
     v9706 Imm(0)                                           -> x0
     v9707 LifetimeEnd(0)                                   -> -
@@ -11881,9 +11881,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v9980 Call { target_pc=796, args=[v9975, v9979, v9966], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v9981 Extend { value=v9980, kind=I32 }                 -> x1
     v9982 Neg(v9980)                                       -> x0
-    v9983 Extend { value=v9982, kind=I32, nsw }            -> x0
+    v9983 Extend { value=v9982, kind=I32, nsw }            -> x1
     v9984 Imm(0)                                           -> x1
-    v9985 VecInsert { vec=v9922, value=v9983, off=0, kind=I32, bytes=16 } -> d0
+    v9985 VecInsert { vec=v9922, value=v9982, off=0, kind=I32, bytes=16 } -> d0
     v9986 Imm(0)                                           -> x0
     v9987 Imm(0)                                           -> x0
     v9988 LifetimeEnd(0)                                   -> -
@@ -12162,9 +12162,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v10261 Call { target_pc=796, args=[v10256, v10260, v10247], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v10262 Extend { value=v10261, kind=I32 }                -> x1
     v10263 Neg(v10261)                                      -> x0
-    v10264 Extend { value=v10263, kind=I32, nsw }           -> x0
+    v10264 Extend { value=v10263, kind=I32, nsw }           -> x1
     v10265 Imm(0)                                           -> x1
-    v10266 VecInsert { vec=v10203, value=v10264, off=0, kind=I32, bytes=16 } -> d0
+    v10266 VecInsert { vec=v10203, value=v10263, off=0, kind=I32, bytes=16 } -> d0
     v10267 Imm(0)                                           -> x0
     v10268 Imm(0)                                           -> x0
     v10269 LifetimeEnd(0)                                   -> -
@@ -12443,9 +12443,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v10542 Call { target_pc=796, args=[v10537, v10541, v10528], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v10543 Extend { value=v10542, kind=I32 }                -> x1
     v10544 Neg(v10542)                                      -> x0
-    v10545 Extend { value=v10544, kind=I32, nsw }           -> x0
+    v10545 Extend { value=v10544, kind=I32, nsw }           -> x1
     v10546 Imm(0)                                           -> x1
-    v10547 VecInsert { vec=v10484, value=v10545, off=0, kind=I32, bytes=16 } -> d0
+    v10547 VecInsert { vec=v10484, value=v10544, off=0, kind=I32, bytes=16 } -> d0
     v10548 Imm(0)                                           -> x0
     v10549 Imm(0)                                           -> x0
     v10550 LifetimeEnd(0)                                   -> -
@@ -12724,9 +12724,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v10823 Call { target_pc=796, args=[v10818, v10822, v10809], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v10824 Extend { value=v10823, kind=I32 }                -> x1
     v10825 Neg(v10823)                                      -> x0
-    v10826 Extend { value=v10825, kind=I32, nsw }           -> x0
+    v10826 Extend { value=v10825, kind=I32, nsw }           -> x1
     v10827 Imm(0)                                           -> x1
-    v10828 VecInsert { vec=v10765, value=v10826, off=0, kind=I32, bytes=16 } -> d0
+    v10828 VecInsert { vec=v10765, value=v10825, off=0, kind=I32, bytes=16 } -> d0
     v10829 Imm(0)                                           -> x0
     v10830 Imm(0)                                           -> x0
     v10831 LifetimeEnd(0)                                   -> -
@@ -13005,9 +13005,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v11104 Call { target_pc=796, args=[v11099, v11103, v11090], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v11105 Extend { value=v11104, kind=I32 }                -> x1
     v11106 Neg(v11104)                                      -> x0
-    v11107 Extend { value=v11106, kind=I32, nsw }           -> x0
+    v11107 Extend { value=v11106, kind=I32, nsw }           -> x1
     v11108 Imm(0)                                           -> x1
-    v11109 VecInsert { vec=v11046, value=v11107, off=0, kind=I32, bytes=16 } -> d0
+    v11109 VecInsert { vec=v11046, value=v11106, off=0, kind=I32, bytes=16 } -> d0
     v11110 Imm(0)                                           -> x0
     v11111 Imm(0)                                           -> x0
     v11112 LifetimeEnd(0)                                   -> -
@@ -13286,9 +13286,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v11385 Call { target_pc=796, args=[v11380, v11384, v11371], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v11386 Extend { value=v11385, kind=I32 }                -> x1
     v11387 Neg(v11385)                                      -> x0
-    v11388 Extend { value=v11387, kind=I32, nsw }           -> x0
+    v11388 Extend { value=v11387, kind=I32, nsw }           -> x1
     v11389 Imm(0)                                           -> x1
-    v11390 VecInsert { vec=v11327, value=v11388, off=0, kind=I32, bytes=16 } -> d0
+    v11390 VecInsert { vec=v11327, value=v11387, off=0, kind=I32, bytes=16 } -> d0
     v11391 Imm(0)                                           -> x0
     v11392 Imm(0)                                           -> x0
     v11393 LifetimeEnd(0)                                   -> -
@@ -13567,9 +13567,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v11666 Call { target_pc=796, args=[v11661, v11665, v11652], fixed_args=3, fp_return=false, fp_arg_mask=0x3 } -> x0
     v11667 Extend { value=v11666, kind=I32 }                -> x1
     v11668 Neg(v11666)                                      -> x0
-    v11669 Extend { value=v11668, kind=I32, nsw }           -> x0
+    v11669 Extend { value=v11668, kind=I32, nsw }           -> x1
     v11670 Imm(0)                                           -> x1
-    v11671 VecInsert { vec=v11608, value=v11669, off=0, kind=I32, bytes=16 } -> d0
+    v11671 VecInsert { vec=v11608, value=v11668, off=0, kind=I32, bytes=16 } -> d0
     v11672 Imm(0)                                           -> x0
     v11673 Imm(0)                                           -> x0
     v11674 LifetimeEnd(0)                                   -> -
@@ -14608,9 +14608,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12707 Imm(0)                                           -> x0
     v12708 Imm(0)                                           -> x0
     v12709 Imm(-1)                                          -> x0
-    v12710 Imm(0)                                           -> x1
+    v12710 Undef                                            -> x1
     v12711 VecInsert { vec=v12710, value=v12709, off=0, kind=I64, bytes=16 } -> d4
-    v12712 VecInsert { vec=v12711, value=v12709, off=8, kind=I64, bytes=16 } -> d4
+    v12712 VecSplat { value=v12709, kind=I64, bytes=16 }    -> d4
     v12713 Imm(0)                                           -> x1
     v12714 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12686, rhs=v12712 } -> d2
     v12715 Imm(0)                                           -> x1
@@ -14631,9 +14631,9 @@ fn ent_pc=1362 n_params=4 variadic=false locals=663
     v12730 Imm(0)                                           -> x1
     v12731 Imm(0)                                           -> x1
     v12732 Imm(-1)                                          -> x1
-    v12733 Imm(0)                                           -> x1
+    v12733 Undef                                            -> x1
     v12734 VecInsert { vec=v12733, value=v12709, off=0, kind=I64, bytes=16 } -> d3
-    v12735 VecInsert { vec=v12734, value=v12709, off=8, kind=I64, bytes=16 } -> d3
+    v12735 VecSplat { value=v12709, kind=I64, bytes=16 }    -> d3
     v12736 Imm(0)                                           -> x0
     v12737 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v12723, rhs=v12735 } -> d0
     v12738 Imm(0)                                           -> x0

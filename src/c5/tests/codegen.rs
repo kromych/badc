@@ -12669,6 +12669,30 @@ fn size_bound_keeps_the_object_in_memory() {
     }
 }
 
+/// A broadcast writes no memory: lane reads of a vector copied from its
+/// constant template fold to the template's bytes past the all-ones splat
+/// `~` takes on x86-64, which cleared the known slot contents when it was
+/// not counted a pure value.
+#[test]
+fn a_splat_keeps_a_template_copy_known() {
+    const SRC: &str = "typedef unsigned char u8 __attribute__((vector_size(16)));\n\
+        u8 g;\n\
+        int f(void) {\n\
+            u8 a = {128, 255, 0, 1, 127, 5, 251, 3, 3, 9, 247, 100, 156, 0, 7, 8};\n\
+            g = ~a;\n\
+            return a[1] + a[4];\n\
+        }\n";
+    let target = crate::Target::LinuxX64;
+    let (body, insts) = optimized_function_full_pool(SRC, "f", target);
+    assert!(
+        insts.iter().any(|(_, i)| i.starts_with("VecSplat"))
+            && !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("LoadLocal") && i.contains("U8")),
+        "{target:?}: the lane reads fold past the splat: {body}"
+    );
+}
+
 /// An aggregate whose reads an earlier pass forwarded, with its writes
 /// dropped, holds only loads nothing reads: the split gives up its storage
 /// with them, and no load of a frame slot is left for the frame to keep

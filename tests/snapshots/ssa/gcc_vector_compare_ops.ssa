@@ -6072,12 +6072,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6803 Imm(0)                                           -> x0
     v6804 Imm(0)                                           -> x0
     v6805 Imm(-1)                                          -> x0
-    v6806 Imm(0)                                           -> x1
+    v6806 Undef                                            -> x1
     v6807 VecInsert { vec=v6806, value=v6805, off=0, kind=I64, bytes=16 } -> d3
     v6808 Imm(0)                                           -> x1
     v6809 Imm(8)                                           -> x1
     v6810 Imm(0)                                           -> x1
-    v6811 VecInsert { vec=v6807, value=v6805, off=8, kind=I64, bytes=16 } -> d3
+    v6811 VecSplat { value=v6805, kind=I64, bytes=16 }     -> d3
     v6812 Imm(0)                                           -> x0
     v6813 Imm(0)                                           -> x0
     v6814 Imm(0)                                           -> x0

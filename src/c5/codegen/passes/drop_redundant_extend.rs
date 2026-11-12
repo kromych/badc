@@ -284,14 +284,24 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::VecBinop { lhs, rhs, .. }
-            | Inst::VecInsert {
-                vec: lhs,
-                value: rhs,
-                ..
-            } => {
+            Inst::VecBinop { lhs, rhs, .. } => {
                 observe(&mut hi, &mut work, *lhs);
                 observe(&mut hi, &mut work, *rhs);
+            }
+            // A lane narrower than 8 bytes takes the value's low bytes, as a
+            // narrow store does.
+            Inst::VecInsert {
+                vec, value, kind, ..
+            } => {
+                observe(&mut hi, &mut work, *vec);
+                if !matches!(kind, StoreKind::I8 | StoreKind::I16 | StoreKind::I32) {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
+            Inst::VecSplat { value, kind, .. } => {
+                if !matches!(kind, StoreKind::I8 | StoreKind::I16 | StoreKind::I32) {
+                    observe(&mut hi, &mut work, *value);
+                }
             }
             Inst::VecExtract { vec, .. } => observe(&mut hi, &mut work, *vec),
             Inst::Select { cond, a, b, .. } => {

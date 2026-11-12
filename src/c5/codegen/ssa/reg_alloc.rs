@@ -377,6 +377,7 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::SimdVal { .. }
         | Inst::VecBinop { .. }
         | Inst::VecInsert { .. }
+        | Inst::VecSplat { .. }
         | Inst::VecExtract { .. }
         | Inst::Select { .. }
         | Inst::InlineAsm { .. }
@@ -1867,6 +1868,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
             | Inst::VecExtract { .. }
             | Inst::Select { .. } => true,
             // AArch64 `madd` / `msub` write only the result; the x86-64
@@ -3744,9 +3746,9 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<VecWidth> {
                     VecWidth::Scalar
                 }
             }
-            Inst::VecBinop { bytes, .. } | Inst::VecInsert { bytes, .. } => {
-                VecWidth::of_bytes(*bytes)
-            }
+            Inst::VecBinop { bytes, .. }
+            | Inst::VecInsert { bytes, .. }
+            | Inst::VecSplat { bytes, .. } => VecWidth::of_bytes(*bytes),
             Inst::VecExtract { kind, .. } => VecWidth::of_load(*kind),
             _ => VecWidth::Scalar,
         })
@@ -3859,7 +3861,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             ..
         } => ResultKind::Fp,
         Simd { .. } => ResultKind::None,
-        VecBinop { .. } | VecInsert { .. } => ResultKind::Fp,
+        VecBinop { .. } | VecInsert { .. } | VecSplat { .. } => ResultKind::Fp,
         VecExtract { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::V128 => ResultKind::Fp,
             _ => ResultKind::Int,

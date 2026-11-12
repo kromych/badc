@@ -79,7 +79,6 @@ Disassembly of section .text:
                	retq
 
 <put_i>:
-               	movslq	%edi, %rdi
                	vpinsrd	$0x2, %edi, %xmm0, %xmm0
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm1
@@ -179,13 +178,11 @@ Disassembly of section .text:
                	retq
 
 <put_i8>:
-               	movslq	%edi, %rdi
                	vmovdqa	%xmm0, %xmm1
                	vpinsrd	$0x1, %edi, %xmm1, %xmm1
                	vinserti128	$0x0, %xmm1, %ymm0, %ymm0
                	movq	%rdi, %rax
                	negq	%rax
-               	movslq	%eax, %rax
                	vextracti128	$0x1, %ymm0, %xmm1
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	vinserti128	$0x1, %xmm1, %ymm0, %ymm0

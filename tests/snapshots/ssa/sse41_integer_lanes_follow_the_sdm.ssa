@@ -3014,9 +3014,9 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v715 Imm(0)                                           -> x1
     v716 Imm(0)                                           -> x1
     v717 Imm(-1)                                          -> x1
-    v718 Imm(0)                                           -> x9
+    v718 Undef                                            -> x7
     v719 VecInsert { vec=v718, value=v717, off=0, kind=I64, bytes=16 } -> d2
-    v720 VecInsert { vec=v719, value=v717, off=8, kind=I64, bytes=16 } -> d2
+    v720 VecSplat { value=v717, kind=I64, bytes=16 }      -> d2
     v721 Imm(0)                                           -> x1
     v722 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v678, rhs=v720 } -> d2
     v723 Imm(0)                                           -> x1
@@ -3063,9 +3063,9 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v939 Imm(0)                                           -> x1
     v940 Imm(0)                                           -> x1
     v941 Imm(-1)                                          -> x1
-    v942 Imm(0)                                           -> x9
+    v942 Undef                                            -> x7
     v943 VecInsert { vec=v942, value=v941, off=0, kind=I64, bytes=16 } -> d2
-    v944 VecInsert { vec=v943, value=v941, off=8, kind=I64, bytes=16 } -> d2
+    v944 VecSplat { value=v941, kind=I64, bytes=16 }      -> d2
     v945 Imm(0)                                           -> x1
     v946 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v678, rhs=v944 } -> d2
     v947 Imm(0)                                           -> x1
@@ -3150,9 +3150,9 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v968 Imm(0)                                           -> x1
     v969 Imm(0)                                           -> x1
     v970 Imm(-1)                                          -> x1
-    v971 Imm(0)                                           -> x9
+    v971 Undef                                            -> x7
     v972 VecInsert { vec=v971, value=v970, off=0, kind=I64, bytes=16 } -> d2
-    v973 VecInsert { vec=v972, value=v970, off=8, kind=I64, bytes=16 } -> d2
+    v973 VecSplat { value=v970, kind=I64, bytes=16 }      -> d2
     v974 Imm(0)                                           -> x1
     v975 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v678, rhs=v973 } -> d0
     v976 Imm(0)                                           -> x1
@@ -3510,9 +3510,9 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v590 Imm(0)                                           -> x0
     v591 Imm(0)                                           -> x0
     v592 Imm(-1)                                          -> x0
-    v593 Imm(0)                                           -> x2
+    v593 Undef                                            -> x2
     v594 VecInsert { vec=v593, value=v592, off=0, kind=I64, bytes=16 } -> d2
-    v595 VecInsert { vec=v594, value=v592, off=8, kind=I64, bytes=16 } -> d2
+    v595 VecSplat { value=v592, kind=I64, bytes=16 }      -> d2
     v596 Imm(0)                                           -> x2
     v597 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v570, rhs=v595 } -> d0
     v598 Imm(0)                                           -> x2
@@ -3532,62 +3532,62 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v831 Imm(-1)                                          -> x1
     v832 Imm(0)                                           -> x1
     v833 Imm(0)                                           -> x1
-    v834 Imm(0)                                           -> x2
-    v835 Imm(0)                                           -> x2
-    v836 Imm(0)                                           -> x2
+    v834 Imm(0)                                           -> x1
+    v835 Imm(0)                                           -> x1
+    v836 Imm(0)                                           -> x1
     v837 VecInsert { vec=v833, value=v592, off=0, kind=I32, bytes=16 } -> d0
-    v838 Imm(0)                                           -> x2
-    v839 Imm(0)                                           -> x2
-    v840 Imm(4)                                           -> x2
-    v841 Imm(0)                                           -> x2
+    v838 Imm(0)                                           -> x1
+    v839 Imm(0)                                           -> x1
+    v840 Imm(4)                                           -> x1
+    v841 Imm(0)                                           -> x1
     v842 VecInsert { vec=v837, value=v592, off=4, kind=I32, bytes=16 } -> d0
-    v843 Imm(0)                                           -> x2
-    v844 Imm(0)                                           -> x2
-    v845 Imm(8)                                           -> x2
-    v846 Imm(0)                                           -> x2
+    v843 Imm(0)                                           -> x1
+    v844 Imm(0)                                           -> x1
+    v845 Imm(8)                                           -> x1
+    v846 Imm(0)                                           -> x1
     v847 VecInsert { vec=v842, value=v592, off=8, kind=I32, bytes=16 } -> d0
-    v848 Imm(0)                                           -> x2
-    v849 Imm(0)                                           -> x2
-    v850 Imm(12)                                          -> x2
-    v851 Imm(0)                                           -> x2
-    v852 VecInsert { vec=v847, value=v592, off=12, kind=I32, bytes=16 } -> d0
-    v853 Imm(0)                                           -> x2
-    v854 Imm(0)                                           -> x2
-    v855 Imm(0)                                           -> x2
-    v856 Imm(-1)                                          -> x2
-    v857 Imm(-1)                                          -> x2
-    v858 Imm(0)                                           -> x2
-    v859 Imm(0)                                           -> x2
-    v860 Imm(0)                                           -> x2
-    v861 Imm(0)                                           -> x2
-    v862 Imm(0)                                           -> x2
-    v863 VecInsert { vec=v833, value=v592, off=0, kind=I32, bytes=16 } -> d1
-    v864 Imm(0)                                           -> x2
-    v865 Imm(0)                                           -> x2
-    v866 Imm(4)                                           -> x2
-    v867 Imm(0)                                           -> x2
+    v848 Imm(0)                                           -> x1
+    v849 Imm(0)                                           -> x1
+    v850 Imm(12)                                          -> x1
+    v851 Imm(0)                                           -> x1
+    v852 VecSplat { value=v592, kind=I32, bytes=16 }      -> d0
+    v853 Imm(0)                                           -> x1
+    v854 Imm(0)                                           -> x1
+    v855 Imm(0)                                           -> x1
+    v856 Imm(-1)                                          -> x1
+    v857 Imm(-1)                                          -> x1
+    v858 Imm(0)                                           -> x1
+    v859 Imm(0)                                           -> x1
+    v860 Imm(0)                                           -> x1
+    v861 Imm(0)                                           -> x1
+    v862 Imm(0)                                           -> x1
+    v863 VecInsert { vec=v859, value=v592, off=0, kind=I32, bytes=16 } -> d1
+    v864 Imm(0)                                           -> x1
+    v865 Imm(0)                                           -> x1
+    v866 Imm(4)                                           -> x1
+    v867 Imm(0)                                           -> x1
     v868 VecInsert { vec=v863, value=v592, off=4, kind=I32, bytes=16 } -> d1
-    v869 Imm(0)                                           -> x2
-    v870 Imm(0)                                           -> x2
-    v871 Imm(8)                                           -> x2
-    v872 Imm(0)                                           -> x2
+    v869 Imm(0)                                           -> x1
+    v870 Imm(0)                                           -> x1
+    v871 Imm(8)                                           -> x1
+    v872 Imm(0)                                           -> x1
     v873 VecInsert { vec=v868, value=v592, off=8, kind=I32, bytes=16 } -> d1
-    v874 Imm(0)                                           -> x2
-    v875 Imm(0)                                           -> x2
-    v876 Imm(12)                                          -> x2
-    v877 Imm(0)                                           -> x2
-    v878 VecInsert { vec=v873, value=v592, off=12, kind=I32, bytes=16 } -> d1
-    v879 Imm(0)                                           -> x2
-    v880 Imm(0)                                           -> x2
-    v881 Imm(0)                                           -> x2
-    v882 Imm(-1)                                          -> x2
-    v883 Imm(-1)                                          -> x2
-    v884 Imm(0)                                           -> x2
-    v885 Imm(0)                                           -> x2
-    v886 Imm(0)                                           -> x2
-    v887 Imm(0)                                           -> x2
-    v888 Imm(0)                                           -> x2
-    v889 VecInsert { vec=v833, value=v592, off=0, kind=I32, bytes=16 } -> d2
+    v874 Imm(0)                                           -> x1
+    v875 Imm(0)                                           -> x1
+    v876 Imm(12)                                          -> x1
+    v877 Imm(0)                                           -> x1
+    v878 VecSplat { value=v592, kind=I32, bytes=16 }      -> d1
+    v879 Imm(0)                                           -> x1
+    v880 Imm(0)                                           -> x1
+    v881 Imm(0)                                           -> x1
+    v882 Imm(-1)                                          -> x1
+    v883 Imm(-1)                                          -> x1
+    v884 Imm(0)                                           -> x1
+    v885 Imm(0)                                           -> x1
+    v886 Imm(0)                                           -> x1
+    v887 Imm(0)                                           -> x1
+    v888 Imm(0)                                           -> x1
+    v889 VecInsert { vec=v885, value=v592, off=0, kind=I32, bytes=16 } -> d2
     v890 Imm(0)                                           -> x1
     v891 Imm(0)                                           -> x1
     v892 Imm(4)                                           -> x1
@@ -3602,7 +3602,7 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v901 Imm(0)                                           -> x1
     v902 Imm(12)                                          -> x1
     v903 Imm(0)                                           -> x1
-    v904 VecInsert { vec=v899, value=v592, off=12, kind=I32, bytes=16 } -> d2
+    v904 VecSplat { value=v592, kind=I32, bytes=16 }      -> d2
     v905 Imm(0)                                           -> x1
     v906 Imm(0)                                           -> x1
     v907 Imm(0)                                           -> x1
@@ -3613,9 +3613,9 @@ fn ent_pc=514 n_params=2 variadic=false locals=5
     v912 Imm(0)                                           -> x1
     v913 Imm(0)                                           -> x1
     v914 Imm(-1)                                          -> x1
-    v915 Imm(0)                                           -> x1
+    v915 Undef                                            -> x1
     v916 VecInsert { vec=v915, value=v592, off=0, kind=I64, bytes=16 } -> d2
-    v917 VecInsert { vec=v916, value=v592, off=8, kind=I64, bytes=16 } -> d2
+    v917 VecSplat { value=v592, kind=I64, bytes=16 }      -> d2
     v918 Imm(0)                                           -> x0
     v919 VecBinop { op=Xor, lane=I64, bytes=16, lhs=v852, rhs=v917 } -> d0
     v920 Imm(0)                                           -> x0

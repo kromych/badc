@@ -1001,9 +1001,8 @@ Disassembly of section .text:
                	leaq	-0xd0(%rbp), %rdx
                	movups	%xmm0, -0xd0(%rbp)
                	movq	$-0x1, %rdi
-               	xorl	%esi, %esi
                	vmovq	%rdi, %xmm0
-               	vpinsrq	$0x1, %rdi, %xmm0, %xmm0
+               	vpbroadcastq	%xmm0, %xmm0
                	movups	-0x80(%rbp), %xmm1
                	pxor	%xmm1, %xmm0
                	leaq	-0xc0(%rbp), %rsi
@@ -1012,9 +1011,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	psubq	%xmm0, %xmm15
                	movapd	%xmm15, %xmm0
-               	xorl	%r8d, %r8d
                	vmovq	%rdi, %xmm1
-               	vpinsrq	$0x1, %rdi, %xmm1, %xmm1
+               	vpbroadcastq	%xmm1, %xmm1
                	movups	-0xa0(%rbp), %xmm2
                	pxor	%xmm2, %xmm1
                	movups	%xmm1, -0xb0(%rbp)

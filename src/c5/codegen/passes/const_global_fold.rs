@@ -878,6 +878,7 @@ fn walk_block(
             | Inst::LifetimeEnd(_)
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
             | Inst::VecExtract { .. }
             | Inst::SimdVal { .. }
             | Inst::Phi { .. } => {}

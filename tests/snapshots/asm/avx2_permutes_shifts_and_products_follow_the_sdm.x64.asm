@@ -374,7 +374,7 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	movslq	-0x58(%rbp), %rax
+               	movl	-0x58(%rbp), %eax
                	vextracti128	$0x1, %ymm0, %xmm2
                	vpinsrd	$0x2, %eax, %xmm2, %xmm2
                	vinserti128	$0x1, %xmm2, %ymm0, %ymm2

@@ -487,6 +487,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
                 | Inst::VecExtract { .. }
                 | Inst::Select { .. }
                 | Inst::BinopI { .. }
@@ -904,6 +905,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
                 | Inst::VecExtract { .. }
                 | Inst::Select { .. }
                 | Inst::BinopI { .. }

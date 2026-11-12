@@ -1765,6 +1765,7 @@ fn run_inst<H: Host>(
         // The -O rewrites producing these never reach the VM.
         Inst::SimdVal { .. } => "SimdVal",
         Inst::VecInsert { .. } => "VecInsert",
+        Inst::VecSplat { .. } => "VecSplat",
         Inst::VecExtract { .. } => "VecExtract",
         Inst::VecBinop {
             op,

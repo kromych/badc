@@ -515,6 +515,9 @@ pub(super) fn emit_inst(
             let lane = (*vec, *value, *off, *kind, *bytes);
             emit_vec_insert(code, lane, blank, dst, alloc, frame)
         }
+        Inst::VecSplat { value, kind, bytes } => {
+            emit_vec_splat(code, (*value, *kind, *bytes), dst, alloc, frame)
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Select { cond, a, b, kind } => {

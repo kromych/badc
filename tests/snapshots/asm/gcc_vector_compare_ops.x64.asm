@@ -3612,9 +3612,8 @@ Disassembly of section .text:
                	pcmpgtd	%xmm0, %xmm2
                	pand	%xmm2, %xmm0
                	movq	$-0x1, %rax
-               	xorl	%ecx, %ecx
                	vmovq	%rax, %xmm3
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vpbroadcastq	%xmm3, %xmm3
                	pxor	%xmm3, %xmm2
                	pand	%xmm2, %xmm1
                	por	%xmm1, %xmm0

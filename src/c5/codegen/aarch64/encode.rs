@@ -1024,6 +1024,20 @@ pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> u32 {
     0x6E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
 }
 
+/// `DUP <Vd>.<T>, <R>n` -- every `esize`-byte lane of `vd`, all 16 bytes
+/// when `q`, from general register `rn` (`X` for 8-byte lanes).
+pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> u32 {
+    debug_assert!(vd < 32 && esize.is_power_of_two() && esize <= 8);
+    0x0E00_0C00 | (u32::from(q) << 30) | (esize << 16) | ((rn.0 as u32) << 5) | (vd as u32)
+}
+
+/// `DUP <Vd>.<T>, <Vn>.<Ts>[0]` -- every `esize`-byte lane of `vd`, all 16
+/// bytes when `q`, from lane 0 of `vn`.
+pub(crate) fn enc_dup_elem(vd: u8, esize: u32, q: bool, vn: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32 && esize.is_power_of_two() && esize <= 8);
+    0x0E00_0400 | (u32::from(q) << 30) | (esize << 16) | ((vn as u32) << 5) | (vd as u32)
+}
+
 /// `DUP <V>d, <Vn>.<T>[index]` -- one element of `vn` into scalar
 /// register `vd` (`mov <V>d, <Vn>.<T>[index]`).
 pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> u32 {

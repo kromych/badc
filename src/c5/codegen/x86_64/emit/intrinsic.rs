@@ -2607,6 +2607,65 @@ pub(super) fn emit_vec_extract(
     Ok(())
 }
 
+/// `Inst::VecSplat`: `vpbroadcast*` of a general register moved in by
+/// `vmovd` / `vmovq`, `vbroadcastss` of a float, `vmovddup` or
+/// `vbroadcastsd` of a double; an 8-byte vector's upper half cleared by
+/// `vmovq`.
+pub(super) fn emit_vec_splat(
+    code: &mut Vec<u8>,
+    (value, kind, bytes): (super::super::ir::ValueId, StoreKind, u8),
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let rd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let full = bytes.max(16);
+    match kind {
+        StoreKind::F32 | StoreKind::F64 => {
+            let place = place_of(alloc, value);
+            let Some(f) = materialize_fp(code, place, Reg(frame.fp_scratch[1]), frame) else {
+                return fail("VecSplat: value has no place");
+            };
+            let mnem = match (kind, full) {
+                (StoreKind::F32, _) => "vbroadcastss",
+                (_, 16) => "vmovddup",
+                _ => "vbroadcastsd",
+            };
+            encode_wide(code, mnem, &[wide_reg(16, f.0), wide_reg(full, rd)])?;
+        }
+        _ => {
+            let Some(gpr) = materialize_int(code, place_of(alloc, value), SCRATCH_R11, frame)
+            else {
+                return fail("VecSplat: value has no place");
+            };
+            let (mov, size, mnem) = match kind {
+                StoreKind::I64 => ("vmovq", AsmRegSize::Quad, "vpbroadcastq"),
+                StoreKind::I32 => ("vmovd", AsmRegSize::Long, "vpbroadcastd"),
+                StoreKind::I16 => ("vmovd", AsmRegSize::Long, "vpbroadcastw"),
+                StoreKind::I8 => ("vmovd", AsmRegSize::Long, "vpbroadcastb"),
+                _ => return fail("VecSplat: not a lane kind"),
+            };
+            let r = Concrete::Reg { reg: gpr.0, size };
+            encode_wide(code, mov, &[r, wide_reg(16, rd)])?;
+            encode_wide(code, mnem, &[wide_reg(16, rd), wide_reg(full, rd)])?;
+        }
+    }
+    if bytes == 8 {
+        encode_wide(code, "vmovq", &[wide_reg(16, rd), wide_reg(16, rd)])?;
+        super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
+    } else if bytes > 16 {
+        mirror_wide_dst(code, VecWidth::of_bytes(bytes), dst, Reg(rd), frame);
+    } else {
+        mirror_v128_dst(code, dst, Reg(rd), frame);
+    }
+    Ok(())
+}
+
 /// `Inst::VecInsert`: the vector with the lane at byte `off` replaced by
 /// `vpinsr*` from a general register (a float's bits moved to r11 by
 /// `vmovq` / `vmovd`); a wide vector's 128-bit part is extracted, updated and

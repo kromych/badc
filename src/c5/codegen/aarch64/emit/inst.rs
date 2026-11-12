@@ -528,6 +528,9 @@ pub(super) fn emit_inst(
             matches!(func.insts[*vec as usize], Inst::Undef | Inst::Imm(0)),
             (dst, alloc, frame, scratch),
         ),
+        Inst::VecSplat { value, kind, bytes } => {
+            emit_vec_splat(code, (*value, *kind, *bytes), (dst, alloc, frame, scratch))
+        }
         Inst::Fma {
             a,
             b,
@@ -935,6 +938,53 @@ fn emit_vec_insert(
         },
     );
     propagate(code, qd);
+    Ok(())
+}
+
+/// `Inst::VecSplat`: `dup` of a general register, or of an FP register's
+/// low element, into every lane; one 64-bit lane is the value's `fmov`.
+fn emit_vec_splat(
+    code: &mut Vec<u8>,
+    (value, kind, bytes): (super::super::ir::ValueId, StoreKind, u8),
+    (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
+) -> Emit {
+    use super::encode::{enc_dup_elem, enc_dup_gen, enc_fmov_d_d, enc_fmov_x_to_d};
+    if bytes != 16 && bytes != 8 {
+        return fail("VecSplat: only 8- and 16-byte vectors");
+    }
+    let esize = match kind {
+        StoreKind::F64 | StoreKind::I64 => 8,
+        StoreKind::F32 | StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        _ => return fail("VecSplat: not a lane kind"),
+    };
+    let float = matches!(kind, StoreKind::F32 | StoreKind::F64);
+    let src = if float {
+        materialize_fp(code, place_of(alloc, value), frame.fp_scratch[1], frame)
+    } else {
+        materialize_int(code, place_of(alloc, value), scratch.primary, frame).map(|r| r.0)
+    };
+    let Some(src) = src else {
+        return fail("VecSplat: value has no place");
+    };
+    let qd = match dst {
+        Place::FpReg(r) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let q = bytes == 16;
+    match (float, esize, q) {
+        (true, 8, false) if qd == src => {}
+        (true, 8, false) => emit(code, enc_fmov_d_d(qd, src)),
+        (false, 8, false) => emit(code, enc_fmov_x_to_d(qd, Reg(src))),
+        (true, ..) => emit(code, enc_dup_elem(qd, esize, q, src)),
+        (false, ..) => emit(code, enc_dup_gen(qd, esize, q, Reg(src))),
+    }
+    if q {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
     Ok(())
 }
 

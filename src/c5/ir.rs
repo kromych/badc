@@ -611,6 +611,14 @@ pub(crate) enum Inst {
         kind: StoreKind,
         bytes: u8,
     },
+    /// The `bytes`-byte vector with every lane `value` stored as `kind`
+    /// (an integer kind, `F32` or `F64`): `dup`, `vpbroadcast*`.
+    /// `vector_slots` makes one of inserts of one value into every lane.
+    VecSplat {
+        value: ValueId,
+        kind: StoreKind,
+        bytes: u8,
+    },
     /// `a` when `cond` is nonzero, else `b`, both computed, of an integer
     /// kind, `F32` or `F64`: `csel`, `fcsel` or `cmov`.
     Select {
@@ -789,6 +797,7 @@ impl Inst {
                 | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
                 | Inst::VecExtract { .. }
                 | Inst::Select { .. }
         )
@@ -897,6 +906,7 @@ impl Inst {
             Inst::SimdVal { .. } => "SimdVal",
             Inst::VecBinop { .. } => "VecBinop",
             Inst::VecInsert { .. } => "VecInsert",
+            Inst::VecSplat { .. } => "VecSplat",
             Inst::VecExtract { .. } => "VecExtract",
             Inst::Select { .. } => "Select",
             Inst::InlineAsm { .. } => "InlineAsm",
@@ -972,6 +982,7 @@ impl Inst {
                 f(*rhs);
             }
             Inst::VecExtract { vec, .. } => f(*vec),
+            Inst::VecSplat { value, .. } => f(*value),
             Inst::Select { cond, a, b, .. } => {
                 f(*cond);
                 f(*a);
@@ -1107,6 +1118,7 @@ impl Inst {
                 f(rhs);
             }
             Inst::VecExtract { vec, .. } => f(vec),
+            Inst::VecSplat { value, .. } => f(value),
             Inst::Select { cond, a, b, .. } => {
                 f(cond);
                 f(a);
@@ -3065,6 +3077,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::SimdVal { .. }
             | Inst::VecBinop { .. }
             | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
             | Inst::VecExtract { .. }
             | Inst::Select { .. }
             | Inst::InlineAsm { .. }

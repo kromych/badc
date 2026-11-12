@@ -4751,9 +4751,8 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	0x60(%rsp), %rsi
                	movq	$-0x1, %rax
-               	xorl	%edx, %edx
                	vmovq	%rax, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vpbroadcastq	%xmm0, %xmm0
                	movups	0x60(%rsp), %xmm1
                	pxor	%xmm1, %xmm0
                	movups	%xmm0, 0x40(%rsp)
@@ -4777,9 +4776,8 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	0x140(%rsp), %rdi
                	movq	$-0x1, %rax
-               	xorl	%edx, %edx
                	vmovq	%rax, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	vpbroadcastq	%xmm0, %xmm0
                	movups	0x140(%rsp), %xmm1
                	pxor	%xmm1, %xmm0
                	movups	%xmm0, 0x40(%rsp)

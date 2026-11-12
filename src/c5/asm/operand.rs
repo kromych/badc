@@ -653,6 +653,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 | Inst::SimdVal { .. }
                 | Inst::VecBinop { .. }
                 | Inst::VecInsert { .. }
+                | Inst::VecSplat { .. }
                 | Inst::VecExtract { .. }
                 | Inst::Select { .. },
             ) => "a vector result",

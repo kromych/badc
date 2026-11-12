@@ -55,7 +55,6 @@ Disassembly of section .text:
                	ret
 
 <put_i>:
-               	sxtw	x0, w0
                	mov	v0.s[2], w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

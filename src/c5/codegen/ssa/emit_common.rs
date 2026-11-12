@@ -2867,6 +2867,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // One value inserted into every lane is a broadcast, formed while a
+        // wide vector's inserts still name it whole.
+        pipeline.run("ssa::vector_slots::form_splats", &mut ssa_funcs, |funcs| {
+            let max = if target.is_x86_64() { 32 } else { 16 };
+            for f in funcs.iter_mut() {
+                super::vector_slots::form_splats(f, max);
+            }
+        });
         // Lane accesses of ymm / zmm values become part accesses once the
         // inliner has measured the bodies, which the split lengthens.
         pipeline.run(

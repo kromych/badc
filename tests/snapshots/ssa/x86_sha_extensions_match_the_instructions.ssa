@@ -194,28 +194,28 @@ fn ent_pc=915 n_params=3 variadic=false locals=2
     v80  Imm(0)                                           -> x6
     v81  Imm(0)                                           -> x6
     v82  Imm(0)                                           -> x7
-    v83  BinopI { op=and, lhs=v71, rhs_imm=4294967295 }   -> x1
+    v83  BinopI { op=and, lhs=v71, rhs_imm=4294967295 }   -> x7
     v84  Imm(0)                                           -> x7
     v85  Imm(0)                                           -> x7
-    v86  VecInsert { vec=v81, value=v83, off=0, kind=I32, bytes=16 } -> d0
+    v86  VecInsert { vec=v81, value=v71, off=0, kind=I32, bytes=16 } -> d0
     v87  Imm(0)                                           -> x1
     v88  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x1
-    v89  Imm(0)                                           -> x2
-    v90  Imm(4)                                           -> x2
-    v91  Imm(0)                                           -> x2
-    v92  VecInsert { vec=v86, value=v88, off=4, kind=I32, bytes=16 } -> d0
+    v89  Imm(0)                                           -> x1
+    v90  Imm(4)                                           -> x1
+    v91  Imm(0)                                           -> x1
+    v92  VecInsert { vec=v86, value=v72, off=4, kind=I32, bytes=16 } -> d0
     v93  Imm(0)                                           -> x1
-    v94  BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x0
+    v94  BinopI { op=and, lhs=v73, rhs_imm=4294967295 }   -> x1
     v95  Imm(0)                                           -> x1
     v96  Imm(8)                                           -> x1
     v97  Imm(0)                                           -> x1
-    v98  VecInsert { vec=v92, value=v94, off=8, kind=I32, bytes=16 } -> d0
+    v98  VecInsert { vec=v92, value=v73, off=8, kind=I32, bytes=16 } -> d0
     v99  Imm(0)                                           -> x0
     v100 BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> x0
-    v101 Imm(0)                                           -> x1
-    v102 Imm(12)                                          -> x1
-    v103 Imm(0)                                           -> x1
-    v104 VecInsert { vec=v98, value=v100, off=12, kind=I32, bytes=16 } -> d0
+    v101 Imm(0)                                           -> x0
+    v102 Imm(12)                                          -> x0
+    v103 Imm(0)                                           -> x0
+    v104 VecInsert { vec=v98, value=v74, off=12, kind=I32, bytes=16 } -> d0
     v105 Imm(0)                                           -> x0
     v106 Imm(0)                                           -> x0
     v107 LifetimeEnd(-2)                                  -> -
@@ -380,8 +380,8 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v146 BinopI { op=shru, lhs=v122, rhs_imm=2 }          -> x1
     v147 Binop { op=or, lhs=v141, rhs=v146 }              -> x1
     v148 BinopI { op=and, lhs=v147, rhs_imm=4294967295 }  -> x6
-    v149 BinopI { op=and, lhs=v147, rhs_imm=4294967295 }  -> x1
-    v150 Binop { op=add, lhs=v134, rhs=v149 }             -> x1
+    v149 BinopI { op=and, lhs=v147, rhs_imm=4294967295 }  -> x6
+    v150 Binop { op=add, lhs=v134, rhs=v147 }             -> x1
     v151 Imm(0)                                           -> x2
     v152 VecInsert { vec=v125, value=v150, off=12, kind=I32, bytes=16 } -> d0
     v153 Imm(0)                                           -> x1
@@ -735,28 +735,28 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v493 Imm(0)                                           -> x6
     v494 Imm(0)                                           -> x6
     v495 Imm(0)                                           -> x6
-    v496 BinopI { op=and, lhs=v490, rhs_imm=4294967295 }  -> x2
+    v496 BinopI { op=and, lhs=v490, rhs_imm=4294967295 }  -> x6
     v497 Imm(0)                                           -> x6
     v498 Imm(0)                                           -> x6
-    v499 VecInsert { vec=v331, value=v496, off=0, kind=I32, bytes=16 } -> d0
+    v499 VecInsert { vec=v331, value=v490, off=0, kind=I32, bytes=16 } -> d0
     v500 Imm(0)                                           -> x0
     v501 BinopI { op=and, lhs=v474, rhs_imm=4294967295 }  -> x0
-    v502 Imm(0)                                           -> x2
-    v503 Imm(4)                                           -> x2
-    v504 Imm(0)                                           -> x2
-    v505 VecInsert { vec=v499, value=v501, off=4, kind=I32, bytes=16 } -> d0
+    v502 Imm(0)                                           -> x0
+    v503 Imm(4)                                           -> x0
+    v504 Imm(0)                                           -> x0
+    v505 VecInsert { vec=v499, value=v474, off=4, kind=I32, bytes=16 } -> d0
     v506 Imm(0)                                           -> x0
     v507 BinopI { op=and, lhs=v456, rhs_imm=4294967295 }  -> x0
-    v508 Imm(0)                                           -> x2
-    v509 Imm(8)                                           -> x2
-    v510 Imm(0)                                           -> x2
-    v511 VecInsert { vec=v505, value=v507, off=8, kind=I32, bytes=16 } -> d0
+    v508 Imm(0)                                           -> x0
+    v509 Imm(8)                                           -> x0
+    v510 Imm(0)                                           -> x0
+    v511 VecInsert { vec=v505, value=v456, off=8, kind=I32, bytes=16 } -> d0
     v512 Imm(0)                                           -> x0
     v513 BinopI { op=and, lhs=v437, rhs_imm=4294967295 }  -> x0
-    v514 Imm(0)                                           -> x1
-    v515 Imm(12)                                          -> x1
-    v516 Imm(0)                                           -> x1
-    v517 VecInsert { vec=v511, value=v513, off=12, kind=I32, bytes=16 } -> d0
+    v514 Imm(0)                                           -> x0
+    v515 Imm(12)                                          -> x0
+    v516 Imm(0)                                           -> x0
+    v517 VecInsert { vec=v511, value=v437, off=12, kind=I32, bytes=16 } -> d0
     v518 Imm(0)                                           -> x0
     v519 Imm(0)                                           -> x0
     v520 LifetimeEnd(0)                                   -> -
@@ -1465,27 +1465,27 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1203 Imm(0)                                           -> x7
     v1204 Imm(0)                                           -> x1
     v1205 BinopI { op=and, lhs=v1073, rhs_imm=4294967295 } -> x1
-    v1206 Imm(0)                                           -> x2
-    v1207 Imm(0)                                           -> x2
-    v1208 VecInsert { vec=v1203, value=v1205, off=0, kind=I32, bytes=16 } -> d0
+    v1206 Imm(0)                                           -> x1
+    v1207 Imm(0)                                           -> x1
+    v1208 VecInsert { vec=v1203, value=v1073, off=0, kind=I32, bytes=16 } -> d0
     v1209 Imm(0)                                           -> x1
     v1210 BinopI { op=and, lhs=v1193, rhs_imm=4294967295 } -> x1
-    v1211 Imm(0)                                           -> x2
-    v1212 Imm(4)                                           -> x2
-    v1213 Imm(0)                                           -> x2
-    v1214 VecInsert { vec=v1208, value=v1210, off=4, kind=I32, bytes=16 } -> d0
+    v1211 Imm(0)                                           -> x1
+    v1212 Imm(4)                                           -> x1
+    v1213 Imm(0)                                           -> x1
+    v1214 VecInsert { vec=v1208, value=v1193, off=4, kind=I32, bytes=16 } -> d0
     v1215 Imm(0)                                           -> x1
     v1216 BinopI { op=and, lhs=v1079, rhs_imm=4294967295 } -> x1
-    v1217 Imm(0)                                           -> x2
-    v1218 Imm(8)                                           -> x2
-    v1219 Imm(0)                                           -> x2
-    v1220 VecInsert { vec=v1214, value=v1216, off=8, kind=I32, bytes=16 } -> d0
+    v1217 Imm(0)                                           -> x1
+    v1218 Imm(8)                                           -> x1
+    v1219 Imm(0)                                           -> x1
+    v1220 VecInsert { vec=v1214, value=v1079, off=8, kind=I32, bytes=16 } -> d0
     v1221 Imm(0)                                           -> x1
-    v1222 BinopI { op=and, lhs=v1199, rhs_imm=4294967295 } -> x0
+    v1222 BinopI { op=and, lhs=v1199, rhs_imm=4294967295 } -> x1
     v1223 Imm(0)                                           -> x1
     v1224 Imm(12)                                          -> x1
     v1225 Imm(0)                                           -> x1
-    v1226 VecInsert { vec=v1220, value=v1222, off=12, kind=I32, bytes=16 } -> d0
+    v1226 VecInsert { vec=v1220, value=v1199, off=12, kind=I32, bytes=16 } -> d0
     v1227 Imm(0)                                           -> x0
     v1228 Imm(0)                                           -> x0
     v1229 LifetimeEnd(0)                                   -> -
@@ -1636,10 +1636,10 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1370 BinopI { op=and, lhs=v1369, rhs_imm=4294967295 } -> x3
     v1371 BinopI { op=and, lhs=v1369, rhs_imm=4294967295 } -> x3
     v1372 Binop { op=add, lhs=v1309, rhs=v1369 }           -> x8
-    v1373 BinopI { op=and, lhs=v1372, rhs_imm=4294967295 } -> x8
+    v1373 BinopI { op=and, lhs=v1372, rhs_imm=4294967295 } -> x9
     v1374 Imm(0)                                           -> x9
     v1375 Imm(0)                                           -> x9
-    v1376 VecInsert { vec=v1203, value=v1373, off=0, kind=I32, bytes=16 } -> d0
+    v1376 VecInsert { vec=v1203, value=v1372, off=0, kind=I32, bytes=16 } -> d0
     v1377 Imm(0)                                           -> x7
     v1378 Imm(0)                                           -> x7
     v1379 Imm(0)                                           -> x7
@@ -1680,11 +1680,11 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1414 BinopI { op=and, lhs=v1413, rhs_imm=4294967295 } -> x8
     v1415 BinopI { op=and, lhs=v1413, rhs_imm=4294967295 } -> x8
     v1416 Binop { op=add, lhs=v1311, rhs=v1413 }           -> x0
-    v1417 BinopI { op=and, lhs=v1416, rhs_imm=4294967295 } -> x0
+    v1417 BinopI { op=and, lhs=v1416, rhs_imm=4294967295 } -> x7
     v1418 Imm(0)                                           -> x7
     v1419 Imm(4)                                           -> x7
     v1420 Imm(0)                                           -> x7
-    v1421 VecInsert { vec=v1376, value=v1417, off=4, kind=I32, bytes=16 } -> d0
+    v1421 VecInsert { vec=v1376, value=v1416, off=4, kind=I32, bytes=16 } -> d0
     v1422 Imm(0)                                           -> x0
     v1423 Imm(0)                                           -> x0
     v1424 Imm(0)                                           -> x0
@@ -1725,11 +1725,11 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1459 BinopI { op=and, lhs=v1458, rhs_imm=4294967295 } -> x7
     v1460 BinopI { op=and, lhs=v1458, rhs_imm=4294967295 } -> x7
     v1461 Binop { op=add, lhs=v1313, rhs=v1458 }           -> x0
-    v1462 BinopI { op=and, lhs=v1461, rhs_imm=4294967295 } -> x0
+    v1462 BinopI { op=and, lhs=v1461, rhs_imm=4294967295 } -> x1
     v1463 Imm(0)                                           -> x1
     v1464 Imm(8)                                           -> x1
     v1465 Imm(0)                                           -> x1
-    v1466 VecInsert { vec=v1421, value=v1462, off=8, kind=I32, bytes=16 } -> d0
+    v1466 VecInsert { vec=v1421, value=v1461, off=8, kind=I32, bytes=16 } -> d0
     v1467 Imm(0)                                           -> x0
     v1468 Imm(0)                                           -> x0
     v1469 Imm(0)                                           -> x0
@@ -1768,11 +1768,11 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1502 BinopI { op=and, lhs=v1501, rhs_imm=4294967295 } -> x1
     v1503 BinopI { op=and, lhs=v1501, rhs_imm=4294967295 } -> x1
     v1504 Binop { op=add, lhs=v1315, rhs=v1501 }           -> x0
-    v1505 BinopI { op=and, lhs=v1504, rhs_imm=4294967295 } -> x0
+    v1505 BinopI { op=and, lhs=v1504, rhs_imm=4294967295 } -> x1
     v1506 Imm(0)                                           -> x1
     v1507 Imm(12)                                          -> x1
     v1508 Imm(0)                                           -> x1
-    v1509 VecInsert { vec=v1466, value=v1505, off=12, kind=I32, bytes=16 } -> d0
+    v1509 VecInsert { vec=v1466, value=v1504, off=12, kind=I32, bytes=16 } -> d0
     v1510 Imm(0)                                           -> x0
     v1511 Imm(0)                                           -> x0
     v1512 LifetimeEnd(0)                                   -> -
@@ -1922,25 +1922,25 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1652 Binop { op=xor, lhs=v1649, rhs=v1651 }           -> x0
     v1653 BinopI { op=and, lhs=v1652, rhs_imm=4294967295 } -> x9
     v1654 BinopI { op=and, lhs=v1652, rhs_imm=4294967295 } -> x9
-    v1655 Binop { op=add, lhs=v1589, rhs=v1652 }           -> x0
-    v1656 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x2
-    v1657 Imm(0)                                           -> x2
-    v1658 Imm(0)                                           -> x2
-    v1659 BinopI { op=and, lhs=v1591, rhs_imm=4294967295 } -> x2
-    v1660 Imm(0)                                           -> x2
-    v1661 Imm(0)                                           -> x2
-    v1662 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x2
-    v1663 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x2
-    v1664 Imm(17)                                          -> x2
-    v1665 Imm(17)                                          -> x2
-    v1666 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x2
-    v1667 BinopI { op=shru, lhs=v1600, rhs_imm=17 }        -> x2
+    v1655 Binop { op=add, lhs=v1589, rhs=v1652 }           -> x2
+    v1656 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x0
+    v1657 Imm(0)                                           -> x0
+    v1658 Imm(0)                                           -> x0
+    v1659 BinopI { op=and, lhs=v1591, rhs_imm=4294967295 } -> x0
+    v1660 Imm(0)                                           -> x0
+    v1661 Imm(0)                                           -> x0
+    v1662 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x0
+    v1663 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x0
+    v1664 Imm(17)                                          -> x0
+    v1665 Imm(17)                                          -> x0
+    v1666 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x0
+    v1667 BinopI { op=shru, lhs=v1600, rhs_imm=17 }        -> x0
     v1668 Imm(32)                                          -> x9
     v1669 Imm(15)                                          -> x9
     v1670 Imm(15)                                          -> x9
     v1671 BinopI { op=shl, lhs=v1600, rhs_imm=15 }         -> x9
     v1672 BinopI { op=and, lhs=v1671, rhs_imm=4294967295 } -> x3
-    v1673 Binop { op=or, lhs=v1667, rhs=v1671 }            -> x2
+    v1673 Binop { op=or, lhs=v1667, rhs=v1671 }            -> x0
     v1674 BinopI { op=and, lhs=v1673, rhs_imm=4294967295 } -> x9
     v1675 BinopI { op=and, lhs=v1673, rhs_imm=4294967295 } -> x9
     v1676 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x9
@@ -1956,188 +1956,188 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1686 Binop { op=or, lhs=v1680, rhs=v1684 }            -> x9
     v1687 BinopI { op=and, lhs=v1686, rhs_imm=4294967295 } -> x3
     v1688 BinopI { op=and, lhs=v1686, rhs_imm=4294967295 } -> x3
-    v1689 Binop { op=xor, lhs=v1673, rhs=v1686 }           -> x2
+    v1689 Binop { op=xor, lhs=v1673, rhs=v1686 }           -> x0
     v1690 BinopI { op=and, lhs=v1600, rhs_imm=4294967295 } -> x9
     v1691 BinopI { op=shru, lhs=v1600, rhs_imm=10 }        -> x1
-    v1692 Binop { op=xor, lhs=v1689, rhs=v1691 }           -> x1
-    v1693 BinopI { op=and, lhs=v1692, rhs_imm=4294967295 } -> x2
-    v1694 BinopI { op=and, lhs=v1692, rhs_imm=4294967295 } -> x2
+    v1692 Binop { op=xor, lhs=v1689, rhs=v1691 }           -> x0
+    v1693 BinopI { op=and, lhs=v1692, rhs_imm=4294967295 } -> x1
+    v1694 BinopI { op=and, lhs=v1692, rhs_imm=4294967295 } -> x1
     v1695 Binop { op=add, lhs=v1591, rhs=v1692 }           -> x1
-    v1696 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x2
-    v1697 Imm(0)                                           -> x2
-    v1698 Imm(0)                                           -> x2
-    v1699 BinopI { op=and, lhs=v1593, rhs_imm=4294967295 } -> x2
-    v1700 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x2
-    v1701 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x2
-    v1702 Imm(17)                                          -> x2
-    v1703 Imm(17)                                          -> x2
+    v1696 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x0
+    v1697 Imm(0)                                           -> x0
+    v1698 Imm(0)                                           -> x0
+    v1699 BinopI { op=and, lhs=v1593, rhs_imm=4294967295 } -> x0
+    v1700 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x0
+    v1701 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x0
+    v1702 Imm(17)                                          -> x0
+    v1703 Imm(17)                                          -> x0
     v1704 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x0
-    v1705 BinopI { op=shru, lhs=v1704, rhs_imm=17 }        -> x2
-    v1706 Imm(32)                                          -> x6
-    v1707 Imm(15)                                          -> x6
-    v1708 Imm(15)                                          -> x6
-    v1709 BinopI { op=shl, lhs=v1704, rhs_imm=15 }         -> x6
-    v1710 BinopI { op=and, lhs=v1709, rhs_imm=4294967295 } -> x9
-    v1711 Binop { op=or, lhs=v1705, rhs=v1709 }            -> x2
-    v1712 BinopI { op=and, lhs=v1711, rhs_imm=4294967295 } -> x6
-    v1713 BinopI { op=and, lhs=v1711, rhs_imm=4294967295 } -> x6
-    v1714 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x6
-    v1715 Imm(19)                                          -> x6
-    v1716 Imm(19)                                          -> x6
-    v1717 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x6
-    v1718 BinopI { op=shru, lhs=v1704, rhs_imm=19 }        -> x6
-    v1719 Imm(32)                                          -> x9
-    v1720 Imm(13)                                          -> x9
-    v1721 Imm(13)                                          -> x9
-    v1722 BinopI { op=shl, lhs=v1704, rhs_imm=13 }         -> x9
-    v1723 BinopI { op=and, lhs=v1722, rhs_imm=4294967295 } -> x3
-    v1724 Binop { op=or, lhs=v1718, rhs=v1722 }            -> x6
-    v1725 BinopI { op=and, lhs=v1724, rhs_imm=4294967295 } -> x9
-    v1726 BinopI { op=and, lhs=v1724, rhs_imm=4294967295 } -> x9
-    v1727 Binop { op=xor, lhs=v1711, rhs=v1724 }           -> x2
-    v1728 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x6
-    v1729 BinopI { op=shru, lhs=v1704, rhs_imm=10 }        -> x6
-    v1730 Binop { op=xor, lhs=v1727, rhs=v1729 }           -> x2
+    v1705 BinopI { op=shru, lhs=v1704, rhs_imm=17 }        -> x6
+    v1706 Imm(32)                                          -> x9
+    v1707 Imm(15)                                          -> x9
+    v1708 Imm(15)                                          -> x9
+    v1709 BinopI { op=shl, lhs=v1704, rhs_imm=15 }         -> x9
+    v1710 BinopI { op=and, lhs=v1709, rhs_imm=4294967295 } -> x3
+    v1711 Binop { op=or, lhs=v1705, rhs=v1709 }            -> x6
+    v1712 BinopI { op=and, lhs=v1711, rhs_imm=4294967295 } -> x9
+    v1713 BinopI { op=and, lhs=v1711, rhs_imm=4294967295 } -> x9
+    v1714 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x9
+    v1715 Imm(19)                                          -> x9
+    v1716 Imm(19)                                          -> x9
+    v1717 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x9
+    v1718 BinopI { op=shru, lhs=v1704, rhs_imm=19 }        -> x9
+    v1719 Imm(32)                                          -> x3
+    v1720 Imm(13)                                          -> x3
+    v1721 Imm(13)                                          -> x3
+    v1722 BinopI { op=shl, lhs=v1704, rhs_imm=13 }         -> x3
+    v1723 BinopI { op=and, lhs=v1722, rhs_imm=4294967295 } -> x12
+    v1724 Binop { op=or, lhs=v1718, rhs=v1722 }            -> x9
+    v1725 BinopI { op=and, lhs=v1724, rhs_imm=4294967295 } -> x3
+    v1726 BinopI { op=and, lhs=v1724, rhs_imm=4294967295 } -> x3
+    v1727 Binop { op=xor, lhs=v1711, rhs=v1724 }           -> x6
+    v1728 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x9
+    v1729 BinopI { op=shru, lhs=v1704, rhs_imm=10 }        -> x0
+    v1730 Binop { op=xor, lhs=v1727, rhs=v1729 }           -> x0
     v1731 BinopI { op=and, lhs=v1730, rhs_imm=4294967295 } -> x6
     v1732 BinopI { op=and, lhs=v1730, rhs_imm=4294967295 } -> x6
     v1733 Binop { op=add, lhs=v1593, rhs=v1730 }           -> x6
-    v1734 BinopI { op=and, lhs=v1733, rhs_imm=4294967295 } -> x2
-    v1735 Imm(0)                                           -> x2
-    v1736 Imm(0)                                           -> x2
-    v1737 BinopI { op=and, lhs=v1595, rhs_imm=4294967295 } -> x2
-    v1738 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x2
-    v1739 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x2
-    v1740 Imm(17)                                          -> x2
-    v1741 Imm(17)                                          -> x2
-    v1742 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x1
-    v1743 BinopI { op=shru, lhs=v1742, rhs_imm=17 }        -> x2
-    v1744 Imm(32)                                          -> x7
-    v1745 Imm(15)                                          -> x7
-    v1746 Imm(15)                                          -> x7
-    v1747 BinopI { op=shl, lhs=v1742, rhs_imm=15 }         -> x7
-    v1748 BinopI { op=and, lhs=v1747, rhs_imm=4294967295 } -> x9
-    v1749 Binop { op=or, lhs=v1743, rhs=v1747 }            -> x2
-    v1750 BinopI { op=and, lhs=v1749, rhs_imm=4294967295 } -> x7
-    v1751 BinopI { op=and, lhs=v1749, rhs_imm=4294967295 } -> x7
-    v1752 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x7
-    v1753 Imm(19)                                          -> x7
-    v1754 Imm(19)                                          -> x7
-    v1755 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x7
-    v1756 BinopI { op=shru, lhs=v1742, rhs_imm=19 }        -> x7
-    v1757 Imm(32)                                          -> x9
-    v1758 Imm(13)                                          -> x9
-    v1759 Imm(13)                                          -> x9
-    v1760 BinopI { op=shl, lhs=v1742, rhs_imm=13 }         -> x9
-    v1761 BinopI { op=and, lhs=v1760, rhs_imm=4294967295 } -> x3
-    v1762 Binop { op=or, lhs=v1756, rhs=v1760 }            -> x7
-    v1763 BinopI { op=and, lhs=v1762, rhs_imm=4294967295 } -> x9
-    v1764 BinopI { op=and, lhs=v1762, rhs_imm=4294967295 } -> x9
-    v1765 Binop { op=xor, lhs=v1749, rhs=v1762 }           -> x2
-    v1766 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x7
-    v1767 BinopI { op=shru, lhs=v1742, rhs_imm=10 }        -> x7
-    v1768 Binop { op=xor, lhs=v1765, rhs=v1767 }           -> x2
+    v1734 BinopI { op=and, lhs=v1733, rhs_imm=4294967295 } -> x0
+    v1735 Imm(0)                                           -> x0
+    v1736 Imm(0)                                           -> x0
+    v1737 BinopI { op=and, lhs=v1595, rhs_imm=4294967295 } -> x0
+    v1738 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x0
+    v1739 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x0
+    v1740 Imm(17)                                          -> x0
+    v1741 Imm(17)                                          -> x0
+    v1742 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x0
+    v1743 BinopI { op=shru, lhs=v1742, rhs_imm=17 }        -> x7
+    v1744 Imm(32)                                          -> x9
+    v1745 Imm(15)                                          -> x9
+    v1746 Imm(15)                                          -> x9
+    v1747 BinopI { op=shl, lhs=v1742, rhs_imm=15 }         -> x9
+    v1748 BinopI { op=and, lhs=v1747, rhs_imm=4294967295 } -> x3
+    v1749 Binop { op=or, lhs=v1743, rhs=v1747 }            -> x7
+    v1750 BinopI { op=and, lhs=v1749, rhs_imm=4294967295 } -> x9
+    v1751 BinopI { op=and, lhs=v1749, rhs_imm=4294967295 } -> x9
+    v1752 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x9
+    v1753 Imm(19)                                          -> x9
+    v1754 Imm(19)                                          -> x9
+    v1755 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x9
+    v1756 BinopI { op=shru, lhs=v1742, rhs_imm=19 }        -> x9
+    v1757 Imm(32)                                          -> x3
+    v1758 Imm(13)                                          -> x3
+    v1759 Imm(13)                                          -> x3
+    v1760 BinopI { op=shl, lhs=v1742, rhs_imm=13 }         -> x3
+    v1761 BinopI { op=and, lhs=v1760, rhs_imm=4294967295 } -> x12
+    v1762 Binop { op=or, lhs=v1756, rhs=v1760 }            -> x9
+    v1763 BinopI { op=and, lhs=v1762, rhs_imm=4294967295 } -> x3
+    v1764 BinopI { op=and, lhs=v1762, rhs_imm=4294967295 } -> x3
+    v1765 Binop { op=xor, lhs=v1749, rhs=v1762 }           -> x7
+    v1766 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x9
+    v1767 BinopI { op=shru, lhs=v1742, rhs_imm=10 }        -> x0
+    v1768 Binop { op=xor, lhs=v1765, rhs=v1767 }           -> x0
     v1769 BinopI { op=and, lhs=v1768, rhs_imm=4294967295 } -> x7
     v1770 BinopI { op=and, lhs=v1768, rhs_imm=4294967295 } -> x7
     v1771 Binop { op=add, lhs=v1595, rhs=v1768 }           -> x7
-    v1772 BinopI { op=and, lhs=v1771, rhs_imm=4294967295 } -> x2
-    v1773 Imm(0)                                           -> x2
-    v1774 Imm(0)                                           -> x2
+    v1772 BinopI { op=and, lhs=v1771, rhs_imm=4294967295 } -> x0
+    v1773 Imm(0)                                           -> x0
+    v1774 Imm(0)                                           -> x0
     v1775 Imm(0)                                           -> x8
     v1776 BinopI { op=and, lhs=v1655, rhs_imm=4294967295 } -> x8
     v1777 Imm(0)                                           -> x8
     v1778 Imm(0)                                           -> x8
-    v1779 VecInsert { vec=v1774, value=v1704, off=0, kind=I32, bytes=16 } -> d0
-    v1780 Imm(0)                                           -> x0
-    v1781 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x0
-    v1782 Imm(0)                                           -> x0
-    v1783 Imm(4)                                           -> x0
-    v1784 Imm(0)                                           -> x0
-    v1785 VecInsert { vec=v1779, value=v1742, off=4, kind=I32, bytes=16 } -> d0
-    v1786 Imm(0)                                           -> x0
-    v1787 BinopI { op=and, lhs=v1733, rhs_imm=4294967295 } -> x0
+    v1779 VecInsert { vec=v1774, value=v1655, off=0, kind=I32, bytes=16 } -> d0
+    v1780 Imm(0)                                           -> x2
+    v1781 BinopI { op=and, lhs=v1695, rhs_imm=4294967295 } -> x2
+    v1782 Imm(0)                                           -> x2
+    v1783 Imm(4)                                           -> x2
+    v1784 Imm(0)                                           -> x2
+    v1785 VecInsert { vec=v1779, value=v1695, off=4, kind=I32, bytes=16 } -> d0
+    v1786 Imm(0)                                           -> x1
+    v1787 BinopI { op=and, lhs=v1733, rhs_imm=4294967295 } -> x1
     v1788 Imm(0)                                           -> x1
     v1789 Imm(8)                                           -> x1
     v1790 Imm(0)                                           -> x1
-    v1791 VecInsert { vec=v1785, value=v1787, off=8, kind=I32, bytes=16 } -> d0
-    v1792 Imm(0)                                           -> x0
-    v1793 BinopI { op=and, lhs=v1771, rhs_imm=4294967295 } -> x0
+    v1791 VecInsert { vec=v1785, value=v1733, off=8, kind=I32, bytes=16 } -> d0
+    v1792 Imm(0)                                           -> x1
+    v1793 BinopI { op=and, lhs=v1771, rhs_imm=4294967295 } -> x1
     v1794 Imm(0)                                           -> x1
     v1795 Imm(12)                                          -> x1
     v1796 Imm(0)                                           -> x1
-    v1797 VecInsert { vec=v1791, value=v1793, off=12, kind=I32, bytes=16 } -> d0
-    v1798 Imm(0)                                           -> x0
-    v1799 Imm(0)                                           -> x0
+    v1797 VecInsert { vec=v1791, value=v1771, off=12, kind=I32, bytes=16 } -> d0
+    v1798 Imm(0)                                           -> x1
+    v1799 Imm(0)                                           -> x1
     v1800 LifetimeEnd(0)                                   -> -
     v1801 LifetimeEnd(0)                                   -> -
     v1802 LifetimeEnd(0)                                   -> -
     v1803 LifetimeEnd(0)                                   -> -
-    v1804 Imm(0)                                           -> x0
-    v1805 Imm(0)                                           -> x0
-    v1806 Imm(0)                                           -> x0
-    v1807 Imm(0)                                           -> x0
-    v1808 Imm(4115521039)                                  -> x0
-    v1809 Imm(3900700065)                                  -> x0
-    v1810 Imm(727785921)                                   -> x0
-    v1811 Imm(302608940)                                   -> x0
-    v1812 Imm(0)                                           -> x0
-    v1813 Imm(0)                                           -> x0
-    v1814 Imm(0)                                           -> x0
-    v1815 Imm(0)                                           -> x0
-    v1816 Imm(4115521039)                                  -> x0
-    v1817 Imm(3900700065)                                  -> x0
-    v1818 Imm(727785921)                                   -> x0
-    v1819 Imm(302608940)                                   -> x0
-    v1820 Imm(0)                                           -> x0
-    v1821 Imm(0)                                           -> x0
-    v1822 Imm(0)                                           -> x0
-    v1823 Imm(4115521039)                                  -> x0
-    v1824 Imm(-179446257)                                  -> x0
-    v1825 Imm(0)                                           -> x1
-    v1826 Imm(0)                                           -> x1
+    v1804 Imm(0)                                           -> x1
+    v1805 Imm(0)                                           -> x1
+    v1806 Imm(0)                                           -> x1
+    v1807 Imm(0)                                           -> x1
+    v1808 Imm(4115521039)                                  -> x1
+    v1809 Imm(3900700065)                                  -> x1
+    v1810 Imm(727785921)                                   -> x1
+    v1811 Imm(302608940)                                   -> x1
+    v1812 Imm(0)                                           -> x1
+    v1813 Imm(0)                                           -> x1
+    v1814 Imm(0)                                           -> x1
+    v1815 Imm(0)                                           -> x1
+    v1816 Imm(4115521039)                                  -> x1
+    v1817 Imm(3900700065)                                  -> x1
+    v1818 Imm(727785921)                                   -> x1
+    v1819 Imm(302608940)                                   -> x1
+    v1820 Imm(0)                                           -> x1
+    v1821 Imm(0)                                           -> x1
+    v1822 Imm(0)                                           -> x1
+    v1823 Imm(4115521039)                                  -> x1
+    v1824 Imm(-179446257)                                  -> x1
+    v1825 Imm(0)                                           -> x2
+    v1826 Imm(0)                                           -> x2
     v1827 VecInsert { vec=v1774, value=v1824, off=0, kind=I32, bytes=16 } -> d1
-    v1828 Imm(0)                                           -> x0
-    v1829 Imm(3900700065)                                  -> x0
-    v1830 Imm(-394267231)                                  -> x0
-    v1831 Imm(0)                                           -> x1
-    v1832 Imm(4)                                           -> x1
-    v1833 Imm(0)                                           -> x1
+    v1828 Imm(0)                                           -> x1
+    v1829 Imm(3900700065)                                  -> x1
+    v1830 Imm(-394267231)                                  -> x1
+    v1831 Imm(0)                                           -> x2
+    v1832 Imm(4)                                           -> x2
+    v1833 Imm(0)                                           -> x2
     v1834 VecInsert { vec=v1827, value=v1830, off=4, kind=I32, bytes=16 } -> d1
-    v1835 Imm(0)                                           -> x0
-    v1836 Imm(727785921)                                   -> x0
-    v1837 Imm(727785921)                                   -> x0
-    v1838 Imm(0)                                           -> x1
-    v1839 Imm(8)                                           -> x1
-    v1840 Imm(0)                                           -> x1
+    v1835 Imm(0)                                           -> x1
+    v1836 Imm(727785921)                                   -> x1
+    v1837 Imm(727785921)                                   -> x1
+    v1838 Imm(0)                                           -> x2
+    v1839 Imm(8)                                           -> x2
+    v1840 Imm(0)                                           -> x2
     v1841 VecInsert { vec=v1834, value=v1837, off=8, kind=I32, bytes=16 } -> d1
-    v1842 Imm(0)                                           -> x0
-    v1843 Imm(302608940)                                   -> x0
-    v1844 Imm(302608940)                                   -> x0
-    v1845 Imm(0)                                           -> x1
-    v1846 Imm(12)                                          -> x1
-    v1847 Imm(0)                                           -> x1
+    v1842 Imm(0)                                           -> x1
+    v1843 Imm(302608940)                                   -> x1
+    v1844 Imm(302608940)                                   -> x1
+    v1845 Imm(0)                                           -> x2
+    v1846 Imm(12)                                          -> x2
+    v1847 Imm(0)                                           -> x2
     v1848 VecInsert { vec=v1841, value=v1844, off=12, kind=I32, bytes=16 } -> d1
-    v1849 Imm(0)                                           -> x0
-    v1850 Imm(0)                                           -> x0
-    v1851 Imm(0)                                           -> x0
-    v1852 Imm(0)                                           -> x0
-    v1853 Imm(0)                                           -> x0
-    v1854 Imm(0)                                           -> x0
+    v1849 Imm(0)                                           -> x1
+    v1850 Imm(0)                                           -> x1
+    v1851 Imm(0)                                           -> x1
+    v1852 Imm(0)                                           -> x1
+    v1853 Imm(0)                                           -> x1
+    v1854 Imm(0)                                           -> x1
     v1855 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v1797, v1848] } -> d0
-    v1856 Imm(0)                                           -> x0
-    v1857 Imm(0)                                           -> x0
-    v1858 Imm(0)                                           -> x0
-    v1859 Imm(0)                                           -> x0
-    v1860 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1855] } -> x0
-    v1861 Imm(0)                                           -> x1
-    v1862 Extend { value=v1860, kind=I32 }                 -> x1
-    v1863 Extend { value=v1860, kind=I32 }                 -> x1
+    v1856 Imm(0)                                           -> x1
+    v1857 Imm(0)                                           -> x1
+    v1858 Imm(0)                                           -> x1
+    v1859 Imm(0)                                           -> x1
+    v1860 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v1855] } -> x1
+    v1861 Imm(0)                                           -> x2
+    v1862 Extend { value=v1860, kind=I32 }                 -> x2
+    v1863 Extend { value=v1860, kind=I32 }                 -> x2
     v1864 LifetimeEnd(0)                                   -> -
-    v1865 Extend { value=v1860, kind=I32 }                 -> x1
-    v1866 BinopI { op=eq, lhs=v1860, rhs_imm=65535 }       -> x0
-    v1867 Extend { value=v1866, kind=I32 }                 -> x1
+    v1865 Extend { value=v1860, kind=I32 }                 -> x2
+    v1866 BinopI { op=eq, lhs=v1860, rhs_imm=65535 }       -> x1
+    v1867 Extend { value=v1866, kind=I32 }                 -> x2
     v1868 LifetimeEnd(0)                                   -> -
-    v1869 Extend { value=v1866, kind=I32 }                 -> x1
-    v1870 BinopI { op=eq, lhs=v1866, rhs_imm=0 }           -> x1
+    v1869 Extend { value=v1866, kind=I32 }                 -> x2
+    v1870 BinopI { op=eq, lhs=v1866, rhs_imm=0 }           -> x2
     terminator Bnz { cond=v1866, target=b20, fall=b19 }   (low word)   (exit_acc=v1870)
   block 19  start_pc=0
     v1871 Imm(10)                                          -> x0
@@ -2146,11 +2146,11 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1874 LifetimeEnd(-220)                                -> -
     terminator Return(v1871)   (exit_acc=v1871)
   block 20  start_pc=0
-    v1875 Imm(0)                                           -> x0
+    v1875 Imm(0)                                           -> x1
     v1876 LifetimeEnd(0)                                   -> -
     v1877 LifetimeEnd(-221)                                -> -
     v1878 LifetimeEnd(-220)                                -> -
-    terminator Return(v1875)   (exit_acc=v1875)
+    terminator Return(v1774)   (exit_acc=v1774)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

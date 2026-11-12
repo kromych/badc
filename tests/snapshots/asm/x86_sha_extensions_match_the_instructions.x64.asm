@@ -102,14 +102,10 @@ Disassembly of section .text:
                	cmpl	$0x4, %esi
                	jl	<addr>
                	xorl	%esi, %esi
-               	movl	%ecx, %ecx
                	vmovd	%ecx, %xmm0
-               	movl	%edx, %ecx
-               	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	movl	%eax, %eax
+               	vpinsrd	$0x1, %edx, %xmm0, %xmm0
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	movl	%r9d, %eax
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	vpinsrd	$0x3, %r9d, %xmm0, %xmm0
                	popq	%rbx
                	popq	%r12
                	popq	%r13
@@ -141,7 +137,6 @@ Disassembly of section .text:
                	shlq	$0x1e, %rsi
                	shrq	$0x2, %rcx
                	orq	%rsi, %rcx
-               	movl	%ecx, %ecx
                	addq	%rdx, %rcx
                	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
                	xorl	%ecx, %ecx
@@ -228,14 +223,10 @@ Disassembly of section .text:
                	shlq	%rsi
                	shrq	$0x1f, %rdx
                	orq	%rsi, %rdx
-               	movl	%edx, %edx
                	vmovd	%edx, %xmm0
-               	movl	%edi, %eax
-               	vpinsrd	$0x1, %eax, %xmm0, %xmm0
-               	movl	%r9d, %eax
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	movl	%ecx, %eax
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	vpinsrd	$0x1, %edi, %xmm0, %xmm0
+               	vpinsrd	$0x2, %r9d, %xmm0, %xmm0
+               	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
                	xorl	%edi, %edi
                	movq	$-0x5a9811d2, %rax      # imm = 0xA567EE2E
                	vmovd	%eax, %xmm1
@@ -488,13 +479,9 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%r12, %rax
                	xorl	%edi, %edi
-               	movl	%edx, %ecx
-               	vmovd	%ecx, %xmm0
-               	movl	%r8d, %ecx
-               	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	movl	%esi, %ecx
-               	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
-               	movl	%eax, %eax
+               	vmovd	%edx, %xmm0
+               	vpinsrd	$0x1, %r8d, %xmm0, %xmm0
+               	vpinsrd	$0x2, %esi, %xmm0, %xmm0
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	movq	$-0x2d41f027, %rax      # imm = 0xD2BE0FD9
                	vmovd	%eax, %xmm1
@@ -536,7 +523,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rbx
                	xorq	%rbx, %r9
                	addq	%r9, %r8
-               	movl	%r8d, %r8d
                	vmovd	%r8d, %xmm0
                	movq	%rcx, %rdi
                	shrq	$0x7, %rdi
@@ -553,7 +539,6 @@ Disassembly of section .text:
                	shrq	$0x3, %r8
                	xorq	%r8, %rdi
                	addq	%rdi, %rax
-               	movl	%eax, %eax
                	vpinsrd	$0x1, %eax, %xmm0, %xmm0
                	movq	%rdx, %rax
                	shrq	$0x7, %rax
@@ -570,7 +555,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rdi
                	xorq	%rdi, %rax
                	addq	%rcx, %rax
-               	movl	%eax, %eax
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	movq	%rsi, %rax
                	shrq	$0x7, %rax
@@ -586,7 +570,6 @@ Disassembly of section .text:
                	shrq	$0x3, %rsi
                	xorq	%rsi, %rax
                	addq	%rdx, %rax
-               	movl	%eax, %eax
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	xorl	%eax, %eax
                	movl	$0x5775367d, %ecx       # imm = 0x5775367D
@@ -628,71 +611,67 @@ Disassembly of section .text:
                	xorq	%rbx, %r9
                	shrq	$0xa, %rax
                	xorq	%r9, %rax
-               	addq	%rdx, %rax
-               	movq	%rcx, %rdx
-               	shrq	$0x11, %rdx
+               	addq	%rax, %rdx
+               	movq	%rcx, %rax
+               	shrq	$0x11, %rax
                	movq	%rcx, %r9
                	shlq	$0xf, %r9
-               	orq	%r9, %rdx
+               	orq	%r9, %rax
                	movq	%rcx, %r9
                	shrq	$0x13, %r9
                	movq	%rcx, %rbx
                	shlq	$0xd, %rbx
                	orq	%rbx, %r9
-               	xorq	%r9, %rdx
+               	xorq	%r9, %rax
                	shrq	$0xa, %rcx
-               	xorq	%rdx, %rcx
-               	addq	%rsi, %rcx
-               	movl	%eax, %eax
-               	movq	%rax, %rdx
-               	shrq	$0x11, %rdx
+               	xorq	%rcx, %rax
+               	leaq	(%rsi,%rax), %rcx
+               	movl	%edx, %eax
                	movq	%rax, %rsi
-               	shlq	$0xf, %rsi
-               	orq	%rsi, %rdx
-               	movq	%rax, %rsi
-               	shrq	$0x13, %rsi
+               	shrq	$0x11, %rsi
                	movq	%rax, %r9
-               	shlq	$0xd, %r9
+               	shlq	$0xf, %r9
                	orq	%r9, %rsi
-               	xorq	%rsi, %rdx
-               	movq	%rax, %rsi
-               	shrq	$0xa, %rsi
-               	xorq	%rsi, %rdx
-               	leaq	(%rdi,%rdx), %rsi
-               	movl	%ecx, %ecx
-               	movq	%rcx, %rdx
-               	shrq	$0x11, %rdx
-               	movq	%rcx, %rdi
-               	shlq	$0xf, %rdi
-               	orq	%rdi, %rdx
-               	movq	%rcx, %rdi
-               	shrq	$0x13, %rdi
-               	movq	%rcx, %r9
-               	shlq	$0xd, %r9
+               	movq	%rax, %r9
+               	shrq	$0x13, %r9
+               	movq	%rax, %rbx
+               	shlq	$0xd, %rbx
+               	orq	%rbx, %r9
+               	xorq	%r9, %rsi
+               	shrq	$0xa, %rax
+               	xorq	%rsi, %rax
+               	leaq	(%rdi,%rax), %rsi
+               	movl	%ecx, %eax
+               	movq	%rax, %rdi
+               	shrq	$0x11, %rdi
+               	movq	%rax, %r9
+               	shlq	$0xf, %r9
                	orq	%r9, %rdi
-               	xorq	%rdi, %rdx
-               	movq	%rcx, %rdi
-               	shrq	$0xa, %rdi
-               	xorq	%rdi, %rdx
-               	leaq	(%r8,%rdx), %rdi
-               	xorl	%edx, %edx
-               	vmovd	%eax, %xmm0
+               	movq	%rax, %r9
+               	shrq	$0x13, %r9
+               	movq	%rax, %rbx
+               	shlq	$0xd, %rbx
+               	orq	%rbx, %r9
+               	xorq	%r9, %rdi
+               	shrq	$0xa, %rax
+               	xorq	%rdi, %rax
+               	leaq	(%r8,%rax), %rdi
+               	xorl	%eax, %eax
+               	vmovd	%edx, %xmm0
                	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	movl	%esi, %eax
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	movl	%edi, %eax
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
-               	movq	$-0xab221f1, %rax       # imm = 0xF54DDE0F
-               	vmovd	%eax, %xmm1
-               	movq	$-0x17800a5f, %rax      # imm = 0xE87FF5A1
-               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	movl	$0x2b6121c1, %eax       # imm = 0x2B6121C1
-               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
-               	movl	$0x1209722c, %eax       # imm = 0x1209722C
-               	vpinsrd	$0x3, %eax, %xmm1, %xmm1
+               	vpinsrd	$0x2, %esi, %xmm0, %xmm0
+               	vpinsrd	$0x3, %edi, %xmm0, %xmm0
+               	movq	$-0xab221f1, %rcx       # imm = 0xF54DDE0F
+               	vmovd	%ecx, %xmm1
+               	movq	$-0x17800a5f, %rcx      # imm = 0xE87FF5A1
+               	vpinsrd	$0x1, %ecx, %xmm1, %xmm1
+               	movl	$0x2b6121c1, %ecx       # imm = 0x2B6121C1
+               	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
+               	movl	$0x1209722c, %ecx       # imm = 0x1209722C
+               	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
                	pcmpeqd	%xmm1, %xmm0
-               	pmovmskb	%xmm0, %eax
-               	cmpl	$0xffff, %eax           # imm = 0xFFFF
+               	pmovmskb	%xmm0, %ecx
+               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx
@@ -702,7 +681,6 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

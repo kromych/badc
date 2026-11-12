@@ -162,6 +162,17 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     }
                     break;
                 }
+                // Every lane of a splat is its value.
+                Inst::VecSplat {
+                    value,
+                    kind: stored,
+                    ..
+                } => {
+                    if store_width(stored) == width {
+                        found = Some((value, stored));
+                    }
+                    break;
+                }
                 Inst::Imm(0) if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
                     func.insts[i] = Inst::Imm(0);
                     changed = true;

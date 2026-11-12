@@ -501,10 +501,10 @@ fn ent_pc=15 n_params=2 variadic=false locals=0
     v17  Imm(24)                                          -> x0
     v18  Imm(0)                                           -> x0
     v19  Neg(v2)                                          -> x0
-    v20  Extend { value=v19, kind=I32, nsw }              -> x0
+    v20  Extend { value=v19, kind=I32, nsw }              -> x1
     v21  Imm(0)                                           -> x1
     v22  VecExtract { vec=v13, off=16, kind=V128, bytes=32 } -> d1
-    v23  VecInsert { vec=v22, value=v20, off=8, kind=I32, bytes=16 } -> d1
+    v23  VecInsert { vec=v22, value=v19, off=8, kind=I32, bytes=16 } -> d1
     v24  VecInsert { vec=v13, value=v23, off=16, kind=V128, bytes=32 } -> d0
     v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0

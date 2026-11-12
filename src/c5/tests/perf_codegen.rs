@@ -3120,6 +3120,45 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
     m.finish();
 }
 
+/// A GNU vector of one value in every lane is a broadcast of it, as with
+/// gcc 16: `dup` from a general register or from an FP register's lane 0
+/// and `ret` on AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one
+/// `vbroadcastss`, and `ret`, at 16 and 32 bytes, from an insert per lane.
+/// A lane read of one is the value.
+#[test]
+fn a_vector_of_one_value_is_a_broadcast() {
+    const SRC: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
+typedef float v4sf __attribute__((vector_size(16)));\n\
+typedef long long v2di __attribute__((vector_size(16)));\n\
+typedef int v2si __attribute__((vector_size(8)));\n\
+typedef int v8si __attribute__((vector_size(32)));\n\
+typedef float v8sf __attribute__((vector_size(32)));\n\
+v4si si(int x) { return (v4si){x, x, x, x}; }\n\
+v4sf sf(float x) { return (v4sf){x, x, x, x}; }\n\
+v2di di(long long x) { return (v2di){x, x}; }\n\
+v2si si8(int x) { return (v2si){x, x}; }\n\
+v8si si32(int x) { return (v8si){x, x, x, x, x, x, x, x}; }\n\
+v8sf sf32(float x) { return (v8sf){x, x, x, x, x, x, x, x}; }\n\
+int lane(int x) { v4si v = (v4si){x, x, x, x}; return v[2]; }\n";
+    let mut m = Misses::default();
+    for (name, dup) in [
+        ("si", 0x4E04_0C00u32),
+        ("sf", 0x4E04_0400),
+        ("di", 0x4E08_0C00),
+        ("si8", 0x0E04_0C00),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == [dup, 0xD65F_03C0], || {
+            format!("aarch64 {name}: {words:08x?}")
+        });
+    }
+    for (name, n) in [("si", 3), ("sf", 2), ("si32", 3), ("sf32", 2), ("lane", 2)] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == n, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A `memcpy` between an 8-byte vector and bytes of any alignment is one
 /// transfer, as a 16-byte one is: `ldr d0, [x0]` or `str d0, [x0]` and
 /// `ret`, and on x86-64 a `movq` and `ret`, from a frame round trip.
@@ -3277,12 +3316,11 @@ int none(const v4l *a, const v4l *b) {\n\
 }\n";
     let count = |f: &[X64Insn], op: u16| f.iter().filter(|i| i.op == op).count();
     let mut m = Misses::default();
-    // `~` builds the vector lane by lane over an undefined one: one
-    // `vinserti128`; the reads take the high half out once each and read
-    // the low one in place.
+    // `~` takes a vector of all-ones lanes, one `vpbroadcastq`; the reads
+    // take the high half out once each and read the low one in place.
     let none = x64(SRC, "none");
     m.expect(
-        count(&none, 0x3A38) == 1 && count(&none, 0x3A39) == 2,
+        count(&none, 0x3A38) == 0 && count(&none, 0x3859) == 1 && count(&none, 0x3A39) == 2,
         || format!("x86-64 none: {none:x?}"),
     );
     // `vextracti128` is 0F3A 39, `vinserti128` 0F3A 38.

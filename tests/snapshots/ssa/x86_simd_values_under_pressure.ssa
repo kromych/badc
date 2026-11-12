@@ -2373,46 +2373,46 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
   block 44  start_pc=0
     v2065 Imm(0)                                           -> x0
     v2066 Imm(-1)                                          -> x0
-    v2067 Imm(-1)                                          -> x1
-    v2068 Imm(0)                                           -> x0
-    v2069 Imm(0)                                           -> x0
-    v2070 Imm(0)                                           -> x2
-    v2071 Imm(0)                                           -> x2
-    v2072 Imm(0)                                           -> x2
+    v2067 Imm(-1)                                          -> x0
+    v2068 Imm(0)                                           -> x1
+    v2069 Imm(0)                                           -> x1
+    v2070 Imm(0)                                           -> x1
+    v2071 Imm(0)                                           -> x1
+    v2072 Imm(0)                                           -> x1
     v2073 VecInsert { vec=v2069, value=v2067, off=0, kind=I32, bytes=16 } -> d0
-    v2074 Imm(0)                                           -> x2
-    v2075 Imm(0)                                           -> x2
-    v2076 Imm(4)                                           -> x2
-    v2077 Imm(0)                                           -> x2
+    v2074 Imm(0)                                           -> x1
+    v2075 Imm(0)                                           -> x1
+    v2076 Imm(4)                                           -> x1
+    v2077 Imm(0)                                           -> x1
     v2078 VecInsert { vec=v2073, value=v2067, off=4, kind=I32, bytes=16 } -> d0
-    v2079 Imm(0)                                           -> x2
-    v2080 Imm(0)                                           -> x2
-    v2081 Imm(8)                                           -> x2
-    v2082 Imm(0)                                           -> x2
+    v2079 Imm(0)                                           -> x1
+    v2080 Imm(0)                                           -> x1
+    v2081 Imm(8)                                           -> x1
+    v2082 Imm(0)                                           -> x1
     v2083 VecInsert { vec=v2078, value=v2067, off=8, kind=I32, bytes=16 } -> d0
-    v2084 Imm(0)                                           -> x2
-    v2085 Imm(0)                                           -> x2
-    v2086 Imm(12)                                          -> x2
-    v2087 Imm(0)                                           -> x2
-    v2088 VecInsert { vec=v2083, value=v2067, off=12, kind=I32, bytes=16 } -> d0
-    v2089 Imm(0)                                           -> x1
-    v2090 Imm(0)                                           -> x1
-    v2091 Imm(0)                                           -> x1
-    v2092 Imm(0)                                           -> x1
-    v2093 Imm(0)                                           -> x1
-    v2094 Imm(0)                                           -> x1
+    v2084 Imm(0)                                           -> x1
+    v2085 Imm(0)                                           -> x1
+    v2086 Imm(12)                                          -> x1
+    v2087 Imm(0)                                           -> x1
+    v2088 VecSplat { value=v2067, kind=I32, bytes=16 }     -> d0
+    v2089 Imm(0)                                           -> x0
+    v2090 Imm(0)                                           -> x0
+    v2091 Imm(0)                                           -> x0
+    v2092 Imm(0)                                           -> x0
+    v2093 Imm(0)                                           -> x0
+    v2094 Imm(0)                                           -> x0
     v2095 SimdVal { op=__builtin_ia32_pcmpeqd128, imm=None, args=[v247, v2088] } -> d0
-    v2096 Imm(0)                                           -> x1
-    v2097 Imm(0)                                           -> x1
-    v2098 Imm(0)                                           -> x1
-    v2099 Imm(0)                                           -> x1
-    v2100 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v2095] } -> x1
-    v2101 Imm(0)                                           -> x2
-    v2102 Extend { value=v2100, kind=I32 }                 -> x2
-    v2103 Extend { value=v2100, kind=I32 }                 -> x2
+    v2096 Imm(0)                                           -> x0
+    v2097 Imm(0)                                           -> x0
+    v2098 Imm(0)                                           -> x0
+    v2099 Imm(0)                                           -> x0
+    v2100 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v2095] } -> x0
+    v2101 Imm(0)                                           -> x1
+    v2102 Extend { value=v2100, kind=I32 }                 -> x1
+    v2103 Extend { value=v2100, kind=I32 }                 -> x1
     v2104 LifetimeEnd(0)                                   -> -
-    v2105 Extend { value=v2100, kind=I32 }                 -> x2
-    v2106 BinopI { op=ne, lhs=v2100, rhs_imm=65535 }       -> x1
+    v2105 Extend { value=v2100, kind=I32 }                 -> x1
+    v2106 BinopI { op=ne, lhs=v2100, rhs_imm=65535 }       -> x0
     terminator Bz { cond=v2106, target=b46, fall=b45 }   (exit_acc=v2106)
   block 45  start_pc=0
     v2179 Imm(30)                                          -> x0
@@ -2445,67 +2445,67 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2206 LifetimeEnd(-365)                                -> -
     terminator Return(v2179)   (exit_acc=v2179)
   block 46  start_pc=0
-    v2207 Imm(0)                                           -> x1
-    v2208 ImmData(8)                                       -> x1
+    v2207 Imm(0)                                           -> x0
+    v2208 ImmData(8)                                       -> x0
     v2209 Load { addr=v2208, disp=0, kind=V128, align=8 }  -> d0
-    v2210 Imm(0)                                           -> x1
-    v2211 Imm(0)                                           -> x1
-    v2212 Imm(0)                                           -> x1
-    v2213 Imm(0)                                           -> x1
-    v2214 Imm(0)                                           -> x1
-    v2215 Imm(0)                                           -> x1
-    v2216 Imm(0)                                           -> x1
-    v2217 Imm(0)                                           -> x1
+    v2210 Imm(0)                                           -> x0
+    v2211 Imm(0)                                           -> x0
+    v2212 Imm(0)                                           -> x0
+    v2213 Imm(0)                                           -> x0
+    v2214 Imm(0)                                           -> x0
+    v2215 Imm(0)                                           -> x0
+    v2216 Imm(0)                                           -> x0
+    v2217 Imm(0)                                           -> x0
     v2218 SimdVal { op=__builtin_ia32_sqrtss, imm=None, args=[v2209] } -> d0
-    v2219 Imm(0)                                           -> x1
-    v2220 Imm(0)                                           -> x1
-    v2221 Imm(0)                                           -> x1
-    v2222 Imm(0)                                           -> x1
-    v2223 Imm(0)                                           -> x1
+    v2219 Imm(0)                                           -> x0
+    v2220 Imm(0)                                           -> x0
+    v2221 Imm(0)                                           -> x0
+    v2222 Imm(0)                                           -> x0
+    v2223 Imm(0)                                           -> x0
     v2224 LifetimeEnd(0)                                   -> -
-    v2225 Imm(0)                                           -> x1
-    v2226 Imm(0)                                           -> x1
-    v2227 Imm(0)                                           -> x1
-    v2228 Imm(0)                                           -> x1
-    v2229 Imm(0)                                           -> x1
-    v2230 Imm(0)                                           -> x1
-    v2231 Imm(0)                                           -> x1
-    v2232 Imm(0)                                           -> x1
+    v2225 Imm(0)                                           -> x0
+    v2226 Imm(0)                                           -> x0
+    v2227 Imm(0)                                           -> x0
+    v2228 Imm(0)                                           -> x0
+    v2229 Imm(0)                                           -> x0
+    v2230 Imm(0)                                           -> x0
+    v2231 Imm(0)                                           -> x0
+    v2232 Imm(0)                                           -> x0
     v2233 LifetimeEnd(0)                                   -> -
-    v2234 Imm(0)                                           -> x1
-    v2235 Imm(0)                                           -> x1
-    v2236 Imm(0)                                           -> x1
+    v2234 Imm(0)                                           -> x0
+    v2235 Imm(0)                                           -> x0
+    v2236 Imm(0)                                           -> x0
     v2237 VecExtract { vec=v2218, off=0, kind=F32, bytes=16 } -> d1 [f32]
-    v2238 Imm(1082130432)                                  -> x1 [f32]
-    v2239 Binop { op=fne, lhs=v2237, rhs=v2238 }           -> x2
-    v2240 Imm(1)                                           -> x6
-    v2241 Imm(0)                                           -> x6
+    v2238 Imm(1082130432)                                  -> x0 [f32]
+    v2239 Binop { op=fne, lhs=v2237, rhs=v2238 }           -> x1
+    v2240 Imm(1)                                           -> x2
+    v2241 Imm(0)                                           -> x2
     terminator Bnz { cond=v2239, target=b49, fall=b47 }   (exit_acc=v2239)
   block 47  start_pc=0
-    v2242 Imm(0)                                           -> x2
-    v2243 Imm(4)                                           -> x2
-    v2244 Imm(4)                                           -> x2
-    v2245 Imm(0)                                           -> x2
+    v2242 Imm(0)                                           -> x1
+    v2243 Imm(4)                                           -> x1
+    v2244 Imm(4)                                           -> x1
+    v2245 Imm(0)                                           -> x1
     v2246 VecExtract { vec=v2218, off=4, kind=F32, bytes=16 } -> d1 [f32]
-    v2247 Imm(1073741824)                                  -> x2 [f32]
-    v2248 Binop { op=fne, lhs=v2246, rhs=v2247 }           -> x2
-    v2249 BinopI { op=ne, lhs=v2248, rhs_imm=0 }           -> x6
-    v2250 Imm(0)                                           -> x6
-    v2251 Imm(0)                                           -> x6
-    v2252 Imm(0)                                           -> x6
-    v2253 Imm(0)                                           -> x6
+    v2247 Imm(1073741824)                                  -> x1 [f32]
+    v2248 Binop { op=fne, lhs=v2246, rhs=v2247 }           -> x1
+    v2249 BinopI { op=ne, lhs=v2248, rhs_imm=0 }           -> x2
+    v2250 Imm(0)                                           -> x2
+    v2251 Imm(0)                                           -> x2
+    v2252 Imm(0)                                           -> x2
+    v2253 Imm(0)                                           -> x2
     terminator Bnz { cond=v2248, target=b49, fall=b48 }   (exit_acc=v2248)
   block 48  start_pc=0
-    v2254 Imm(0)                                           -> x2
-    v2255 Imm(12)                                          -> x2
-    v2256 Imm(12)                                          -> x2
-    v2257 Imm(0)                                           -> x2
+    v2254 Imm(0)                                           -> x1
+    v2255 Imm(12)                                          -> x1
+    v2256 Imm(12)                                          -> x1
+    v2257 Imm(0)                                           -> x1
     v2258 VecExtract { vec=v2218, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v2259 Imm(1082130432)                                  -> x2 [f32]
-    v2260 Binop { op=fne, lhs=v2258, rhs=v2238 }           -> x1
-    v2261 Imm(0)                                           -> x2
-    v2262 Imm(0)                                           -> x2
-    v2263 Imm(0)                                           -> x2
+    v2259 Imm(1082130432)                                  -> x1 [f32]
+    v2260 Binop { op=fne, lhs=v2258, rhs=v2238 }           -> x0
+    v2261 Imm(0)                                           -> x1
+    v2262 Imm(0)                                           -> x1
+    v2263 Imm(0)                                           -> x1
     terminator Bz { cond=v2260, target=b50, fall=b49 }   (exit_acc=v2260)
   block 49  start_pc=0
     v2264 Imm(31)                                          -> x0
@@ -2538,7 +2538,7 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2291 LifetimeEnd(-365)                                -> -
     terminator Return(v2264)   (exit_acc=v2264)
   block 50  start_pc=0
-    v2292 Imm(0)                                           -> x1
+    v2292 Imm(0)                                           -> x0
     v2293 LifetimeEnd(0)                                   -> -
     v2294 LifetimeEnd(0)                                   -> -
     v2295 LifetimeEnd(0)                                   -> -
@@ -2566,7 +2566,7 @@ fn ent_pc=505 n_params=0 variadic=false locals=80
     v2317 LifetimeEnd(0)                                   -> -
     v2318 LifetimeEnd(-80)                                 -> -
     v2319 LifetimeEnd(-365)                                -> -
-    terminator Return(v2069)   (exit_acc=v2069)
+    terminator Return(v2292)   (exit_acc=v2292)
   block 51  start_pc=0
     v2147 Imm(1)                                           -> x0
     v2148 Extend { value=v2055, kind=I32 }                 -> x0

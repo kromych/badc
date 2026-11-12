@@ -1164,9 +1164,8 @@ Disassembly of section .text:
                	cmpl	%r8d, %ecx
                	jne	<addr>
                	movq	$-0x1, %rcx
-               	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
-               	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
+               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
                	vmovq	%xmm2, %rcx
@@ -1186,9 +1185,8 @@ Disassembly of section .text:
                	testq	%r9, %r9
                	je	<addr>
                	movq	$-0x1, %rcx
-               	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
-               	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
+               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm0, %xmm2
                	pand	%xmm1, %xmm2
                	vmovq	%xmm2, %rcx
@@ -1227,9 +1225,8 @@ Disassembly of section .text:
                	testq	%r9, %r9
                	je	<addr>
                	movq	$-0x1, %rcx
-               	xorl	%r9d, %r9d
                	vmovq	%rcx, %xmm2
-               	vpinsrq	$0x1, %rcx, %xmm2, %xmm2
+               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm2, %xmm0
                	pand	%xmm1, %xmm0
                	vmovq	%xmm0, %rcx
@@ -1339,9 +1336,8 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm1
                	pcmpeqd	%xmm0, %xmm1
                	movq	$-0x1, %rax
-               	xorl	%edx, %edx
                	vmovq	%rax, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm2, %xmm0
                	pand	%xmm1, %xmm0
                	vmovq	%xmm0, %rdx
@@ -1352,23 +1348,15 @@ Disassembly of section .text:
                	movzbq	%dl, %rdx
                	cmpl	%ecx, %edx
                	jne	<addr>
-               	xorl	%ecx, %ecx
                	vmovd	%eax, %xmm0
-               	vpinsrd	$0x1, %eax, %xmm0, %xmm0
-               	vpinsrd	$0x2, %eax, %xmm0, %xmm0
-               	vpinsrd	$0x3, %eax, %xmm0, %xmm0
+               	vpbroadcastd	%xmm0, %xmm0
                	vmovd	%eax, %xmm1
-               	vpinsrd	$0x1, %eax, %xmm1, %xmm1
-               	vpinsrd	$0x2, %eax, %xmm1, %xmm1
-               	vpinsrd	$0x3, %eax, %xmm1, %xmm1
+               	vpbroadcastd	%xmm1, %xmm1
                	vmovd	%eax, %xmm2
-               	vpinsrd	$0x1, %eax, %xmm2, %xmm2
-               	vpinsrd	$0x2, %eax, %xmm2, %xmm2
-               	vpinsrd	$0x3, %eax, %xmm2, %xmm2
+               	vpbroadcastd	%xmm2, %xmm2
                	pcmpeqd	%xmm2, %xmm1
-               	xorl	%ecx, %ecx
                	vmovq	%rax, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vpbroadcastq	%xmm2, %xmm2
                	pxor	%xmm2, %xmm0
                	pand	%xmm1, %xmm0
                	vmovq	%xmm0, %rax

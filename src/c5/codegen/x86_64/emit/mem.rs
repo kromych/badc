@@ -126,7 +126,9 @@ pub(super) fn emit_tls_addr(
             }
             // PE TLS: the TEB at gs:[0x58], its TLS array indexed by `_tls_index`,
             // plus the per-variable offset. r10 holds the TEB pointer and `rd` the
-            // index, which is live across one mov only.
+            // index, which is live across one mov only; a spilled result, whose
+            // register is r10, is formed in r11.
+            let rd = if rd == SCRATCH_R10 { SCRATCH_R11 } else { rd };
             //
             // mov r10, gs:[0x58]           ; TEB
             // mov rd_w, [rip+disp32]       ; _tls_index slot (zero-extends to rd)

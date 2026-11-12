@@ -1131,6 +1131,35 @@ mod two_address_tests {
         }
     }
 
+    /// A spilled Windows x64 TLS address is formed in r11: r10 holds the TLS
+    /// array the index selects from, so the index cannot load into it.
+    #[test]
+    fn a_spilled_windows_tls_address_keeps_the_index_off_r10() {
+        let target = Target::WindowsX64;
+        let (func, v, mut alloc) = binop_of("long f(long a, long b) { return a + b; }", BinOp::Add);
+        alloc.places[v as usize] = Place::Spill(0);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        super::super::mem::emit_tls_addr(
+            &mut code,
+            Place::Spill(0),
+            0x20,
+            v,
+            (target, false),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &Default::default(),
+            0,
+            frame,
+        )
+        .expect("TlsAddr");
+        // `mov r10, gs:[0x58]` is 9 bytes; then the index load, REX.R
+        // selecting r8..r15.
+        let (rex, modrm) = (code[9], code[11]);
+        let index = ((modrm >> 3) & 7) | ((rex & 4) << 1);
+        assert_ne!(index, 10, "{code:02x?}");
+    }
+
     /// A division saves rax / rdx exactly for the values the allocation
     /// records live in them across it, never over its own result; without
     /// a record, any value placed there counts. Encodings are clang's.

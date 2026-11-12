@@ -814,22 +814,22 @@ fn ent_pc=6 n_params=2 variadic=false locals=8
     v12  LoadLocal { off=-41, kind=I64 }                  -> x0
     v13  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x1
     v14  LoadLocal { off=-41, disp=8, kind=I64 }          -> x1
-    v15  Imm(0)                                           -> x6
-    v16  BinopI { op=lt, lhs=v14, rhs_imm=0 }             -> x6
-    v17  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x8
-    v18  Imm(0)                                           -> x8
-    v19  Imm(0)                                           -> x8
-    v20  BinopI { op=or, lhs=v16, rhs_imm=0 }             -> x8
+    v15  Imm(0)                                           -> x1
+    v16  BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x1
+    v17  BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x6
+    v18  Imm(0)                                           -> x6
+    v19  Imm(0)                                           -> x6
+    v20  BinopI { op=or, lhs=v16, rhs_imm=0 }             -> x6
     terminator Bz { cond=v16, target=b18, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
-    v21  LocalAddr(-41)                                   -> x6
-    v22  LoadLocal { off=-41, kind=I64 }                  -> x6
-    v23  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x6
-    v24  LoadLocal { off=-41, disp=8, kind=I64 }          -> x6
+    v21  LocalAddr(-41)                                   -> x1
+    v22  LoadLocal { off=-41, kind=I64 }                  -> x1
+    v23  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x1
+    v24  LoadLocal { off=-41, disp=8, kind=I64 }          -> x1
     v25  Imm(0)                                           -> x6
     v26  BinopI { op=ugt, lhs=v12, rhs_imm=0 }            -> x6
     v27  Neg(v12)                                         -> x0
-    v28  Neg(v14)                                         -> x1
+    v28  Neg(v24)                                         -> x1
     v29  Binop { op=sub, lhs=v28, rhs=v26 }               -> x1
     v30  LocalAddr(-8)                                    -> x7
     v31  StoreLocal { off=-8, value=v27, kind=I64 }       -> -

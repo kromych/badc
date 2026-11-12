@@ -104,9 +104,8 @@ fn is_int_store(kind: StoreKind) -> bool {
 
 /// The origin an entry seeded by a store of `kind` carries: an integer
 /// store's value describes the loads [`reuse`] lists (`Some(None)`); a
-/// whole vector's register holds the bytes a load of that vector kind
-/// reads back, unless the value is an immediate, which a general register
-/// holds; `None` for a store that seeds nothing.
+/// whole vector's or a double's FP register holds the bytes a load of that
+/// kind reads back; `None` for a store that seeds nothing.
 fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<Option<LoadKind>> {
     if is_int_store(kind) {
         return Some(None);
@@ -115,9 +114,29 @@ fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<O
         StoreKind::V128 => LoadKind::V128,
         StoreKind::V256 => LoadKind::V256,
         StoreKind::V512 => LoadKind::V512,
+        // A double from an FP register reads back the same 64 bits.
+        StoreKind::F64 => LoadKind::F64,
         _ => return None,
     };
-    (!matches!(func.insts.get(value as usize), Some(Inst::Imm(_)))).then_some(Some(vector))
+    let inst = func.insts.get(value as usize)?;
+    let fp = crate::c5::codegen::ssa::reg_alloc::produces_fp_result(inst);
+    // A single-precision value is not the double a load reads back.
+    let single = func
+        .f32_values
+        .get(value as usize)
+        .copied()
+        .unwrap_or(false);
+    (fp && !single && !matches!(inst, Inst::Imm(_))).then_some(Some(vector))
+}
+
+/// Whether a load of `kind` reads a lane of a `bytes`-byte vector the
+/// targets extract: an integer or floating scalar, or a 16-byte half.
+fn lane_kind(kind: LoadKind, bytes: u8) -> bool {
+    match kind {
+        LoadKind::V128 => bytes == 32,
+        LoadKind::F80 | LoadKind::F128 | LoadKind::V256 | LoadKind::V512 => false,
+        _ => true,
+    }
 }
 
 /// Maximum instruction distance between the store or first load and the
@@ -435,8 +454,60 @@ fn run_one(func: &mut FunctionSsa) {
                                 && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
                         })
                         .copied();
+                    // A lane of a vector the slot holds whole is that lane
+                    // of the vector's register.
+                    let lane = |e: &SlotEntry| {
+                        let at = disp - e.disp;
+                        e.off == off
+                            && matches!(e.load_kind, Some(LoadKind::V128 | LoadKind::V256))
+                            && lane_kind(kind, e.width)
+                            && at >= 0
+                            && at + i32::from(w) <= i32::from(e.width)
+                            && at % i32::from(w) == 0
+                            && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
+                    };
+                    // Two doubles the slot holds side by side are a 16-byte
+                    // vector: the high one inserted over the low one's
+                    // register.
+                    let half = |at: i32| {
+                        slot_table
+                            .iter()
+                            .rev()
+                            .find(|e| {
+                                e.off == off
+                                    && e.disp == at
+                                    && e.width == 8
+                                    && e.load_kind == Some(LoadKind::F64)
+                                    && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
+                            })
+                            .copied()
+                    };
+                    let pair = (kind == LoadKind::V128)
+                        .then(|| half(disp).zip(half(disp + 8)))
+                        .flatten();
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                    } else if let Some((lo, hi)) = pair {
+                        rewrites.push((
+                            i,
+                            Inst::VecInsert {
+                                vec: lo.value,
+                                value: hi.value,
+                                off: 8,
+                                kind: StoreKind::F64,
+                                bytes: 16,
+                            },
+                        ));
+                    } else if let Some(e) = slot_table.iter().rev().find(|e| lane(e)).copied() {
+                        rewrites.push((
+                            i,
+                            Inst::VecExtract {
+                                vec: e.value,
+                                off: (disp - e.disp) as u8,
+                                kind,
+                                bytes: e.width,
+                            },
+                        ));
                     } else {
                         slot_table.retain(|e| !(same(e) && e.load_kind == Some(kind)));
                         slot_table.push(SlotEntry {
@@ -593,6 +664,9 @@ fn run_one(func: &mut FunctionSsa) {
                         });
                     }
                 }
+                // A zero alloca slot marks a function with no alloca: it
+                // writes nothing.
+                Inst::AllocaInit(0) => {}
                 // Anything that can write through a pointer the pass
                 // does not track clears the pointer tables. Forwardable
                 // slot entries survive (no address value); exposed slot
@@ -948,6 +1022,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::AsmOut { .. }
                 | Inst::AggParts { .. }
                 | Inst::Phi { .. } => {}
+                Inst::AllocaInit(0) => {}
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
                 | Inst::Mzero { .. }

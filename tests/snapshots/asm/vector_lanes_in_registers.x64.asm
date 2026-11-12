@@ -615,10 +615,10 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x80(%rsp), %r9
                	movups	%xmm0, 0x80(%rsp)
-               	movq	0x80(%rsp), %rax
+               	vmovq	%xmm0, %rax
                	cmpq	$-0xa, %rax
                	jne	<addr>
-               	movq	0x88(%rsp), %rax
+               	vpextrq	$0x1, %xmm0, %rax
                	movabsq	$0x2468acf134, %r11     # imm = 0x2468ACF134
                	cmpq	%r11, %rax
                	je	<addr>

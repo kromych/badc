@@ -580,11 +580,11 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x7, x29, #0x210
                	str	q0, [sp, #0x50]
-               	ldr	x0, [sp, #0x50]
+               	mov	x0, v0.d[0]
                	mov	x17, #-0xa              // =-10
                	cmp	x0, x17
                	b.ne	<addr>
-               	ldr	x0, [sp, #0x58]
+               	mov	x0, v0.d[1]
                	mov	x17, #0xf134            // =61748
                	movk	x17, #0x68ac, lsl #16
                	movk	x17, #0x24, lsl #32

@@ -14,53 +14,25 @@ Disassembly of section .text:
                	brk	#0x1
 
 <ne_rhs>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <eq_rhs>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, eq
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <add_rhs>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
                	sub	x0, x0, #0x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <swapped>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	stur	w0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x8]
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	cset	x0, ne
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

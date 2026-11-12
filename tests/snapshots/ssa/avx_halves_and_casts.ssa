@@ -1378,7 +1378,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1160 Imm(0)                                           -> x0
     v1161 Imm(0)                                           -> x0
     v1162 BinopI { op=add, lhs=v1053, rhs_imm=0 }          -> x0
-    v1163 LoadLocal { off=-18, kind=F32 }                  -> d2 [f32]
+    v1163 VecExtract { vec=v1133, off=0, kind=F32, bytes=32 } -> d2 [f32]
     v1164 LocalAddr(-6)                                    -> x0
     v1165 Imm(0)                                           -> x0
     v1166 Imm(0)                                           -> x0
@@ -1644,7 +1644,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
   block 39  start_pc=0
     v1405 Imm(0)                                           -> x0
     v1406 ImmData(8)                                       -> x0
-    v1407 Load { addr=v1406, disp=0, kind=V256, align=8 }  -> d0
+    v1407 Load { addr=v1406, disp=0, kind=V256, align=8 }  -> d1
     v1408 Imm(0)                                           -> x0
     v1409 Imm(0)                                           -> x0
     v1410 Imm(0)                                           -> x0
@@ -1659,7 +1659,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1419 Imm(0)                                           -> x0
     v1420 Imm(0)                                           -> x0
     v1421 Imm(0)                                           -> x0
-    v1422 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1407] } -> d1
+    v1422 SimdVal { op=__builtin_ia32_extract128i256, imm=Some(1), args=[v1407] } -> d0
     v1423 Imm(0)                                           -> x0
     v1424 Imm(0)                                           -> x0
     v1425 Imm(0)                                           -> x0
@@ -1670,7 +1670,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1430 LifetimeEnd(0)                                   -> -
     v1431 LocalAddr(-14)                                   -> x0
     v1432 Imm(0)                                           -> x0
-    v1433 LoadLocal { off=-14, kind=F64 }                  -> d1
+    v1433 VecExtract { vec=v1422, off=0, kind=F64, bytes=16 } -> d2
     v1434 Imm(4614500768194494464)                         -> x0
     v1435 Binop { op=fne, lhs=v1433, rhs=v1434 }           -> x0
     v1436 Imm(0)                                           -> x1
@@ -1679,7 +1679,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1437 LocalAddr(-14)                                   -> x0
     v1438 Imm(8)                                           -> x0
     v1439 BinopI { op=add, lhs=v1418, rhs_imm=8 }          -> x0
-    v1440 LoadLocal { off=-14, disp=8, kind=F64 }          -> d1
+    v1440 VecExtract { vec=v1422, off=8, kind=F64, bytes=16 } -> d0
     v1441 Imm(9094988921128908188)                         -> x0
     v1442 Binop { op=fne, lhs=v1440, rhs=v1441 }           -> x0
     v1443 Imm(0)                                           -> x1
@@ -1753,7 +1753,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1507 LifetimeEnd(0)                                   -> -
     v1508 LocalAddr(-14)                                   -> x0
     v1509 Imm(0)                                           -> x0
-    v1510 LoadLocal { off=-14, kind=F64 }                  -> d0
+    v1510 VecExtract { vec=v1491, off=0, kind=F64, bytes=32 } -> d1
     v1511 Imm(4609434218613702656)                         -> x0
     v1512 Binop { op=fne, lhs=v1510, rhs=v1511 }           -> x0
     v1513 Imm(1)                                           -> x1
@@ -1763,7 +1763,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
     v1515 LocalAddr(-14)                                   -> x0
     v1516 Imm(8)                                           -> x0
     v1517 BinopI { op=add, lhs=v1418, rhs_imm=8 }          -> x0
-    v1518 LoadLocal { off=-14, disp=8, kind=F64 }          -> d0
+    v1518 VecExtract { vec=v1491, off=8, kind=F64, bytes=32 } -> d0
     v1519 Imm(4612811918334230528)                         -> x0
     v1520 Imm(-4610560118520545280)                        -> x0
     v1521 Binop { op=fne, lhs=v1518, rhs=v1520 }           -> x0

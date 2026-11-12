@@ -5471,12 +5471,12 @@ Disassembly of section .text:
                	movups	0x60(%rsp), %xmm0
                	blendpd	$0x2, %xmm14, %xmm0     # xmm0 = xmm0[0],xmm14[1]
                	movups	%xmm0, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
+               	vmovd	%xmm0, %eax
                	leaq	-0x50(%rbp), %rsi
                	movl	-0x50(%rbp), %edx
                	cmpl	%edx, %eax
                	jne	<addr>
-               	movl	-0xc(%rbp), %eax
+               	vpextrd	$0x1, %xmm0, %eax
                	movl	-0x4c(%rbp), %edx
                	cmpl	%edx, %eax
                	jne	<addr>

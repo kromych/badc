@@ -309,9 +309,9 @@ fn ent_pc=16 n_params=0 variadic=false locals=4
     v48  RetPart(0, kind=F64)                             -> d0
     v49  StoreLocal { off=-38, value=v48, kind=F64 }      -> -
     v50  LocalAddr(-38)                                   -> x0
-    v51  LoadLocal { off=-38, kind=F64 }                  -> d0
+    v51  LoadLocal { off=-38, kind=F64 }                  -> d1
     v52  Imm(4612811918334230528)                         -> x0
-    v53  Binop { op=fne, lhs=v51, rhs=v52 }               -> x0
+    v53  Binop { op=fne, lhs=v48, rhs=v52 }               -> x0
     terminator Bz { cond=v53, target=b8, fall=b7 }   (exit_acc=v53)
   block 7  start_pc=0
     v54  Imm(4)                                           -> x0
@@ -457,9 +457,9 @@ fn ent_pc=16 n_params=0 variadic=false locals=4
     v162 StoreLocal { off=-2, disp=8, value=v159, kind=F64 } -> -
     v163 LocalAddr(-2)                                    -> x0
     v164 BinopI { op=add, lhs=v161, rhs_imm=8 }           -> x0
-    v165 LoadLocal { off=-2, disp=8, kind=F64 }           -> d0
+    v165 LoadLocal { off=-2, disp=8, kind=F64 }           -> d1
     v166 Imm(4612811918334230528)                         -> x0
-    v167 Binop { op=fne, lhs=v165, rhs=v166 }             -> x0
+    v167 Binop { op=fne, lhs=v159, rhs=v166 }             -> x0
     terminator Bz { cond=v167, target=b25, fall=b24 }   (exit_acc=v167)
   block 24  start_pc=0
     v168 Imm(12)                                          -> x0

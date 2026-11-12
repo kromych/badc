@@ -202,7 +202,6 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	movsd	%xmm0, -0x40(%rbp)
-               	movsd	-0x40(%rbp), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -299,7 +298,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movsd	%xmm0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

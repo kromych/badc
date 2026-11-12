@@ -1748,7 +1748,7 @@ fn ent_pc=30 n_params=2 variadic=false locals=0
     v41  LocalAddr(-5)                                    -> x1
     v42  Imm(8)                                           -> x1
     v43  BinopI { op=add, lhs=v32, rhs_imm=8 }            -> x1
-    v44  LoadLocal { off=-5, disp=8, kind=I32 }           -> x1
+    v44  Extend { value=v1, kind=I32 }                    -> x1
     v45  Binop { op=add, lhs=v40, rhs=v44 }               -> x0
     v46  Extend { value=v45, kind=I32, nsw }              -> x1
     v47  Extend { value=v45, kind=I32 }                   -> x1

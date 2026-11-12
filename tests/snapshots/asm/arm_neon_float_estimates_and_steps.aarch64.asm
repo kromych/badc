@@ -139,30 +139,30 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x30]
                	stur	d0, [x29, #-0x8]
                	ldur	q0, [x29, #-0x20]
-               	ldur	d1, [x29, #-0x18]
-               	ldur	q2, [x29, #-0x10]
-               	ldur	d3, [x29, #-0x8]
+               	mov	d2, v0.d[1]
+               	ldur	q1, [x29, #-0x10]
+               	mov	d3, v1.d[1]
                	frecpe	v4.4s, v0.4s
                	stur	q4, [x29, #-0xb0]
                	frsqrte	v0.4s, v0.4s
                	stur	q0, [x29, #-0xa0]
-               	stur	d1, [x29, #-0x30]
+               	stur	d2, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
                	frecpe	v0.2s, v16.2s
                	stur	d0, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]
                	stur	x0, [x29, #-0x50]
-               	stur	d1, [x29, #-0x30]
+               	stur	d2, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]
                	fmov	d16, x0
                	frsqrte	v0.2s, v16.2s
                	stur	d0, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]
                	stur	x0, [x29, #-0x48]
-               	frecpe	v0.2d, v2.2d
+               	frecpe	v0.2d, v1.2d
                	stur	q0, [x29, #-0x90]
-               	frsqrte	v0.2d, v2.2d
+               	frsqrte	v0.2d, v1.2d
                	stur	q0, [x29, #-0x80]
                	stur	d3, [x29, #-0x30]
                	ldur	x0, [x29, #-0x30]

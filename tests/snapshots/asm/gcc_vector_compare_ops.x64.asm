@@ -2734,9 +2734,9 @@ Disassembly of section .text:
                	movups	%xmm14, (%rsi)
                	movsd	-0x8(%rbp), %xmm0
                	movsd	%xmm0, -0x58(%rbp)
-               	movsd	-0x60(%rbp), %xmm0
-               	movsd	-0x40(%rbp), %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movsd	-0x60(%rbp), %xmm1
+               	movsd	-0x40(%rbp), %xmm2
+               	ucomisd	%xmm2, %xmm1
                	sete	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
@@ -2744,7 +2744,6 @@ Disassembly of section .text:
                	andq	%r10, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
-               	movsd	-0x58(%rbp), %xmm0
                	movsd	-0x38(%rbp), %xmm1
                	ucomisd	%xmm1, %xmm0
                	sete	%dil

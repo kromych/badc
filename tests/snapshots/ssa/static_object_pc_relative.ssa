@@ -188,10 +188,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v12  Load { addr=v10, disp=16, kind=F64 pc_rel }      -> d1
     v13  Fma { a=v6, b=v8, c=v12, neg_product=false, neg_addend=false } -> d0
     v14  Store { addr=v2, disp=0, value=v13, kind=F64 pc_rel } -> -
-    v15  Load { addr=v2, disp=0, kind=F64 pc_rel }        -> d0
+    v15  Load { addr=v2, disp=0, kind=F64 pc_rel }        -> d1
     v16  Load { addr=v1, disp=0, kind=F32 pc_rel }        -> d1 [f32]
     v17  FpCast { kind=F32ToF64, value=v16 }              -> d1
-    v18  Binop { op=fadd, lhs=v15, rhs=v17 }              -> d0
+    v18  Binop { op=fadd, lhs=v13, rhs=v17 }              -> d0
     terminator Return(v18)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=counter

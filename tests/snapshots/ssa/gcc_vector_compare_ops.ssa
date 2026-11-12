@@ -4540,17 +4540,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v5448 LocalAddr(-640)                                  -> x0
     v5449 LocalAddr(-641)                                  -> x0
     v5450 Imm(0)                                           -> x0
-    v5451 LoadLocal { off=-640, kind=F64 }                 -> d0
-    v5452 LoadLocal { off=-641, kind=F64 }                 -> d1
+    v5451 LoadLocal { off=-640, kind=F64 }                 -> d1
+    v5452 LoadLocal { off=-641, kind=F64 }                 -> d2
     v5453 Binop { op=feq, lhs=v5451, rhs=v5452 }           -> x1
     v5454 Imm(0)                                           -> x0
     v5455 Neg(v5453)                                       -> x1
     v5456 Imm(0)                                           -> x7
     v5457 BinopI { op=add, lhs=v5436, rhs_imm=8 }          -> x7
-    v5458 LoadLocal { off=-640, disp=8, kind=F64 }         -> d0
+    v5458 LoadLocal { off=-640, disp=8, kind=F64 }         -> d1
     v5459 BinopI { op=add, lhs=v5439, rhs_imm=8 }          -> x7
     v5460 LoadLocal { off=-641, disp=8, kind=F64 }         -> d1
-    v5461 Binop { op=feq, lhs=v5458, rhs=v5460 }           -> x7
+    v5461 Binop { op=feq, lhs=v5446, rhs=v5460 }           -> x7
     v5462 Neg(v5461)                                       -> x7
     v5463 Imm(0)                                           -> x8
     v5464 Imm(0)                                           -> x8

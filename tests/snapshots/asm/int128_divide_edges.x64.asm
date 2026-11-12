@@ -616,9 +616,9 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rdx
                	movq	%rcx, -0x88(%rbp)
                	movq	-0xa0(%rbp), %rax
-               	movq	-0x98(%rbp), %rcx
-               	testq	%rcx, %rcx
+               	testq	%rsi, %rsi
                	jge	<addr>
+               	movq	-0x98(%rbp), %rcx
                	testq	%rax, %rax
                	seta	%sil
                	movzbq	%sil, %rsi

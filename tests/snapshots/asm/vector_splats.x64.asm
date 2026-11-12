@@ -237,7 +237,7 @@ Disassembly of section .text:
                	movups	%xmm0, -0x10(%rbp)
                	andq	$0x3, %rsi
                	movl	(%rax,%rsi,4), %eax
-               	movl	-0x8(%rbp), %ecx
+               	movq	%rdi, %rcx
                	addq	%rcx, %rax
                	leave
                	retq

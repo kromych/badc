@@ -2117,7 +2117,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=3
     v1097 LifetimeEnd(0)                                   -> -
     v1098 LocalAddr(-194)                                  -> x0
     v1099 Imm(0)                                           -> x0
-    v1100 LoadLocal { off=-194, kind=I64 }                 -> x0
+    v1100 VecExtract { vec=v1091, off=0, kind=I64, bytes=16 } -> x0
     v1101 BinopI { op=ne, lhs=v1100, rhs_imm=-10 }         -> x0
     v1102 Imm(0)                                           -> x1
     terminator Bnz { cond=v1101, target=b31, fall=b30 }   (exit_acc=v1101)
@@ -2125,7 +2125,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=3
     v1103 LocalAddr(-194)                                  -> x0
     v1104 Imm(8)                                           -> x0
     v1105 BinopI { op=add, lhs=v1094, rhs_imm=8 }          -> x0
-    v1106 LoadLocal { off=-194, disp=8, kind=I64 }         -> x0
+    v1106 VecExtract { vec=v1091, off=8, kind=I64, bytes=16 } -> x0
     v1107 BinopI { op=ne, lhs=v1106, rhs_imm=156374987060 } -> x0
     v1108 Imm(0)                                           -> x1
     v1109 Imm(0)                                           -> x1

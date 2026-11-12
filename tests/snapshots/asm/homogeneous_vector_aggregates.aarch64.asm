@@ -32,24 +32,17 @@ Disassembly of section .text:
                	ret
 
 <take_s2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	stur	q0, [x29, #-0x20]
-               	stur	q1, [x29, #-0x10]
-               	ldur	s0, [x29, #-0x14]
+               	mov	s0, v0.s[3]
                	mov	x16, #0x42c80000        // =1120403456
-               	fmov	s1, w16
-               	ldursw	x0, [x29, #-0x8]
+               	fmov	s3, w16
+               	smov	x0, v1.s[2]
                	mov	x17, #0xa               // =10
                	mul	x0, x0, x17
                	sxtw	x0, w0
-               	scvtf	s3, x0
-               	fmadd	s0, s0, s1, s3
+               	scvtf	s1, x0
+               	fmadd	s0, s0, s3, s1
                	fcvt	d0, s0
                	fadd	d0, d0, d2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <take_d3>:

@@ -3159,6 +3159,38 @@ void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
     m.finish();
 }
 
+/// A half of a 16-byte vector parameter taken through `memcpy` is a lane of
+/// its register, and two 8-byte halves stored side by side and read back
+/// whole are one insert, as with gcc 16: `mov d0, v0.d[1]` and
+/// `mov v0.d[1], v1.d[0]` on AArch64, each from a store to the frame and a
+/// reload.
+#[test]
+fn vector_halves_move_in_registers() {
+    const SRC: &str = "typedef signed char i8x16 __attribute__((vector_size(16)));\n\
+typedef signed char i8x8 __attribute__((vector_size(8)));\n\
+i8x8 lo(i8x16 a) { i8x8 r; __builtin_memcpy(&r, &a, 8); return r; }\n\
+i8x8 hi(i8x16 a) { i8x8 r; __builtin_memcpy(&r, (char *)&a + 8, 8); return r; }\n\
+i8x16 comb(i8x8 a, i8x8 b) {\n\
+    i8x16 r;\n\
+    __builtin_memcpy(&r, &a, 8);\n\
+    __builtin_memcpy((char *)&r + 8, &b, 8);\n\
+    return r;\n\
+}\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("lo", &[0x5E08_0400u32, RET][..]),
+        ("hi", &[0x5E18_0400, RET]),
+        ("comb", &[0x6E18_0420, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        m.expect(insns.len() <= 3, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

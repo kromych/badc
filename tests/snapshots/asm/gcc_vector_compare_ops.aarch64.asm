@@ -1654,13 +1654,12 @@ Disassembly of section .text:
                	stp	x16, x17, [x4]
                	ldur	d0, [x29, #-0x8]
                	stur	d0, [x29, #-0x58]
-               	ldur	d0, [x29, #-0x60]
-               	ldur	d1, [x29, #-0x40]
-               	fcmp	d0, d1
+               	ldur	d1, [x29, #-0x60]
+               	ldur	d2, [x29, #-0x40]
+               	fcmp	d1, d2
                	cset	x1, eq
                	mov	x0, #0x0                // =0
                	neg	x1, x1
-               	ldur	d0, [x29, #-0x58]
                	ldur	d1, [x29, #-0x38]
                	fcmp	d0, d1
                	cset	x5, eq

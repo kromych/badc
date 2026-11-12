@@ -381,12 +381,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	dup	v0.4s, w0
-               	sub	x0, x29, #0x10
+               	sub	x2, x29, #0x10
                	stur	q0, [x29, #-0x10]
                	and	x1, x1, #0x3
-               	ldrsw	x0, [x0, x1, lsl #2]
-               	ldursw	x1, [x29, #-0x8]
-               	add	x0, x0, x1
+               	ldrsw	x1, [x2, x1, lsl #2]
+               	add	x0, x1, x0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

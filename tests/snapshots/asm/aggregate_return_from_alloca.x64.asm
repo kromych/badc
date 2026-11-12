@@ -303,7 +303,6 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, (%rbx)
-               	movsd	(%rbx), %xmm0
                	movq	0x8(%rbx), %rcx
                	addq	%rcx, %rax
                	movq	%rax, 0x8(%rbx)

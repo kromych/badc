@@ -357,9 +357,9 @@ Disassembly of section .text:
                	movups	(%rdx), %xmm0
                	movups	%xmm0, -0x60(%rbp)
                	leaq	<rip>, %rdx
-               	movups	(%rdx), %xmm0
-               	movups	%xmm0, -0x50(%rbp)
-               	movss	-0x54(%rbp), %xmm0
+               	movups	(%rdx), %xmm1
+               	movups	%xmm1, -0x50(%rbp)
+               	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
                	movl	$0x42480000, %edx       # imm = 0x42480000
                	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15

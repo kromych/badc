@@ -123,7 +123,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movsd	%xmm0, <rip> # <addr>
-               	movsd	<rip>, %xmm0 # <addr>
                	movss	<rip>, %xmm1 # <addr>
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0

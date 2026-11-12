@@ -354,7 +354,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v57  FpCast { kind=IntToFp, value=v51 }               -> d1
     v58  Binop { op=fadd, lhs=v55, rhs=v57 }              -> d0
     v59  Store { addr=v6, disp=0, value=v58, kind=F64 }   -> -
-    v60  Load { addr=v6, disp=0, kind=F64 }               -> d0
+    v60  Load { addr=v6, disp=0, kind=F64 }               -> d1
     v61  Imm(0)                                           -> x1
     v62  BinopI { op=add, lhs=v6, rhs_imm=8 }             -> x1
     v63  Load { addr=v6, disp=8, kind=I64 }               -> x1
@@ -364,7 +364,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v67  Imm(0)                                           -> x1
     v68  Load { addr=v6, disp=0, kind=F64 }               -> d1
     v69  Load { addr=v6, disp=8, kind=I64 }               -> x1
-    v70  AggParts { desc=0, parts=[v60, v65], fp_mask=0x1 } -> -
+    v70  AggParts { desc=0, parts=[v58, v65], fp_mask=0x1 } -> -
     terminator Return(v70)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=fc

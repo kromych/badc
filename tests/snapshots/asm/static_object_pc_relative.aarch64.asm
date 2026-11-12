@@ -148,7 +148,6 @@ Disassembly of section .text:
                	ldr	d2, [x2, #0x10]
                	fmadd	d0, d0, d1, d2
                	str	d0, [x0, #0x10]
-               	ldr	d0, [x0, #0x10]
                	ldr	s1, [x1, #0x18]
                	fcvt	d1, s1
                	fadd	d0, d0, d1

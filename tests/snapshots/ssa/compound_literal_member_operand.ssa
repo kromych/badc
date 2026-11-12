@@ -4,10 +4,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
-    v1   StoreLocal { off=-1, value=v0, kind=I32 }        -> -
+    v1   Imm(0)                                           -> x0
     v2   AllocaInit(0)                                    -> -
     v3   LocalAddr(-1)                                    -> x0
-    v4   LoadLocal { off=-1, kind=I32 }                   -> x0
+    v4   Extend { value=v0, kind=I32 }                    -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
     v7   Imm(4294967295)                                  -> x1
@@ -24,10 +24,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
-    v1   StoreLocal { off=-1, value=v0, kind=I32 }        -> -
+    v1   Imm(0)                                           -> x0
     v2   AllocaInit(0)                                    -> -
     v3   LocalAddr(-1)                                    -> x0
-    v4   LoadLocal { off=-1, kind=I32 }                   -> x0
+    v4   Extend { value=v0, kind=I32 }                    -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
     v7   Imm(4294967295)                                  -> x1
@@ -44,10 +44,10 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
-    v1   StoreLocal { off=-1, value=v0, kind=I32 }        -> -
+    v1   Imm(0)                                           -> x0
     v2   AllocaInit(0)                                    -> -
     v3   LocalAddr(-1)                                    -> x0
-    v4   LoadLocal { off=-1, kind=I32 }                   -> x0
+    v4   Extend { value=v0, kind=I32 }                    -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
     v7   Imm(4294967295)                                  -> x1
@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
-    v1   StoreLocal { off=-1, value=v0, kind=I32 }        -> -
+    v1   Imm(0)                                           -> x0
     v2   AllocaInit(0)                                    -> -
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
@@ -74,7 +74,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v7   Imm(0)                                           -> x0
     v8   Imm(-1)                                          -> x0
     v9   LocalAddr(-1)                                    -> x0
-    v10  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v10  Extend { value=v0, kind=I32 }                    -> x0
     v11  BinopI { op=ne, lhs=v10, rhs_imm=-1 }            -> x0
     v12  Extend { value=v11, kind=I32 }                   -> x1
     v13  LifetimeEnd(-1)                                  -> -

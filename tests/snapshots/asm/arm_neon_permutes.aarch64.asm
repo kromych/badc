@@ -1809,17 +1809,19 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x11]
                	mov	x0, #0xc1               // =193
                	sturb	w0, [x29, #-0x1]
-               	ldur	q2, [x29, #-0x20]
-               	ldur	q3, [x29, #-0x10]
-               	ldur	d0, [x29, #-0x20]
-               	ldur	d1, [x29, #-0x10]
-               	ext	v2.16b, v2.16b, v3.16b, #0x5
+               	ldur	q0, [x29, #-0x20]
+               	ldur	q1, [x29, #-0x10]
+               	mov	d2, v0.d[0]
+               	mov	d3, v1.d[0]
+               	mov	d4, v0.d[0]
+               	mov	d5, v1.d[0]
+               	ext	v0.16b, v0.16b, v1.16b, #0x5
                	sub	x5, x29, #0x50
-               	stur	q2, [x29, #-0x50]
-               	ext	v2.8b, v0.8b, v1.8b, #0x3
+               	stur	q0, [x29, #-0x50]
+               	ext	v0.8b, v2.8b, v3.8b, #0x3
                	sub	x6, x29, #0x40
-               	stur	d2, [x29, #-0x40]
-               	ext	v0.8b, v0.8b, v1.8b, #0x6
+               	stur	d0, [x29, #-0x40]
+               	ext	v0.8b, v4.8b, v5.8b, #0x6
                	sub	x7, x29, #0x38
                	stur	d0, [x29, #-0x38]
                	sub	x0, x29, #0x30
@@ -2118,28 +2120,28 @@ Disassembly of section .text:
                	mov	x0, #0xd7               // =215
                	sturb	w0, [x29, #-0x1]
                	ldur	q0, [x29, #-0x30]
-               	ldur	q2, [x29, #-0x20]
+               	ldur	q1, [x29, #-0x20]
                	ldur	q3, [x29, #-0x10]
-               	ldur	d1, [x29, #-0x20]
-               	ldur	d4, [x29, #-0x10]
+               	mov	d2, v1.d[0]
+               	mov	d4, v3.d[0]
                	ldur	q5, [x29, #-0x30]
-               	tbl	v6.16b, { v0.16b }, v2.16b
+               	tbl	v6.16b, { v0.16b }, v1.16b
                	sub	x7, x29, #0x70
                	stur	q6, [x29, #-0x70]
                	mov	v16.16b, v3.16b
-               	tbx	v16.16b, { v0.16b }, v2.16b
-               	mov	v2.16b, v16.16b
+               	tbx	v16.16b, { v0.16b }, v1.16b
+               	mov	v1.16b, v16.16b
                	sub	x8, x29, #0x60
-               	stur	q2, [x29, #-0x60]
-               	tbl	v2.8b, { v0.16b }, v1.8b
+               	stur	q1, [x29, #-0x60]
+               	tbl	v1.8b, { v0.16b }, v2.8b
                	sub	x9, x29, #0x48
-               	stur	d2, [x29, #-0x48]
+               	stur	d1, [x29, #-0x48]
                	mov	v16.16b, v4.16b
-               	tbx	v16.8b, { v0.16b }, v1.8b
+               	tbx	v16.8b, { v0.16b }, v2.8b
                	mov	v0.16b, v16.16b
                	sub	x10, x29, #0x40
                	stur	d0, [x29, #-0x40]
-               	tbl	v0.8b, { v5.16b }, v1.8b
+               	tbl	v0.8b, { v5.16b }, v2.8b
                	sub	x11, x29, #0x38
                	stur	d0, [x29, #-0x38]
                	mov	x4, #0x0                // =0

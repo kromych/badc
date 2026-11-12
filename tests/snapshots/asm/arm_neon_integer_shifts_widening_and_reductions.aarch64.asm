@@ -4417,57 +4417,49 @@ Disassembly of section .text:
 <w_vaddv_s8>:
                	ldr	d0, [x1]
                	addv	b0, v0.8b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vaddvq_s8>:
                	ldr	q0, [x1]
                	addv	b0, v0.16b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vaddlv_s8>:
                	ldr	d0, [x1]
                	saddlv	h0, v0.8b
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vaddlvq_s8>:
                	ldr	q0, [x1]
                	saddlv	h0, v0.16b
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vmaxv_s8>:
                	ldr	d0, [x1]
                	smaxv	b0, v0.8b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vmaxvq_s8>:
                	ldr	q0, [x1]
                	smaxv	b0, v0.16b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vminv_s8>:
                	ldr	d0, [x1]
                	sminv	b0, v0.8b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vminvq_s8>:
                	ldr	q0, [x1]
                	sminv	b0, v0.16b
-               	umov	w1, v0.b[0]
-               	strb	w1, [x0]
+               	str	b0, [x0]
                	ret
 
 <w_vaddv_u8>:
@@ -4537,57 +4529,49 @@ Disassembly of section .text:
 <w_vaddv_s16>:
                	ldr	d0, [x1]
                	addv	h0, v0.4h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vaddvq_s16>:
                	ldr	q0, [x1]
                	addv	h0, v0.8h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vaddlv_s16>:
                	ldr	d0, [x1]
                	saddlv	s0, v0.4h
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddlvq_s16>:
                	ldr	q0, [x1]
                	saddlv	s0, v0.8h
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vmaxv_s16>:
                	ldr	d0, [x1]
                	smaxv	h0, v0.4h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vmaxvq_s16>:
                	ldr	q0, [x1]
                	smaxv	h0, v0.8h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vminv_s16>:
                	ldr	d0, [x1]
                	sminv	h0, v0.4h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vminvq_s16>:
                	ldr	q0, [x1]
                	sminv	h0, v0.8h
-               	smov	x1, v0.h[0]
-               	strh	w1, [x0]
+               	str	h0, [x0]
                	ret
 
 <w_vaddv_u16>:
@@ -4609,15 +4593,13 @@ Disassembly of section .text:
 <w_vaddlv_u16>:
                	ldr	d0, [x1]
                	uaddlv	s0, v0.4h
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddlvq_u16>:
                	ldr	q0, [x1]
                	uaddlv	s0, v0.8h
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vmaxv_u16>:
@@ -4655,127 +4637,109 @@ Disassembly of section .text:
 <w_vaddv_s32>:
                	ldr	d0, [x1]
                	addp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddvq_s32>:
                	ldr	q0, [x1]
                	addv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddlv_s32>:
                	ldr	d0, [x1]
                	saddlp	v0.1d, v0.2s
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vaddlvq_s32>:
                	ldr	q0, [x1]
                	saddlv	d0, v0.4s
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vmaxv_s32>:
                	ldr	d0, [x1]
                	smaxp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vmaxvq_s32>:
                	ldr	q0, [x1]
                	smaxv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vminv_s32>:
                	ldr	d0, [x1]
                	sminp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vminvq_s32>:
                	ldr	q0, [x1]
                	sminv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddv_u32>:
                	ldr	d0, [x1]
                	addp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddvq_u32>:
                	ldr	q0, [x1]
                	addv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddlv_u32>:
                	ldr	d0, [x1]
                	uaddlp	v0.1d, v0.2s
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vaddlvq_u32>:
                	ldr	q0, [x1]
                	uaddlv	d0, v0.4s
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vmaxv_u32>:
                	ldr	d0, [x1]
                	umaxp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vmaxvq_u32>:
                	ldr	q0, [x1]
                	umaxv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vminv_u32>:
                	ldr	d0, [x1]
                	uminp	v0.2s, v0.2s, v0.2s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vminvq_u32>:
                	ldr	q0, [x1]
                	uminv	s0, v0.4s
-               	smov	x1, v0.s[0]
-               	str	w1, [x0]
+               	str	s0, [x0]
                	ret
 
 <w_vaddvq_s64>:
                	ldr	q0, [x1]
                	addp	v0.2d, v0.2d, v0.2d
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vaddvq_u64>:
                	ldr	q0, [x1]
                	addp	v0.2d, v0.2d, v0.2d
-               	mov	x1, v0.d[0]
-               	str	x1, [x0]
+               	str	d0, [x0]
                	ret
 
 <lane>:

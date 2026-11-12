@@ -1030,6 +1030,27 @@ pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u3
     0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32)
 }
 
+/// `LD1 {<Vt>.<T>}[index], [<Xn|SP>]` when `load`, else `ST1`: one
+/// `esize`-byte lane between `vt` and memory.
+pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: Reg) -> u32 {
+    debug_assert!(vt < 32 && index * esize < 16);
+    // Q:S:size spell the lane index, `size` the low bits for bytes.
+    let (opcode, qss) = match esize {
+        1 => (0, index),
+        2 => (2, index << 1),
+        4 => (4, index << 2),
+        _ => (4, (index << 3) | 1),
+    };
+    0x0D00_0000
+        | ((qss >> 3) << 30)
+        | (u32::from(load) << 22)
+        | (opcode << 13)
+        | (((qss >> 2) & 1) << 12)
+        | ((qss & 3) << 10)
+        | ((rn.0 as u32) << 5)
+        | (vt as u32)
+}
+
 /// `ZIP1 <Vd>.2D, <Vn>.2D, <Vm>.2D` -- the low element of `vn`, then the
 /// low element of `vm`.
 pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> u32 {
@@ -2991,6 +3012,13 @@ mod tests {
         // mov v1.s[2], v5.s[0] / v0.d[1], v7.d[0]
         assert_eq!(enc_ins_elem(1, 4, 2, 5), 0x6E14_04A1);
         assert_eq!(enc_ins_elem(0, 8, 1, 7), 0x6E18_04E0);
+        // ld1 {v0.b}[15], [x2]; ld1 {v3.h}[6], [x1]; ld1 {v2.d}[1], [x3];
+        // st1 {v0.s}[3], [x0]; st1 {v5.d}[1], [sp]
+        assert_eq!(enc_ld1_st1_lane(true, 0, 1, 15, Reg(2)), 0x4D40_1C40);
+        assert_eq!(enc_ld1_st1_lane(true, 3, 2, 6, Reg(1)), 0x4D40_5023);
+        assert_eq!(enc_ld1_st1_lane(true, 2, 8, 1, Reg(3)), 0x4D40_8462);
+        assert_eq!(enc_ld1_st1_lane(false, 0, 4, 3, Reg(0)), 0x4D00_9000);
+        assert_eq!(enc_ld1_st1_lane(false, 5, 8, 1, Reg(31)), 0x4D00_87E5);
         // mov v1.d[1], v2.d[1]; zip1 v3.2d, v4.2d, v5.2d
         assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1), 0x6E18_4441);
         assert_eq!(enc_zip1_2d(3, 4, 5), 0x4EC5_3883);

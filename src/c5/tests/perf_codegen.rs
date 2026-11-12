@@ -3222,6 +3222,28 @@ d2 pair(d2 a, d2 b) { return (d2){b[0], a[0]}; }\n";
     m.finish();
 }
 
+/// A lane written from memory or written to it moves through the pointer
+/// alone: `ld1` / `st1` of the lane, and `str` of the low lane's width.
+#[test]
+fn a_lane_load_or_store_is_one_instruction() {
+    const SRC: &str = "typedef unsigned short u16x8 __attribute__((vector_size(16)));\n\
+typedef float f4 __attribute__((vector_size(16)));\n\
+u16x8 ld(const unsigned short *p, u16x8 v) { v[6] = *p; return v; }\n\
+void st(float *p, f4 v) { *p = v[3]; }\n\
+void st0(float *p, f4 v) { *p = v[0]; }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("ld", &[0x4D40_5000u32, RET][..]),
+        ("st", &[0x4D00_9000, RET]),
+        ("st0", &[0xBD00_0000, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

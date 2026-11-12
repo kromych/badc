@@ -125,8 +125,7 @@ Disassembly of section .text:
 
 <save_state>:
                	ldr	q0, [x0]
-               	umov	w2, v0.b[0]
-               	strb	w2, [x1]
+               	str	b0, [x1]
                	umov	w2, v0.b[1]
                	strb	w2, [x1, #0x1]
                	umov	w2, v0.b[2]
@@ -159,8 +158,7 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xf]
                	add	x2, x1, #0x10
                	ldr	q0, [x0, #0x10]
-               	umov	w3, v0.b[0]
-               	strb	w3, [x2]
+               	str	b0, [x2]
                	umov	w3, v0.b[1]
                	strb	w3, [x2, #0x1]
                	umov	w3, v0.b[2]
@@ -193,8 +191,7 @@ Disassembly of section .text:
                	strb	w3, [x2, #0xf]
                	add	x2, x1, #0x20
                	ldr	q0, [x0, #0x20]
-               	umov	w3, v0.b[0]
-               	strb	w3, [x2]
+               	str	b0, [x2]
                	umov	w3, v0.b[1]
                	strb	w3, [x2, #0x1]
                	umov	w3, v0.b[2]
@@ -227,8 +224,7 @@ Disassembly of section .text:
                	strb	w3, [x2, #0xf]
                	add	x2, x1, #0x30
                	ldr	q0, [x0, #0x30]
-               	umov	w3, v0.b[0]
-               	strb	w3, [x2]
+               	str	b0, [x2]
                	umov	w3, v0.b[1]
                	strb	w3, [x2, #0x1]
                	umov	w3, v0.b[2]
@@ -261,8 +257,7 @@ Disassembly of section .text:
                	strb	w3, [x2, #0xf]
                	add	x1, x1, #0x40
                	ldr	q0, [x0, #0x40]
-               	umov	w0, v0.b[0]
-               	strb	w0, [x1]
+               	str	b0, [x1]
                	umov	w0, v0.b[1]
                	strb	w0, [x1, #0x1]
                	umov	w0, v0.b[2]
@@ -799,8 +794,7 @@ Disassembly of section .text:
                	mov	v0.b[15], w0
                	stur	q0, [x29, #-0xc0]
                	add	x0, x22, #0x10
-               	ldrb	w1, [x0]
-               	mov	v0.b[0], w1
+               	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v0.b[1], w1
                	ldrb	w1, [x0, #0x2]
@@ -833,8 +827,7 @@ Disassembly of section .text:
                	mov	v0.b[15], w0
                	stur	q0, [x29, #-0xb0]
                	add	x0, x22, #0x20
-               	ldrb	w1, [x0]
-               	mov	v0.b[0], w1
+               	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v0.b[1], w1
                	ldrb	w1, [x0, #0x2]
@@ -867,8 +860,7 @@ Disassembly of section .text:
                	mov	v0.b[15], w0
                	stur	q0, [x29, #-0xa0]
                	add	x0, x22, #0x30
-               	ldrb	w1, [x0]
-               	mov	v0.b[0], w1
+               	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v0.b[1], w1
                	ldrb	w1, [x0, #0x2]
@@ -901,8 +893,7 @@ Disassembly of section .text:
                	mov	v0.b[15], w0
                	stur	q0, [x29, #-0x90]
                	add	x0, x22, #0x40
-               	ldrb	w1, [x0]
-               	mov	v0.b[0], w1
+               	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v0.b[1], w1
                	ldrb	w1, [x0, #0x2]
@@ -962,9 +953,8 @@ Disassembly of section .text:
                	lsl	x1, x21, #4
                	sxtw	x1, w1
                	add	x3, x23, x1
-               	ldrb	w1, [x3]
                	ldr	q0, [sp, #0x180]
-               	mov	v0.b[0], w1
+               	ld1	{ v0.b }[0], [x3]
                	ldrb	w1, [x3, #0x1]
                	mov	v0.b[1], w1
                	ldrb	w1, [x3, #0x2]
@@ -1292,9 +1282,8 @@ Disassembly of section .text:
                	ldrb	w0, [sp, #0x137]
                	mov	v0.b[15], w0
                	add	x0, x1, #0x10
-               	ldrb	w2, [x0]
                	mov	v1.16b, v0.16b
-               	mov	v1.b[0], w2
+               	ld1	{ v1.b }[0], [x0]
                	ldrb	w2, [x0, #0x1]
                	mov	v1.b[1], w2
                	ldrb	w2, [x0, #0x2]
@@ -1326,9 +1315,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	v1.b[15], w0
                	add	x0, x1, #0x20
-               	ldrb	w1, [x0]
                	mov	v2.16b, v1.16b
-               	mov	v2.b[0], w1
+               	ld1	{ v2.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v2.b[1], w1
                	ldrb	w1, [x0, #0x2]
@@ -1361,9 +1349,8 @@ Disassembly of section .text:
                	mov	v2.b[15], w0
                	sub	x1, x29, #0x218
                	add	x0, x1, #0x30
-               	ldrb	w2, [x0]
                	mov	v3.16b, v2.16b
-               	mov	v3.b[0], w2
+               	ld1	{ v3.b }[0], [x0]
                	ldrb	w2, [x0, #0x1]
                	mov	v3.b[1], w2
                	ldrb	w2, [x0, #0x2]
@@ -1395,9 +1382,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	v3.b[15], w0
                	add	x0, x1, #0x40
-               	ldrb	w1, [x0]
                	mov	v4.16b, v3.16b
-               	mov	v4.b[0], w1
+               	ld1	{ v4.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v4.b[1], w1
                	ldrb	w1, [x0, #0x2]

@@ -128,6 +128,8 @@ struct FunctionEmitter<'a, 'b> {
     plan: super::ssa::block_plan::BlockPlan,
     /// `ParamRef` values the entry parallel copy already placed.
     prebatched: Vec<bool>,
+    /// Loads and lane reads a lane insert or store performs ([`lane_memory`]).
+    lane_mem: Vec<bool>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -333,6 +335,7 @@ pub(crate) fn emit_function(
         snapshot,
         plan,
         prebatched: Vec::new(),
+        lane_mem: lane_memory(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -955,7 +958,7 @@ impl FunctionEmitter<'_, '_> {
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
-        if self.prebatched[v as usize] {
+        if self.prebatched[v as usize] || self.lane_mem[v as usize] {
             return Ok(());
         }
         // An inline-asm block takes the mapping state itself.
@@ -985,20 +988,23 @@ impl FunctionEmitter<'_, '_> {
             return self.emit_asm_goto(asm, args, v, table);
         }
         let data_fixups_pre_inst = self.cx.data_fixups.len();
-        let lowered = emit_inst(
-            self.cx,
-            inst,
-            v,
-            place,
-            &self.fcx,
-            self.fixups,
-            self.macho_tlv_fixups,
-            self.macho_tlv_descriptors,
-            &mut self.deferred_regions,
-            self.text_map_state,
-            self.asm_text_labels,
-            self.asm_section_text_refs,
-        );
+        let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx);
+        let lowered = fused.unwrap_or_else(|| {
+            emit_inst(
+                self.cx,
+                inst,
+                v,
+                place,
+                &self.fcx,
+                self.fixups,
+                self.macho_tlv_fixups,
+                self.macho_tlv_descriptors,
+                &mut self.deferred_regions,
+                self.text_map_state,
+                self.asm_text_labels,
+                self.asm_section_text_refs,
+            )
+        });
         if let Err(e) = lowered {
             #[cfg(feature = "codegen_test")]
             if std::env::var("BADC_DUMP_SSA").is_ok() {

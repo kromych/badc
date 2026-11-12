@@ -1468,14 +1468,12 @@ Disassembly of section .text:
 
 <w_vget_lane_s8>:
                	ldr	d0, [x1]
-               	smov	x1, v0.b[7]
-               	strb	w1, [x0]
+               	st1	{ v0.b }[7], [x0]
                	ret
 
 <w_vgetq_lane_s8>:
                	ldr	q0, [x1]
-               	smov	x1, v0.b[1]
-               	strb	w1, [x0]
+               	st1	{ v0.b }[1], [x0]
                	ret
 
 <w_vset_lane_s8>:
@@ -1616,14 +1614,12 @@ Disassembly of section .text:
 
 <w_vget_lane_s16>:
                	ldr	d0, [x1]
-               	smov	x1, v0.h[3]
-               	strh	w1, [x0]
+               	st1	{ v0.h }[3], [x0]
                	ret
 
 <w_vgetq_lane_s16>:
                	ldr	q0, [x1]
-               	smov	x1, v0.h[1]
-               	strh	w1, [x0]
+               	st1	{ v0.h }[1], [x0]
                	ret
 
 <w_vset_lane_s16>:
@@ -1764,14 +1760,12 @@ Disassembly of section .text:
 
 <w_vget_lane_s32>:
                	ldr	d0, [x1]
-               	smov	x1, v0.s[1]
-               	str	w1, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vgetq_lane_s32>:
                	ldr	q0, [x1]
-               	smov	x1, v0.s[1]
-               	str	w1, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vset_lane_s32>:
@@ -1812,14 +1806,12 @@ Disassembly of section .text:
 
 <w_vget_lane_u32>:
                	ldr	d0, [x1]
-               	mov	w1, v0.s[1]
-               	str	w1, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vgetq_lane_u32>:
                	ldr	q0, [x1]
-               	mov	w1, v0.s[1]
-               	str	w1, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vset_lane_u32>:
@@ -1860,14 +1852,12 @@ Disassembly of section .text:
 
 <w_vget_lane_f32>:
                	ldr	d0, [x1]
-               	mov	s0, v0.s[1]
-               	str	s0, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vgetq_lane_f32>:
                	ldr	q0, [x1]
-               	mov	s0, v0.s[1]
-               	str	s0, [x0]
+               	st1	{ v0.s }[1], [x0]
                	ret
 
 <w_vset_lane_f32>:
@@ -1909,8 +1899,7 @@ Disassembly of section .text:
 
 <w_vgetq_lane_s64>:
                	ldr	q0, [x1]
-               	mov	x1, v0.d[1]
-               	str	x1, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vset_lane_s64>:
@@ -1954,8 +1943,7 @@ Disassembly of section .text:
 
 <w_vgetq_lane_u64>:
                	ldr	q0, [x1]
-               	mov	x1, v0.d[1]
-               	str	x1, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vset_lane_u64>:
@@ -1999,8 +1987,7 @@ Disassembly of section .text:
 
 <w_vgetq_lane_p64>:
                	ldr	q0, [x1]
-               	mov	x1, v0.d[1]
-               	str	x1, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vset_lane_p64>:
@@ -2044,8 +2031,7 @@ Disassembly of section .text:
 
 <w_vgetq_lane_f64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[1]
-               	str	d0, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vset_lane_f64>:

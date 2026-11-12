@@ -859,6 +859,183 @@ fn emit_vec_extract(
     Ok(())
 }
 
+/// The bytes of a lane of `kind`, for the widths a lane access moves.
+fn lane_bytes(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::I8 => Some(1),
+        StoreKind::I16 => Some(2),
+        StoreKind::I32 | StoreKind::F32 => Some(4),
+        StoreKind::I64 | StoreKind::F64 => Some(8),
+        _ => None,
+    }
+}
+
+/// The loads and lane reads each fused into the one lane insert or store
+/// that reads it: a non-volatile access through its address alone, of the
+/// lane's width and naturally aligned, with nothing emitted between the
+/// two, so `ld1` / `st1` of the lane performs both and the address and
+/// vector registers still hold their values there.
+pub(super) fn lane_memory(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
+    let mut fused = alloc::vec![false; func.insts.len()];
+    let single = |v: super::super::ir::ValueId| alloc.use_counts.get(v as usize) == Some(&1);
+    let quiet = |from: super::super::ir::ValueId, to: usize| {
+        (from as usize + 1..to).all(|u| {
+            super::ssa::emit_common::inst_emits_nothing(
+                &func.insts[u],
+                u as super::super::ir::ValueId,
+                alloc,
+            )
+        })
+    };
+    let aligned = |align: u8, w: u8| align == 0 || align >= w;
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let i = v as usize;
+            let (value, w) = match func.insts[i] {
+                Inst::VecInsert {
+                    vec,
+                    value,
+                    kind,
+                    bytes: 8 | 16,
+                    ..
+                } if !matches!(func.insts[vec as usize], Inst::Undef | Inst::Imm(0)) => {
+                    (value, lane_bytes(kind))
+                }
+                Inst::Store {
+                    disp: 0,
+                    value,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    align,
+                    ..
+                } => (value, lane_bytes(kind).filter(|&w| aligned(align, w))),
+                _ => continue,
+            };
+            let Some(w) = w else { continue };
+            if !block.inst_range.contains(&value)
+                || value >= v
+                || !single(value)
+                || !quiet(value, i)
+            {
+                continue;
+            }
+            let f32_ok = |k: LoadKind| k != LoadKind::F32 || alloc.is_f32(value);
+            fused[value as usize] = match (&func.insts[i], &func.insts[value as usize]) {
+                (
+                    Inst::VecInsert { .. },
+                    &Inst::Load {
+                        disp: 0,
+                        kind,
+                        volatile: false,
+                        pc_rel: false,
+                        align,
+                        ..
+                    },
+                ) => kind.bytes() == w && aligned(align, w) && f32_ok(kind),
+                (
+                    Inst::Store { .. },
+                    &Inst::VecExtract {
+                        kind,
+                        bytes: 8 | 16,
+                        ..
+                    },
+                ) => kind.bytes() == w && f32_ok(kind),
+                _ => false,
+            };
+        }
+    }
+    fused
+}
+
+/// `ld1` or `st1` of one lane for a lane insert or store whose value
+/// [`lane_memory`] fused into it; `None` for any other instruction.
+pub(super) fn emit_lane_memory(
+    code: &mut Vec<u8>,
+    inst: &Inst,
+    fused: &[bool],
+    dst: Place,
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        scratch,
+        ..
+    } = *fcx;
+    let is_fused = |v: super::super::ir::ValueId| fused.get(v as usize).copied().unwrap_or(false);
+    let (vec, off, w, bytes, addr, load) = match *inst {
+        Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes,
+        } if is_fused(value) => {
+            let Inst::Load { addr, .. } = func.insts[value as usize] else {
+                return None;
+            };
+            (vec, off, lane_bytes(kind)?, bytes, addr, true)
+        }
+        Inst::Store { addr, value, .. } if is_fused(value) => {
+            let Inst::VecExtract {
+                vec,
+                off,
+                kind,
+                bytes,
+            } = func.insts[value as usize]
+            else {
+                return None;
+            };
+            (vec, off, kind.bytes(), bytes, addr, false)
+        }
+        _ => return None,
+    };
+    let Some(rn) = materialize_int(code, place_of(alloc, addr), scratch.primary, frame) else {
+        return Some(fail("lane access: address has no place"));
+    };
+    let qd = match (load, dst) {
+        (true, Place::FpReg(r)) => r,
+        _ => frame.fp_scratch[0],
+    };
+    let qn = match bytes {
+        16 => materialize_v128(code, place_of(alloc, vec), qd, frame, scratch.secondary),
+        _ => materialize_fp(code, place_of(alloc, vec), qd, frame),
+    };
+    let Some(qn) = qn else {
+        return Some(fail("lane access: vector has no place"));
+    };
+    let esize = u32::from(w);
+    let index = u32::from(off) / esize;
+    // Lane 0 is the low bytes a scalar store of the width writes.
+    if !load {
+        use super::encode::{STR_B, STR_D, STR_H, STR_S, enc_ld1_st1_lane, enc_mem};
+        let op = [STR_B, STR_H, STR_S, STR_D][esize.trailing_zeros() as usize];
+        emit(
+            code,
+            match index {
+                0 => enc_mem(op, qn, rn, op.scaled(0)),
+                _ => enc_ld1_st1_lane(false, qn, esize, index, rn),
+            },
+        );
+        return Some(Ok(()));
+    }
+    if qn != qd {
+        emit(code, super::encode::enc_mov_v16b(qd, qn));
+    }
+    emit(
+        code,
+        super::encode::enc_ld1_st1_lane(true, qd, esize, index, rn),
+    );
+    if bytes == 16 {
+        propagate_v128(code, frame, dst, qd, scratch.primary);
+    } else {
+        store_spilled_fp(code, frame, dst, qd);
+    }
+    Some(Ok(()))
+}
+
 /// `Inst::VecInsert`: `ins` of the value into the lane of a copy of the
 /// vector, from a general register or from the low element of an FP one.
 /// `blank` is `Some(undefined)` for a vector of no value or of zero.

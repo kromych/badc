@@ -2427,9 +2427,12 @@ impl Compiler {
             self.symbols[id_idx].is_extern_decl = false;
             // C99 6.9.2: a tentative definition's type may be completed
             // further on in the unit -- a tag defined later, or an enum
-            // used before its definition -- so its storage is sized, and
-            // an aggregate left incomplete rejected, once the unit is parsed.
-            if let Some(tag) = self.incomplete_aggregate_tag(ty) {
+            // used before its definition, which the Microsoft targets type
+            // `int` until then -- so its storage is sized, and an aggregate
+            // left incomplete rejected, once the unit is parsed.
+            let forward_enum = super::types::enum_id_of(ty)
+                .filter(|&id| !super::types::is_pointer_ty(ty) && self.is_ms_forward_enum(id));
+            if let Some(tag) = self.incomplete_aggregate_tag(ty).or(forward_enum) {
                 self.pending_incomplete_objects
                     .push((id_idx, tag, signature_line));
             }
@@ -3184,7 +3187,7 @@ impl Compiler {
     fn complete_tentative_definitions(&mut self) -> Result<(), C5Error> {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
             let tag = &self.structs[sid];
-            if !tag.is_complete && tag.enum_underlying.is_none() {
+            if !tag.is_complete && tag.enum_underlying.is_none() && !self.is_ms_forward_enum(sid) {
                 let name = self.symbols[id_idx].name.clone();
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,

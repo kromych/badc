@@ -3879,8 +3879,16 @@ fn type_name_function_of_function_pointer_typedef() {
 #[test]
 fn tentative_definition_completed_later() {
     // C99 6.9.2p2: an object declared while its type was incomplete is sized
-    // and aligned by the type the unit ends with.
-    assert_eq!(run_fixture("tentative_definition_completed_later.c"), 0);
+    // and aligned by the type the unit ends with. The Microsoft targets type
+    // an enum `int` until its definition, which may widen it.
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        let name = "tentative_definition_completed_later.c";
+        assert_eq!(super::run_fixture_for(name, target), 0, "{target:?}");
+    }
 }
 
 #[test]

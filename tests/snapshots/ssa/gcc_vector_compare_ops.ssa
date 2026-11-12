@@ -6046,11 +6046,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6777 LifetimeEnd(0)                                   -> -
     v6778 Imm(0)                                           -> x0
     v6779 ImmData(392)                                     -> x0
-    v6780 Load { addr=v6779, disp=0, kind=V128 }           -> d0
+    v6780 Load { addr=v6779, disp=0, kind=V128, align=8 }  -> d0
     v6781 Imm(0)                                           -> x0
     v6782 Imm(0)                                           -> x0
     v6783 ImmData(408)                                     -> x0
-    v6784 Load { addr=v6783, disp=0, kind=V128 }           -> d1
+    v6784 Load { addr=v6783, disp=0, kind=V128, align=8 }  -> d1
     v6785 Imm(0)                                           -> x0
     v6786 Imm(0)                                           -> x0
     v6787 Imm(0)                                           -> x0

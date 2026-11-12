@@ -194,7 +194,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
     v15  ImmData(8)                                       -> x0
-    v16  Load { addr=v15, disp=0, kind=V128 }             -> d1
+    v16  Load { addr=v15, disp=0, kind=V128, align=8 }    -> d1
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0

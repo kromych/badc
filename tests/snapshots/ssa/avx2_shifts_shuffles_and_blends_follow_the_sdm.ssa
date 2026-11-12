@@ -6278,7 +6278,7 @@ fn ent_pc=1370 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> [spill 0]
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> [spill 0]
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -6288,7 +6288,7 @@ fn ent_pc=1370 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> [spill 4]
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> [spill 4]
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -10768,7 +10768,7 @@ fn ent_pc=1371 n_params=3 variadic=false locals=8
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Load { addr=v1, disp=0, kind=V256 }              -> [spill 0]
+    v9   Load { addr=v1, disp=0, kind=V256, align=1 }     -> [spill 0]
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
@@ -10778,7 +10778,7 @@ fn ent_pc=1371 n_params=3 variadic=false locals=8
     v16  LifetimeEnd(0)                                   -> -
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  Load { addr=v3, disp=0, kind=V256 }              -> [spill 4]
+    v19  Load { addr=v3, disp=0, kind=V256, align=1 }     -> [spill 4]
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
@@ -10788,11 +10788,11 @@ fn ent_pc=1371 n_params=3 variadic=false locals=8
     v26  LifetimeEnd(0)                                   -> -
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  Load { addr=v1, disp=0, kind=V128 }              -> [spill 8]
+    v29  Load { addr=v1, disp=0, kind=V128, align=1 }     -> [spill 8]
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
-    v33  Load { addr=v3, disp=0, kind=V128 }              -> [spill 10]
+    v33  Load { addr=v3, disp=0, kind=V128, align=1 }     -> [spill 10]
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
@@ -13890,7 +13890,7 @@ fn ent_pc=1371 n_params=3 variadic=false locals=8
     v2451 Imm(0)                                           -> x0
     v2452 Imm(0)                                           -> x0
     v2453 Imm(0)                                           -> x0
-    v2454 Load { addr=v5, disp=0, kind=V256 }              -> d0
+    v2454 Load { addr=v5, disp=0, kind=V256, align=1 }     -> d0
     v2455 Imm(0)                                           -> x0
     v2456 Imm(0)                                           -> x0
     v2457 Imm(0)                                           -> x0
@@ -14324,7 +14324,7 @@ fn ent_pc=1372 n_params=1 variadic=false locals=8
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v5   Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v6   Imm(0)                                           -> x0
     v7   LocalAddr(-462)                                  -> x0
     v8   Mzero { dst=v7, size=384, align=8 }              -> -
@@ -18978,7 +18978,7 @@ fn ent_pc=1374 n_params=1 variadic=false locals=8
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   Load { addr=v1, disp=0, kind=V128 }              -> [spill 0]
+    v5   Load { addr=v1, disp=0, kind=V128, align=1 }     -> [spill 0]
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x15
     v8   Imm(0)                                           -> x0

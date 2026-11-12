@@ -990,7 +990,7 @@ fn ent_pc=1364 n_params=2 variadic=false locals=32
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
     v170 Imm(0)                                           -> x0
-    v171 Load { addr=v1, disp=0, kind=V256 }              -> [spill 0]
+    v171 Load { addr=v1, disp=0, kind=V256, align=1 }     -> [spill 0]
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 Imm(0)                                           -> x0
@@ -1000,7 +1000,7 @@ fn ent_pc=1364 n_params=2 variadic=false locals=32
     v178 LifetimeEnd(0)                                   -> -
     v179 Imm(0)                                           -> x0
     v180 Imm(0)                                           -> x0
-    v181 Load { addr=v3, disp=0, kind=V256 }              -> [spill 4]
+    v181 Load { addr=v3, disp=0, kind=V256, align=1 }     -> [spill 4]
     v182 Imm(0)                                           -> x0
     v183 Imm(0)                                           -> x0
     v184 Imm(0)                                           -> x0
@@ -1257,7 +1257,7 @@ fn ent_pc=1365 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -1267,7 +1267,7 @@ fn ent_pc=1365 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -1713,7 +1713,7 @@ fn ent_pc=1366 n_params=2 variadic=false locals=12
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -1723,7 +1723,7 @@ fn ent_pc=1366 n_params=2 variadic=false locals=12
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -2433,7 +2433,7 @@ fn ent_pc=1368 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -2443,7 +2443,7 @@ fn ent_pc=1368 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -2816,7 +2816,7 @@ fn ent_pc=1369 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -2826,7 +2826,7 @@ fn ent_pc=1369 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -3129,7 +3129,7 @@ fn ent_pc=1370 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -3139,7 +3139,7 @@ fn ent_pc=1370 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -3484,7 +3484,7 @@ fn ent_pc=1371 n_params=2 variadic=false locals=8
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v1, disp=0, kind=V256 }              -> d0
+    v7   Load { addr=v1, disp=0, kind=V256, align=1 }     -> d0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
@@ -3494,7 +3494,7 @@ fn ent_pc=1371 n_params=2 variadic=false locals=8
     v14  LifetimeEnd(0)                                   -> -
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Load { addr=v3, disp=0, kind=V256 }              -> d1
+    v17  Load { addr=v3, disp=0, kind=V256, align=1 }     -> d1
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0

@@ -1644,7 +1644,7 @@ fn ent_pc=1361 n_params=0 variadic=false locals=32
   block 39  start_pc=0
     v1405 Imm(0)                                           -> x0
     v1406 ImmData(8)                                       -> x0
-    v1407 Load { addr=v1406, disp=0, kind=V256 }           -> d0
+    v1407 Load { addr=v1406, disp=0, kind=V256, align=8 }  -> d0
     v1408 Imm(0)                                           -> x0
     v1409 Imm(0)                                           -> x0
     v1410 Imm(0)                                           -> x0

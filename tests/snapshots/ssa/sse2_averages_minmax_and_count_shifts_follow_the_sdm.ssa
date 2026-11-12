@@ -1476,13 +1476,13 @@ fn ent_pc=396 n_params=2 variadic=false locals=8
     v558 Imm(0)                                           -> x0
     v559 Imm(0)                                           -> x0
     v560 Imm(0)                                           -> x0
-    v561 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v561 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v562 Imm(0)                                           -> x0
     v563 Imm(0)                                           -> x0
     v564 Imm(0)                                           -> x0
     v565 Imm(0)                                           -> x0
     v566 Imm(0)                                           -> x0
-    v567 Load { addr=v3, disp=0, kind=V128 }              -> d1
+    v567 Load { addr=v3, disp=0, kind=V128, align=1 }     -> d1
     v568 Imm(0)                                           -> x0
     v569 Imm(0)                                           -> x0
     v570 Imm(0)                                           -> x0
@@ -1518,13 +1518,13 @@ fn ent_pc=396 n_params=2 variadic=false locals=8
     v602 Copy { value=v597, fp=false }                    -> x0
     v603 Imm(0)                                           -> x0
     v604 Imm(0)                                           -> x0
-    v605 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v605 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v606 Imm(0)                                           -> x0
     v607 Imm(0)                                           -> x0
     v608 Imm(0)                                           -> x0
     v609 Imm(0)                                           -> x0
     v610 Imm(0)                                           -> x0
-    v611 Load { addr=v3, disp=0, kind=V128 }              -> d1
+    v611 Load { addr=v3, disp=0, kind=V128, align=1 }     -> d1
     v612 Imm(0)                                           -> x0
     v613 Imm(0)                                           -> x0
     v614 Imm(0)                                           -> x0
@@ -1556,13 +1556,13 @@ fn ent_pc=396 n_params=2 variadic=false locals=8
   block 98  start_pc=0
     v639 Imm(0)                                           -> x0
     v640 Imm(0)                                           -> x0
-    v641 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v641 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v642 Imm(0)                                           -> x0
     v643 Imm(0)                                           -> x0
     v644 Imm(0)                                           -> x0
     v645 Imm(0)                                           -> x0
     v646 Imm(0)                                           -> x0
-    v647 Load { addr=v3, disp=0, kind=V128 }              -> d1
+    v647 Load { addr=v3, disp=0, kind=V128, align=1 }     -> d1
     v648 Imm(0)                                           -> x0
     v649 Imm(0)                                           -> x0
     v650 Imm(0)                                           -> x0
@@ -1645,7 +1645,7 @@ fn ent_pc=399 n_params=2 variadic=false locals=5
     v33  Imm(0)                                           -> x1
     v34  Imm(0)                                           -> x1
     v35  Imm(0)                                           -> x1
-    v36  Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v36  Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v37  Imm(0)                                           -> x1
     v38  Imm(0)                                           -> x1
     v39  Imm(0)                                           -> x1
@@ -2267,7 +2267,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 3  start_pc=0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v29  Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0
@@ -2330,7 +2330,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 7  start_pc=0
     v86  Imm(0)                                           -> x0
     v87  Imm(0)                                           -> x0
-    v88  Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v88  Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v89  Imm(0)                                           -> x0
     v90  Imm(0)                                           -> x0
     v91  Imm(0)                                           -> x0
@@ -2401,7 +2401,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 14  start_pc=0
     v131 Imm(0)                                           -> x0
     v132 Imm(0)                                           -> x0
-    v133 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v133 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v134 Imm(0)                                           -> x0
     v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
@@ -2473,7 +2473,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 21  start_pc=0
     v191 Imm(0)                                           -> x0
     v192 Imm(0)                                           -> x0
-    v193 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v193 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v194 Imm(0)                                           -> x0
     v195 Imm(0)                                           -> x0
     v196 Imm(0)                                           -> x0
@@ -2544,7 +2544,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 28  start_pc=0
     v250 Imm(0)                                           -> x0
     v251 Imm(0)                                           -> x0
-    v252 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v252 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v253 Imm(0)                                           -> x0
     v254 Imm(0)                                           -> x0
     v255 Imm(0)                                           -> x0
@@ -2616,7 +2616,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 35  start_pc=0
     v310 Imm(0)                                           -> x0
     v311 Imm(0)                                           -> x0
-    v312 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v312 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v313 Imm(0)                                           -> x0
     v314 Imm(0)                                           -> x0
     v315 Imm(0)                                           -> x0
@@ -2687,7 +2687,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 42  start_pc=0
     v369 Imm(0)                                           -> x0
     v370 Imm(0)                                           -> x0
-    v371 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v371 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v372 Imm(0)                                           -> x0
     v373 Imm(0)                                           -> x0
     v374 Imm(0)                                           -> x0
@@ -2759,7 +2759,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 49  start_pc=0
     v429 Imm(0)                                           -> x0
     v430 Imm(0)                                           -> x0
-    v431 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v431 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v432 Imm(0)                                           -> x0
     v433 Imm(0)                                           -> x0
     v434 Imm(0)                                           -> x0
@@ -2817,7 +2817,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 53  start_pc=0
     v497 Imm(0)                                           -> x0
     v498 Imm(0)                                           -> x0
-    v499 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v499 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v500 Imm(0)                                           -> x0
     v501 Imm(0)                                           -> x0
     v502 Imm(0)                                           -> x0
@@ -2876,7 +2876,7 @@ fn ent_pc=400 n_params=1 variadic=false locals=4
   block 57  start_pc=0
     v557 Imm(0)                                           -> x0
     v558 Imm(0)                                           -> x0
-    v559 Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v559 Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v560 Imm(0)                                           -> x0
     v561 Imm(0)                                           -> x0
     v562 Imm(0)                                           -> x0
@@ -3109,7 +3109,7 @@ fn ent_pc=401 n_params=2 variadic=false locals=14
     v90  BinopI { op=add, lhs=v88, rhs_imm=16 }           -> x0
     v91  Imm(0)                                           -> x0
     v92  Imm(0)                                           -> x0
-    v93  Load { addr=v1, disp=0, kind=V128 }              -> d0
+    v93  Load { addr=v1, disp=0, kind=V128, align=1 }     -> d0
     v94  Imm(0)                                           -> x0
     v95  Imm(0)                                           -> x0
     v96  Imm(0)                                           -> x0

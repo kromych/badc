@@ -113,9 +113,9 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Return(v70)   (exit_acc=v70)
   block 14  start_pc=0
     v90  ImmData(48)                                      -> x0
-    v91  Load { addr=v90, disp=0, kind=V128 }             -> d0
+    v91  Load { addr=v90, disp=0, kind=V128, align=8 }    -> d0
     v92  ImmData(64)                                      -> x0
-    v93  Load { addr=v92, disp=0, kind=V128 }             -> d1
+    v93  Load { addr=v92, disp=0, kind=V128, align=8 }    -> d1
     v94  InlineAsm { template="movdqa %1, %%xmm7\n\tpaddd %2, %%xmm7\n\tmovdqa %%xmm7, %0", ops=3, args=[-, v91, v93] } -> d0
     v95  VecExtract { vec=v94, off=12, kind=I32, bytes=16 } -> x0
     v96  Extend { value=v95, kind=I32 }                   -> x1
@@ -144,9 +144,9 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Bz { cond=v110, target=b19, fall=b17 }   (exit_acc=v110)
   block 17  start_pc=0
     v114 ImmData(80)                                      -> x0
-    v115 Load { addr=v114, disp=0, kind=V128 }            -> d0
+    v115 Load { addr=v114, disp=0, kind=V128, align=8 }   -> d0
     v116 ImmData(96)                                      -> x0
-    v117 Load { addr=v116, disp=0, kind=V128 }            -> d1
+    v117 Load { addr=v116, disp=0, kind=V128, align=8 }   -> d1
     v118 InlineAsm { template="vpaddd %2, %1, %0", ops=3, args=[-, v115, v117] } -> d0
     v119 VecExtract { vec=v118, off=12, kind=I32, bytes=16 } -> x0
     v120 LifetimeEnd(0)                                   -> -
@@ -179,7 +179,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v140 ImmData(112)                                     -> x0
     v141 InlineAsm { template="vmovdqu %1, %%xmm0\n\tvmovdqu %%xmm0, %0", ops=2, args=[v139, v140] } -> -
     v142 ImmData(128)                                     -> x0
-    v143 Load { addr=v142, disp=0, kind=V128 }            -> d1
+    v143 Load { addr=v142, disp=0, kind=V128, align=8 }   -> d1
     v144 ImmData(144)                                     -> x0
     v145 InlineAsm { template="vpaddd %2, %1, %0", ops=3, args=[-, v143, v144] } -> d0
     v146 LocalAddr(-2)                                    -> x0
@@ -221,9 +221,9 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Bz { cond=v173, target=b25, fall=b23 }   (exit_acc=v173)
   block 23  start_pc=0
     v177 ImmData(160)                                     -> x0
-    v178 Load { addr=v177, disp=0, kind=V128 }            -> d0
+    v178 Load { addr=v177, disp=0, kind=V128, align=8 }   -> d0
     v179 ImmData(176)                                     -> x0
-    v180 Load { addr=v179, disp=0, kind=V128 }            -> d1
+    v180 Load { addr=v179, disp=0, kind=V128, align=8 }   -> d1
     v181 InlineAsm { template="vpmulld %2, %1, %0", ops=3, args=[-, v178, v180] } -> d0
     v182 InlineAsm { template="vpshufd $0x1b, %1, %0", ops=2, args=[-, v181] } -> d0
     v183 VecExtract { vec=v182, off=0, kind=I32, bytes=16 } -> x0
@@ -269,11 +269,11 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Bz { cond=v318, target=b29, fall=b27 }   (low word)   (exit_acc=v319)
   block 27  start_pc=0
     v209 ImmData(192)                                     -> x0
-    v210 Load { addr=v209, disp=0, kind=V128 }            -> d4
+    v210 Load { addr=v209, disp=0, kind=V128, align=8 }   -> d4
     v211 ImmData(208)                                     -> x0
-    v212 Load { addr=v211, disp=0, kind=V128 }            -> d5
+    v212 Load { addr=v211, disp=0, kind=V128, align=8 }   -> d5
     v213 ImmData(224)                                     -> x0
-    v214 Load { addr=v213, disp=0, kind=V128 }            -> d6
+    v214 Load { addr=v213, disp=0, kind=V128, align=8 }   -> d6
     v215 InlineAsm { template="cvtdq2ps %1, %%xmm0\n\tcvtdq2ps %2, %%xmm1\n\tcvtdq2ps %3, %%xmm2\n\tvfmadd231ps %%xmm0, %%xmm1, %%xmm2\n\tcvtps2dq %%xmm2, %0", ops=4, args=[-, v210, v212, v214] } -> d3
     v216 VecExtract { vec=v215, off=12, kind=I32, bytes=16 } -> x0
     v217 LifetimeEnd(0)                                   -> -
@@ -359,9 +359,9 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Bz { cond=v332, target=b37, fall=b35 }   (low word)   (exit_acc=v333)
   block 35  start_pc=0
     v267 ImmData(240)                                     -> x0
-    v268 Load { addr=v267, disp=0, kind=V128 }            -> d0
+    v268 Load { addr=v267, disp=0, kind=V128, align=8 }   -> d0
     v269 ImmData(256)                                     -> x0
-    v270 Load { addr=v269, disp=0, kind=V128 }            -> d1
+    v270 Load { addr=v269, disp=0, kind=V128, align=8 }   -> d1
     v271 InlineAsm { template="vpsllvd %2, %1, %0", ops=3, args=[-, v268, v270] } -> d0
     v272 VecExtract { vec=v271, off=12, kind=I32, bytes=16 } -> x0
     v273 LifetimeEnd(0)                                   -> -
@@ -405,9 +405,9 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Bz { cond=v339, target=b41, fall=b39 }   (low word)   (exit_acc=v340)
   block 39  start_pc=0
     v297 ImmData(272)                                     -> x0
-    v298 Load { addr=v297, disp=0, kind=V128 }            -> d0
+    v298 Load { addr=v297, disp=0, kind=V128, align=8 }   -> d0
     v299 ImmData(288)                                     -> x0
-    v300 Load { addr=v299, disp=0, kind=V128 }            -> d1
+    v300 Load { addr=v299, disp=0, kind=V128, align=8 }   -> d1
     v301 InlineAsm { template="vpblendd $0x8, %2, %1, %0", ops=3, args=[-, v298, v300] } -> d0
     v302 VecExtract { vec=v301, off=12, kind=I32, bytes=16 } -> x0
     v303 VecExtract { vec=v301, off=0, kind=I32, bytes=16 } -> x1

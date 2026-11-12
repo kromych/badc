@@ -17,103 +17,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x1b0
-               	sub	x1, x29, #0x80
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0x78
+               	sub	x0, x29, #0x80
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0x78
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0x68
+               	str	x16, [x2]
+               	sub	x2, x29, #0x68
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0x58
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x48
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0x58
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x38
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x48
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x38
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x70
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0x68]
-               	ldur	q0, [x29, #-0x58]
-               	ldur	q2, [x29, #-0x48]
-               	ldur	q3, [x29, #-0x38]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	saddl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp]
-               	saddl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	ssubl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x20]
-               	ssubl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	smull	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x40]
-               	smull2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	sabdl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x60]
-               	sabdl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0x70]
-               	saddw	v4.8h, v2.8h, v4.8b
-               	str	q4, [sp, #0x80]
-               	saddw2	v4.8h, v2.8h, v0.16b
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0x70]
-               	ssubw	v4.8h, v2.8h, v4.8b
-               	str	q4, [sp, #0xa0]
-               	ssubw2	v4.8h, v2.8h, v0.16b
-               	stur	q4, [x29, #-0x100]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlal	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xf0]
-               	mov	v4.16b, v3.16b
-               	smlal2	v4.8h, v1.16b, v0.16b
-               	stur	q4, [x29, #-0xe0]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlsl	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xd0]
-               	mov	v4.16b, v3.16b
-               	smlsl2	v4.8h, v1.16b, v0.16b
-               	stur	q4, [x29, #-0xc0]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	sabal	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xb0]
-               	mov	v16.16b, v3.16b
-               	sabal2	v16.8h, v1.16b, v0.16b
-               	mov	v0.16b, v16.16b
-               	stur	q0, [x29, #-0xa0]
-               	ldur	d0, [x29, #-0x70]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0x80]
+               	ldur	d2, [x29, #-0x78]
+               	ldur	q3, [x29, #-0x68]
+               	ldur	q1, [x29, #-0x58]
+               	ldur	q4, [x29, #-0x48]
+               	ldur	q5, [x29, #-0x38]
+               	saddl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp]
+               	saddl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x10]
+               	ssubl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x20]
+               	ssubl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x30]
+               	smull	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x40]
+               	smull2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x50]
+               	sabdl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x60]
+               	sabdl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x70]
+               	saddw	v6.8h, v4.8h, v0.8b
+               	str	q6, [sp, #0x80]
+               	saddw2	v6.8h, v4.8h, v1.16b
+               	str	q6, [sp, #0x90]
+               	ssubw	v6.8h, v4.8h, v0.8b
+               	str	q6, [sp, #0xa0]
+               	ssubw2	v6.8h, v4.8h, v1.16b
+               	stur	q6, [x29, #-0x100]
+               	mov	v6.16b, v5.16b
+               	smlal	v6.8h, v0.8b, v2.8b
+               	stur	q6, [x29, #-0xf0]
+               	mov	v6.16b, v5.16b
+               	smlal2	v6.8h, v3.16b, v1.16b
+               	stur	q6, [x29, #-0xe0]
+               	mov	v6.16b, v5.16b
+               	smlsl	v6.8h, v0.8b, v2.8b
+               	stur	q6, [x29, #-0xd0]
+               	mov	v6.16b, v5.16b
+               	smlsl2	v6.8h, v3.16b, v1.16b
+               	stur	q6, [x29, #-0xc0]
+               	mov	v16.16b, v5.16b
+               	sabal	v16.8h, v0.8b, v2.8b
+               	mov	v2.16b, v16.16b
+               	stur	q2, [x29, #-0xb0]
+               	mov	v16.16b, v5.16b
+               	sabal2	v16.8h, v3.16b, v1.16b
+               	mov	v1.16b, v16.16b
+               	stur	q1, [x29, #-0xa0]
                	sshll	v0.8h, v0.8b, #0x0
                	stur	q0, [x29, #-0x90]
                	mov	x1, #0x0                // =0
@@ -248,8 +225,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.lt	<addr>
-               	xtn	v0.8b, v2.8h
-               	sqxtn	v1.8b, v2.8h
+               	xtn	v0.8b, v4.8h
+               	sqxtn	v1.8b, v4.8h
                	sub	x3, x29, #0x30
                	stur	d0, [x29, #-0x30]
                	sub	x4, x29, #0x8
@@ -277,7 +254,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
-               	sqxtun	v0.8b, v2.8h
+               	sqxtun	v0.8b, v4.8h
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
@@ -321,103 +298,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x1b0
-               	sub	x1, x29, #0x80
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0x78
+               	sub	x0, x29, #0x80
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0x78
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0x68
+               	str	x16, [x2]
+               	sub	x2, x29, #0x68
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0x58
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x48
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0x58
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x38
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x48
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x38
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x70
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0x68]
-               	ldur	q0, [x29, #-0x58]
-               	ldur	q2, [x29, #-0x48]
-               	ldur	q3, [x29, #-0x38]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	uaddl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp]
-               	uaddl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	usubl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x20]
-               	usubl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	umull	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x40]
-               	umull2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	uabdl	v4.8h, v4.8b, v5.8b
-               	str	q4, [sp, #0x60]
-               	uabdl2	v4.8h, v1.16b, v0.16b
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0x70]
-               	uaddw	v4.8h, v2.8h, v4.8b
-               	str	q4, [sp, #0x80]
-               	uaddw2	v4.8h, v2.8h, v0.16b
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0x70]
-               	usubw	v4.8h, v2.8h, v4.8b
-               	str	q4, [sp, #0xa0]
-               	usubw2	v4.8h, v2.8h, v0.16b
-               	stur	q4, [x29, #-0x100]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlal	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xf0]
-               	mov	v4.16b, v3.16b
-               	umlal2	v4.8h, v1.16b, v0.16b
-               	stur	q4, [x29, #-0xe0]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlsl	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xd0]
-               	mov	v4.16b, v3.16b
-               	umlsl2	v4.8h, v1.16b, v0.16b
-               	stur	q4, [x29, #-0xc0]
-               	ldur	d4, [x29, #-0x70]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	uabal	v16.8h, v4.8b, v5.8b
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xb0]
-               	mov	v16.16b, v3.16b
-               	uabal2	v16.8h, v1.16b, v0.16b
-               	mov	v0.16b, v16.16b
-               	stur	q0, [x29, #-0xa0]
-               	ldur	d0, [x29, #-0x70]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0x80]
+               	ldur	d2, [x29, #-0x78]
+               	ldur	q3, [x29, #-0x68]
+               	ldur	q1, [x29, #-0x58]
+               	ldur	q4, [x29, #-0x48]
+               	ldur	q5, [x29, #-0x38]
+               	uaddl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp]
+               	uaddl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x10]
+               	usubl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x20]
+               	usubl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x30]
+               	umull	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x40]
+               	umull2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x50]
+               	uabdl	v6.8h, v0.8b, v2.8b
+               	str	q6, [sp, #0x60]
+               	uabdl2	v6.8h, v3.16b, v1.16b
+               	str	q6, [sp, #0x70]
+               	uaddw	v6.8h, v4.8h, v0.8b
+               	str	q6, [sp, #0x80]
+               	uaddw2	v6.8h, v4.8h, v1.16b
+               	str	q6, [sp, #0x90]
+               	usubw	v6.8h, v4.8h, v0.8b
+               	str	q6, [sp, #0xa0]
+               	usubw2	v6.8h, v4.8h, v1.16b
+               	stur	q6, [x29, #-0x100]
+               	mov	v6.16b, v5.16b
+               	umlal	v6.8h, v0.8b, v2.8b
+               	stur	q6, [x29, #-0xf0]
+               	mov	v6.16b, v5.16b
+               	umlal2	v6.8h, v3.16b, v1.16b
+               	stur	q6, [x29, #-0xe0]
+               	mov	v6.16b, v5.16b
+               	umlsl	v6.8h, v0.8b, v2.8b
+               	stur	q6, [x29, #-0xd0]
+               	mov	v6.16b, v5.16b
+               	umlsl2	v6.8h, v3.16b, v1.16b
+               	stur	q6, [x29, #-0xc0]
+               	mov	v16.16b, v5.16b
+               	uabal	v16.8h, v0.8b, v2.8b
+               	mov	v2.16b, v16.16b
+               	stur	q2, [x29, #-0xb0]
+               	mov	v16.16b, v5.16b
+               	uabal2	v16.8h, v3.16b, v1.16b
+               	mov	v1.16b, v16.16b
+               	stur	q1, [x29, #-0xa0]
                	ushll	v0.8h, v0.8b, #0x0
                	stur	q0, [x29, #-0x90]
                	mov	x1, #0x0                // =0
@@ -525,8 +479,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x8
                	b.lt	<addr>
-               	xtn	v0.8b, v2.8h
-               	uqxtn	v1.8b, v2.8h
+               	xtn	v0.8b, v4.8h
+               	uqxtn	v1.8b, v4.8h
                	sub	x2, x29, #0x30
                	stur	d0, [x29, #-0x30]
                	sub	x3, x29, #0x8
@@ -564,103 +518,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x1e0
-               	sub	x1, x29, #0xa8
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0xa0
+               	sub	x0, x29, #0xa8
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0xa0
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0x90
+               	str	x16, [x2]
+               	sub	x2, x29, #0x90
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0x80
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x70
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0x80
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x60
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x70
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x60
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x98
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0x90]
-               	ldur	q0, [x29, #-0x80]
-               	ldur	q2, [x29, #-0x70]
-               	ldur	q3, [x29, #-0x60]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	saddl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp]
-               	saddl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	ssubl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x20]
-               	ssubl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	smull	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x40]
-               	smull2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	sabdl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x60]
-               	sabdl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0x98]
-               	saddw	v4.4s, v2.4s, v4.4h
-               	str	q4, [sp, #0x80]
-               	saddw2	v4.4s, v2.4s, v0.8h
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0x98]
-               	ssubw	v4.4s, v2.4s, v4.4h
-               	str	q4, [sp, #0xa0]
-               	ssubw2	v4.4s, v2.4s, v0.8h
-               	str	q4, [sp, #0xb0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlal	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xc0]
-               	mov	v4.16b, v3.16b
-               	smlal2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0xd0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlsl	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0x100]
-               	mov	v4.16b, v3.16b
-               	smlsl2	v4.4s, v1.8h, v0.8h
-               	stur	q4, [x29, #-0xf0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	sabal	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xe0]
-               	mov	v16.16b, v3.16b
-               	sabal2	v16.4s, v1.8h, v0.8h
-               	mov	v0.16b, v16.16b
-               	stur	q0, [x29, #-0xd0]
-               	ldur	d0, [x29, #-0x98]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0xa8]
+               	ldur	d2, [x29, #-0xa0]
+               	ldur	q3, [x29, #-0x90]
+               	ldur	q1, [x29, #-0x80]
+               	ldur	q4, [x29, #-0x70]
+               	ldur	q5, [x29, #-0x60]
+               	saddl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp]
+               	saddl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x10]
+               	ssubl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x20]
+               	ssubl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x30]
+               	smull	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x40]
+               	smull2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x50]
+               	sabdl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x60]
+               	sabdl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x70]
+               	saddw	v6.4s, v4.4s, v0.4h
+               	str	q6, [sp, #0x80]
+               	saddw2	v6.4s, v4.4s, v1.8h
+               	str	q6, [sp, #0x90]
+               	ssubw	v6.4s, v4.4s, v0.4h
+               	str	q6, [sp, #0xa0]
+               	ssubw2	v6.4s, v4.4s, v1.8h
+               	str	q6, [sp, #0xb0]
+               	mov	v6.16b, v5.16b
+               	smlal	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0xc0]
+               	mov	v6.16b, v5.16b
+               	smlal2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0xd0]
+               	mov	v6.16b, v5.16b
+               	smlsl	v6.4s, v0.4h, v2.4h
+               	stur	q6, [x29, #-0x100]
+               	mov	v6.16b, v5.16b
+               	smlsl2	v6.4s, v3.8h, v1.8h
+               	stur	q6, [x29, #-0xf0]
+               	mov	v16.16b, v5.16b
+               	sabal	v16.4s, v0.4h, v2.4h
+               	mov	v2.16b, v16.16b
+               	stur	q2, [x29, #-0xe0]
+               	mov	v16.16b, v5.16b
+               	sabal2	v16.4s, v3.8h, v1.8h
+               	mov	v1.16b, v16.16b
+               	stur	q1, [x29, #-0xd0]
                	sshll	v0.4s, v0.4h, #0x0
                	stur	q0, [x29, #-0xc0]
                	mov	x1, #0x0                // =0
@@ -766,8 +697,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.lt	<addr>
-               	xtn	v0.4h, v2.4s
-               	sqxtn	v1.4h, v2.4s
+               	xtn	v0.4h, v4.4s
+               	sqxtn	v1.4h, v4.4s
                	sub	x3, x29, #0x58
                	stur	d0, [x29, #-0x58]
                	sub	x4, x29, #0x8
@@ -795,7 +726,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	sqxtun	v0.4h, v2.4s
+               	sqxtun	v0.4h, v4.4s
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
@@ -840,103 +771,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x1e0
-               	sub	x1, x29, #0xa8
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0xa0
+               	sub	x0, x29, #0xa8
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0xa0
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0x90
+               	str	x16, [x2]
+               	sub	x2, x29, #0x90
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0x80
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x70
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0x80
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0x60
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x70
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0x60
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x98
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0x90]
-               	ldur	q0, [x29, #-0x80]
-               	ldur	q2, [x29, #-0x70]
-               	ldur	q3, [x29, #-0x60]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	uaddl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp]
-               	uaddl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	usubl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x20]
-               	usubl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	umull	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x40]
-               	umull2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	uabdl	v4.4s, v4.4h, v5.4h
-               	str	q4, [sp, #0x60]
-               	uabdl2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0x98]
-               	uaddw	v4.4s, v2.4s, v4.4h
-               	str	q4, [sp, #0x80]
-               	uaddw2	v4.4s, v2.4s, v0.8h
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0x98]
-               	usubw	v4.4s, v2.4s, v4.4h
-               	str	q4, [sp, #0xa0]
-               	usubw2	v4.4s, v2.4s, v0.8h
-               	str	q4, [sp, #0xb0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlal	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xc0]
-               	mov	v4.16b, v3.16b
-               	umlal2	v4.4s, v1.8h, v0.8h
-               	str	q4, [sp, #0xd0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlsl	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0x100]
-               	mov	v4.16b, v3.16b
-               	umlsl2	v4.4s, v1.8h, v0.8h
-               	stur	q4, [x29, #-0xf0]
-               	ldur	d4, [x29, #-0x98]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	uabal	v16.4s, v4.4h, v5.4h
-               	mov	v4.16b, v16.16b
-               	stur	q4, [x29, #-0xe0]
-               	mov	v16.16b, v3.16b
-               	uabal2	v16.4s, v1.8h, v0.8h
-               	mov	v0.16b, v16.16b
-               	stur	q0, [x29, #-0xd0]
-               	ldur	d0, [x29, #-0x98]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0xa8]
+               	ldur	d2, [x29, #-0xa0]
+               	ldur	q3, [x29, #-0x90]
+               	ldur	q1, [x29, #-0x80]
+               	ldur	q4, [x29, #-0x70]
+               	ldur	q5, [x29, #-0x60]
+               	uaddl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp]
+               	uaddl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x10]
+               	usubl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x20]
+               	usubl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x30]
+               	umull	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x40]
+               	umull2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x50]
+               	uabdl	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0x60]
+               	uabdl2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0x70]
+               	uaddw	v6.4s, v4.4s, v0.4h
+               	str	q6, [sp, #0x80]
+               	uaddw2	v6.4s, v4.4s, v1.8h
+               	str	q6, [sp, #0x90]
+               	usubw	v6.4s, v4.4s, v0.4h
+               	str	q6, [sp, #0xa0]
+               	usubw2	v6.4s, v4.4s, v1.8h
+               	str	q6, [sp, #0xb0]
+               	mov	v6.16b, v5.16b
+               	umlal	v6.4s, v0.4h, v2.4h
+               	str	q6, [sp, #0xc0]
+               	mov	v6.16b, v5.16b
+               	umlal2	v6.4s, v3.8h, v1.8h
+               	str	q6, [sp, #0xd0]
+               	mov	v6.16b, v5.16b
+               	umlsl	v6.4s, v0.4h, v2.4h
+               	stur	q6, [x29, #-0x100]
+               	mov	v6.16b, v5.16b
+               	umlsl2	v6.4s, v3.8h, v1.8h
+               	stur	q6, [x29, #-0xf0]
+               	mov	v16.16b, v5.16b
+               	uabal	v16.4s, v0.4h, v2.4h
+               	mov	v2.16b, v16.16b
+               	stur	q2, [x29, #-0xe0]
+               	mov	v16.16b, v5.16b
+               	uabal2	v16.4s, v3.8h, v1.8h
+               	mov	v1.16b, v16.16b
+               	stur	q1, [x29, #-0xd0]
                	ushll	v0.4s, v0.4h, #0x0
                	stur	q0, [x29, #-0xc0]
                	mov	x1, #0x0                // =0
@@ -1042,8 +950,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x4
                	b.lt	<addr>
-               	xtn	v0.4h, v2.4s
-               	uqxtn	v1.4h, v2.4s
+               	xtn	v0.4h, v4.4s
+               	uqxtn	v1.4h, v4.4s
                	sub	x2, x29, #0x58
                	stur	d0, [x29, #-0x58]
                	sub	x3, x29, #0x8
@@ -1082,103 +990,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x220
-               	sub	x1, x29, #0xf0
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0xe8
+               	sub	x0, x29, #0xf0
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0xe8
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0xd8
+               	str	x16, [x2]
+               	sub	x2, x29, #0xd8
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0xc8
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0xb8
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0xc8
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0xa8
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0xb8
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0xa8
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0xe0
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0xd8]
-               	ldur	q0, [x29, #-0xc8]
-               	ldur	q2, [x29, #-0xb8]
-               	ldur	q3, [x29, #-0xa8]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	saddl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp]
-               	saddl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	ssubl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x20]
-               	ssubl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	smull	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x40]
-               	smull2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	sabdl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x60]
-               	sabdl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0xe0]
-               	saddw	v4.2d, v2.2d, v4.2s
-               	str	q4, [sp, #0x80]
-               	saddw2	v4.2d, v2.2d, v0.4s
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0xe0]
-               	ssubw	v4.2d, v2.2d, v4.2s
-               	str	q4, [sp, #0xa0]
-               	ssubw2	v4.2d, v2.2d, v0.4s
-               	str	q4, [sp, #0xb0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlal	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xc0]
-               	mov	v4.16b, v3.16b
-               	smlal2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0xd0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	smlsl	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xe0]
-               	mov	v4.16b, v3.16b
-               	smlsl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0xf0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	sabal	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0x100]
-               	mov	v16.16b, v3.16b
-               	sabal2	v16.2d, v1.4s, v0.4s
-               	mov	v0.16b, v16.16b
-               	str	q0, [sp, #0x110]
-               	ldur	d0, [x29, #-0xe0]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0xf0]
+               	ldur	d2, [x29, #-0xe8]
+               	ldur	q3, [x29, #-0xd8]
+               	ldur	q1, [x29, #-0xc8]
+               	ldur	q4, [x29, #-0xb8]
+               	ldur	q5, [x29, #-0xa8]
+               	saddl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp]
+               	saddl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x10]
+               	ssubl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x20]
+               	ssubl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x30]
+               	smull	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x40]
+               	smull2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x50]
+               	sabdl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x60]
+               	sabdl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x70]
+               	saddw	v6.2d, v4.2d, v0.2s
+               	str	q6, [sp, #0x80]
+               	saddw2	v6.2d, v4.2d, v1.4s
+               	str	q6, [sp, #0x90]
+               	ssubw	v6.2d, v4.2d, v0.2s
+               	str	q6, [sp, #0xa0]
+               	ssubw2	v6.2d, v4.2d, v1.4s
+               	str	q6, [sp, #0xb0]
+               	mov	v6.16b, v5.16b
+               	smlal	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0xc0]
+               	mov	v6.16b, v5.16b
+               	smlal2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0xd0]
+               	mov	v6.16b, v5.16b
+               	smlsl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0xe0]
+               	mov	v6.16b, v5.16b
+               	smlsl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0xf0]
+               	mov	v16.16b, v5.16b
+               	sabal	v16.2d, v0.2s, v2.2s
+               	mov	v2.16b, v16.16b
+               	str	q2, [sp, #0x100]
+               	mov	v16.16b, v5.16b
+               	sabal2	v16.2d, v3.4s, v1.4s
+               	mov	v1.16b, v16.16b
+               	str	q1, [sp, #0x110]
                	sshll	v0.2d, v0.2s, #0x0
                	stur	q0, [x29, #-0x100]
                	mov	x1, #0x0                // =0
@@ -1288,8 +1173,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
-               	xtn	v0.2s, v2.2d
-               	sqxtn	v1.2s, v2.2d
+               	xtn	v0.2s, v4.2d
+               	sqxtn	v1.2s, v4.2d
                	sub	x3, x29, #0xa0
                	stur	d0, [x29, #-0xa0]
                	sub	x4, x29, #0x8
@@ -1316,7 +1201,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	sqxtun	v0.2s, v2.2d
+               	sqxtun	v0.2s, v4.2d
                	sub	x3, x29, #0x8
                	stur	d0, [x29, #-0x8]
                	mov	x2, #0x0                // =0
@@ -1361,103 +1246,80 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x220
-               	sub	x1, x29, #0xf0
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	sub	x3, x29, #0xe8
+               	sub	x0, x29, #0xf0
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x2, x29, #0xe8
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x3]
-               	sub	x4, x29, #0xd8
+               	str	x16, [x2]
+               	sub	x2, x29, #0xd8
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0xc8
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0xb8
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x4]
-               	sub	x2, x29, #0xc8
+               	stp	x16, x17, [x1]
+               	sub	x1, x29, #0xa8
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0xb8
-               	adrp	x4, <addr>
-               	add	x4, x4, <lo12>
-               	ldp	x16, x17, [x4]
-               	stp	x16, x17, [x2]
-               	sub	x2, x29, #0xa8
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	sub	x0, x29, #0xe0
-               	ldr	x16, [x1]
-               	str	x16, [x0]
-               	sub	x0, x29, #0x8
-               	ldr	x16, [x3]
-               	str	x16, [x0]
-               	ldur	q1, [x29, #-0xd8]
-               	ldur	q0, [x29, #-0xc8]
-               	ldur	q2, [x29, #-0xb8]
-               	ldur	q3, [x29, #-0xa8]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	uaddl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp]
-               	uaddl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x10]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	usubl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x20]
-               	usubl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x30]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	umull	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x40]
-               	umull2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x50]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	uabdl	v4.2d, v4.2s, v5.2s
-               	str	q4, [sp, #0x60]
-               	uabdl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0x70]
-               	ldur	d4, [x29, #-0xe0]
-               	uaddw	v4.2d, v2.2d, v4.2s
-               	str	q4, [sp, #0x80]
-               	uaddw2	v4.2d, v2.2d, v0.4s
-               	str	q4, [sp, #0x90]
-               	ldur	d4, [x29, #-0xe0]
-               	usubw	v4.2d, v2.2d, v4.2s
-               	str	q4, [sp, #0xa0]
-               	usubw2	v4.2d, v2.2d, v0.4s
-               	str	q4, [sp, #0xb0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlal	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xc0]
-               	mov	v4.16b, v3.16b
-               	umlal2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0xd0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	umlsl	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0xe0]
-               	mov	v4.16b, v3.16b
-               	umlsl2	v4.2d, v1.4s, v0.4s
-               	str	q4, [sp, #0xf0]
-               	ldur	d4, [x29, #-0xe0]
-               	ldur	d5, [x29, #-0x8]
-               	mov	v16.16b, v3.16b
-               	uabal	v16.2d, v4.2s, v5.2s
-               	mov	v4.16b, v16.16b
-               	str	q4, [sp, #0x100]
-               	mov	v16.16b, v3.16b
-               	uabal2	v16.2d, v1.4s, v0.4s
-               	mov	v0.16b, v16.16b
-               	str	q0, [sp, #0x110]
-               	ldur	d0, [x29, #-0xe0]
+               	stp	x16, x17, [x1]
+               	ldur	d0, [x29, #-0xf0]
+               	ldur	d2, [x29, #-0xe8]
+               	ldur	q3, [x29, #-0xd8]
+               	ldur	q1, [x29, #-0xc8]
+               	ldur	q4, [x29, #-0xb8]
+               	ldur	q5, [x29, #-0xa8]
+               	uaddl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp]
+               	uaddl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x10]
+               	usubl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x20]
+               	usubl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x30]
+               	umull	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x40]
+               	umull2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x50]
+               	uabdl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0x60]
+               	uabdl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0x70]
+               	uaddw	v6.2d, v4.2d, v0.2s
+               	str	q6, [sp, #0x80]
+               	uaddw2	v6.2d, v4.2d, v1.4s
+               	str	q6, [sp, #0x90]
+               	usubw	v6.2d, v4.2d, v0.2s
+               	str	q6, [sp, #0xa0]
+               	usubw2	v6.2d, v4.2d, v1.4s
+               	str	q6, [sp, #0xb0]
+               	mov	v6.16b, v5.16b
+               	umlal	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0xc0]
+               	mov	v6.16b, v5.16b
+               	umlal2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0xd0]
+               	mov	v6.16b, v5.16b
+               	umlsl	v6.2d, v0.2s, v2.2s
+               	str	q6, [sp, #0xe0]
+               	mov	v6.16b, v5.16b
+               	umlsl2	v6.2d, v3.4s, v1.4s
+               	str	q6, [sp, #0xf0]
+               	mov	v16.16b, v5.16b
+               	uabal	v16.2d, v0.2s, v2.2s
+               	mov	v2.16b, v16.16b
+               	str	q2, [sp, #0x100]
+               	mov	v16.16b, v5.16b
+               	uabal2	v16.2d, v3.4s, v1.4s
+               	mov	v1.16b, v16.16b
+               	str	q1, [sp, #0x110]
                	ushll	v0.2d, v0.2s, #0x0
                	stur	q0, [x29, #-0x100]
                	mov	x1, #0x0                // =0
@@ -1567,8 +1429,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x2
                	b.lt	<addr>
-               	xtn	v0.2s, v2.2d
-               	uqxtn	v1.2s, v2.2d
+               	xtn	v0.2s, v4.2d
+               	uqxtn	v1.2s, v4.2d
                	sub	x2, x29, #0xa0
                	stur	d0, [x29, #-0xa0]
                	sub	x3, x29, #0x8

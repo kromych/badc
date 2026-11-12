@@ -1145,11 +1145,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v568 Imm(0)                                           -> x1
     v569 Imm(0)                                           -> x1
     v570 ImmData(8)                                       -> x1
-    v571 Load { addr=v570, disp=0, kind=V128 }            -> d0
+    v571 Load { addr=v570, disp=0, kind=V128, align=8 }   -> d0
     v572 Imm(0)                                           -> x1
     v573 Imm(0)                                           -> x1
     v574 ImmData(24)                                      -> x1
-    v575 Load { addr=v574, disp=0, kind=V128 }            -> d1
+    v575 Load { addr=v574, disp=0, kind=V128, align=8 }   -> d1
     v576 Imm(0)                                           -> x1
     v577 Imm(0)                                           -> x1
     v578 Imm(0)                                           -> x1

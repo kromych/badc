@@ -1310,7 +1310,14 @@ pub(super) fn emit_load(
         let Some(qd) = fp_or_spill_dst(dst, frame) else {
             return fail("Load V128: dst not fp reg / spill");
         };
-        emit_mem(code, LDR_Q, qd, rn, disp, t);
+        match bound {
+            Some(a) => {
+                let (base, off) = bound_base(code, rn, disp, 16, 16, a, t);
+                let tmp = scratch_other(scratch, base);
+                emit_agg_load_fp(code, qd, base, off, 16, a, true, tmp);
+            }
+            None => emit_mem(code, LDR_Q, qd, rn, disp, t),
+        }
         propagate_v128(code, frame, dst, qd, scratch.primary);
         return Ok(());
     }
@@ -1909,7 +1916,15 @@ pub(super) fn emit_store(
         ) else {
             return fail("Store V128: value not fp reg / spill / int reg");
         };
-        emit_mem(code, STR_Q, qn, rn, disp, scratch_other(scratch, rn));
+        let t = scratch_other(scratch, rn);
+        match bound {
+            Some(a) => {
+                let (base, off) = bound_base(code, rn, disp, 16, 16, a, t);
+                let tmp = scratch_other(scratch, base);
+                emit_agg_store_fp(code, qn, base, off, 16, a, true, tmp);
+            }
+            None => emit_mem(code, STR_Q, qn, rn, disp, t),
+        }
         propagate_v128(code, frame, dst, qn, scratch.secondary);
         return Ok(());
     }

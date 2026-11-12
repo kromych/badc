@@ -19899,11 +19899,11 @@ fn ent_pc=1368 n_params=0 variadic=false locals=10
   block 15  start_pc=0
     v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
-    v126 Load { addr=v75, disp=0, kind=V256 }             -> d0
+    v126 Load { addr=v75, disp=0, kind=V256, align=1 }    -> d0
     v127 Imm(0)                                           -> x0
     v128 Imm(0)                                           -> x0
     v129 Imm(0)                                           -> x0
-    v130 Load { addr=v82, disp=0, kind=V256 }             -> d1
+    v130 Load { addr=v82, disp=0, kind=V256, align=1 }    -> d1
     v131 Imm(0)                                           -> x0
     v132 Extend { value=v66, kind=I32 }                   -> x0
     v133 Imm(0)                                           -> x0
@@ -23265,7 +23265,7 @@ fn ent_pc=1369 n_params=0 variadic=false locals=49
     v1607 Extend { value=v1605, kind=I32 }                 -> x0
     v1608 Imm(0)                                           -> x0
     v1609 ImmData(8)                                       -> x0
-    v1610 Load { addr=v1609, disp=0, kind=V256 }           -> [spill 0]
+    v1610 Load { addr=v1609, disp=0, kind=V256, align=8 }  -> [spill 0]
     v1611 Imm(0)                                           -> x0
     v1612 LocalAddr(-33)                                   -> x0
     v1613 ImmData(40)                                      -> x1
@@ -23819,7 +23819,7 @@ fn ent_pc=1369 n_params=0 variadic=false locals=49
     v2153 Extend { value=v2151, kind=I32 }                 -> x0
     v2154 Imm(0)                                           -> x0
     v2155 ImmData(136)                                     -> x0
-    v2156 Load { addr=v2155, disp=0, kind=V256 }           -> [spill 0]
+    v2156 Load { addr=v2155, disp=0, kind=V256, align=8 }  -> [spill 0]
     v2157 Imm(0)                                           -> x0
     v2158 LocalAddr(-21)                                   -> x0
     v2159 ImmData(168)                                     -> x1
@@ -24241,11 +24241,11 @@ fn ent_pc=1369 n_params=0 variadic=false locals=49
     v2567 Extend { value=v2565, kind=I32 }                 -> x0
     v2568 Imm(0)                                           -> x0
     v2569 ImmData(264)                                     -> x0
-    v2570 Load { addr=v2569, disp=0, kind=V256 }           -> d2
+    v2570 Load { addr=v2569, disp=0, kind=V256, align=8 }  -> d2
     v2571 Imm(0)                                           -> x0
     v2572 Imm(0)                                           -> x0
     v2573 ImmData(296)                                     -> x0
-    v2574 Load { addr=v2573, disp=0, kind=V256 }           -> d3
+    v2574 Load { addr=v2573, disp=0, kind=V256, align=8 }  -> d3
     v2575 Imm(0)                                           -> x0
     v2576 Imm(0)                                           -> x0
     v2577 Imm(0)                                           -> x0

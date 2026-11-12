@@ -48,10 +48,13 @@ enum Edit {
         at: ValueId,
         off: i64,
     },
+    /// A whole copy; `align` is the copy's, which the access to the side
+    /// in memory keeps (zero when it is the vector's own).
     Copy {
         at: ValueId,
         src: Side,
         dst: Side,
+        align: u8,
     },
     Zero {
         at: ValueId,
@@ -468,8 +471,7 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
                 .or_else(|| derived.get(&a).copied())
         };
         match inst {
-            // The copy's alignment bounds nothing: the vector moves are the
-            // unaligned forms.
+            // The copy's alignment carries to the access that replaces it.
             Inst::Mcpy { dst, src, size, .. } => {
                 let ok = *size == bytes && !used[v];
                 check(*dst, ok, &mut reject);
@@ -717,13 +719,20 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     kind,
                 });
             }
-            Inst::Mcpy { dst, src, .. } => {
+            Inst::Mcpy {
+                dst, src, align, ..
+            } => {
                 let (d, s) = (slot_of(*dst), slot_of(*src));
                 if d.is_some() || s.is_some() {
                     edits.push(Edit::Copy {
                         at,
                         src: side(s, *src),
                         dst: side(d, *dst),
+                        align: if *align >= w.cells as u32 * 8 {
+                            0
+                        } else {
+                            *align as u8
+                        },
                     });
                 }
             }
@@ -767,7 +776,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     copy_of: None,
                 });
             }
-            Edit::Copy { at, src, .. } => put(
+            Edit::Copy { at, src, align, .. } => put(
                 *at,
                 match *src {
                     Side::Slot(off) => slot_load(off, w),
@@ -776,7 +785,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                         disp: 0,
                         kind: w.load,
                         volatile: false,
-                        align: 0,
+                        align: *align,
                         pc_rel: false,
                     },
                 },
@@ -841,7 +850,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     func.insts[n] = slot_store(*off, value, w);
                 }
             }
-            Edit::Copy { at, dst, .. } => {
+            Edit::Copy { at, dst, align, .. } => {
                 let load = take();
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = match *dst {
@@ -852,7 +861,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                         value: load,
                         kind: w.store,
                         volatile: false,
-                        align: 0,
+                        align: *align,
                         pc_rel: false,
                     },
                 };
@@ -1039,11 +1048,8 @@ fn cell_slots(func: &FunctionSsa) -> (BTreeSet<i64>, BTreeSet<ValueId>) {
                     .all(|(i, &x)| x != a || simd8_output(asm, i))
         }
         Inst::Mcpy {
-            dst,
-            src,
-            size: 8,
-            align,
-        } => *align >= 8 && (*dst == a) != (*src == a) && unread(u),
+            dst, src, size: 8, ..
+        } => (*dst == a) != (*src == a) && unread(u),
         Inst::Mzero { dst, size: 8, .. } => *dst == a && unread(u),
         inst => match (slot_read(func, inst), slot_write(func, inst)) {
             (Some((_, kind)), _) => matches!(kind, LoadKind::I64 | LoadKind::F64),

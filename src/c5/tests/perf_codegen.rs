@@ -3120,6 +3120,71 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
     m.finish();
 }
 
+/// A `memcpy` between an 8-byte vector and bytes of any alignment is one
+/// transfer, as a 16-byte one is: `ldr d0, [x0]` or `str d0, [x0]` and
+/// `ret`, and on x86-64 a `movq` and `ret`, from a frame round trip.
+#[test]
+fn an_8_byte_vector_copied_from_bytes_is_one_transfer() {
+    const SRC: &str = "typedef unsigned char u8x8 __attribute__((vector_size(8)));\n\
+u8x8 ld(const unsigned char *p) { u8x8 r; __builtin_memcpy(&r, p, 8); return r; }\n\
+void st(unsigned char *p, u8x8 v) { __builtin_memcpy(p, &v, 8); }\n";
+    let mut m = Misses::default();
+    for (name, want) in [("ld", 0xFD40_0000u32), ("st", 0xFD00_0000)] {
+        let words = a64(SRC, name);
+        m.expect(words == [want, 0xD65F_03C0], || {
+            format!("aarch64 {name}: {words:08x?}")
+        });
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == 2, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// Under `-mstrict-align` a vector copied from or to bytes moves in the
+/// pieces their alignment allows, `ldrb` and `strb` with no `ldr q` or
+/// `str q`; a vector at its own alignment is one `ldr q`.
+#[test]
+fn strict_align_splits_a_vector_copy_to_its_alignment() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+u8x16 ld(const unsigned char *p) { u8x16 r; __builtin_memcpy(&r, p, 16); return r; }\n\
+void st(unsigned char *p, u8x16 v) { __builtin_memcpy(p, &v, 16); }\n\
+u8x16 ldv(const u8x16 *p) { return *p; }\n";
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_options(
+        SRC.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        strict_align: true,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&program, target, opts).expect("emit");
+    let has = |name: &str, want: u32| {
+        function_words(&obj, name)
+            .iter()
+            .any(|w| w & 0xFFC0_0000 == want)
+    };
+    let (ldr_q, str_q, ldrb, strb) = (0x3DC0_0000, 0x3D80_0000, 0x3940_0000, 0x3900_0000);
+    let mut m = Misses::default();
+    m.expect(has("ld", ldrb) && !has("ld", ldr_q), || {
+        format!("ld: {:08x?}", function_words(&obj, "ld"))
+    });
+    m.expect(has("st", strb) && !has("st", str_q), || {
+        format!("st: {:08x?}", function_words(&obj, "st"))
+    });
+    m.expect(has("ldv", ldr_q) && !has("ldv", ldrb), || {
+        format!("ldv: {:08x?}", function_words(&obj, "ldv"))
+    });
+    m.finish();
+}
+
 /// GNU vector arithmetic on 32-byte vectors is one ymm instruction per
 /// operator on x86-64, whose x86-64-v3 baseline has AVX2, with the value in
 /// a ymm register: `*r = *a + *b` is gcc 16's two loads, `vpaddd`, the

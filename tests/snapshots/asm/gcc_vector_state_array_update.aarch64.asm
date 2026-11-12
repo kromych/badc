@@ -1219,20 +1219,20 @@ Disassembly of section .text:
                	mov	x2, #0x8                // =8
                	mov	x0, x20
                	bl	<addr>
-               	mov	x2, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	lsl	x1, x2, #4
+               	lsl	x1, x5, #4
+               	add	x2, x21, x1
                	add	x3, x1, x0
                	ldrb	w3, [x20, x3]
-               	add	x1, x21, x1
-               	ldrb	w1, [x1, x0]
-               	cmp	w3, w1
+               	ldrb	w4, [x2, x0]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0x5
+               	add	x5, x5, #0x1
+               	cmp	w5, #0x5
                	b.lt	<addr>
                	mov	x22, #0x0               // =0
                	mov	x0, #0x0                // =0
@@ -1626,21 +1626,21 @@ Disassembly of section .text:
                	sub	x1, x29, #0xd8
                	mov	x0, x20
                	bl	<addr>
-               	mov	x2, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	mov	x0, #0x0                // =0
+               	lsl	x1, x5, #4
+               	add	x2, x20, x1
                	sub	x3, x29, #0x128
-               	lsl	x1, x2, #4
                	add	x4, x1, x0
                	ldrb	w3, [x3, x4]
-               	add	x1, x20, x1
-               	ldrb	w1, [x1, x0]
-               	cmp	w3, w1
+               	ldrb	w4, [x2, x0]
+               	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0x5
+               	add	x5, x5, #0x1
+               	cmp	w5, #0x5
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x22, x23, [sp, #0x10]

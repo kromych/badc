@@ -36,10 +36,10 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x0                // =0
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x1, x2, #0x4
-               	add	x1, x1, x0, lsl #3
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	add	x2, x1, #0x4
+               	add	x1, x2, x0, lsl #3
                	ldrsw	x3, [x1]
                	cmp	w3, #0x7
                	b.ne	<addr>

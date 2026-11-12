@@ -97,15 +97,15 @@ Disassembly of section .text:
 
 <carried>:
                	xorl	%eax, %eax
-               	movq	%rax, %r8
-               	cmpq	%rdi, %r8
+               	shlxq	%rdx, %rsi, %rsi
+               	movq	%rax, %rdx
+               	cmpq	%rdi, %rdx
                	jge	<addr>
-               	leaq	(%rax,%rcx), %r8
-               	shlxq	%rdx, %rsi, %r9
-               	addq	%r9, %rax
-               	cmpq	%rdi, %r8
+               	leaq	(%rax,%rcx), %rdx
+               	addq	%rsi, %rax
+               	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movq	%r8, %rax
+               	movq	%rdx, %rax
                	retq
 
 <rotr>:

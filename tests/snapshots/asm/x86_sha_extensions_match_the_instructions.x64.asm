@@ -48,12 +48,11 @@ Disassembly of section .text:
                	vpextrd	$0x2, %xmm0, %eax
                	vpextrd	$0x1, %xmm0, %edx
                	vmovd	%xmm0, %ecx
+               	andq	$0x3, %rdi
                	movq	%rsi, %r12
-               	movq	%rdi, %r8
-               	andq	$0x3, %r8
-               	cmpl	$0x2, %r8d
+               	cmpl	$0x2, %edi
                	jl	<addr>
-               	cmpl	$0x2, %r8d
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movq	%rax, %r8
                	xorq	%rdx, %r8
@@ -68,7 +67,7 @@ Disassembly of section .text:
                	andq	%rcx, %rbx
                	xorq	%rbx, %r8
                	jmp	<addr>
-               	testl	%r8d, %r8d
+               	testl	%edi, %edi
                	jne	<addr>
                	movq	%rax, %r8
                	andq	%rdx, %r8
@@ -87,9 +86,7 @@ Disassembly of section .text:
                	addq	%rbx, %r8
                	addq	%r12, %r8
                	leaq	<rip>, %rbx # <addr>
-               	movq	%rdi, %r12
-               	andq	$0x3, %r12
-               	movl	(%rbx,%r12,4), %ebx
+               	movl	(%rbx,%rdi,4), %ebx
                	addq	%rbx, %r8
                	movl	%eax, %eax
                	movq	%rax, %rbx

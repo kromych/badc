@@ -62,8 +62,8 @@ Disassembly of section .text:
                	b.ge	<addr>
                	fmov	d0, #1.00000000
                	fsub	d1, d1, d0
-               	mov	x1, #0x0                // =0
-               	fmov	d17, x1
+               	mov	x4, #0x0                // =0
+               	fmov	d17, x4
                	fcmpe	d1, d17
                	b.pl	<addr>
                	fneg	d1, d1
@@ -75,32 +75,32 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x5, #0x18               // =24
-               	mov	x2, #0x0                // =0
-               	mov	x0, x2
-               	sub	x4, x29, #0x90
-               	mul	x3, x1, x5
-               	add	x6, x4, x3
-               	lsl	x4, x0, #3
-               	add	x6, x6, x4
-               	add	x7, x1, x1, lsl #1
-               	add	x7, x7, x0
+               	mov	x8, #0x18               // =24
+               	mov	x1, #0x0                // =0
+               	mul	x2, x4, x8
+               	add	x5, x4, x4, lsl #1
+               	mov	x0, x1
+               	sub	x3, x29, #0x90
+               	add	x6, x3, x2
+               	lsl	x3, x0, #3
+               	add	x6, x6, x3
+               	add	x7, x5, x0
                	add	x7, x7, #0x1
                	sxtw	x7, w7
                	scvtf	d1, x7
                	str	d1, [x6]
                	sub	x6, x29, #0x48
+               	add	x6, x6, x2
                	add	x3, x6, x3
-               	add	x3, x3, x4
-               	cmp	w1, w0
-               	fmov	d17, x2
+               	cmp	w4, w0
+               	fmov	d17, x1
                	fcsel	d1, d0, d17, eq
                	str	d1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x3
+               	add	x4, x4, #0x1
+               	cmp	w4, #0x3
                	b.lt	<addr>
                	mov	x2, #0x0                // =0
                	mov	x3, #0x18               // =24

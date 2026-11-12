@@ -28,9 +28,9 @@ Disassembly of section .text:
 <fill>:
                	xorl	%eax, %eax
                	imulq	$0x1f, %rsi, %rcx
-               	addq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, (%rdi,%rax)
+               	leaq	(%rcx,%rax), %rdx
+               	andq	$0xff, %rdx
+               	movb	%dl, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
@@ -44,11 +44,11 @@ Disassembly of section .text:
 
 <intact>:
                	xorl	%eax, %eax
-               	movzbq	(%rdi,%rax), %rcx
-               	imulq	$0x1f, %rsi, %rdx
-               	addq	%rax, %rdx
-               	andq	$0xff, %rdx
-               	cmpl	%edx, %ecx
+               	imulq	$0x1f, %rsi, %rcx
+               	movzbq	(%rdi,%rax), %rdx
+               	leaq	(%rcx,%rax), %r8
+               	andq	$0xff, %r8
+               	cmpl	%r8d, %edx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200

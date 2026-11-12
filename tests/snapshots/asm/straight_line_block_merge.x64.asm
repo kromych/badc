@@ -286,6 +286,9 @@ Disassembly of section .text:
                	xorl	%r13d, %r13d
                	movq	%r13, %rbx
                	movl	$0x4, %r12d
+               	leaq	0x64(%r13), %r15
+               	leaq	(%r13,%r13,2), %rax
+               	leaq	0x1(%rax), %r14
                	testl	%ebx, %ebx
                	jne	<addr>
                	movq	%r13, %rdi
@@ -298,12 +301,12 @@ Disassembly of section .text:
                	setl	%dl
                	movzbq	%dl, %rdx
                	andq	%rdx, %rcx
-               	leaq	0x64(%r13), %rdx
                	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	negq	%rcx
-               	andq	%rcx, %rdx
+               	movq	%rcx, %rdx
+               	andq	%r15, %rdx
                	xorq	$-0x1, %rcx
                	orq	%rdx, %rcx
                	cmpl	%ecx, %eax
@@ -333,31 +336,30 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x2, %ebx
-               	leaq	(%r13,%r13,2), %rax
-               	incq	%rax
                	cmpl	$0x3, %r13d
+               	setl	%al
+               	movzbq	%al, %rax
+               	cmpl	$0x7, %r12d
                	setl	%cl
                	movzbq	%cl, %rcx
-               	cmpl	$0x7, %r12d
-               	setl	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	leaq	(%rax,%r12), %rdx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	negq	%rcx
-               	andq	%rcx, %rdx
-               	xorq	$-0x1, %rcx
                	andq	%rcx, %rax
-               	movq	%rdx, %r14
-               	orq	%rax, %r14
+               	leaq	(%r14,%r12), %rcx
+               	testl	%eax, %eax
+               	setne	%al
+               	movzbq	%al, %rax
+               	negq	%rax
+               	andq	%rax, %rcx
+               	xorq	$-0x1, %rax
+               	andq	%r14, %rax
+               	movq	%rcx, %r10
+               	orq	%rax, %r10
+               	movq	%r10, 0x38(%rsp)
                	testl	%ebx, %ebx
                	jne	<addr>
                	movq	%r13, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	cmpl	%r14d, %eax
+               	cmpl	0x38(%rsp), %eax
                	je	<addr>
                	movl	$0x3, %ebx
                	incq	%r12

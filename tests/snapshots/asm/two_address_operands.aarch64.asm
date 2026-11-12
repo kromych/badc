@@ -82,17 +82,17 @@ Disassembly of section .text:
                	ret
 
 <carried>:
-               	mov	x5, x0
-               	mov	x0, #0x0                // =0
                	mov	x4, x0
-               	cmp	x4, x5
+               	mov	x0, #0x0                // =0
+               	lsl	x2, x1, x2
+               	mov	x1, x0
+               	cmp	x1, x4
                	b.ge	<addr>
-               	add	x4, x0, x3
-               	lsl	x6, x1, x2
-               	add	x0, x0, x6
-               	cmp	x4, x5
+               	add	x1, x0, x3
+               	add	x0, x0, x2
+               	cmp	x1, x4
                	b.lt	<addr>
-               	mov	x0, x4
+               	mov	x0, x1
                	ret
 
 <rotr>:

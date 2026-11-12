@@ -254,6 +254,9 @@ Disassembly of section .text:
                	mov	x22, #0x0               // =0
                	mov	x20, x22
                	mov	x21, #0x4               // =4
+               	add	x24, x22, #0x64
+               	add	x0, x22, x22, lsl #1
+               	add	x23, x0, #0x1
                	cbnz	w20, <addr>
                	mov	x0, x22
                	mov	x1, x21
@@ -263,11 +266,10 @@ Disassembly of section .text:
                	cmp	w21, #0x7
                	cset	x2, lt
                	and	x1, x1, x2
-               	add	x2, x22, #0x64
                	cmp	w1, #0x0
                	cset	x1, ne
                	neg	x1, x1
-               	and	x2, x1, x2
+               	and	x2, x1, x24
                	mvn	x1, x1
                	orr	x1, x2, x1
                	cmp	w0, w1
@@ -293,26 +295,24 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.eq	<addr>
                	mov	x20, #0x2               // =2
-               	add	x0, x22, x22, lsl #1
-               	add	x0, x0, #0x1
                	cmp	w22, #0x3
-               	cset	x1, lt
+               	cset	x0, lt
                	cmp	w21, #0x7
-               	cset	x2, lt
-               	and	x1, x1, x2
-               	add	x2, x0, x21
-               	cmp	w1, #0x0
-               	cset	x1, ne
-               	neg	x1, x1
-               	and	x2, x1, x2
-               	mvn	x1, x1
-               	and	x0, x1, x0
-               	orr	x23, x2, x0
+               	cset	x1, lt
+               	and	x0, x0, x1
+               	add	x1, x23, x21
+               	cmp	w0, #0x0
+               	cset	x0, ne
+               	neg	x0, x0
+               	and	x1, x0, x1
+               	mvn	x0, x0
+               	and	x0, x0, x23
+               	orr	x25, x1, x0
                	cbnz	w20, <addr>
                	mov	x0, x22
                	mov	x1, x21
                	bl	<addr>
-               	cmp	w0, w23
+               	cmp	w0, w25
                	b.eq	<addr>
                	mov	x20, #0x3               // =3
                	add	x21, x21, #0x1

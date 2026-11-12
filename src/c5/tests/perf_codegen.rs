@@ -6769,3 +6769,24 @@ __asm__(\"fmla %0.4s, %1.4s, %2.4s\" : \"+w\"(acc) : \"w\"(*b), \"w\"(*c)); *d =
     }
     m.finish();
 }
+
+/// Integer arithmetic over values the loop does not change is computed
+/// once before it: `x * y + 3` here, where the loop keeps only its own
+/// multiply-add.
+#[test]
+fn a64_invariant_arithmetic_is_computed_before_the_loop() {
+    const SRC: &str = "long scale(long *a, long n, long x, long y) {\n\
+long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n";
+    let ws = a64(SRC, "scale");
+    // `b.cond` back to the loop head.
+    let head = ws.iter().enumerate().find_map(|(i, &w)| {
+        let imm = (((w >> 5) & 0x7_FFFF) << 13) as i32 >> 13;
+        (w & 0xFF00_0010 == 0x5400_0000 && imm < 0).then(|| (i as i32 + imm) as usize)
+    });
+    // `mul xd, xn, xm`.
+    let mul = ws.iter().position(|&w| w & 0xFFE0_FC00 == 0x9B00_7C00);
+    assert!(
+        matches!((mul, head), (Some(m), Some(h)) if m < h),
+        "the invariant product is in the loop: {ws:08x?}"
+    );
+}

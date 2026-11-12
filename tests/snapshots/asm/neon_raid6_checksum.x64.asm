@@ -30,33 +30,33 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x48, %rsp
                	pushq	%rbx
-               	xorl	%ecx, %ecx
+               	xorl	%r9d, %r9d
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx # <addr>
-               	movq	%rcx, %rsi
-               	shlq	$0x9, %rsi
-               	addq	%rsi, %rdx
-               	imulq	$0x43, %rcx, %rsi
+               	movq	%r9, %rcx
+               	shlq	$0x9, %rcx
+               	imulq	$0x43, %r9, %rdx
+               	leaq	<rip>, %rsi # <addr>
+               	addq	%rcx, %rsi
                	imulq	$0xd, %rax, %rdi
-               	addq	%rdi, %rsi
-               	movq	%rax, %rdi
-               	sarq	$0x3, %rdi
-               	imulq	$0x7, %rdi, %rdi
-               	addq	%rdi, %rsi
-               	incq	%rsi
-               	andq	$0xff, %rsi
-               	movb	%sil, (%rdx,%rax)
+               	addq	%rdx, %rdi
+               	movq	%rax, %r8
+               	sarq	$0x3, %r8
+               	imulq	$0x7, %r8, %r8
+               	addq	%r8, %rdi
+               	incq	%rdi
+               	andq	$0xff, %rdi
+               	movb	%dil, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	leaq	-0x38(%rbp), %rax
-               	leaq	<rip>, %rdx # <addr>
-               	movq	%rcx, %rsi
-               	shlq	$0x9, %rsi
-               	addq	%rsi, %rdx
-               	movq	%rdx, (%rax,%rcx,8)
-               	incq	%rcx
-               	cmpl	$0x7, %ecx
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%r9, %rdx
+               	shlq	$0x9, %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, (%rax,%r9,8)
+               	incq	%r9
+               	cmpl	$0x7, %r9d
                	jl	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax

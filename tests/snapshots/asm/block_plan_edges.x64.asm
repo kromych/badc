@@ -90,11 +90,11 @@ Disassembly of section .text:
                	movl	$0xfffffffe, %ecx       # imm = 0xFFFFFFFE
                	movq	%rdi, %rdx
                	shlq	%rdx
-               	addq	%rax, %rdx
                	imulq	$0x7, %rdi, %rsi
+               	leaq	(%rax,%rdx), %rdi
                	addq	%rsi, %rax
                	testb	$0x1, %cl
-               	cmovneq	%rdx, %rax
+               	cmovneq	%rdi, %rax
                	incq	%rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>
@@ -447,19 +447,19 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	xorl	%edx, %edx
-               	movq	%rdx, %rcx
+               	xorl	%edi, %edi
+               	movq	%rdi, %rcx
+               	movq	%rdi, %rdx
+               	shlq	$0x2, %rdx
                	xorl	%eax, %eax
-               	movq	%rdx, %rsi
-               	shlq	$0x2, %rsi
-               	addq	%rax, %rsi
+               	leaq	(%rdx,%rax), %rsi
                	movslq	%esi, %rsi
                	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	incq	%rdx
-               	cmpl	$0x3, %edx
+               	incq	%rdi
+               	cmpl	$0x3, %edi
                	jl	<addr>
                	cmpq	$0x42, %rcx
                	je	<addr>

@@ -27,11 +27,11 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx # <addr>
-               	leaq	0x20(%rdx), %rcx
-               	movq	%rax, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rcx
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x20(%rcx), %rdx
+               	movq	%rax, %rcx
+               	shlq	$0x3, %rcx
+               	addq	%rdx, %rcx
                	movl	(%rcx), %esi
                	cmpl	$0x9, %esi
                	jne	<addr>

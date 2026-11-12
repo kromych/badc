@@ -370,23 +370,23 @@ Disassembly of section .text:
                	ldur	q1, [x29, #-0xb0]
                	stur	q0, [x29, #-0x100]
                	stur	q1, [x29, #-0xf0]
-               	sub	x1, x29, #0x120
+               	sub	x3, x29, #0x120
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
+               	stp	x16, x17, [x3]
                	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x3, #0x10]
                	mov	x0, #0x0                // =0
-               	ldrh	w4, [x1, x0, lsl #1]
-               	sub	x2, x29, #0x60
-               	lsl	x3, x0, #1
-               	ldrh	w5, [x2, x3, lsl #1]
-               	cmp	w4, w5
+               	add	x4, x3, #0x10
+               	ldrh	w5, [x3, x0, lsl #1]
+               	sub	x1, x29, #0x60
+               	lsl	x2, x0, #1
+               	ldrh	w6, [x1, x2, lsl #1]
+               	cmp	w5, w6
                	b.ne	<addr>
-               	add	x4, x1, #0x10
-               	ldrh	w4, [x4, x0, lsl #1]
-               	add	x3, x3, #0x1
-               	ldrh	w2, [x2, x3, lsl #1]
-               	cmp	w4, w2
+               	ldrh	w5, [x4, x0, lsl #1]
+               	add	x2, x2, #0x1
+               	ldrh	w1, [x1, x2, lsl #1]
+               	cmp	w5, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8

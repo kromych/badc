@@ -187,30 +187,31 @@ fn ent_pc=9 n_params=4 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x8
-    v11  Imm(0)                                           -> x8
+    v11  Binop { op=shl, lhs=v3, rhs=v5 }                 -> x6
+    v12  Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v9)
   block 1  start_pc=0
-    v17  Imm(0)                                           -> x8
-    v18  Imm(0)                                           -> x8
-    v19  Binop { op=add, lhs=v12, rhs=v7 }                -> x8
-    v20  Imm(0)                                           -> x9
-    v21  Imm(0)                                           -> x9
-    v22  Imm(0)                                           -> x9
-    v23  Imm(0)                                           -> x9
-    v24  Binop { op=shl, lhs=v3, rhs=v5 }                 -> x9
-    v25  Binop { op=add, lhs=v12, rhs=v24 }               -> x0
-    v26  Imm(0)                                           -> x9
-    terminator Jmp(b2)   (exit_acc=v25)
+    v18  Imm(0)                                           -> x2
+    v19  Imm(0)                                           -> x2
+    v20  Binop { op=add, lhs=v13, rhs=v7 }                -> x2
+    v21  Imm(0)                                           -> x8
+    v22  Imm(0)                                           -> x8
+    v23  Imm(0)                                           -> x8
+    v24  Imm(0)                                           -> x8
+    v25  Binop { op=shl, lhs=v3, rhs=v5 }                 -> x8
+    v26  Binop { op=add, lhs=v13, rhs=v11 }               -> x0
+    v27  Imm(0)                                           -> x8
+    terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
-    v12  Phi { incoming=[b0:v9, b1:v25], kind=I64 }       -> x0
-    v13  Phi { incoming=[b0:v9, b1:v19], kind=I64 }       -> x8
-    v14  Imm(0)                                           -> x9
-    v15  Imm(0)                                           -> x9
-    v16  Binop { op=lt, lhs=v13, rhs=v1 }                 -> x9
-    terminator Bz { cond=v16, target=b3, fall=b1 }   (exit_acc=v16)
+    v13  Phi { incoming=[b0:v9, b1:v26], kind=I64 }       -> x0
+    v14  Phi { incoming=[b0:v9, b1:v20], kind=I64 }       -> x2
+    v15  Imm(0)                                           -> x8
+    v16  Imm(0)                                           -> x8
+    v17  Binop { op=lt, lhs=v14, rhs=v1 }                 -> x8
+    terminator Bz { cond=v17, target=b3, fall=b1 }   (exit_acc=v17)
   block 3  start_pc=0
-    v27  Imm(0)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
+    v28  Imm(0)                                           -> x0
+    terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=rotr
 fn ent_pc=10 n_params=2 variadic=false locals=0

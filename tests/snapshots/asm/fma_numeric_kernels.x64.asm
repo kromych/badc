@@ -88,8 +88,8 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm15
+               	xorl	%esi, %esi
+               	movq	%rsi, %xmm15
                	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
@@ -103,23 +103,23 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x90(%rbp), %rsi
-               	imulq	$0x18, %rcx, %rdx
-               	leaq	(%rsi,%rdx), %rdi
-               	movq	%rax, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rdi
-               	leaq	(%rcx,%rcx,2), %r8
-               	addq	%rax, %r8
-               	incq	%r8
-               	movslq	%r8d, %r8
+               	imulq	$0x18, %rsi, %rcx
+               	leaq	(%rsi,%rsi,2), %rdi
+               	leaq	-0x90(%rbp), %rdx
+               	leaq	(%rdx,%rcx), %r8
+               	movq	%rax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %r8
+               	leaq	(%rdi,%rax), %r9
+               	incq	%r9
+               	movslq	%r9d, %r9
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%r8, %xmm0
-               	movsd	%xmm0, (%rdi)
-               	leaq	-0x48(%rbp), %rdi
-               	addq	%rdi, %rdx
-               	addq	%rsi, %rdx
-               	cmpl	%eax, %ecx
+               	cvtsi2sd	%r9, %xmm0
+               	movsd	%xmm0, (%r8)
+               	leaq	-0x48(%rbp), %r8
+               	addq	%rcx, %r8
+               	addq	%r8, %rdx
+               	cmpl	%eax, %esi
                	jne	<addr>
                	movabsq	$0x3ff0000000000000, %r11 # imm = 0x3FF0000000000000
                	movq	%r11, %xmm0
@@ -130,8 +130,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	incq	%rcx
-               	cmpl	$0x3, %ecx
+               	incq	%rsi
+               	cmpl	$0x3, %esi
                	jl	<addr>
                	xorl	%edx, %edx
                	movsd	-0x48(%rbp), %xmm1

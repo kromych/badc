@@ -26,36 +26,33 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x8(%rax), %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x8(%rax), %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x8(%rax), %rcx
                	xorl	%eax, %eax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax
-               	leaq	0x8(%rcx), %rdx
-               	cmpq	$0x0, (%rdx,%rax,8)
+               	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>

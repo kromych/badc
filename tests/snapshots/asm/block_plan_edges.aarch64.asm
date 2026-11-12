@@ -80,9 +80,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, #0xfffffffe         // =4294967294
                	mov	x3, #0x7                // =7
+               	mul	x3, x2, x3
                	add	x4, x0, x2, lsl #1
-               	mul	x5, x2, x3
-               	add	x0, x0, x5
+               	add	x0, x0, x3
                	tst	x1, #0x1
                	csel	x0, x4, x0, ne
                	add	x1, x1, #0x1

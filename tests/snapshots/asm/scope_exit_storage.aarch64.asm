@@ -16,8 +16,8 @@ Disassembly of section .text:
 <fill>:
                	mov	x2, #0x0                // =0
                	mov	x3, #0x1f               // =31
-               	mul	x4, x1, x3
-               	add	x4, x4, x2
+               	mul	x3, x1, x3
+               	add	x4, x3, x2
                	and	x4, x4, #0xff
                	strb	w4, [x0, x2]
                	add	x2, x2, #0x1
@@ -35,9 +35,9 @@ Disassembly of section .text:
 <intact>:
                	mov	x2, #0x0                // =0
                	mov	x3, #0x1f               // =31
+               	mul	x3, x1, x3
                	ldrb	w4, [x0, x2]
-               	mul	x5, x1, x3
-               	add	x5, x5, x2
+               	add	x5, x3, x2
                	and	x5, x5, #0xff
                	cmp	w4, w5
                	b.ne	<addr>

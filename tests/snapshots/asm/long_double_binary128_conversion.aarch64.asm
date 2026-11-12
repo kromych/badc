@@ -258,14 +258,16 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	stp	x20, x21, [sp, #-0x70]!
+               	stp	x20, x21, [sp, #-0x80]!
                	stp	x22, x23, [sp, #0x10]
                	stp	x24, x25, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
-               	mov	x24, #0x0               // =0
+               	str	x26, [sp, #0x30]
+               	stp	x29, x30, [sp, #0x70]
+               	add	x29, sp, #0x70
                	mov	x23, #0x0               // =0
+               	mov	x26, #0x0               // =0
                	mov	x20, #0x0               // =0
+               	lsl	x24, x26, #63
                	cmp	w20, #0x8
                	b.ge	<addr>
                	mov	x0, #0xffffffffffff     // =281474976710655
@@ -277,11 +279,10 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x21, [x0, x20, lsl #3]
-               	lsl	x0, x23, #63
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2, x24, lsl #3]
-               	orr	x0, x0, x2, lsl #48
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0, x23, lsl #3]
+               	orr	x0, x24, x0, lsl #48
                	orr	x22, x0, x1
                	sub	x1, x29, #0x10
                	stp	xzr, xzr, [x1]
@@ -347,11 +348,11 @@ Disassembly of section .text:
                	add	x20, x20, #0x1
                	cmp	w20, #0x30
                	b.lt	<addr>
-               	add	x23, x23, #0x1
-               	cmp	w23, #0x2
+               	add	x26, x26, #0x1
+               	cmp	w26, #0x2
                	b.lo	<addr>
-               	add	x24, x24, #0x1
-               	cmp	w24, #0x10
+               	add	x23, x23, #0x1
+               	cmp	w23, #0x10
                	b.lo	<addr>
                	mov	x22, #0x0               // =0
                	adrp	x0, <page>
@@ -419,10 +420,11 @@ Disassembly of section .text:
                	bl	<addr>
                	cbnz	w0, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x70]
+               	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
@@ -486,26 +488,30 @@ Disassembly of section .text:
                	cmp	w20, w17
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x70]
+               	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x70]
+               	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x70]
+               	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x60]
+               	ldp	x29, x30, [sp, #0x70]
+               	ldr	x26, [sp, #0x30]
                	ldp	x24, x25, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
+               	ldp	x20, x21, [sp], #0x80
                	ret

@@ -2797,3 +2797,15 @@ fn staged_indirect_call_target_reaches_its_callee() {
         );
     }
 }
+
+/// An address constant below its object -- `buf - 1` for one-based
+/// indexing, which compilers accept as a relocation -- names a target
+/// before the data image's start when the object sits near it; the
+/// relocation wraps as the image writers apply it.
+#[test]
+fn an_address_constant_below_its_object_relocates() {
+    let src = "static char buf[4] = \"abc\";\n\
+               static char *one_based = buf - 4096;\n\
+               int main(void) { return one_based + 4097 == buf + 1 ? 0 : 1; }\n";
+    assert_eq!(jit_exit(src, &[]), 0);
+}

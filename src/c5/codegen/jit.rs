@@ -1217,8 +1217,10 @@ mod jit_impl {
         // them in place against the mmap'd page's address.
         if let Some(region) = &mut at.data {
             let bytes = region.as_mut_slice(build.data.len());
+            // An address constant below its object (`buf - 1`) carries a
+            // target the offset wraps to, as the image writers apply it.
             for r in &build.data_relocs {
-                let absolute = data_vmaddr + r.target_offset;
+                let absolute = data_vmaddr.wrapping_add(r.target_offset);
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
                     return Err(C5Error::internal(format!(
@@ -1333,7 +1335,8 @@ mod jit_impl {
                     code_vmaddr
                 };
                 let at = r.slot_data_offset as usize;
-                let value = (base + r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                let value =
+                    base.wrapping_add(r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
                 if r.branch26 {
                     let word = bytes
                         .get(at..at + 4)
@@ -2624,8 +2627,8 @@ mod jit_impl {
         }
         for r in &build.text_pcrel_relocs {
             let at = r.site_text_offset as usize;
-            let value =
-                (data_vmaddr + r.target_data_offset) as i64 - (code_vmaddr + at as u64) as i64;
+            let value = data_vmaddr.wrapping_add(r.target_data_offset) as i64
+                - (code_vmaddr + at as u64) as i64;
             let width = r.width as usize;
             let fits = width == 8 || i32::try_from(value).is_ok();
             let Some(field) = code.get_mut(at..at + width).filter(|_| fits) else {

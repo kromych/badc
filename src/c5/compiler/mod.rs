@@ -3810,8 +3810,7 @@ impl Compiler {
         // avoid duplicate export entries.
         if self.export_all_functions {
             use crate::c5::symbol::Linkage;
-            for idx in 0..self.symbols.len() {
-                let sym = &self.symbols[idx];
+            for sym in &self.symbols {
                 if sym.class != Token::Fun as i64
                     || sym.linkage != Linkage::External
                     || !sym.defined_here

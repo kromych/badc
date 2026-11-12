@@ -5847,8 +5847,8 @@ int main(void) { return 0; }
             "equal weights spill the highest id, got {:?}",
             a.places[4]
         );
-        for v in 0..4 {
-            assert!(matches!(a.places[v], Place::IntReg(_)));
+        for place in &a.places[..4] {
+            assert!(matches!(place, Place::IntReg(_)));
         }
     }
 

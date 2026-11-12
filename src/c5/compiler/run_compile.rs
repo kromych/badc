@@ -2578,10 +2578,7 @@ impl Compiler {
         // C99 6.9.2p2: a later no-initializer declaration redeclares the
         // alias-defined object. The alias owns no storage, so reserving any
         // for it would break the binding.
-        if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
-            return Ok(true);
-        }
-        Ok(false)
+        Ok(self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign)
     }
 
     /// C11 6.7.5: the object is placed at the strictest alignment its

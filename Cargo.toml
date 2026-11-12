@@ -107,13 +107,6 @@ codegen_test = ["std"]
 # purely internal keys (macro names) and avoids the small extra cost
 # of the `aHashMap` initialization.
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
-# `rustc-hash` ships the `FxHash` hasher rustc itself uses for its
-# internal id-keyed maps. We use it through `hashbrown::HashMap` (so
-# the `no_std + alloc` build path is unchanged) on the codegen hot
-# paths whose keys are small integers (bytecode PCs, function ids)
-# and whose iteration order is never relied on. Default-features off
-# matches the rest of the dep set.
-rustc-hash = { version = "2", default-features = false }
 # `libm` supplies the software `fma` / `fmaf` the SSA VM uses to
 # evaluate `Inst::Fma` with a single rounding, matching the native
 # fused multiply-add instruction on every target. `f64::mul_add` would

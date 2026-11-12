@@ -1771,9 +1771,9 @@ impl Compiler {
     /// return the byte just past it.
     fn move_anon_member(&mut self, struct_id: usize, idx: usize, base: usize) -> usize {
         let m = self.structs[struct_id].anon_members[idx];
-        for k in m.first as usize..(m.first + m.count) as usize {
-            let off = self.structs[struct_id].fields[k].offset;
-            self.structs[struct_id].fields[k].offset = off - m.offset + base;
+        let entries = m.first as usize..(m.first + m.count) as usize;
+        for field in &mut self.structs[struct_id].fields[entries] {
+            field.offset = field.offset - m.offset + base;
         }
         self.structs[struct_id].anon_members[idx].offset = base;
         base + m.size

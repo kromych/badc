@@ -596,10 +596,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         let counts = use_counts(func);
         let scaled = foldable_scaled_addresses(func, &counts);
         let displaced = foldable_displaced_addresses(func, &counts);
-        let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
-        for idx in 0..n {
-            match &func.insts[idx] {
+        for (idx, inst) in func.insts.iter().enumerate() {
+            match inst {
                 // A displacement already present means the address was
                 // folded once; leave it rather than compose for now.
                 Inst::Load {

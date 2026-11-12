@@ -654,15 +654,9 @@ fn _block_check(_b: BlockId) {}
 /// `BADC_DUMP_SSA` environment variable is also honored; a production
 /// build relies solely on the flag and never reads the environment.
 pub(crate) fn enabled(options: &super::NativeOptions) -> bool {
-    if options.dump_ssa {
-        return true;
-    }
     #[cfg(feature = "codegen_test")]
-    {
-        std::env::var("BADC_DUMP_SSA").is_ok()
-    }
+    let env = std::env::var("BADC_DUMP_SSA").is_ok();
     #[cfg(not(feature = "codegen_test"))]
-    {
-        false
-    }
+    let env = false;
+    options.dump_ssa || env
 }

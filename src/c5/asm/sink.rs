@@ -435,8 +435,7 @@ impl AsmSectionSink {
         // what this call added; the two agree except where a `.set` wrote
         // into a section the call did not otherwise touch.
         let counted = self.published[sec_idx];
-        for i in counted.min(from)..sec.labels.len() {
-            let l = &sec.labels[i];
+        for (i, l) in sec.labels.iter().enumerate().skip(counted.min(from)) {
             if i >= counted {
                 count_label_bind(&mut self.non_local, &mut self.weak, l, true);
             }

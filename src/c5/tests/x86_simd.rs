@@ -1829,6 +1829,8 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::DupLane(..)
         | Sem::Tbl(..)
         | Sem::Tbx(..)
+        | Sem::ShrAcc(..)
+        | Sem::ShiftInsert(..)
         | Sem::ShrRound(..)
         | Sem::ShlSat(..)
         | Sem::ShrNarrow(..) => false,

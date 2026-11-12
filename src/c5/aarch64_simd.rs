@@ -277,6 +277,12 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "ushr" Shift Shr (): b8 b16 h4 h8 s2 s4 d1 d2;
     "srshr" Shift ShrRound (true): b8 b16 h4 h8 s2 s4 d1 d2;
     "urshr" Shift ShrRound (false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "ssra" VvI ShrAcc (true, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "usra" VvI ShrAcc (false, false): b8 b16 h4 h8 s2 s4 d1 d2;
+    "srsra" VvI ShrAcc (true, true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "ursra" VvI ShrAcc (false, true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sli" VvI ShiftInsert (true): b8 b16 h4 h8 s2 s4 d1 d2;
+    "sri" VvI ShiftInsert (false): b8 b16 h4 h8 s2 s4 d1 d2;
     "fadd" Vv Float [Add]: f2s f4s fd f2d;
     "fsub" Vv Float [Sub]: f2s f4s fd f2d;
     "fmul" Vv Float [Mul]: f2s f4s fd f2d;

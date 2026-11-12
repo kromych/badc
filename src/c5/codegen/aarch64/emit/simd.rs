@@ -24,6 +24,13 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
     }
 }
 
+/// Whether the instruction computes in the register of the row's first
+/// source: the three-operand forms and the accumulating and inserting
+/// shifts by an immediate.
+fn accumulates(row: &SimdOp) -> bool {
+    row.form == Form::Vvv || matches!(row.sem, simd::Sem::ShrAcc(..) | simd::Sem::ShiftInsert(..))
+}
+
 /// The instruction a row names over v registers `regs`, destination first,
 /// each in its operand's arrangement, with a shift's count. An
 /// accumulating form names its accumulator once, as the destination.
@@ -65,7 +72,7 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
         ];
         return table::encode(row.mnem, &ops);
     }
-    let skip = usize::from(row.form == Form::Vvv);
+    let skip = usize::from(accumulates(row));
     let mut ops: Vec<Opnd> = regs
         .iter()
         .enumerate()
@@ -155,11 +162,7 @@ pub(super) fn emit_a64_simd(
     // An accumulating form writes its first source; the others write a
     // destination of their own, the first scratch.
     let mut ops = alloc::vec![frame.fp_scratch[0]];
-    ops.extend(if row.form == Form::Vvv {
-        &regs[1..]
-    } else {
-        regs
-    });
+    ops.extend(if accumulates(row) { &regs[1..] } else { regs });
     match encode(row, &ops, imm) {
         Ok(word) => emit(code, word),
         Err(e) => return fail(alloc::format!("{}: {e}", row.name)),
@@ -212,7 +215,7 @@ pub(super) fn emit_a64_simd_val(
     }
     let mut ops = alloc::vec![vd];
     let mut acc = vd;
-    if row.form == Form::Vvv {
+    if accumulates(row) {
         if regs[1..n].contains(&vd) {
             acc = frame.fp_scratch[0];
             ops[0] = acc;

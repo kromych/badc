@@ -202,27 +202,27 @@ Disassembly of section .text:
 <w_vsra_n_s8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -256,27 +256,27 @@ Disassembly of section .text:
 <w_vrsra_n_s8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -310,27 +310,27 @@ Disassembly of section .text:
 <w_vsli_n_s8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x7
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -364,27 +364,27 @@ Disassembly of section .text:
 <w_vsri_n_s8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -604,27 +604,27 @@ Disassembly of section .text:
 <w_vsra_n_u8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -658,27 +658,27 @@ Disassembly of section .text:
 <w_vrsra_n_u8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -712,27 +712,27 @@ Disassembly of section .text:
 <w_vsli_n_u8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x7
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -766,27 +766,27 @@ Disassembly of section .text:
 <w_vsri_n_u8_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u8_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u8_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.8b, v0.8b, #0x8
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1006,27 +1006,27 @@ Disassembly of section .text:
 <w_vsra_n_s16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1060,27 +1060,27 @@ Disassembly of section .text:
 <w_vrsra_n_s16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1114,27 +1114,27 @@ Disassembly of section .text:
 <w_vsli_n_s16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0xf
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1168,27 +1168,27 @@ Disassembly of section .text:
 <w_vsri_n_s16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1408,27 +1408,27 @@ Disassembly of section .text:
 <w_vsra_n_u16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1462,27 +1462,27 @@ Disassembly of section .text:
 <w_vrsra_n_u16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1516,27 +1516,27 @@ Disassembly of section .text:
 <w_vsli_n_u16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.4h, v0.4h, #0xf
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1570,27 +1570,27 @@ Disassembly of section .text:
 <w_vsri_n_u16_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u16_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u16_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.4h, v0.4h, #0x10
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1810,27 +1810,27 @@ Disassembly of section .text:
 <w_vsra_n_s32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1864,27 +1864,27 @@ Disassembly of section .text:
 <w_vrsra_n_s32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1918,27 +1918,27 @@ Disassembly of section .text:
 <w_vsli_n_s32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x1f
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -1972,27 +1972,27 @@ Disassembly of section .text:
 <w_vsri_n_s32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2212,27 +2212,27 @@ Disassembly of section .text:
 <w_vsra_n_u32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2266,27 +2266,27 @@ Disassembly of section .text:
 <w_vrsra_n_u32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2320,27 +2320,27 @@ Disassembly of section .text:
 <w_vsli_n_u32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.2s, v0.2s, #0x1f
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2374,27 +2374,27 @@ Disassembly of section .text:
 <w_vsri_n_u32_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u32_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u32_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	v16.2s, v0.2s, #0x20
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2614,27 +2614,27 @@ Disassembly of section .text:
 <w_vsra_n_s64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_s64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ssra	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2668,27 +2668,27 @@ Disassembly of section .text:
 <w_vrsra_n_s64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_s64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	srsra	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2722,27 +2722,27 @@ Disassembly of section .text:
 <w_vsli_n_s64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_s64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x3f
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -2776,27 +2776,27 @@ Disassembly of section .text:
 <w_vsri_n_s64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_s64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -3016,27 +3016,27 @@ Disassembly of section .text:
 <w_vsra_n_u64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsra_n_u64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	usra	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -3070,27 +3070,27 @@ Disassembly of section .text:
 <w_vrsra_n_u64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vrsra_n_u64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	ursra	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -3124,27 +3124,27 @@ Disassembly of section .text:
 <w_vsli_n_u64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x0
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsli_n_u64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	d16, d0, #0x3f
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -3178,27 +3178,27 @@ Disassembly of section .text:
 <w_vsri_n_u64_lo>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x1
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u64_mid>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
 <w_vsri_n_u64_hi>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sri	d16, d0, #0x40
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 
@@ -3232,9 +3232,9 @@ Disassembly of section .text:
 <w_vsli_n_p8>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	fmov	d16, d1
+               	mov	v16.16b, v1.16b
                	sli	v16.8b, v0.8b, #0x3
-               	fmov	d0, d16
+               	mov	v0.16b, v16.16b
                	str	d0, [x0]
                	ret
 

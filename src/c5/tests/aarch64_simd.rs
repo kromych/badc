@@ -44,7 +44,9 @@ fn the_intrinsics_emit_their_instruction() {
 /// Each lane permute is its one instruction on the argument registers
 /// under `-O`, a floating one the integer form of its lane width, and
 /// `vext` the byte form at its lane's byte offset; so is each conversion
-/// between the float and double lanes.
+/// between the float and double lanes, each lane `dup` and table lookup,
+/// and each shift by an immediate, an accumulating one in its first
+/// operand's register.
 #[cfg(feature = "full")]
 #[test]
 fn the_permutes_emit_their_instruction() {
@@ -66,6 +68,11 @@ fn the_permutes_emit_their_instruction() {
         uint16x8_t rshr(uint16x8_t a) { return vrshrq_n_u16(a, 16); }\n\
         int8x8_t shrn(int16x8_t a) { return vshrn_n_s16(a, 3); }\n\
         uint16x4_t rshrn(uint32x4_t a) { return vrshrn_n_u32(a, 16); }\n\
+        int8x16_t sra(int8x16_t a, int8x16_t b) { return vsraq_n_s8(a, b, 3); }\n\
+        uint32x2_t sli(uint32x2_t a, uint32x2_t b) { return vsli_n_u32(a, b, 5); }\n\
+        uint64x1_t sri(uint64x1_t a, uint64x1_t b) { return vsri_n_u64(a, b, 64); }\n\
+        uint16x8_t rsra(uint16x8_t a, uint16x8_t b) { return vrsraq_n_u16(a, b, 16); }\n\
+        uint64x1_t usra(uint64x1_t a, uint64x1_t b) { return vsra_n_u64(a, b, 1); }\n\
         int main(void) { return 0; }";
     let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
         .compile()
@@ -97,6 +104,11 @@ fn the_permutes_emit_their_instruction() {
         (0x6f10_2400, TWO, "urshr v0.8h, v0.8h, #16"),
         (0x0f0d_8400, TWO, "shrn v0.8b, v0.8h, #3"),
         (0x0f10_8c00, TWO, "rshrn v0.4h, v0.4s, #16"),
+        (0x4f0d_1420, TWO, "ssra v0.16b, v1.16b, #3"),
+        (0x2f25_5420, TWO, "sli v0.2s, v1.2s, #5"),
+        (0x7f40_4420, TWO, "sri d0, d1, #64"),
+        (0x6f10_3420, TWO, "ursra v0.8h, v1.8h, #16"),
+        (0x7f7f_1420, TWO, "usra d0, d1, #1"),
     ] {
         let mut words = bytes
             .as_chunks::<4>()

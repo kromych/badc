@@ -445,6 +445,14 @@ pub(crate) enum Sem {
     /// [`Sem::Tbl`] keeping the accumulator's byte for an index past the
     /// table (`tbx`).
     Tbx(u8),
+    /// The first operand plus each lane of the second shifted right by the
+    /// immediate, signed when the first flag is set and rounding when the
+    /// second is (`ssra`, `ursra`).
+    ShrAcc(u8, bool, bool),
+    /// Each lane of the second operand shifted by the immediate, left when
+    /// `true`, into the first's, which keeps the bits the shift vacates
+    /// (`sli`, `sri`).
+    ShiftInsert(u8, bool),
 }
 
 /// The permutation of a [`Sem::Perm`] form.
@@ -1436,6 +1444,23 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Tbl(bytes) => {
             for i in 0..usize::from(bytes) {
                 o[i] = a.get(usize::from(b[i])).copied().unwrap_or(0);
+            }
+        }
+        Sem::ShrAcc(w, signed, round) => {
+            let n = i64::from(imm);
+            let part = eval(Sem::ShlReg(w, signed, round, false), b, &splat(w, -n), 0, 0);
+            o = eval(Sem::Add(w), a, &part, 0, 0);
+        }
+        Sem::ShiftInsert(w, left) => {
+            let n = u32::from(imm);
+            let shift = |x: u64| match left {
+                true => x.checked_shl(n).unwrap_or(0),
+                false => x.checked_shr(n).unwrap_or(0),
+            };
+            let kept = !shift(mask(w)) & mask(w);
+            for i in 0..16 / w as usize {
+                let x = shift(lane(b, w, i)) & mask(w) | lane(a, w, i) & kept;
+                set_lane(&mut o, w, i, x);
             }
         }
         Sem::DupLane(w) => {

@@ -248,8 +248,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     terminator Return(v131)   (exit_acc=v131)
   block 38  start_pc=0
     v132 LocalAddr(-2)                                    -> x0
-    v133 ImmData(32)                                      -> x1
-    v134 Mcpy { dst=v132, src=v133, size=12, align=8 }    -> -
+    v133 ImmData(32)                                      -> x0
+    v134 Imm(0)                                           -> x0
     v135 LocalAddr(-2)                                    -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0

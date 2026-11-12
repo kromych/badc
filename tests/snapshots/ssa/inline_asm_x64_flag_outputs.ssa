@@ -11,11 +11,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v5   LocalAddr(-1)                                    -> x0
     v6   InlineAsm { template="addq %3, %0", ops=4, args=[-, -, v1, v3] } -> x0
     v7   AsmOut(1, kind=U8)                               -> x1
-    v8   StoreLocal { off=-2, value=v6, kind=I64 }        -> -
+    v8   Imm(0)                                           -> x2
     v9   Imm(0)                                           -> x2
     v10  BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x2
     v11  BinopI { op=add, lhs=v7, rhs_imm=0 }             -> x2
-    v12  StoreLocal { off=-1, value=v7, kind=I64 }        -> -
+    v12  Imm(0)                                           -> x2
     v13  LoadLocal { off=-2, kind=I64 }                   -> x2
     v14  BinopI { op=ne, lhs=v6, rhs_imm=3 }              -> x0
     v15  Imm(0)                                           -> x2
@@ -41,11 +41,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v29  LocalAddr(-1)                                    -> x0
     v30  InlineAsm { template="addq %3, %0", ops=4, args=[-, -, v24, v26] } -> x0
     v31  AsmOut(1, kind=U8)                               -> x1
-    v32  StoreLocal { off=-2, value=v30, kind=I64 }       -> -
+    v32  Imm(0)                                           -> x2
     v33  Imm(12)                                          -> x2
     v34  BinopI { op=and, lhs=v31, rhs_imm=255 }          -> x2
     v35  BinopI { op=add, lhs=v31, rhs_imm=12 }           -> x1
-    v36  StoreLocal { off=-1, value=v35, kind=I64 }       -> -
+    v36  Imm(0)                                           -> x2
     v37  LoadLocal { off=-2, kind=I64 }                   -> x2
     v38  BinopI { op=ne, lhs=v30, rhs_imm=0 }             -> x2
     v39  Imm(0)                                           -> x2

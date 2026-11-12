@@ -300,14 +300,12 @@ Disassembly of section .text:
 <list_mix>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
                	movq	%r12, %rdx

@@ -34,7 +34,6 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0]
                	fmov	d0, #1.50000000
                	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
                	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]
@@ -43,8 +42,6 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	stur	d0, [x29, #-0x10]
                	fmov	d0, #2.50000000
-               	mov	x1, #0x2                // =2
-               	stur	x1, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
                	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]
@@ -53,8 +50,6 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	stur	d0, [x29, #-0x10]
                	fmov	d0, #3.50000000
-               	mov	x1, #0x3                // =3
-               	stur	x1, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
                	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]

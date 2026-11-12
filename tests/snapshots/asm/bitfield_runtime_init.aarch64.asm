@@ -46,14 +46,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x5, x29, #0x10
-               	str	xzr, [x5]
-               	str	wzr, [x5, #0x8]
+               	sub	x4, x29, #0x10
+               	str	xzr, [x4]
+               	str	wzr, [x4, #0x8]
                	sturh	w0, [x29, #-0x10]
-               	and	x5, x1, #0x7
+               	and	x4, x1, #0x7
                	ldur	w1, [x29, #-0x10]
                	and	x1, x1, #0xfffffffffff8ffff
-               	orr	x1, x1, x5, lsl #16
+               	orr	x1, x1, x4, lsl #16
                	stur	w1, [x29, #-0x10]
                	and	x2, x2, #0x3ff
                	and	x1, x1, #0xffffffffe007ffff
@@ -61,7 +61,6 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x10]
                	and	x3, x3, #0x7ffff
                	stur	w3, [x29, #-0xc]
-               	stur	w4, [x29, #-0x8]
                	ldurh	w3, [x29, #-0x10]
                	and	x0, x0, #0xffff
                	cmp	w3, w0
@@ -69,7 +68,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	w3, w1
                	ubfx	x3, x3, #16, #3
-               	cmp	w3, w5
+               	cmp	w3, w4
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1

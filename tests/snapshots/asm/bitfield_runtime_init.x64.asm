@@ -69,9 +69,7 @@ Disassembly of section .text:
 <build_mixed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
-               	movq	%r8, %rbx
+               	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rax
                	movq	$0x0, (%rax)
                	movl	$0x0, 0x8(%rax)
@@ -83,17 +81,16 @@ Disassembly of section .text:
                	shlq	$0x10, %r8
                	orq	%r8, %rax
                	movl	%eax, -0x10(%rbp)
-               	movq	%rdx, %r9
-               	andq	$0x3ff, %r9             # imm = 0x3FF
+               	movq	%rdx, %r8
+               	andq	$0x3ff, %r8             # imm = 0x3FF
                	andq	$-0x1ff80001, %rax      # imm = 0xE007FFFF
-               	movq	%r9, %rdx
+               	movq	%r8, %rdx
                	shlq	$0x13, %rdx
                	orq	%rdx, %rax
                	movl	%eax, -0x10(%rbp)
-               	movq	%rcx, %r8
-               	andq	$0x7ffff, %r8           # imm = 0x7FFFF
-               	movl	%r8d, -0xc(%rbp)
-               	movl	%ebx, -0x8(%rbp)
+               	movq	%rcx, %r9
+               	andq	$0x7ffff, %r9           # imm = 0x7FFFF
+               	movl	%r9d, -0xc(%rbp)
                	movzwq	-0x10(%rbp), %rdx
                	andq	$0xffff, %rdi           # imm = 0xFFFF
                	cmpl	%edi, %edx
@@ -114,20 +111,19 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	sarq	$0x13, %rax
                	andq	$0x3ff, %rax            # imm = 0x3FF
-               	cmpl	%r9d, %eax
+               	cmpl	%r8d, %eax
                	sete	%sil
                	movzbq	%sil, %rsi
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
                	andq	$0x7ffff, %rcx          # imm = 0x7FFFF
-               	cmpl	%ecx, %r8d
+               	cmpl	%ecx, %r9d
                	sete	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %edx
                	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
-               	popq	%rbx
                	leave
                	retq
                	movq	%rax, %rcx

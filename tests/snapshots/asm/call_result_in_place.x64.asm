@@ -610,16 +610,15 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x6, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
-               	movq	%rdx, %r12
-               	movq	%rbx, -0x10(%rbp)
-               	movq	%r12, -0x8(%rbp)
+               	movq	%rax, %r12
+               	movq	%rdx, %rbx
+               	movq	%rbx, -0x8(%rbp)
                	movl	$0x7, %edi
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
                	movl	-0x8(%rbp), %ecx
                	movl	-0x4(%rbp), %edx
-               	leaq	(%rbx,%r12), %rsi
+               	leaq	(%r12,%rbx), %rsi
                	xorl	%eax, %eax
                	cmpl	$0x7, %ecx
                	sete	%cl

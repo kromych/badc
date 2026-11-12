@@ -216,8 +216,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v120 Imm(0)                                           -> x0
     v121 Imm(0)                                           -> x0
     v122 LocalAddr(-1)                                    -> x0
-    v123 ImmData(8)                                       -> x1
-    v124 Mcpy { dst=v122, src=v123, size=6, align=8 }     -> -
+    v123 ImmData(8)                                       -> x0
+    v124 Imm(0)                                           -> x0
     v125 LocalAddr(-1)                                    -> x0
     v126 Imm(97)                                          -> x0
     v127 Imm(1)                                           -> x0

@@ -199,7 +199,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx
                	movq	%rax, %rdi
-               	movl	$0x0, -0x10(%rbp)
                	movq	%rsp, %r9
                	movq	%rbx, %r11
                	addq	$0xf, %r11

@@ -66,7 +66,6 @@ Disassembly of section .text:
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
                	movq	%rax, -0x8(%rbp)
                	movl	$0x99, %eax
-               	movq	%rax, -0x8(%rbp)
                	cmpq	$0x99, %rax
                	sete	%al
                	movzbq	%al, %rax

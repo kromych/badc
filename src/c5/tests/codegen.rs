@@ -12674,6 +12674,36 @@ fn size_bound_keeps_the_object_in_memory() {
     }
 }
 
+/// A frame object whose addresses only write it and that no load reads
+/// holds nothing anyone observes: the zero fill and the stores of the
+/// `vzipq_s8` pair's temporary go once the copy out reads the stored
+/// values, as with gcc. One whose address reaches a call keeps them, the
+/// callee reading it.
+#[cfg(feature = "full")]
+#[test]
+fn writes_to_an_object_nothing_reads_go() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        void sink(int8x16x2_t *);\n\
+        void q(int8x16x2_t *out, const int8x16_t *a, const int8x16_t *b) {\n\
+            *out = vzipq_s8(*a, *b);\n\
+        }\n\
+        void r(const int8x16_t *a) { int8x16x2_t p = vzipq_s8(*a, *a); sink(&p); }\n";
+    let target = crate::Target::LinuxAarch64;
+    let writes = |name: &str| {
+        let (body, insts) = optimized_function_full_pool(SRC, name, target);
+        let n = (insts.iter())
+            .filter(|(_, i)| {
+                i.starts_with("Mzero") || i.starts_with("StoreLocal") || i.starts_with("Mcpy")
+            })
+            .count();
+        (n, body)
+    };
+    let (n, body) = writes("q");
+    assert_eq!(n, 0, "q writes its temporary: {body}");
+    let (n, body) = writes("r");
+    assert!(n > 0, "r drops the writes the callee reads: {body}");
+}
+
 /// A vector held in a register still folds against its constant template:
 /// a lane read past an insert of another lane reads the template's lane,
 /// and an array element stored from such a vector holds the template's

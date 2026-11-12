@@ -222,7 +222,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	mov	x4, x0
                	mov	x5, x0
-               	stur	wzr, [x29, #-0x10]
                	mov	x7, sp
                	add	x17, x9, #0xf
                	and	x17, x17, #0xfffffffffffffff0

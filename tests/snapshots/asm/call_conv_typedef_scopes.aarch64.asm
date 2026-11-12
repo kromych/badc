@@ -264,15 +264,12 @@ Disassembly of section .text:
                	ret
 
 <list_mix>:
-               	stp	x20, x21, [sp, #-0x40]!
+               	stp	x20, x21, [sp, #-0x30]!
                	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
@@ -288,9 +285,9 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	add	x0, x22, x0
-               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
+               	ldp	x20, x21, [sp], #0x30
                	ret
 
 <main>:

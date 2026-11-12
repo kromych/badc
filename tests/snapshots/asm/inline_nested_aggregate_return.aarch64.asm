@@ -65,8 +65,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	mov	x21, x1
-               	stur	x20, [x29, #-0x40]
-               	stur	x21, [x29, #-0x38]
                	mov	x0, #0x4                // =4
                	sub	x8, x29, #0x30
                	bl	<addr>
@@ -91,8 +89,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x21, x0
                	mov	x22, x1
-               	stur	x21, [x29, #-0x40]
-               	stur	x22, [x29, #-0x38]
                	mov	x0, #0x0                // =0
                	sub	x8, x29, #0x30
                	bl	<addr>
@@ -127,8 +123,6 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	mov	x21, x1
-               	stur	x0, [x29, #-0x40]
-               	stur	x21, [x29, #-0x38]
                	sub	x8, x29, #0x30
                	bl	<addr>
                	ldur	x0, [x29, #-0x8]

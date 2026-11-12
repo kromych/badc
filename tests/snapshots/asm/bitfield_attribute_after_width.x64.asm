@@ -101,9 +101,7 @@ Disassembly of section .text:
                	sarq	$0x22, %rax
                	cmpl	$0x1fffffff, %eax       # imm = 0x1FFFFFFF
                	jne	<addr>
-               	movq	$0x0, -0x40(%rbp)
                	movq	$0x0, -0x30(%rbp)
-               	movb	$0x7, -0x40(%rbp)
                	movb	$0x8, -0x2b(%rbp)
                	movq	-0x30(%rbp), %rax
                	movabsq	$-0x10000000000, %r11   # imm = 0xFFFFFF0000000000

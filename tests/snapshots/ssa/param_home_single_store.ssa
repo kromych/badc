@@ -80,11 +80,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v35  Imm(4622522805030748160)                         -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(41)                                          -> x0
-    v38  StoreLocal { off=-1, value=v37, kind=I64 }       -> -
+    v38  Imm(0)                                           -> x0
     v39  LocalAddr(-1)                                    -> x0
     v40  LoadLocal { off=-1, kind=I64 }                   -> x0
     v41  Imm(42)                                          -> x0
-    v42  StoreLocal { off=-1, value=v41, kind=I64 }       -> -
+    v42  Imm(0)                                           -> x0
     v43  LoadLocal { off=-1, kind=I64 }                   -> x0
     v44  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v44)

@@ -133,7 +133,6 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	xgetbv
                	movq	%rax, -0x10(%rbp)
-               	movq	%rdx, -0x8(%rbp)
                	shrq	$0x20, %rax
                	shrq	$0x20, %rdx
                	testl	%edx, %edx

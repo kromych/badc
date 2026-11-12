@@ -210,7 +210,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%gs:(%rdi), %rax
-               	movq	%rax, -0x20(%rbp)
                	leaq	0x8(%rdi), %rcx
                	movq	%gs:(%rcx), %rcx
                	movq	%rcx, -0x18(%rbp)
@@ -219,7 +218,6 @@ Disassembly of section .text:
                	movq	%rcx, -0x10(%rbp)
                	leaq	0x18(%rdi), %rcx
                	movq	%gs:(%rcx), %rcx
-               	movq	%rcx, -0x8(%rbp)
                	movl	-0x18(%rbp), %edx
                	addq	%rdx, %rax
                	movl	-0x10(%rbp), %edx

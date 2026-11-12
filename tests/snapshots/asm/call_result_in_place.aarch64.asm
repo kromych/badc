@@ -568,16 +568,15 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x0, #0x6                // =6
                	bl	<addr>
-               	mov	x20, x0
-               	mov	x21, x1
-               	stur	x20, [x29, #-0x10]
-               	stur	x21, [x29, #-0x8]
+               	mov	x21, x0
+               	mov	x20, x1
+               	stur	x20, [x29, #-0x8]
                	mov	x0, #0x7                // =7
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
                	ldur	w1, [x29, #-0x8]
                	ldur	w2, [x29, #-0x4]
-               	add	x3, x20, x21
+               	add	x3, x21, x20
                	mov	x0, #0x0                // =0
                	cmp	w1, #0x7
                	cset	x1, eq

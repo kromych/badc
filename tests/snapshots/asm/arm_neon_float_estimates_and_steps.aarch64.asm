@@ -557,6 +557,7 @@ Disassembly of section .text:
                	mov	s0, v2.s[3]
                	mov	x0, #0x0                // =0
                	fmov	s16, s0
+               	fmov	d0, d16
                	mov	w0, v0.s[0]
                	ubfx	x0, x0, #23, #8
                	mov	w1, v0.s[0]

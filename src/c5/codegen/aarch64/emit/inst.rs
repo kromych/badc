@@ -866,13 +866,19 @@ fn emit_vec_insert(
     if bytes != 16 && bytes != 8 {
         return fail("VecInsert: only 8- and 16-byte vectors");
     }
-    // The result at the vector's width: an 8-byte one is its D register.
+    // The result at the vector's width: an 8-byte one is its D register,
+    // moved there when it formed in the scratch.
     let propagate = |code: &mut Vec<u8>, qd: u8| {
         if bytes == 16 {
             propagate_v128(code, frame, dst, qd, scratch.primary);
-        } else {
-            store_spilled_fp(code, frame, dst, qd);
+            return;
         }
+        if let Place::FpReg(r) = dst
+            && r != qd
+        {
+            emit(code, super::encode::enc_fmov_d_d(r, qd));
+        }
+        store_spilled_fp(code, frame, dst, qd);
     };
     let esize = match kind {
         StoreKind::F64 | StoreKind::I64 => 8,

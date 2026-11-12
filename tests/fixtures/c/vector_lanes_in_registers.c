@@ -21,6 +21,7 @@ typedef double v4d __attribute__((vector_size(32)));
 typedef short v16s __attribute__((vector_size(32)));
 typedef int v16i __attribute__((vector_size(64)));
 typedef long long v8l __attribute__((vector_size(64)));
+typedef float v2f __attribute__((vector_size(8)));
 
 __attribute__((noinline)) v16c put_c(v16c v, signed char x) {
     v[3] = x;
@@ -75,6 +76,17 @@ __attribute__((noinline)) v16i put_i16(v16i v, int x) {
 }
 __attribute__((noinline)) long get_i16(v16i v) { return (v + v)[14]; }
 __attribute__((noinline)) long long get_l8(v8l v) { return (v - 1)[5]; }
+
+/* 8-byte vectors whose lanes are the arguments in their results' registers:
+ * a lane that forms in another register reaches the result's. */
+struct v2f3 { v2f a, b, c; };
+__attribute__((noinline)) struct v2f3 three(float a, float b, float c) {
+    struct v2f3 s;
+    s.a = (v2f){a, 0};
+    s.b = (v2f){0, b};
+    s.c = (v2f){c, 0};
+    return s;
+}
 
 int main(void) {
     v16c c;
@@ -143,5 +155,8 @@ int main(void) {
     v8l zl;
     for (int i = 0; i < 8; i++) zl[i] = -0x100000000LL * i;
     if (get_l8(zl) != -0x500000001LL) return 23;
+    struct v2f3 t = three(1, 2, 3);
+    if (t.a[0] != 1 || t.a[1] != 0 || t.b[0] != 0 || t.b[1] != 2 || t.c[0] != 3 || t.c[1] != 0)
+        return 24;
     return 0;
 }

@@ -77,8 +77,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x128, %rsp            # imm = 0x128
-               	pushq	%rbx
+               	subq	$0x120, %rsp            # imm = 0x120
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
                	movl	$0xffc2f700, -0xd0(%rbp) # imm = 0xFFC2F700
@@ -116,8 +115,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -139,8 +136,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -156,8 +151,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -192,8 +185,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -227,8 +218,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -258,8 +247,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -288,8 +275,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -317,8 +302,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -336,16 +319,15 @@ Disassembly of section .text:
                	movl	-0xb8(%rbp), %ecx
                	addq	%rcx, %rax
                	movl	-0xb4(%rbp), %ecx
-               	leaq	(%rax,%rcx), %rbx
+               	leaq	(%rax,%rcx), %r10
+               	movq	%r10, -0x108(%rbp)
                	leaq	(%rsp), %r9
                	movq	%r9, %r10
                	vmovups	(%r10), %ymm0
                	callq	<addr>
-               	cmpl	%ebx, %eax
+               	cmpl	-0x108(%rbp), %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -377,8 +359,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -407,8 +387,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -429,8 +407,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -487,8 +463,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -509,8 +483,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
@@ -540,13 +512,9 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xf, %eax
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq
-               	leaq	-0x130(%rbp), %rsp
-               	popq	%rbx
                	vzeroupper
                	leave
                	retq

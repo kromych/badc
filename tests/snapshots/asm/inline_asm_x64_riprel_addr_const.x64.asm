@@ -36,7 +36,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r14
+               	subq	$0x18, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -62,13 +62,14 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
-               	popq	%rbp
+               	leave
                	retq
                	callq	*%rax
-               	movq	%rax, %r14
+               	movq	%rax, 0x28(%rsp)
                	callq	*%rbx
-               	addq	%r14, %rax
+               	movq	%rax, %r10
+               	movq	0x28(%rsp), %rax
+               	addq	%r10, %rax
                	movl	(%r12), %ecx
                	addq	%rcx, %rax
                	movl	(%r13), %ecx
@@ -76,6 +77,5 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
-               	popq	%rbp
+               	leave
                	retq

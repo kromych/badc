@@ -27,7 +27,7 @@ fn ent_pc=25 n_params=3 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=26 ---
 ; name=main
 fn ent_pc=26 n_params=0 variadic=false locals=6
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-4)                                    -> x7
@@ -164,7 +164,7 @@ fn ent_pc=26 n_params=0 variadic=false locals=6
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
     v170 ImmData(30)                                      -> x7
-    v171 CallExt { binding_idx=101, args=[v170], fp_arg_mask=0x0 } -> x3
+    v171 CallExt { binding_idx=101, args=[v170], fp_arg_mask=0x0 } -> [spill 0]
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 BinopI { op=eq, lhs=v171, rhs_imm=0 }            -> x0

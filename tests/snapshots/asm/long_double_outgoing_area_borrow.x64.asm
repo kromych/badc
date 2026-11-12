@@ -353,15 +353,16 @@ Disassembly of section .text:
                	imulq	$0x6, %rbx, %rcx
                	addq	%rcx, %rax
                	imulq	$0x7, %r12, %rcx
+               	addq	%rax, %rcx
+               	movq	0x38(%rsp), %rax
+               	movq	%rax, %rdx
+               	shlq	$0x3, %rdx
+               	addq	%rdx, %rcx
+               	leaq	(%r13,%r13,8), %rdx
+               	addq	%rdx, %rcx
+               	imulq	$0xa, %rsi, %rdx
+               	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movq	0x38(%rsp), %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
-               	leaq	(%r13,%r13,8), %rcx
-               	addq	%rcx, %rax
-               	imulq	$0xa, %rsi, %rcx
-               	addq	%rcx, %rax
-               	addq	0x38(%rsp), %rax
                	leaq	0x7(%rax), %rbx
                	callq	<addr>
                	cmpq	%rbx, %rax

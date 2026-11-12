@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x9
@@ -228,7 +228,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v97  BinopI { op=ne, lhs=v202, rhs_imm=30 }           -> x0
     terminator Bz { cond=v97, target=b28, fall=b21 }   (exit_acc=v97)
   block 21  start_pc=0
-    v98  ImmData(25)                                      -> x3
+    v98  ImmData(25)                                      -> [spill 0]
     v99  Imm(3)                                           -> x0
     v100 Imm(3)                                           -> x0
     v101 Imm(0)                                           -> x9

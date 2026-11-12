@@ -264,7 +264,7 @@ pub(crate) fn emit_function(
     // A full leaf builds no frame to leave ahead of; the evaluation may need
     // more temporaries than it has.
     let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
-        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+        super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
             emit_early_test(&mut Vec::new(), exit, false, frame.fixed_regs).is_some()
                 && emit_early_return(&mut Vec::new(), exit, frame.fixed_regs)
         })

@@ -244,26 +244,26 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=5 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
-    v3   BinopI { op=mul, lhs=v2, rhs_imm=5 }             -> x12
+    v3   BinopI { op=mul, lhs=v2, rhs_imm=5 }             -> [spill 0]
     v4   Imm(0)                                           -> x0
     v5   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
-    v6   BinopI { op=xor, lhs=v5, rhs_imm=153 }           -> x13
+    v6   BinopI { op=xor, lhs=v5, rhs_imm=153 }           -> [spill 1]
     v7   Imm(0)                                           -> x0
     v8   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
-    v9   BinopI { op=add, lhs=v8, rhs_imm=77 }            -> x14
+    v9   BinopI { op=add, lhs=v8, rhs_imm=77 }            -> [spill 2]
     v10  Imm(0)                                           -> x0
     v11  Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
-    v12  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> x15
+    v12  BinopI { op=mul, lhs=v11, rhs_imm=3 }            -> [spill 3]
     v13  Imm(0)                                           -> x0
     v14  Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x3
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Call { target_pc=1, args=[v14], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
+    v17  Call { target_pc=1, args=[v14], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 4]
     v18  Imm(0)                                           -> x0
     v19  Call { target_pc=2, args=[v14], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Binop { op=ne, lhs=v17, rhs=v19 }                -> x0
@@ -310,7 +310,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   block 7  start_pc=0
     v48  Imm(0)                                           -> x0
     v49  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x7
-    v50  Call { target_pc=1, args=[v49], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v50  Call { target_pc=1, args=[v49], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v51  Imm(0)                                           -> x0
     v52  BinopI { op=add, lhs=v14, rhs_imm=1 }            -> x7
     v53  Call { target_pc=2, args=[v52], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

@@ -1080,7 +1080,7 @@ fn ent_pc=33 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=34 ---
 ; name=main
 fn ent_pc=34 n_params=0 variadic=false locals=80
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> x0
@@ -2484,7 +2484,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=80
     v1273 BinopI { op=and, lhs=v1272, rhs_imm=4294967295 } -> x2
     v1274 BinopI { op=and, lhs=v1272, rhs_imm=65280 }      -> x1
     v1275 Binop { op=or, lhs=v1269, rhs=v1274 }            -> x0
-    v1276 BinopI { op=or, lhs=v1275, rhs_imm=65536 }       -> x12
+    v1276 BinopI { op=or, lhs=v1275, rhs_imm=65536 }       -> [spill 0]
     v1277 Imm(0)                                           -> x0
     v1278 Call { target_pc=33, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1279 BinopI { op=and, lhs=v1278, rhs_imm=4294967295 } -> x1

@@ -196,7 +196,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v52  Imm(1)                                           -> x6
     v53  Store { addr=v51, disp=0, value=v52, kind=I8 }   -> -
     v54  TlsAddr(112)                                     -> x6
-    v55  Imm(2)                                           -> x3
+    v55  Imm(2)                                           -> [spill 0]
     v56  Store { addr=v54, disp=0, value=v55, kind=I8 }   -> -
     v57  TlsAddr(144)                                     -> x6
     v58  Store { addr=v57, disp=0, value=v37, kind=I8 }   -> -

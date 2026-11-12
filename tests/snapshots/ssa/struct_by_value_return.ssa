@@ -115,15 +115,15 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
 fn ent_pc=4 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(11)                                          -> x7
-    v3   Call { target_pc=0, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v3   Call { target_pc=0, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v4   Extend { value=v3, kind=I32 }                    -> x0
     v5   Imm(22)                                          -> x7
-    v6   Call { target_pc=0, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v6   Call { target_pc=0, args=[v5], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v7   Extend { value=v6, kind=I32 }                    -> x0
     v8   Extend { value=v3, kind=I32 }                    -> x0
     v9   Extend { value=v6, kind=I32 }                    -> x0
@@ -174,7 +174,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v43  Imm(0)                                           -> x0
     v44  Imm(3)                                           -> x7
-    v45  Call { target_pc=0, args=[v44], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v45  Call { target_pc=0, args=[v44], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v46  Extend { value=v45, kind=I32 }                   -> x0
     v47  Imm(4)                                           -> x7
     v48  Call { target_pc=0, args=[v47], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -214,10 +214,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v74  LifetimeEnd(0)                                   -> -
     v75  Imm(0)                                           -> x0
     v76  Imm(100)                                         -> x7
-    v77  Call { target_pc=0, args=[v76], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v77  Call { target_pc=0, args=[v76], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v78  Extend { value=v77, kind=I32 }                   -> x0
     v79  Imm(200)                                         -> x7
-    v80  Call { target_pc=0, args=[v79], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v80  Call { target_pc=0, args=[v79], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v81  Extend { value=v80, kind=I32 }                   -> x0
     v82  Extend { value=v77, kind=I32 }                   -> x0
     v83  Extend { value=v80, kind=I32 }                   -> x0
@@ -232,7 +232,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v92  LifetimeEnd(0)                                   -> -
     v93  Imm(0)                                           -> x0
     v94  Imm(300)                                         -> x7
-    v95  Call { target_pc=0, args=[v94], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v95  Call { target_pc=0, args=[v94], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 2]
     v96  Extend { value=v95, kind=I32 }                   -> x0
     v97  Imm(400)                                         -> x7
     v98  Call { target_pc=0, args=[v97], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -298,10 +298,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v142 LifetimeEnd(0)                                   -> -
     v143 Imm(0)                                           -> x0
     v144 Imm(1)                                           -> x7
-    v145 Call { target_pc=0, args=[v144], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v145 Call { target_pc=0, args=[v144], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v146 Extend { value=v145, kind=I32 }                  -> x0
     v147 Imm(2)                                           -> x7
-    v148 Call { target_pc=0, args=[v147], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v148 Call { target_pc=0, args=[v147], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v149 Extend { value=v148, kind=I32 }                  -> x0
     v150 Extend { value=v145, kind=I32 }                  -> x0
     v151 Extend { value=v148, kind=I32 }                  -> x0
@@ -313,7 +313,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v157 Imm(0)                                           -> x0
     v158 Imm(0)                                           -> x0
     v159 Imm(3)                                           -> x7
-    v160 Call { target_pc=0, args=[v159], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x13
+    v160 Call { target_pc=0, args=[v159], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 2]
     v161 Extend { value=v160, kind=I32 }                  -> x0
     v162 Imm(4)                                           -> x7
     v163 Call { target_pc=0, args=[v162], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

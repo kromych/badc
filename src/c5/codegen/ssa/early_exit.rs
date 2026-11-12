@@ -9,7 +9,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 
 use super::mem2reg::predecessors;
-use super::reg_alloc::{Allocation, incoming_reg};
+use super::reg_alloc::incoming_reg;
 use crate::c5::codegen::ArgPlacement;
 use crate::c5::codegen::passes::constfold::mirror;
 use crate::c5::codegen::passes::narrow::is_cmp32;
@@ -147,13 +147,9 @@ fn pure(inst: &Inst) -> bool {
     }
 }
 
-/// The early return of `func` under `alloc`, with parameters in the
-/// registers `plan` assigns them.
-pub(crate) fn early_exit(
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    plan: &[ArgPlacement],
-) -> Option<EarlyExit> {
+/// The early return of `func`, with parameters in the registers `plan`
+/// assigns them.
+pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<EarlyExit> {
     if func.is_naked
         || func.is_variadic
         || func.indirect_result_slot != 0
@@ -233,13 +229,13 @@ pub(crate) fn early_exit(
             op: *op,
             lhs: cx.expr(*lhs)?,
             rhs: cx.expr(*rhs)?,
-            narrow: is_cmp32(&alloc.cmp32, cond),
+            narrow: is_cmp32(&func.cmp32, cond),
         },
         Inst::BinopI { op, lhs, rhs_imm } if is_int_comparison_op(*op) => ShadowTest::Cmp {
             op: *op,
             lhs: cx.expr(*lhs)?,
             rhs: ShadowExpr::Imm(*rhs_imm),
-            narrow: is_cmp32(&alloc.cmp32, cond),
+            narrow: is_cmp32(&func.cmp32, cond),
         },
         _ => ShadowTest::Value {
             value: cx.expr(cond)?,

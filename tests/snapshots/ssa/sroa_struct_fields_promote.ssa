@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=2 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
@@ -42,7 +42,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v36  Imm(0)                                           -> x7
     v37  Imm(0)                                           -> x7
     v38  Imm(122)                                         -> x7
-    v39  Extend { value=v2, kind=I8 }                     -> x12
+    v39  Extend { value=v2, kind=I8 }                     -> [spill 0]
     v40  BinopI { op=xor, lhs=v39, rhs_imm=122 }          -> x7
     v41  Extend { value=v40, kind=I8 }                    -> x7
     v42  Imm(0)                                           -> x8
@@ -147,7 +147,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v141 BinopI { op=add, lhs=v131, rhs_imm=9 }           -> x1
     v142 LifetimeEnd(0)                                   -> -
     v143 BinopI { op=mul, lhs=v141, rhs_imm=3 }           -> x1
-    v144 Binop { op=add, lhs=v119, rhs=v143 }             -> x13
+    v144 Binop { op=add, lhs=v119, rhs=v143 }             -> [spill 1]
     v145 Imm(0)                                           -> x0
     v146 Imm(0)                                           -> x7
     v147 Imm(0)                                           -> x0
@@ -187,7 +187,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v253 LifetimeEnd(0)                                   -> -
     v254 BinopI { op=mul, lhs=v234, rhs_imm=5 }           -> x0
-    v255 Binop { op=add, lhs=v144, rhs=v254 }             -> x13
+    v255 Binop { op=add, lhs=v144, rhs=v254 }             -> [spill 1]
     v256 Imm(0)                                           -> x0
     v257 Imm(0)                                           -> x0
     v258 Imm(0)                                           -> x0
@@ -225,7 +225,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v290 Imm(0)                                           -> x7
     v291 Imm(122)                                         -> x7
     v292 Extend { value=v2, kind=I8 }                     -> x7
-    v293 BinopI { op=xor, lhs=v39, rhs_imm=122 }          -> x12
+    v293 BinopI { op=xor, lhs=v39, rhs_imm=122 }          -> x7
     v294 Extend { value=v293, kind=I8 }                   -> x7
     v295 Imm(0)                                           -> x8
     v296 Imm(0)                                           -> x8

@@ -308,7 +308,7 @@ pub(crate) fn emit_function(
     // need more temporaries than it has.
     let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
     let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
-        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+        super::ssa::early_exit::early_exit(func, &param_plan).filter(|exit| {
             emit_early_test(&mut Vec::new(), exit, frame.fixed_regs).is_some()
                 && emit_early_return(
                     &mut Vec::new(),

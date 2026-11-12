@@ -696,7 +696,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=main
 fn ent_pc=10 n_params=0 variadic=false locals=4
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x7
@@ -981,7 +981,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=4
     v268 Extend { value=v267, kind=I32 }                  -> x2
     v269 Extend { value=v267, kind=I32 }                  -> x2
     v270 Extend { value=v267, kind=I32 }                  -> x2
-    v271 Binop { op=add, lhs=v228, rhs=v267 }             -> x3
+    v271 Binop { op=add, lhs=v228, rhs=v267 }             -> [spill 0]
     v272 Extend { value=v271, kind=I32, nsw }             -> x0
     v273 LocalAddr(-48)                                   -> x7
     v274 Imm(4)                                           -> x0

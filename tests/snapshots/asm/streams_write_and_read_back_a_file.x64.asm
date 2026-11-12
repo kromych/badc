@@ -30,8 +30,7 @@ Disassembly of section .text:
                	jl	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x168, %rsp            # imm = 0x168
-               	pushq	%r15
+               	subq	$0x160, %rsp            # imm = 0x160
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	leaq	<rip>, %rsi
@@ -159,14 +157,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r13
                	movsd	-0x148(%rbp), %xmm14
-               	movsd	%xmm14, 0x38(%rsp)
+               	movsd	%xmm14, 0x28(%rsp)
                	movl	-0x140(%rbp), %r14d
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rcx
                	leaq	<rip>, %rdi
-               	movsd	0x38(%rsp), %xmm0
+               	movsd	0x28(%rsp), %xmm0
                	movq	%r13, %rsi
                	movq	%r14, %rdx
                	movb	$0x1, %al
@@ -202,15 +200,16 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r15
+               	movq	%rax, %r10
+               	movq	%r10, 0x28(%rsp)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r8
                	leaq	<rip>, %rdi
                	movq	%r13, %rsi
-               	movq	%r15, %rcx
                	movq	%r14, %rdx
+               	movq	0x28(%rsp), %rcx
                	movb	$0x0, %al
                	callq	<addr>
                	movq	-0x138(%rbp), %rdi
@@ -295,7 +294,6 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	movl	$0x2, %eax

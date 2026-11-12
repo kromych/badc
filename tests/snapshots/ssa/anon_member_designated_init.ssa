@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=17
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -24,9 +24,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
     v6   StoreLocal { off=-5, value=v5, kind=I64, volatile } -> -
     v7   LocalAddr(-17)                                   -> x0
     v8   StoreLocal { off=-4, value=v7, kind=I64, volatile } -> -
-    v9   LoadLocal { off=-6, kind=I32, volatile }         -> x3
-    v10  LoadLocal { off=-4, kind=I64, volatile }         -> x12
-    v11  LoadLocal { off=-5, kind=I64, volatile }         -> x13
+    v9   LoadLocal { off=-6, kind=I32, volatile }         -> [spill 0]
+    v10  LoadLocal { off=-4, kind=I64, volatile }         -> [spill 1]
+    v11  LoadLocal { off=-5, kind=I64, volatile }         -> [spill 2]
     v12  Extend { value=v9, kind=I32 }                    -> x0
     v13  LocalAddr(-3)                                    -> x7
     v14  Mzero { dst=v13, size=24, align=8 }              -> -

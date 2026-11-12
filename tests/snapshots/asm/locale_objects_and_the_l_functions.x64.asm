@@ -28,8 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
-               	pushq	%r14
+               	subq	$0x98, %rsp
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -51,7 +50,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	retq
                	movq	%r12, %rdi
@@ -74,7 +72,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	retq
                	movl	$0x37, %edi
@@ -138,7 +135,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	retq
                	movl	$0x3, %edi
@@ -153,7 +149,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	retq
                	xorl	%eax, %eax
@@ -165,7 +160,6 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
                	leave
                	retq
                	leaq	<rip>, %rdi
@@ -475,7 +469,8 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r14
+               	movq	%rax, %r10
+               	movq	%r10, 0x28(%rsp)
                	testq	%r13, %r13
                	je	<addr>
                	movl	$0x61, %edi
@@ -495,8 +490,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x61, %edi
-               	movq	%r14, %rsi
                	movq	%rbx, %rdx
+               	movq	0x28(%rsp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpl	$0x41, %eax

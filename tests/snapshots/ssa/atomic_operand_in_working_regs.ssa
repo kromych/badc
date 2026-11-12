@@ -1,16 +1,16 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=f
 fn ent_pc=0 n_params=8 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
-    v5   ParamRef(2, kind=I64)                            -> x3
+    v5   ParamRef(2, kind=I64)                            -> [spill 0]
     v6   Imm(0)                                           -> x0
-    v7   ParamRef(3, kind=I64)                            -> x12
+    v7   ParamRef(3, kind=I64)                            -> [spill 1]
     v8   Imm(0)                                           -> x0
     v9   ParamRef(4, kind=I64)                            -> x8
     v10  Imm(0)                                           -> x0
@@ -29,13 +29,13 @@ fn ent_pc=0 n_params=8 variadic=false locals=0
     v22  Copy { value=v20, fp=false }                     -> x1
     v23  Imm(0)                                           -> x1
     v24  ImmData(8)                                       -> x1
-    v25  Imm(0)                                           -> x13
-    v26  Imm(0)                                           -> x13
-    v27  Binop { op=add, lhs=v1, rhs=v3 }                 -> x13
+    v25  Imm(0)                                           -> [spill 2]
+    v26  Imm(0)                                           -> [spill 2]
+    v27  Binop { op=add, lhs=v1, rhs=v3 }                 -> [spill 2]
     v28  AtomicRmw { op=Add, addr=v24, value=v27, width=8, order=SeqCst } -> x1
-    v29  Imm(0)                                           -> x13
-    v30  Extend { value=v19, kind=I32 }                   -> x13
-    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x13
+    v29  Imm(0)                                           -> [spill 2]
+    v30  Extend { value=v19, kind=I32 }                   -> [spill 2]
+    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> [spill 2]
     terminator Bz { cond=v19, target=b3, fall=b2 }   (exit_acc=v19)
   block 2  start_pc=0
     v32  Imm(1)                                           -> x0

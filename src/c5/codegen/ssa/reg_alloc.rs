@@ -1664,6 +1664,58 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         )
     };
     let mut coloring = color(&node_cons);
+    // A callee-saved register costs its save and its restore at every
+    // exit past the prologue, unless a call or an asm block saves it
+    // anyway; one whose holders would cost less in spill slots -- a store
+    // at each definition, a load at each use, by loop weight -- is
+    // withheld and the graph colored again. x86-64 only: AArch64 saves
+    // registers in pairs folded into the frame's own setup and teardown.
+    if target.is_x86_64() {
+        let exits = (func.blocks.iter())
+            .filter(|b| matches!(b.terminator, Terminator::Return(_) | Terminator::TailExt(_)))
+            .count() as u64;
+        let early = super::early_exit::early_exit(func, &param_incoming_plan(func, target));
+        let exits = exits - u64::from(early.is_some());
+        let defs = compute_def_weights(func, &node_of, &use_counts);
+        let conv_banks = RegBanks::new(conv_target, fixed);
+        let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
+        let (asm_gpr, asm_fpr) =
+            asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
+        let base = region_base.map_or(0, |r| 1u32 << r);
+        let saved = [call_gpr | asm_gpr | base, call_fpr | asm_fpr].map(u64::from);
+        let mut withheld = [0u64; 2];
+        loop {
+            let mut held = [[0u64; 64]; 2];
+            for (node, c) in node_cons.iter().enumerate() {
+                let Some(c) = c else { continue };
+                let r = match coloring.places[node] {
+                    Place::IntReg(r) if !c.is_fp && banks.callee_gprs.contains(&r) => r,
+                    Place::FpReg(r) if c.is_fp && banks.callee_fprs.contains(&r) => r,
+                    _ => continue,
+                };
+                let cost = spill_weights[node].saturating_add(defs[node]);
+                let h = &mut held[usize::from(c.is_fp)][r as usize];
+                *h = h.saturating_add(cost);
+            }
+            let mut more = false;
+            for (bank, regs) in held.iter().enumerate() {
+                for (r, &cost) in regs.iter().enumerate() {
+                    let free = (saved[bank] >> r) & 1 != 0 || (withheld[bank] >> r) & 1 != 0;
+                    if cost > 0 && cost < exits + 1 && !free {
+                        withheld[bank] |= 1 << r;
+                        more = true;
+                    }
+                }
+            }
+            if !more {
+                break;
+            }
+            for c in node_cons.iter_mut().flatten() {
+                c.forbid |= withheld[usize::from(c.is_fp)];
+            }
+            coloring = color(&node_cons);
+        }
+    }
     // A bound x86-64 statement short of scratch under this coloring reserves
     // its whole need, which any coloring leaves free, and colors again.
     while target.is_x86_64() {
@@ -3352,6 +3404,25 @@ fn compute_spill_weights(
                 bump_term(target)
             }
             _ => {}
+        }
+    }
+    w
+}
+
+/// Loop-depth-weighted count of the emitted definitions per interference
+/// node: what storing its members to a spill slot costs.
+fn compute_def_weights(func: &FunctionSsa, node_of: &[ValueId], use_counts: &[u32]) -> Vec<u64> {
+    let block_weight = block_weights(func);
+    let mut w: Vec<u64> = vec![0u64; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::emit_common::is_dead_pure_counts(inst, v, use_counts) {
+                continue;
+            }
+            if let Some(&root) = node_of.get(v as usize) {
+                w[root as usize] = w[root as usize].saturating_add(block_weight[b]);
+            }
         }
     }
     w
@@ -5980,6 +6051,49 @@ int main(void) { return 0; }
             ..Default::default()
         };
         (f, dead)
+    }
+
+    /// x86-64: a value crossing one call before several returns spills, as a
+    /// store and a load cost less than a push and a pop at every exit; one
+    /// read on every trip of a loop keeps its callee-saved register.
+    #[test]
+    fn a_callee_saved_register_is_kept_only_where_its_save_costs_less_than_spilling() {
+        let src = r#"
+            int g(int);
+            int once(int a, int b) {
+                int k = a * 3;
+                int r = g(b);
+                if (r == 1) return g(11);
+                if (r == 2) return g(12);
+                if (r == 3) return g(13);
+                return r + k;
+            }
+            int looped(int a, int n) {
+                int k = a * 3, s = 0;
+                for (int i = 0; i < n; i++)
+                    s += g(i) * k;
+                if (s == 1) return g(11);
+                return s;
+            }
+            int main(void) { return once(1, 2) + looped(3, 4); }
+        "#;
+        let target = Target::LinuxX64;
+        let opts = crate::CompileOptions::default().with_optimize(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
+                .expect("produce_ssa_funcs");
+        let alloc_of = |name: &str| {
+            let mut func = funcs.iter().find(|f| f.name == name).expect(name).clone();
+            super::super::mem2reg::run(&mut func);
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target))
+        };
+        let once = alloc_of("once");
+        assert!(once.gpr_used.is_empty(), "once saves {:?}", once.gpr_used);
+        assert!(once.spill_count > 0);
+        assert!(!alloc_of("looped").gpr_used.is_empty());
     }
 
     #[test]

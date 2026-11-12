@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=19 ---
 ; name=main
 fn ent_pc=19 n_params=0 variadic=false locals=48
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-48)                                   -> x7
@@ -15,8 +15,8 @@ fn ent_pc=19 n_params=0 variadic=false locals=48
     v9   FpCast { kind=F32ToF64, value=v8 }               -> d0
     v10  Imm(4607182418800017408)                         -> x8
     v11  Imm(7)                                           -> x9
-    v12  Imm(255)                                         -> x3
-    v13  ImmData(53)                                      -> x12
+    v12  Imm(255)                                         -> [spill 0]
+    v13  ImmData(53)                                      -> [spill 1]
     v14  CallExt { binding_idx=170, args=[v1, v2, v3, v5, v7, v9, v7, v5, v10, v11, v12, v13], fp_arg_mask=0x1f8 } -> x0
     v15  LocalAddr(-48)                                   -> x7
     v16  ImmData(55)                                      -> x6

@@ -27,7 +27,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=46
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(48)                                      -> x0
@@ -302,7 +302,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
   block 21  start_pc=0
     v229 ImmData(32)                                      -> x7
     v230 ImmData(38)                                      -> x6
-    v231 CallExt { binding_idx=0, args=[v229, v230], fp_arg_mask=0x0 } -> x3
+    v231 CallExt { binding_idx=0, args=[v229, v230], fp_arg_mask=0x0 } -> [spill 0]
     v232 Imm(0)                                           -> x0
     v233 Imm(0)                                           -> x0
     v234 Imm(-1)                                          -> x0
@@ -727,7 +727,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
     v591 Imm(0)                                           -> x1
     terminator Bnz { cond=v590, target=b54, fall=b53 }   (exit_acc=v590)
   block 53  start_pc=0
-    v592 CallExt { binding_idx=318, args=[], fp_arg_mask=0x0 } -> x3
+    v592 CallExt { binding_idx=318, args=[], fp_arg_mask=0x0 } -> [spill 0]
     v593 CallExt { binding_idx=317, args=[], fp_arg_mask=0x0 } -> x0
     v594 Binop { op=lt, lhs=v592, rhs=v593 }              -> x0
     v595 Imm(0)                                           -> x1
@@ -753,7 +753,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=46
     terminator Return(v598)   (exit_acc=v598)
   block 55  start_pc=0
     v613 Imm(250)                                         -> x7
-    v614 CallExt { binding_idx=296, args=[v613], fp_arg_mask=0x0 } -> x3
+    v614 CallExt { binding_idx=296, args=[v613], fp_arg_mask=0x0 } -> [spill 0]
     v615 Imm(0)                                           -> x0
     v616 Imm(0)                                           -> x0
     v617 BinopI { op=ne, lhs=v614, rhs_imm=-1 }           -> x0

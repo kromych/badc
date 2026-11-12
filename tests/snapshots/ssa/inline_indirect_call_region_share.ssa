@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=4
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x0
@@ -69,7 +69,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v36  LocalAddr(-4)                                    -> x1
     v37  BinopI { op=add, lhs=v26, rhs_imm=24 }           -> x1
     v38  LoadLocal { off=-4, disp=24, kind=I64 }          -> x1
-    v39  Binop { op=add, lhs=v35, rhs=v38 }               -> x3
+    v39  Binop { op=add, lhs=v35, rhs=v38 }               -> [spill 0]
     v40  LifetimeEnd(-4)                                  -> -
     v41  Imm(0)                                           -> x0
     v42  ImmData(8)                                       -> x0

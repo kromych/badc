@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=207
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x7
@@ -151,7 +151,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=207
     v274 Extend { value=v97, kind=I32 }                   -> x0
     v275 Imm(0)                                           -> x6
     v276 Imm(2)                                           -> x2
-    v277 CallExt { binding_idx=260, args=[v97, v275, v276], fp_arg_mask=0x0 } -> x12
+    v277 CallExt { binding_idx=260, args=[v97, v275, v276], fp_arg_mask=0x0 } -> [spill 0]
     v278 Extend { value=v97, kind=I32 }                   -> x0
     v279 CallExt { binding_idx=253, args=[v97], fp_arg_mask=0x0 } -> x0
     v280 Imm(0)                                           -> x0

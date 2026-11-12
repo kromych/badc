@@ -14,11 +14,11 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1234)                                        -> x7
-    v2   Call { target_pc=2, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v2   Call { target_pc=2, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v3   Extend { value=v2, kind=I32 }                    -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(-42)                                         -> x7
@@ -178,15 +178,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v121)   (exit_acc=v121)
   block 18  start_pc=0
     v124 Imm(65534)                                       -> x7
-    v125 Call { target_pc=2, args=[v124], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v125 Call { target_pc=2, args=[v124], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v126 Extend { value=v125, kind=I32 }                  -> x0
     v127 Imm(0)                                           -> x0
     v128 Imm(1)                                           -> x7
-    v129 Call { target_pc=2, args=[v128], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v129 Call { target_pc=2, args=[v128], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v130 Extend { value=v129, kind=I32 }                  -> x0
     v131 Imm(0)                                           -> x0
-    v132 BinopI { op=and, lhs=v125, rhs_imm=65535 }       -> x12
-    v133 BinopI { op=and, lhs=v129, rhs_imm=65535 }       -> x0
+    v132 BinopI { op=and, lhs=v125, rhs_imm=65535 }       -> x0
+    v133 BinopI { op=and, lhs=v129, rhs_imm=65535 }       -> x1
     v134 Binop { op=add, lhs=v132, rhs=v133 }             -> x0
     v135 Extend { value=v134, kind=I32, nsw }             -> x1
     v136 Imm(0)                                           -> x1
@@ -228,7 +228,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Return(v163)   (exit_acc=v163)
   block 22  start_pc=0
     v166 Imm(-1)                                          -> x7
-    v167 Call { target_pc=2, args=[v166], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v167 Call { target_pc=2, args=[v166], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v168 Extend { value=v167, kind=I32 }                  -> x0
     v169 Imm(0)                                           -> x0
     v170 Imm(1)                                           -> x7
@@ -275,15 +275,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v201 LifetimeEnd(0)                                   -> -
     terminator Return(v199)   (exit_acc=v199)
   block 28  start_pc=0
-    v202 BinopI { op=and, lhs=v129, rhs_imm=65535 }       -> x3
-    v203 BinopI { op=shl, lhs=v202, rhs_imm=15 }          -> x3
-    v204 Extend { value=v203, kind=I32 }                  -> x0
-    v205 Extend { value=v203, kind=I32 }                  -> x0
-    v206 BinopI { op=and, lhs=v203, rhs_imm=65535 }       -> x3
-    v207 Extend { value=v206, kind=I32 }                  -> x0
-    v208 Extend { value=v206, kind=I32 }                  -> x0
-    v209 Imm(0)                                           -> x0
-    v210 BinopI { op=and, lhs=v206, rhs_imm=65535 }       -> x0
+    v202 BinopI { op=and, lhs=v129, rhs_imm=65535 }       -> x0
+    v203 BinopI { op=shl, lhs=v202, rhs_imm=15 }          -> x0
+    v204 Extend { value=v203, kind=I32 }                  -> x1
+    v205 Extend { value=v203, kind=I32 }                  -> x1
+    v206 BinopI { op=and, lhs=v203, rhs_imm=65535 }       -> x0
+    v207 Extend { value=v206, kind=I32 }                  -> x1
+    v208 Extend { value=v206, kind=I32 }                  -> x1
+    v209 Imm(0)                                           -> x1
+    v210 BinopI { op=and, lhs=v206, rhs_imm=65535 }       -> x1
     v211 BinopI { op=ne, lhs=v206, rhs_imm=32768 }        -> x0
     v212 BinopI { op=and, lhs=v211, rhs_imm=4294967295 }  -> x1
     v213 BinopI { op=ne, lhs=v206, rhs_imm=32768 }        -> x1
@@ -315,7 +315,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v231 Imm(0)                                           -> x0
     v232 Imm(0)                                           -> x0
     v233 Imm(100)                                         -> x7
-    v234 Call { target_pc=2, args=[v233], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v234 Call { target_pc=2, args=[v233], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v235 Extend { value=v234, kind=I32 }                  -> x0
     v236 Imm(0)                                           -> x0
     v237 Extend { value=v234, kind=I16 }                  -> x0
@@ -323,7 +323,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v239 Imm(2)                                           -> x0
     v240 Imm(0)                                           -> x0
     v241 Imm(200)                                         -> x7
-    v242 Call { target_pc=2, args=[v241], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v242 Call { target_pc=2, args=[v241], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v243 Extend { value=v242, kind=I32 }                  -> x0
     v244 Imm(0)                                           -> x0
     v245 Extend { value=v242, kind=I16 }                  -> x0
@@ -380,14 +380,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   block 35  start_pc=0
     v282 Imm(0)                                           -> x0
     v283 Imm(7)                                           -> x7
-    v284 Call { target_pc=2, args=[v283], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v284 Call { target_pc=2, args=[v283], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v285 Extend { value=v284, kind=I32 }                  -> x0
     v286 Imm(0)                                           -> x0
     v287 Extend { value=v284, kind=I16 }                  -> x0
     v288 Imm(0)                                           -> x0
     v289 Imm(0)                                           -> x0
     v290 Imm(-7)                                          -> x7
-    v291 Call { target_pc=2, args=[v290], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x12
+    v291 Call { target_pc=2, args=[v290], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 1]
     v292 Extend { value=v291, kind=I32 }                  -> x0
     v293 Imm(0)                                           -> x0
     v294 Extend { value=v291, kind=I16 }                  -> x0

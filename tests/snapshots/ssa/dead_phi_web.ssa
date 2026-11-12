@@ -234,17 +234,17 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
-    v2   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x3
+    v2   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> [spill 0]
     v3   Imm(0)                                           -> x0
     v4   ImmData(16)                                      -> x0
-    v5   Load { addr=v4, disp=0, kind=I64, volatile pc_rel } -> x12
+    v5   Load { addr=v4, disp=0, kind=I64, volatile pc_rel } -> [spill 1]
     v6   Imm(0)                                           -> x0
     v7   ImmData(24)                                      -> x0
-    v8   Load { addr=v7, disp=0, kind=I64, volatile pc_rel } -> x13
+    v8   Load { addr=v7, disp=0, kind=I64, volatile pc_rel } -> [spill 2]
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0

@@ -1,10 +1,10 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=wide
 fn ent_pc=1 n_params=1 variadic=false locals=14
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x3
+    v1   ParamRef(0, kind=I64)                            -> [spill 0]
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-5)                                    -> x7
     v4   ImmData(8)                                       -> x0

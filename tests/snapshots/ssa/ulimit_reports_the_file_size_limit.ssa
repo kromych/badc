@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x7
@@ -21,14 +21,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v11  Imm(9223372036854775807)                         -> x1
     v12  BinopI { op=shru, lhs=v8, rhs_imm=9 }            -> x2
     v13  BinopI { op=eq, lhs=v8, rhs_imm=-1 }             -> x0
-    v14  Select { cond=v13, a=v11, b=v12, kind=I64 }      -> x12
+    v14  Select { cond=v13, a=v11, b=v12, kind=I64 }      -> [spill 1]
     terminator Jmp(b3)
   block 3  start_pc=0
     v22  Copy { value=v14, fp=false }                     -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(1)                                           -> x7
-    v26  CallExt { binding_idx=41, args=[v25], fp_arg_mask=0x0 } -> x3
+    v26  CallExt { binding_idx=41, args=[v25], fp_arg_mask=0x0 } -> [spill 0]
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0

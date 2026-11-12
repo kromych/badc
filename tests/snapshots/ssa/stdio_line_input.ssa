@@ -1,10 +1,10 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=10
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> x3
+    v1   CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> [spill 0]
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   StoreLocal { off=-10, value=v3, kind=I64 }       -> -
@@ -198,7 +198,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=10
   block 25  start_pc=0
     v143 Imm(0)                                           -> x0
     v144 CallExt { binding_idx=18, args=[v1], fp_arg_mask=0x0 } -> x0
-    v145 CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> x3
+    v145 CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> [spill 0]
     v146 Imm(0)                                           -> x0
     v147 Imm(0)                                           -> x0
     v148 BinopI { op=eq, lhs=v145, rhs_imm=0 }            -> x0
@@ -320,7 +320,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=10
     v234 CallExt { binding_idx=75, args=[v233], fp_arg_mask=0x0 } -> x0
     v235 Imm(0)                                           -> x0
     v236 CallExt { binding_idx=18, args=[v145], fp_arg_mask=0x0 } -> x0
-    v237 CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> x12
+    v237 CallExt { binding_idx=30, args=[], fp_arg_mask=0x0 } -> [spill 1]
     v238 Imm(0)                                           -> x0
     v239 Imm(0)                                           -> x0
     v240 BinopI { op=eq, lhs=v237, rhs_imm=0 }            -> x0
@@ -333,7 +333,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=10
     terminator Return(v241)   (exit_acc=v241)
   block 42  start_pc=0
     v245 Imm(0)                                           -> x0
-    v246 CallExt { binding_idx=58, args=[v237], fp_arg_mask=0x0 } -> x3
+    v246 CallExt { binding_idx=58, args=[v237], fp_arg_mask=0x0 } -> [spill 0]
     v247 Imm(0)                                           -> x0
     v248 Extend { value=v246, kind=I32 }                  -> x0
     v249 BinopI { op=lt, lhs=v246, rhs_imm=0 }            -> x0

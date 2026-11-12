@@ -28,8 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x680, %rsp            # imm = 0x680
-               	pushq	%r12
+               	subq	$0x698, %rsp            # imm = 0x698
                	pushq	%rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
@@ -71,7 +70,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	<rip>, %rsi
@@ -83,7 +81,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	$0x2, %esi
@@ -102,7 +99,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	$0xa, %esi
@@ -121,7 +117,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movq	%rbx, %rdi
@@ -143,7 +138,6 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%esi, %esi
@@ -151,11 +145,13 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %r10
+               	movq	%r10, 0x18(%rsp)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x4, %r12
+               	movq	0x18(%rsp), %rax
+               	cmpq	$0x4, %rax
                	jne	<addr>
                	leaq	-0x658(%rbp), %rdi
                	xorl	%eax, %eax
@@ -165,7 +161,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x458(%rbp), %rdi
@@ -181,7 +176,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x258(%rbp), %rdi
@@ -199,7 +193,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%eax, %eax
@@ -218,7 +211,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x668(%rbp), %rax
@@ -248,7 +240,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%eax, %eax
@@ -266,7 +257,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%edi, %edi
@@ -276,7 +266,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	$0x1, %edi
@@ -291,7 +280,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	$0x1, %edi
@@ -312,6 +300,5 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	cmovlq	%rcx, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq

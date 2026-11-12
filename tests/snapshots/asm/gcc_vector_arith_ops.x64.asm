@@ -28,11 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x78, %rsp
-               	pushq	%r15
-               	pushq	%r14
-               	pushq	%r13
-               	pushq	%r12
+               	subq	$0x98, %rsp
                	pushq	%rbx
                	subq	$0x180, %rsp            # imm = 0x180
                	andq	$-0x20, %rsp
@@ -1970,7 +1966,8 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	0x120(%rsp), %rbx
-               	leaq	0x130(%rsp), %r12
+               	leaq	0x130(%rsp), %r10
+               	movq	%r10, -0x48(%rbp)
                	movq	0x120(%rsp), %rcx
                	movq	0x130(%rsp), %rdi
                	movq	%rcx, %rax
@@ -1990,7 +1987,8 @@ Disassembly of section .text:
                	leaq	(%rsi,%rdx), %rdi
                	leaq	(%rbx,%rdx), %rax
                	movq	(%rax), %r8
-               	leaq	(%r12,%rdx), %rax
+               	movq	-0x48(%rbp), %rax
+               	addq	%rdx, %rax
                	movq	(%rax), %r9
                	movq	%r8, %rax
                	xorl	%edx, %edx
@@ -2138,7 +2136,8 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	leaq	0x140(%rsp), %rbx
-               	leaq	0x150(%rsp), %r12
+               	leaq	0x150(%rsp), %r10
+               	movq	%r10, -0x48(%rbp)
                	movq	0x140(%rsp), %rcx
                	movq	0x150(%rsp), %rdi
                	movq	%rcx, %rax
@@ -2158,7 +2157,8 @@ Disassembly of section .text:
                	leaq	(%rsi,%rdx), %rdi
                	leaq	(%rbx,%rdx), %rax
                	movq	(%rax), %r8
-               	leaq	(%r12,%rdx), %rax
+               	movq	-0x48(%rbp), %rax
+               	addq	%rdx, %rax
                	movq	(%rax), %r9
                	movq	%r8, %rax
                	cqto
@@ -6389,42 +6389,46 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	sarq	$0x7, %rbx
                	movsbq	0x47(%rsp), %rax
-               	movq	%rax, %r12
-               	sarq	$0x7, %r12
-               	movsbq	0x48(%rsp), %rax
-               	movq	%rax, %r13
-               	sarq	$0x7, %r13
-               	movsbq	0x49(%rsp), %rax
-               	movq	%rax, %r14
-               	sarq	$0x7, %r14
-               	movsbq	0x4a(%rsp), %rax
-               	movq	%rax, %r15
-               	sarq	$0x7, %r15
-               	movsbq	0x4b(%rsp), %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x48(%rbp)
-               	movsbq	0x4c(%rsp), %rax
+               	movsbq	0x48(%rsp), %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x50(%rbp)
-               	movsbq	0x4d(%rsp), %rax
+               	movsbq	0x49(%rsp), %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x58(%rbp)
-               	movsbq	0x4e(%rsp), %rax
+               	movsbq	0x4a(%rsp), %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x60(%rbp)
-               	movsbq	0x4f(%rsp), %rax
+               	movsbq	0x4b(%rsp), %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x68(%rbp)
+               	movsbq	0x4c(%rsp), %rax
+               	movq	%rax, %r10
+               	sarq	$0x7, %r10
+               	movq	%r10, -0x70(%rbp)
+               	movsbq	0x4d(%rsp), %rax
+               	movq	%rax, %r10
+               	sarq	$0x7, %r10
+               	movq	%r10, -0x78(%rbp)
+               	movsbq	0x4e(%rsp), %rax
+               	movq	%rax, %r10
+               	sarq	$0x7, %r10
+               	movq	%r10, -0x80(%rbp)
+               	movsbq	0x4f(%rsp), %rax
+               	movq	%rax, %r10
+               	sarq	$0x7, %r10
+               	movq	%r10, -0x88(%rbp)
                	movl	$0x1b, %eax
                	andq	%rax, %rcx
                	xorl	%r10d, %r10d
-               	movq	%r10, -0x70(%rbp)
-               	movups	-0x78(%rbp), %xmm1
+               	movq	%r10, -0x90(%rbp)
+               	movups	-0x98(%rbp), %xmm1
                	vpinsrb	$0x0, %ecx, %xmm1, %xmm1
                	andq	%rax, %rdx
                	vpinsrb	$0x1, %edx, %xmm1, %xmm1
@@ -6438,28 +6442,32 @@ Disassembly of section .text:
                	vpinsrb	$0x5, %r9d, %xmm1, %xmm1
                	andq	%rax, %rbx
                	vpinsrb	$0x6, %ebx, %xmm1, %xmm1
-               	andq	%rax, %r12
-               	vpinsrb	$0x7, %r12d, %xmm1, %xmm1
-               	andq	%rax, %r13
-               	vpinsrb	$0x8, %r13d, %xmm1, %xmm1
-               	andq	%rax, %r14
-               	vpinsrb	$0x9, %r14d, %xmm1, %xmm1
-               	andq	%rax, %r15
-               	vpinsrb	$0xa, %r15d, %xmm1, %xmm1
                	movq	-0x48(%rbp), %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xb, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x7, %ecx, %xmm1, %xmm1
                	movq	-0x50(%rbp), %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xc, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x8, %ecx, %xmm1, %xmm1
                	movq	-0x58(%rbp), %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xd, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x9, %ecx, %xmm1, %xmm1
                	movq	-0x60(%rbp), %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0xa, %ecx, %xmm1, %xmm1
+               	movq	-0x68(%rbp), %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0xb, %ecx, %xmm1, %xmm1
+               	movq	-0x70(%rbp), %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0xc, %ecx, %xmm1, %xmm1
+               	movq	-0x78(%rbp), %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0xd, %ecx, %xmm1, %xmm1
+               	movq	-0x80(%rbp), %rcx
                	andq	%rax, %rcx
                	vpinsrb	$0xe, %ecx, %xmm1, %xmm1
                	movq	%rax, %r10
-               	movq	-0x68(%rbp), %rax
+               	movq	-0x88(%rbp), %rax
                	andq	%r10, %rax
                	vpinsrb	$0xf, %eax, %xmm1, %xmm1
                	pxor	%xmm1, %xmm0
@@ -6670,1050 +6678,630 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x68, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x67, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5f, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5e, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5d, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5c, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5b, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5a, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x59, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x58, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x57, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x56, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x55, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x54, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x53, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x52, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x51, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x50, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4f, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4e, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4d, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4c, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4b, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4a, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x49, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x60, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x48, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x66, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x65, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x64, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x63, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x62, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x61, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x47, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x46, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x45, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x44, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x43, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x42, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x41, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x40, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3f, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3e, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3d, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3c, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3b, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3a, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x39, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x38, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x37, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x36, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x35, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x34, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x33, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x32, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x31, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x30, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2f, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2e, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2d, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2c, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2b, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2a, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x29, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x28, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x27, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x26, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x25, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x24, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x23, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x22, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x21, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x20, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1f, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1e, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1d, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1c, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1b, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1a, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x19, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x18, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x17, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x16, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x15, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x14, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x13, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x12, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x11, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x10, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xf, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xe, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xd, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xc, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xb, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0xa, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x9, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x8, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x7, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x6, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x5, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x4, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x3, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x2, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq
                	movl	$0x1, %eax
                	leaq	-0xa0(%rbp), %rsp
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	vzeroupper
                	leave
                	retq

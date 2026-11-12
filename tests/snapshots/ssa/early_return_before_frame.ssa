@@ -420,7 +420,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=main
 fn ent_pc=10 n_params=0 variadic=false locals=85
-  spill_count=8 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=12 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(20)                                          -> x7
@@ -729,32 +729,32 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     v247 ImmData(32)                                      -> x0
     v248 Load { addr=v247, disp=0, kind=I64, volatile pc_rel } -> x3
     v249 BinopI { op=add, lhs=v247, rhs_imm=8 }           -> x0
-    v250 Load { addr=v247, disp=8, kind=I64, volatile pc_rel } -> x12
+    v250 Load { addr=v247, disp=8, kind=I64, volatile pc_rel } -> [spill 0]
     v251 BinopI { op=add, lhs=v247, rhs_imm=16 }          -> x0
-    v252 Load { addr=v247, disp=16, kind=I64, volatile pc_rel } -> x13
+    v252 Load { addr=v247, disp=16, kind=I64, volatile pc_rel } -> [spill 1]
     v253 BinopI { op=add, lhs=v247, rhs_imm=24 }          -> x0
-    v254 Load { addr=v247, disp=24, kind=I64, volatile pc_rel } -> x14
+    v254 Load { addr=v247, disp=24, kind=I64, volatile pc_rel } -> [spill 2]
     v255 BinopI { op=add, lhs=v247, rhs_imm=32 }          -> x0
-    v256 Load { addr=v247, disp=32, kind=I64, volatile pc_rel } -> x15
+    v256 Load { addr=v247, disp=32, kind=I64, volatile pc_rel } -> [spill 3]
     v257 BinopI { op=add, lhs=v247, rhs_imm=40 }          -> x0
-    v258 Load { addr=v247, disp=40, kind=I64, volatile pc_rel } -> [spill 0]
+    v258 Load { addr=v247, disp=40, kind=I64, volatile pc_rel } -> [spill 4]
     v259 BinopI { op=add, lhs=v247, rhs_imm=48 }          -> x0
-    v260 Load { addr=v247, disp=48, kind=I64, volatile pc_rel } -> [spill 1]
+    v260 Load { addr=v247, disp=48, kind=I64, volatile pc_rel } -> [spill 5]
     v261 BinopI { op=add, lhs=v247, rhs_imm=56 }          -> x0
-    v262 Load { addr=v247, disp=56, kind=I64, volatile pc_rel } -> [spill 2]
+    v262 Load { addr=v247, disp=56, kind=I64, volatile pc_rel } -> [spill 6]
     v263 BinopI { op=add, lhs=v247, rhs_imm=64 }          -> x0
-    v264 Load { addr=v247, disp=64, kind=I64, volatile pc_rel } -> [spill 3]
+    v264 Load { addr=v247, disp=64, kind=I64, volatile pc_rel } -> [spill 7]
     v265 BinopI { op=add, lhs=v247, rhs_imm=72 }          -> x0
-    v266 Load { addr=v247, disp=72, kind=I64, volatile pc_rel } -> [spill 4]
+    v266 Load { addr=v247, disp=72, kind=I64, volatile pc_rel } -> [spill 8]
     v267 BinopI { op=add, lhs=v247, rhs_imm=80 }          -> x0
-    v268 Load { addr=v247, disp=80, kind=I64, volatile pc_rel } -> [spill 5]
+    v268 Load { addr=v247, disp=80, kind=I64, volatile pc_rel } -> [spill 9]
     v269 BinopI { op=add, lhs=v247, rhs_imm=88 }          -> x0
-    v270 Load { addr=v247, disp=88, kind=I64, volatile pc_rel } -> [spill 6]
+    v270 Load { addr=v247, disp=88, kind=I64, volatile pc_rel } -> [spill 10]
     v271 Imm(1)                                           -> x7
-    v272 Call { target_pc=0, args=[v271], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 7]
+    v272 Call { target_pc=0, args=[v271], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 11]
     v273 Imm(0)                                           -> x7
     v274 Call { target_pc=2, args=[v273], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v275 Binop { op=add, lhs=v272, rhs=v274 }             -> [spill 7]
+    v275 Binop { op=add, lhs=v272, rhs=v274 }             -> [spill 11]
     v276 Imm(0)                                           -> x7
     v277 Imm(5)                                           -> x6
     v278 Call { target_pc=3, args=[v276, v277], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -768,18 +768,18 @@ fn ent_pc=10 n_params=0 variadic=false locals=85
     v286 Imm(7)                                           -> x1
     v287 Imm(0)                                           -> x1
     v288 Imm(7)                                           -> x1
-    v289 BinopI { op=add, lhs=v280, rhs_imm=7 }           -> [spill 7]
+    v289 BinopI { op=add, lhs=v280, rhs_imm=7 }           -> [spill 11]
     v290 Imm(0)                                           -> x7
     v291 Imm(1)                                           -> x6
     v292 Imm(2)                                           -> x2
     v293 Call { target_pc=5, args=[v290, v291, v292, v290, v290, v290, v290, v290, v290, v290], fixed_args=10, fp_return=false, fp_arg_mask=0x0 } -> x0
     v294 Binop { op=add, lhs=v289, rhs=v293 }             -> x0
     v295 Binop { op=add, lhs=v294, rhs=v248 }             -> x0
-    v296 BinopI { op=shl, lhs=v250, rhs_imm=1 }           -> x12
+    v296 BinopI { op=shl, lhs=v250, rhs_imm=1 }           -> x1
     v297 Binop { op=add, lhs=v295, rhs=v296 }             -> x0
     v298 BinopI { op=mul, lhs=v252, rhs_imm=3 }           -> x1
     v299 Binop { op=add, lhs=v297, rhs=v298 }             -> x0
-    v300 BinopI { op=shl, lhs=v254, rhs_imm=2 }           -> x14
+    v300 BinopI { op=shl, lhs=v254, rhs_imm=2 }           -> x1
     v301 Binop { op=add, lhs=v299, rhs=v300 }             -> x0
     v302 BinopI { op=mul, lhs=v256, rhs_imm=5 }           -> x1
     v303 Binop { op=add, lhs=v301, rhs=v302 }             -> x0

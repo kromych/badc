@@ -28,9 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xe0, %rsp
-               	pushq	%r12
-               	pushq	%rbx
+               	subq	$0xf0, %rsp
                	leaq	<rip>, %rdi
                	leaq	-0xe0(%rbp), %rsi
                	xorl	%eax, %eax
@@ -39,8 +37,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	cmpq	$0x0, -0xe0(%rbp)
@@ -52,8 +48,6 @@ Disassembly of section .text:
                	cmpq	$0x0, -0x90(%rbp)
                	jne	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movq	-0xc8(%rbp), %rcx
@@ -68,31 +62,31 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jbe	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, %rbx
-               	testl	%ebx, %ebx
+               	movq	%rax, %r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	0x8(%rsp), %rax
+               	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x6, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x70(%rbp), %rsi
-               	movq	%rbx, %rdi
+               	movq	0x8(%rsp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
-               	movq	%rbx, %rdi
+               	movq	%rax, %r10
+               	movq	%r10, (%rsp)
+               	movq	0x8(%rsp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%r12d, %r12d
+               	movq	(%rsp), %r10
+               	testl	%r10d, %r10d
                	jne	<addr>
                	movq	-0x68(%rbp), %rax
                	movq	-0xd8(%rbp), %rcx
@@ -107,12 +101,8 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq

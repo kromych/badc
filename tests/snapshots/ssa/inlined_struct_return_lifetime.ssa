@@ -58,7 +58,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=1
     v14  Imm(0)                                           -> x0
     v15  Imm(5)                                           -> x9
     v16  Imm(0)                                           -> x0
-    v17  Imm(6)                                           -> x3
+    v17  Imm(6)                                           -> [spill 0]
     v18  Imm(0)                                           -> x0
     v19  ImmData(16)                                      -> x0
     v20  Imm(10)                                          -> x0

@@ -527,7 +527,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=519
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=moving
 fn ent_pc=6 n_params=1 variadic=false locals=517
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I32)                            -> x3
@@ -546,7 +546,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=517
     v14  Extend { value=v13, kind=I32, nsw }              -> x0
     v15  StoreLocal { off=-517, value=v14, kind=I64 }     -> -
     v16  BinopI { op=shl, lhs=v1, rhs_imm=4 }             -> x0
-    v17  Intrinsic { kind=Alloca, args=[v16] }            -> x12
+    v17  Intrinsic { kind=Alloca, args=[v16] }            -> [spill 0]
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
@@ -807,7 +807,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=8224
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=results
 fn ent_pc=8 n_params=1 variadic=false locals=517
-  spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=2 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x3
@@ -840,9 +840,9 @@ fn ent_pc=8 n_params=1 variadic=false locals=517
     v28  Imm(0)                                           -> x0
     v29  LoadLocal { off=-517, disp=16, kind=I64 }        -> x14
     v30  Imm(0)                                           -> x0
-    v31  LoadLocal { off=-517, disp=24, kind=I64 }        -> x15
+    v31  LoadLocal { off=-517, disp=24, kind=I64 }        -> [spill 0]
     v32  Imm(0)                                           -> x0
-    v33  LoadLocal { off=-517, disp=32, kind=I64 }        -> [spill 0]
+    v33  LoadLocal { off=-517, disp=32, kind=I64 }        -> [spill 1]
     v34  Imm(0)                                           -> x0
     v35  LifetimeEnd(-517)                                -> -
     v36  Imm(0)                                           -> x0

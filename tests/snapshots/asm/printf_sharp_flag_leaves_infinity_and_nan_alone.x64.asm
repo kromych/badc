@@ -28,9 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x180, %rsp            # imm = 0x180
-               	pushq	%r12
-               	pushq	%rbx
+               	subq	$0x190, %rsp            # imm = 0x190
                	leaq	-0x180(%rbp), %rdi
                	movl	$0x80, %esi
                	leaq	<rip>, %rdx
@@ -41,8 +39,10 @@ Disassembly of section .text:
                	cvtss2sd	%xmm14, %xmm0
                	movabsq	$0x3ff0000000000000, %r8 # imm = 0x3FF0000000000000
                	movl	$0x7, %r9d
-               	movl	$0xff, %ebx
-               	leaq	<rip>, %r12
+               	movl	$0xff, %r10d
+               	movq	%r10, 0x8(%rsp)
+               	leaq	<rip>, %r10
+               	movq	%r10, (%rsp)
                	movapd	%xmm0, %xmm2
                	movq	%rax, %xmm0
                	movq	%rcx, %xmm1
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm4
                	movq	%r8, %xmm5
                	movq	%r9, %rcx
-               	movq	%r12, %r9
-               	movq	%rbx, %r8
+               	movq	0x8(%rsp), %r8
+               	movq	(%rsp), %r9
                	movb	$0x6, %al
                	callq	<addr>
                	leaq	-0x180(%rbp), %rdi
@@ -62,8 +62,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	leaq	-0x100(%rbp), %rdi
@@ -87,7 +85,5 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	movq	%rdx, %rax
                	cmovneq	%rcx, %rax
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq

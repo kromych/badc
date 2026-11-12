@@ -25,7 +25,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=4
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(100)                                         -> x7
@@ -73,7 +73,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     terminator Return(v40)   (exit_acc=v40)
   block 4  start_pc=0
     v42  Imm(1052)                                        -> x7
-    v43  Call { target_pc=0, args=[v42], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v43  Call { target_pc=0, args=[v42], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v44  BinopI { op=and, lhs=v43, rhs_imm=4294967295 }   -> x0
     v45  Imm(0)                                           -> x0
     v46  Imm(1282)                                        -> x7

@@ -198,7 +198,7 @@ fn ent_pc=7 n_params=1 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=5 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4613937818241073152)                         -> x0
@@ -244,10 +244,10 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v33  Imm(4618441417868443648)                         -> x9
     v34  Imm(7)                                           -> x9
     v35  Imm(4619567317775286272)                         -> x9
-    v36  Imm(8)                                           -> x3
-    v37  Imm(4620693217682128896)                         -> x3
-    v38  Imm(4602678819172646912)                         -> x12
-    v39  LocalAddr(-69)                                   -> x13
+    v36  Imm(8)                                           -> [spill 0]
+    v37  Imm(4620693217682128896)                         -> [spill 0]
+    v38  Imm(4602678819172646912)                         -> [spill 1]
+    v39  LocalAddr(-69)                                   -> [spill 2]
     v40  StoreLocal { off=-69, value=v38, kind=F80 }      -> -
     v41  Call { target_pc=3, args=[v23, v25, v27, v29, v31, v19, v35, v37, v39], fixed_args=9, fp_return=true, fp_arg_mask=0xff } -> d0
     v42  Imm(4630333735634468864)                         -> x0
@@ -345,14 +345,14 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v110 Imm(4617315517961601024)                         -> x8
     v111 Imm(6)                                           -> x9
     v112 Imm(4618441417868443648)                         -> x9
-    v113 Imm(7)                                           -> x3
-    v114 Imm(4619567317775286272)                         -> x3
-    v115 Imm(8)                                           -> x12
-    v116 Imm(4620693217682128896)                         -> x12
-    v117 Imm(9)                                           -> x13
-    v118 Imm(4621256167635550208)                         -> x13
-    v119 Imm(4621819117588971520)                         -> x14
-    v120 LocalAddr(-80)                                   -> x15
+    v113 Imm(7)                                           -> [spill 0]
+    v114 Imm(4619567317775286272)                         -> [spill 0]
+    v115 Imm(8)                                           -> [spill 1]
+    v116 Imm(4620693217682128896)                         -> [spill 1]
+    v117 Imm(9)                                           -> [spill 2]
+    v118 Imm(4621256167635550208)                         -> [spill 2]
+    v119 Imm(4621819117588971520)                         -> [spill 3]
+    v120 LocalAddr(-80)                                   -> [spill 4]
     v121 StoreLocal { off=-80, value=v102, kind=F80 }     -> -
     v122 LocalAddr(-81)                                   -> x0
     v123 StoreLocal { off=-81, value=v104, kind=F80 }     -> -
@@ -366,11 +366,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v131 StoreLocal { off=-85, value=v112, kind=F80 }     -> -
     v132 LocalAddr(-86)                                   -> x9
     v133 StoreLocal { off=-86, value=v114, kind=F80 }     -> -
-    v134 LocalAddr(-87)                                   -> x3
+    v134 LocalAddr(-87)                                   -> [spill 0]
     v135 StoreLocal { off=-87, value=v116, kind=F80 }     -> -
-    v136 LocalAddr(-88)                                   -> x12
+    v136 LocalAddr(-88)                                   -> [spill 1]
     v137 StoreLocal { off=-88, value=v118, kind=F80 }     -> -
-    v138 LocalAddr(-89)                                   -> x13
+    v138 LocalAddr(-89)                                   -> [spill 2]
     v139 StoreLocal { off=-89, value=v119, kind=F80 }     -> -
     v140 Call { target_pc=6, args=[v100, v120, v122, v124, v126, v128, v130, v132, v134, v136, v138], fixed_args=1, fp_return=true, fp_arg_mask=0x0 } -> d0
     v141 Imm(4632937379169042432)                         -> x0

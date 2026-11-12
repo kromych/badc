@@ -4739,7 +4739,9 @@ fn constant_stack_arguments_take_no_register() {
 /// A stack argument read from a local array, with nothing between the read
 /// and the call that writes memory, is read by the call's marshaling into
 /// its slot: the 63 elements take no register ahead of the call and spill
-/// none, so the frame is the array and the outgoing area.
+/// none, so the stack is the array, the frame's own 16 bytes, and the
+/// call target, which a variadic call filling every argument register
+/// keeps in a pushed callee-saved register or in a slot.
 #[test]
 fn local_array_stack_arguments_take_no_register() {
     let args: String = (0..63).map(|i| format!(", tmp[{i}]")).collect();
@@ -4758,8 +4760,10 @@ fn local_array_stack_arguments_take_no_register() {
         .iter()
         .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map_or(0, |i| i.imm);
-    // The 504-byte array and the frame's own 16.
-    assert!(frame <= 504 + 16, "x86-64 frame of {frame} bytes");
+    // `push r` past the frame pointer's own.
+    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count() as i64 - 1;
+    let stack = frame + 8 * pushes;
+    assert!(stack <= 504 + 16 + 8, "x86-64 stack of {stack} bytes");
 }
 
 /// Arithmetic on floating-point constants is evaluated at translation

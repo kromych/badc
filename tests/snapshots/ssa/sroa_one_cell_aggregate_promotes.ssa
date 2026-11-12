@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=3 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
@@ -61,7 +61,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v129 Imm(0)                                           -> x1
     v130 Imm(0)                                           -> x1
     v131 Imm(97)                                          -> x1
-    v132 Extend { value=v2, kind=I8 }                     -> x3
+    v132 Extend { value=v2, kind=I8 }                     -> [spill 0]
     v133 BinopI { op=xor, lhs=v132, rhs_imm=97 }          -> x1
     v134 Extend { value=v133, kind=I8 }                   -> x1
     v135 Imm(0)                                           -> x7
@@ -84,7 +84,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v152 Binop { op=add, lhs=v96, rhs=v151 }              -> x0
     v153 Imm(0)                                           -> x1
     v154 Imm(0)                                           -> x1
-    v155 Extend { value=v2, kind=I16 }                    -> x12
+    v155 Extend { value=v2, kind=I16 }                    -> [spill 1]
     v156 Imm(0)                                           -> x1
     v157 Imm(0)                                           -> x1
     v158 Imm(0)                                           -> x1
@@ -121,7 +121,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v189 Extend { value=v188, kind=I32, nsw }             -> x1
     v190 LifetimeEnd(0)                                   -> -
     v191 BinopI { op=mul, lhs=v189, rhs_imm=3 }           -> x1
-    v192 Binop { op=add, lhs=v152, rhs=v191 }             -> x13
+    v192 Binop { op=add, lhs=v152, rhs=v191 }             -> [spill 2]
     v193 Imm(0)                                           -> x0
     v194 Imm(0)                                           -> x0
     v195 Imm(0)                                           -> x2

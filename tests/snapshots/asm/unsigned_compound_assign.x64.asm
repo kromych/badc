@@ -46,8 +46,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
-               	pushq	%rbx
+               	subq	$0x30, %rsp
                	movl	$0x64, %edi
                	callq	<addr>
                	leaq	0x5(%rax), %rsi
@@ -57,7 +56,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x3e8, %edi            # imm = 0x3E8
@@ -69,23 +67,22 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x41c, %edi            # imm = 0x41C
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, 0x8(%rsp)
                	movl	$0x502, %edi            # imm = 0x502
                	callq	<addr>
                	subq	$0x363, %rax            # imm = 0x363
-               	leaq	(%rbx,%rax), %rsi
+               	movq	0x8(%rsp), %rsi
+               	addq	%rax, %rsi
                	cmpl	$0x5bb, %esi            # imm = 0x5BB
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0xc8, %edi
@@ -99,7 +96,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	-0x20(%rbp), %rcx
@@ -118,9 +114,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
-               	popq	%rbx
                	leave
                	retq

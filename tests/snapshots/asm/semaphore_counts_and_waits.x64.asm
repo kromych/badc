@@ -28,9 +28,8 @@ Disassembly of section .text:
 <worker>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
+               	subq	$0x10, %rsp
+               	movq	%rdi, 0x8(%rsp)
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -41,11 +40,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
-               	movq	%rbx, %rax
-               	popq	%rbx
+               	movq	0x8(%rsp), %rax
                	leave
                	retq
 

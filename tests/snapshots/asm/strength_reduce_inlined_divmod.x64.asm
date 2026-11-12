@@ -28,8 +28,7 @@ Disassembly of section .text:
 <ints>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xb0, %rsp
-               	pushq	%r12
+               	subq	$0xb8, %rsp
                	pushq	%rbx
                	movl	<rip>, %eax # <addr>
                	incq	%rax
@@ -431,14 +430,16 @@ Disassembly of section .text:
                	subq	%r8, %rbx
                	shrq	%rbx
                	leaq	(%rbx,%r8), %rax
-               	movq	%rax, %r12
-               	shrq	$0x2, %r12
-               	movl	-0x48(%rbp), %eax
-               	movq	%rax, %r10
+               	shrq	$0x2, %rax
+               	movl	-0x48(%rbp), %edx
+               	movq	%rdx, %r10
+               	pushq	%rax
                	movl	%esi, %eax
                	xorl	%edx, %edx
                	divl	%r10d
-               	cmpl	%eax, %r12d
+               	movq	%rax, %rdx
+               	popq	%rax
+               	cmpl	%edx, %eax
                	jne	<addr>
                	leaq	(%rbx,%r8), %rax
                	shrq	$0x2, %rax
@@ -690,246 +691,202 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
                	leave
                	retq
 
 <wides>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xb8, %rsp
-               	pushq	%rbx
+               	subq	$0xb0, %rsp
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -987,14 +944,16 @@ Disassembly of section .text:
                	movq	%rdi, %r9
                	shrq	$0x3f, %r9
                	leaq	(%rdi,%r9), %rax
-               	movq	%rax, %rbx
-               	negq	%rbx
-               	movq	-0xa8(%rbp), %rax
-               	movq	%rax, %r10
+               	negq	%rax
+               	movq	-0xa8(%rbp), %rdx
+               	movq	%rdx, %r10
+               	pushq	%rax
                	movq	%rsi, %rax
                	cqto
                	idivq	%r10
-               	cmpq	%rax, %rbx
+               	movq	%rax, %rdx
+               	popq	%rax
+               	cmpq	%rdx, %rax
                	jne	<addr>
                	leaq	(%rdi,%r9), %rax
                	negq	%rax
@@ -1508,14 +1467,16 @@ Disassembly of section .text:
                	movq	%rdi, %r9
                	shrq	$0x3f, %r9
                	leaq	(%rdi,%r9), %rax
-               	movq	%rax, %rbx
-               	negq	%rbx
-               	movq	-0x30(%rbp), %rax
-               	movq	%rax, %r10
+               	negq	%rax
+               	movq	-0x30(%rbp), %rdx
+               	movq	%rdx, %r10
+               	pushq	%rax
                	movq	%rsi, %rax
                	cqto
                	idivq	%r10
-               	cmpq	%rax, %rbx
+               	movq	%rax, %rdx
+               	popq	%rax
+               	cmpq	%rdx, %rax
                	jne	<addr>
                	leaq	(%rdi,%r9), %rax
                	negq	%rax
@@ -1698,213 +1659,167 @@ Disassembly of section .text:
                	cmpl	$0x18, %ecx
                	jl	<addr>
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
-               	popq	%rbx
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
                	leave
                	retq
 
 <converted>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
-               	pushq	%r12
+               	subq	$0x98, %rsp
                	pushq	%rbx
                	movl	<rip>, %eax # <addr>
                	incq	%rax
@@ -2346,14 +2261,16 @@ Disassembly of section .text:
                	movq	%rbx, %rax
                	shrq	%rax
                	addq	%rdi, %rax
-               	movq	%rax, %r12
-               	shrq	$0x2, %r12
-               	movq	-0x18(%rbp), %rax
-               	movq	%rax, %r10
+               	shrq	$0x2, %rax
+               	movq	-0x18(%rbp), %rdx
+               	movq	%rdx, %r10
+               	pushq	%rax
                	movq	%rsi, %rax
                	cqto
                	idivq	%r10
-               	cmpq	%rax, %r12
+               	movq	%rax, %rdx
+               	popq	%rax
+               	cmpq	%rdx, %rax
                	jne	<addr>
                	shrq	%rbx
                	leaq	(%rbx,%rdi), %rax
@@ -2448,194 +2365,159 @@ Disassembly of section .text:
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	addq	$0x64, %rax
-               	popq	%rbx
-               	popq	%r12
-               	leave
-               	retq
-               	movl	<rip>, %eax # <addr>
-               	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x64, %rax
                	popq	%rbx
-               	popq	%r12
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	popq	%rbx
-               	popq	%r12
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x64, %rax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	<rip>, %eax # <addr>
+               	popq	%rbx
                	leave
                	retq
 

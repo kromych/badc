@@ -438,8 +438,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xe8, %rsp
-               	pushq	%rbx
+               	subq	$0xf0, %rsp
                	leaq	-0x90(%rbp), %rsi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
@@ -476,20 +475,20 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
+               	leaq	-0xf0(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
                	leaq	-0xe0(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0xd0(%rbp), %rax
+               	leaq	-0xc0(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
+               	leaq	-0xd0(%rbp), %rcx
                	leaq	-0xb0(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0xc0(%rbp), %rcx
-               	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rax)
@@ -506,7 +505,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x3, %edi
@@ -527,7 +525,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x7, %edi
@@ -537,14 +534,15 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %r8
                	leaq	-0x50(%rbp), %r9
                	leaq	-0x40(%rbp), %rax
-               	leaq	-0x30(%rbp), %rbx
+               	leaq	-0x30(%rbp), %r10
+               	movq	%r10, 0x58(%rsp)
                	subq	$0x20, %rsp
                	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
-               	movq	%rbx, %r10
+               	movq	0x78(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x10(%rsp)
                	movq	0x8(%r10), %r11
@@ -568,17 +566,17 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x9, %edi
                	leaq	-0x20(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdx
-               	leaq	-0xe0(%rbp), %r9
-               	leaq	-0xd0(%rbp), %rcx
-               	leaq	-0xc0(%rbp), %rax
-               	leaq	-0xb0(%rbp), %r8
-               	movl	$0x3, %ebx
+               	leaq	-0xf0(%rbp), %r9
+               	leaq	-0xe0(%rbp), %rcx
+               	leaq	-0xd0(%rbp), %rax
+               	leaq	-0xc0(%rbp), %r8
+               	movl	$0x3, %r10d
+               	movq	%r10, 0x58(%rsp)
                	subq	$0x10, %rsp
                	movq	%r8, %r10
                	movq	(%r10), %r11
@@ -589,7 +587,7 @@ Disassembly of section .text:
                	movsd	(%r10), %xmm2
                	movq	%rax, %r10
                	movups	(%r10), %xmm3
-               	movq	%rbx, %r8
+               	movq	0x68(%rsp), %r8
                	movsd	(%rsi), %xmm0
                	movq	0x8(%rsi), %rsi
                	movsd	(%rdx), %xmm1
@@ -604,7 +602,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x8, %edi
@@ -634,10 +631,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq

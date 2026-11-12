@@ -797,7 +797,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=signed_ok
 fn ent_pc=6 n_params=2 variadic=false locals=8
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
     v1   ParamPart(0, part=1, kind=I64)                   -> x6
@@ -972,7 +972,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=8
     v158 LoadLocal { off=-44, disp=8, kind=I64 }          -> x8
     v159 Imm(0)                                           -> x9
     v160 BinopI { op=ugt, lhs=v156, rhs_imm=0 }           -> x9
-    v161 Neg(v156)                                        -> x3
+    v161 Neg(v156)                                        -> [spill 0]
     v162 Neg(v158)                                        -> x1
     v163 Binop { op=sub, lhs=v162, rhs=v160 }             -> x8
     v164 LocalAddr(-4)                                    -> x1

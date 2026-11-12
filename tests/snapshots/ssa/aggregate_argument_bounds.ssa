@@ -79,7 +79,7 @@ fn ent_pc=9 n_params=1 variadic=true locals=3
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=main
 fn ent_pc=10 n_params=0 variadic=false locals=3
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(30)                                          -> x7
@@ -89,7 +89,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
     v5   Imm(3)                                           -> x2
     v6   Imm(34)                                          -> x1
     v7   Imm(-1)                                          -> x8
-    v8   CallExt { binding_idx=83, args=[v3, v4, v5, v6, v7, v3], fp_arg_mask=0x0 } -> x12
+    v8   CallExt { binding_idx=83, args=[v3, v4, v5, v6, v7, v3], fp_arg_mask=0x0 } -> [spill 0]
     v9   BinopI { op=eq, lhs=v8, rhs_imm=-1 }             -> x0
     terminator Bnz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
@@ -259,26 +259,26 @@ fn ent_pc=10 n_params=0 variadic=false locals=3
     v130 Imm(0)                                           -> x0
     v131 Imm(0)                                           -> x0
     v132 Load { addr=v17, disp=0, kind=U16, align=1 }     -> x0
-    v133 BinopI { op=add, lhs=v17, rhs_imm=2 }            -> x12
+    v133 BinopI { op=add, lhs=v17, rhs_imm=2 }            -> [spill 0]
     v134 Load { addr=v17, disp=2, kind=U8 }               -> x1
     v135 BinopI { op=shl, lhs=v134, rhs_imm=16 }          -> x1
     v136 Binop { op=or, lhs=v132, rhs=v135 }              -> x0
     v137 Load { addr=v19, disp=0, kind=U32, align=1 }     -> x1
-    v138 BinopI { op=add, lhs=v19, rhs_imm=4 }            -> x12
+    v138 BinopI { op=add, lhs=v19, rhs_imm=4 }            -> [spill 0]
     v139 Load { addr=v19, disp=4, kind=U8 }               -> x2
     v140 BinopI { op=shl, lhs=v139, rhs_imm=32 }          -> x2
     v141 Binop { op=or, lhs=v137, rhs=v140 }              -> x2
     v142 Load { addr=v21, disp=0, kind=U32, align=2 }     -> x1
-    v143 BinopI { op=add, lhs=v21, rhs_imm=4 }            -> x12
+    v143 BinopI { op=add, lhs=v21, rhs_imm=4 }            -> [spill 0]
     v144 Load { addr=v21, disp=4, kind=U16 }              -> x6
     v145 BinopI { op=shl, lhs=v144, rhs_imm=32 }          -> x6
     v146 Binop { op=or, lhs=v142, rhs=v145 }              -> x1
     v147 Load { addr=v23, disp=0, kind=U32, align=1 }     -> x6
-    v148 BinopI { op=add, lhs=v23, rhs_imm=4 }            -> x12
-    v149 Load { addr=v23, disp=4, kind=U16, align=1 }     -> x12
-    v150 BinopI { op=shl, lhs=v149, rhs_imm=32 }          -> x12
+    v148 BinopI { op=add, lhs=v23, rhs_imm=4 }            -> [spill 0]
+    v149 Load { addr=v23, disp=4, kind=U16, align=1 }     -> [spill 0]
+    v150 BinopI { op=shl, lhs=v149, rhs_imm=32 }          -> [spill 0]
     v151 Binop { op=or, lhs=v147, rhs=v150 }              -> x6
-    v152 BinopI { op=add, lhs=v23, rhs_imm=6 }            -> x12
+    v152 BinopI { op=add, lhs=v23, rhs_imm=6 }            -> [spill 0]
     v153 Load { addr=v23, disp=6, kind=U8 }               -> x8
     v154 BinopI { op=shl, lhs=v153, rhs_imm=48 }          -> x8
     v155 Binop { op=or, lhs=v151, rhs=v154 }              -> x8

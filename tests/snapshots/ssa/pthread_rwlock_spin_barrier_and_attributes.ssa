@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=reader
 fn ent_pc=9 n_params=1 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
@@ -31,7 +31,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
     terminator Return(v20)   (exit_acc=v20)
   block 5  start_pc=0
     v21  ImmData(104)                                     -> x0
-    v22  Load { addr=v21, disp=0, kind=I32 pc_rel }       -> x3
+    v22  Load { addr=v21, disp=0, kind=I32 pc_rel }       -> [spill 0]
     v23  Imm(0)                                           -> x0
     v24  ImmData(48)                                      -> x7
     v25  CallExt { binding_idx=251, args=[v24], fp_arg_mask=0x0 } -> x0
@@ -191,7 +191,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=49
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=linux_only
 fn ent_pc=13 n_params=0 variadic=false locals=42
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-38)                                   -> x0
@@ -375,7 +375,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=42
     v143 Imm(0)                                           -> x1
     terminator Bnz { cond=v142, target=b20, fall=b19 }   (exit_acc=v142)
   block 19  start_pc=0
-    v144 CallExt { binding_idx=299, args=[], fp_arg_mask=0x0 } -> x3
+    v144 CallExt { binding_idx=299, args=[], fp_arg_mask=0x0 } -> [spill 0]
     v145 CallExt { binding_idx=298, args=[], fp_arg_mask=0x0 } -> x0
     v146 Binop { op=le, lhs=v144, rhs=v145 }              -> x0
     v147 Imm(0)                                           -> x1
@@ -422,7 +422,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=42
     v180 LocalAddr(-1)                                    -> x0
     v181 Imm(42)                                          -> x0
     v182 StoreLocal { off=-1, value=v181, kind=I32 }      -> -
-    v183 CallExt { binding_idx=349, args=[], fp_arg_mask=0x0 } -> x3
+    v183 CallExt { binding_idx=349, args=[], fp_arg_mask=0x0 } -> [spill 0]
     v184 CallExt { binding_idx=298, args=[], fp_arg_mask=0x0 } -> x6
     v185 LocalAddr(-1)                                    -> x2
     v186 CallExt { binding_idx=297, args=[v183, v184, v185], fp_arg_mask=0x0 } -> x0
@@ -451,7 +451,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=42
     v205 LocalAddr(-32)                                   -> x7
     v206 LocalAddr(-16)                                   -> x6
     v207 LocalAddr(-38)                                   -> x0
-    v208 CallExt { binding_idx=295, args=[v205, v206, v198], fp_arg_mask=0x0 } -> x3
+    v208 CallExt { binding_idx=295, args=[v205, v206, v198], fp_arg_mask=0x0 } -> [spill 0]
     v209 CallExt { binding_idx=298, args=[], fp_arg_mask=0x0 } -> x0
     v210 Binop { op=ne, lhs=v208, rhs=v209 }              -> x0
     v211 Imm(0)                                           -> x1

@@ -43,8 +43,7 @@ Disassembly of section .text:
 <depths>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r13
+               	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
@@ -59,7 +58,6 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movq	%rbx, %rdi
@@ -70,7 +68,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movq	%rbx, %rdi
@@ -81,7 +78,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	subq	$0x20, %rsp
@@ -94,7 +90,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movq	%rbx, %rdi
@@ -105,7 +100,6 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	movq	%rbx, %rdi
@@ -116,7 +110,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
                	subq	$0x20, %rsp
@@ -124,13 +117,15 @@ Disassembly of section .text:
                	movq	%r12, %rdx
                	callq	<addr>
                	addq	$0x20, %rsp
-               	movq	%rax, %r13
+               	movq	%rax, 0x18(%rsp)
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
                	callq	<addr>
                	addq	$0x20, %rsp
-               	addq	%r13, %rax
+               	movq	%rax, %r10
+               	movq	0x18(%rsp), %rax
+               	addq	%r10, %rax
                	movl	$0x7, %ecx
                	xorl	%edx, %edx
                	cmpq	$0x2e, %rax
@@ -138,7 +133,6 @@ Disassembly of section .text:
                	cmovneq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
 

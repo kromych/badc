@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=semaphores
 fn ent_pc=0 n_params=0 variadic=false locals=17
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-17)                                   -> x0
@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     v4   Imm(0)                                           -> x7
     v5   Imm(2)                                           -> x6
     v6   Imm(896)                                         -> x2
-    v7   CallExt { binding_idx=90, args=[v4, v5, v6], fp_arg_mask=0x0 } -> x3
+    v7   CallExt { binding_idx=90, args=[v4, v5, v6], fp_arg_mask=0x0 } -> [spill 0]
     v8   Imm(0)                                           -> x0
     v9   Extend { value=v7, kind=I32 }                    -> x0
     v10  BinopI { op=lt, lhs=v7, rhs_imm=0 }              -> x0
@@ -213,7 +213,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
     v171 Extend { value=v7, kind=I32 }                    -> x0
     v172 Imm(0)                                           -> x6
     v173 Imm(11)                                          -> x2
-    v174 CallExt { binding_idx=89, args=[v7, v172, v173], fp_arg_mask=0x0 } -> x12
+    v174 CallExt { binding_idx=89, args=[v7, v172, v173], fp_arg_mask=0x0 } -> [spill 1]
     v175 CallExt { binding_idx=135, args=[], fp_arg_mask=0x0 } -> x0
     v176 Binop { op=ne, lhs=v174, rhs=v175 }              -> x0
     terminator Bz { cond=v176, target=b20, fall=b19 }   (exit_acc=v176)

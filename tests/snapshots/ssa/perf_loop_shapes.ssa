@@ -640,7 +640,7 @@ fn ent_pc=23 n_params=2 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=24 ---
 ; name=main
 fn ent_pc=24 n_params=0 variadic=false locals=7
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-7)                                    -> x7
@@ -670,7 +670,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=7
     v19  LifetimeEnd(-7)                                  -> -
     terminator Return(v16)   (exit_acc=v16)
   block 4  start_pc=0
-    v20  LocalAddr(-5)                                    -> x3
+    v20  LocalAddr(-5)                                    -> [spill 0]
     v21  ImmData(16)                                      -> x0
     v22  Mcpy { dst=v20, src=v21, size=36, align=8 }      -> -
     v23  LocalAddr(-5)                                    -> x0
@@ -805,7 +805,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=7
   block 22  start_pc=0
     v121 Imm(12345)                                       -> x7
     v122 Imm(1000)                                        -> x6
-    v123 Call { target_pc=5, args=[v121, v122], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x3
+    v123 Call { target_pc=5, args=[v121, v122], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> [spill 0]
     v124 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x0
     v125 Imm(12345)                                       -> x7
     v126 Imm(1000)                                        -> x6

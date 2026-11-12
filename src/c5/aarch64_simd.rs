@@ -221,6 +221,7 @@ pub(crate) const OPS: &[SimdOp] = table! {
     "add" Vv Add (): b8 b16 h4 h8 s2 s4 d1 d2;
     "sub" Vv Sub (): b8 b16 h4 h8 s2 s4 d1 d2;
     "mul" Vv MulLo (): b8 b16 h4 h8 s2 s4;
+    "pmul" Vv PolyMul (): b8 b16;
     "sqadd" Vv AddSat (true): b8 b16 h4 h8 s2 s4 d1 d2;
     "uqadd" Vv AddSat (false): b8 b16 h4 h8 s2 s4 d1 d2;
     "sqsub" Vv SubSat (true): b8 b16 h4 h8 s2 s4 d1 d2;

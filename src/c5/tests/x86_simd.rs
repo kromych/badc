@@ -1737,6 +1737,7 @@ fn floating_rows_compute_in_the_environment() {
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
+        | Sem::PolyMul(_)
         | Sem::MulHi(..)
         | Sem::Avg(_)
         | Sem::Min(..)

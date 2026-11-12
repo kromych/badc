@@ -217,6 +217,8 @@ pub(crate) enum Sem {
     Sub(u8),
     /// Low half of the lane-wise product.
     MulLo(u8),
+    /// Low half of the lane-wise carry-less (polynomial) product.
+    PolyMul(u8),
     /// High half of the lane-wise product, signed (`true`) or unsigned.
     MulHi(u8, bool),
     /// Unsigned lane average, rounded up.
@@ -1039,6 +1041,15 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             for i in 0..16 / w as usize {
                 let x = lane(a, w, i).wrapping_mul(lane(b, w, i)) & mask(w);
                 set_lane(&mut o, w, i, x);
+            }
+        }
+        Sem::PolyMul(w) => {
+            for i in 0..16 / w as usize {
+                let (x, y) = (lane(a, w, i), lane(b, w, i));
+                let p = (0..8 * w)
+                    .filter(|k| y >> k & 1 != 0)
+                    .fold(0, |p, k| p ^ x << k);
+                set_lane(&mut o, w, i, p & mask(w));
             }
         }
         Sem::MulHi(w, signed) => {

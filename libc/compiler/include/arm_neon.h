@@ -409,8 +409,12 @@ __BADC_NEON_SINT(__BADC_NEON_F_UN, vqneg, __builtin_neon_sqneg, __builtin_neon_s
 __BADC_NEON_SINT(__BADC_NEON_F_UN, vqabs, __builtin_neon_sqabs, __builtin_neon_sqabs)
 __BADC_NEON_INT_8_32(__BADC_NEON_F_UN, vclz, __builtin_neon_clz, __builtin_neon_clz)
 __BADC_NEON_SINT_8_32(__BADC_NEON_F_UN, vcls, __builtin_neon_cls, __builtin_neon_cls)
-__BADC_NEON_FN2(vmul_p8, poly8x8_t, poly8x8_t, poly8x8_t, "pmul %0.8b, %1.8b, %2.8b")
-__BADC_NEON_FN2(vmulq_p8, poly8x16_t, poly8x16_t, poly8x16_t, "pmul %0.16b, %1.16b, %2.16b")
+__BADC_INTRIN poly8x8_t vmul_p8(poly8x8_t __a, poly8x8_t __b) {
+    return (poly8x8_t)__builtin_neon_pmul_8b(__a, __b);
+}
+__BADC_INTRIN poly8x16_t vmulq_p8(poly8x16_t __a, poly8x16_t __b) {
+    return (poly8x16_t)__builtin_neon_pmul_16b(__a, __b);
+}
 
 /* Bitwise operations over the bytes of any integer vector. */
 #define __BADC_NEON_F_LOGIC(op, stem, sfx, k, E, D, Q, ...)               \

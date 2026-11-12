@@ -462,6 +462,44 @@ fn the_high_precision_conversions_are_rows() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
 }
 
+/// `vmul_p8` multiplies each byte lane as a polynomial over GF(2), keeping
+/// the low eight bits: one `pmul` under -O, the carry-less product in the
+/// interpreter and in the constant folder.
+#[cfg(feature = "full")]
+#[test]
+fn the_polynomial_multiply_is_a_row() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        poly8x8_t m(poly8x8_t a, poly8x8_t b) { return vmul_p8(a, b); }\n\
+        poly8x16_t mq(poly8x16_t a, poly8x16_t b) { return vmulq_p8(a, b); }\n\
+        static unsigned char ref(unsigned char x, unsigned char y) {\n\
+            unsigned p = 0;\n\
+            for (int k = 0; k < 8; k++) if (y >> k & 1) p ^= (unsigned)x << k;\n\
+            return (unsigned char)p;\n\
+        }\n\
+        int main(void) {\n\
+            volatile unsigned char seed = 0x53;\n\
+            poly8x16_t a, b;\n\
+            for (int i = 0; i < 16; i++) {\n\
+                a[i] = (unsigned char)(seed * (i + 3));\n\
+                b[i] = (unsigned char)(seed ^ (i * 29));\n\
+            }\n\
+            poly8x16_t r = mq(a, b);\n\
+            for (int i = 0; i < 16; i++) if (r[i] != ref(a[i], b[i])) return 1 + i;\n\
+            poly8x8_t c = vmul_p8((poly8x8_t){0xca, 3}, (poly8x8_t){0x53, 0x81});\n\
+            return c[0] == ref(0xca, 0x53) && c[1] == ref(3, 0x81) ? 42 : 40;\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("m", &[0x2E21_9C00u32, RET][..]),
+        ("mq", &[0x6E21_9C00, RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

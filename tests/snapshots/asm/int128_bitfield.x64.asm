@@ -155,13 +155,13 @@ Disassembly of section .text:
                	movw	%r10w, 0x4(%rax)
                	movzbq	0x6(%rcx), %r10
                	movb	%r10b, 0x6(%rax)
-               	movl	$0xffffffff, 0x1(%rax)  # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, -0x7(%rbp) # imm = 0xFFFFFFFF
                	movb	$0x7f, -0x3(%rbp)
-               	movl	$0x0, 0x1(%rax)
+               	movl	$0x0, -0x7(%rbp)
                	movb	$-0x80, -0x3(%rbp)
-               	movl	$0x1, 0x1(%rax)
+               	movl	$0x1, -0x7(%rbp)
                	movb	$-0x80, -0x3(%rbp)
-               	movl	$0xfffffffe, 0x1(%rax)  # imm = 0xFFFFFFFE
+               	movl	$0xfffffffe, -0x7(%rbp) # imm = 0xFFFFFFFE
                	movb	$-0x1, -0x3(%rbp)
                	xorl	%eax, %eax
                	leave

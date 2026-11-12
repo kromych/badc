@@ -266,11 +266,10 @@ Disassembly of section .text:
                	movzbq	0xc(%rax), %r10
                	movb	%r10b, 0xc(%rdi)
                	callq	<addr>
-               	leaq	-0x98(%rbp), %rax
-               	movq	0x1(%rax), %rcx
-               	cmpq	$-0x3, %rcx
+               	movq	-0x97(%rbp), %rax
+               	cmpq	$-0x3, %rax
                	jne	<addr>
-               	movl	0x9(%rax), %eax
+               	movl	-0x8f(%rbp), %eax
                	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	je	<addr>
                	movl	$0xb, %eax

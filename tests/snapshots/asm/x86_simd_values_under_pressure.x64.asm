@@ -579,17 +579,17 @@ Disassembly of section .text:
                	movups	%xmm0, -0x310(%rbp)
                	xorl	%r8d, %r8d
                	xorl	%eax, %eax
-               	movq	%r8, %rdx
-               	shlq	$0x4, %rdx
-               	leaq	(%r9,%rdx), %rsi
-               	movups	(%rsi), %xmm0
-               	leaq	-0x150(%rbp), %rcx
-               	movups	%xmm0, (%rcx)
-               	movl	(%rcx,%rax,4), %ecx
+               	movq	%r8, %rcx
+               	shlq	$0x4, %rcx
+               	leaq	(%r9,%rcx), %rdx
+               	movups	(%rdx), %xmm0
+               	leaq	-0x150(%rbp), %rsi
+               	movups	%xmm0, -0x150(%rbp)
+               	movl	(%rsi,%rax,4), %esi
                	leaq	-0x140(%rbp), %rdi
-               	addq	%rdx, %rdi
+               	addq	%rcx, %rdi
                	movl	(%rdi,%rax,4), %edi
-               	cmpl	%edi, %ecx
+               	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax

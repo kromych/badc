@@ -158,9 +158,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x18(%rbp), %r9
-               	movq	$0x5, (%r9)
-               	movq	$0x6, 0x8(%r9)
-               	movq	$0x7, 0x10(%r9)
+               	movq	$0x5, -0x18(%rbp)
+               	movq	$0x6, -0x10(%rbp)
+               	movq	$0x7, -0x8(%rbp)
                	movl	$0x1, %edi
                	subq	$0x20, %rsp
                	movq	%r9, %r10

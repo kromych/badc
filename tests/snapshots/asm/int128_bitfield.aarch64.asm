@@ -257,20 +257,20 @@ Disassembly of section .text:
                	strh	w16, [x0, #0x4]
                	ldrb	w16, [x1, #0x6]
                	strb	w16, [x0, #0x6]
-               	mov	x1, #0x7fffffffff       // =549755813887
-               	stur	w1, [x0, #0x1]
-               	mov	x1, #0x7f               // =127
-               	sturb	w1, [x29, #-0x3]
-               	mov	x1, #0x8000000000       // =549755813888
-               	stur	w1, [x0, #0x1]
-               	mov	x1, #0x80               // =128
-               	sturb	w1, [x29, #-0x3]
-               	mov	x2, #0x1                // =1
-               	movk	x2, #0x80, lsl #32
-               	stur	w2, [x0, #0x1]
-               	sturb	w1, [x29, #-0x3]
-               	mov	x1, #0xfffffffffe       // =1099511627774
-               	stur	w1, [x0, #0x1]
+               	mov	x0, #0x7fffffffff       // =549755813887
+               	stur	w0, [x29, #-0x7]
+               	mov	x0, #0x7f               // =127
+               	sturb	w0, [x29, #-0x3]
+               	mov	x0, #0x8000000000       // =549755813888
+               	stur	w0, [x29, #-0x7]
+               	mov	x0, #0x80               // =128
+               	sturb	w0, [x29, #-0x3]
+               	mov	x1, #0x1                // =1
+               	movk	x1, #0x80, lsl #32
+               	stur	w1, [x29, #-0x7]
+               	sturb	w0, [x29, #-0x3]
+               	mov	x0, #0xfffffffffe       // =1099511627774
+               	stur	w0, [x29, #-0x7]
                	mov	x0, #0xff               // =255
                	sturb	w0, [x29, #-0x3]
                	mov	x0, #0x0                // =0

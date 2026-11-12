@@ -232,7 +232,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v92  Imm(0)                                           -> x0
     v93  LocalAddr(-1)                                    -> x0
     v94  Imm(0)                                           -> x0
-    v95  Load { addr=v82, disp=0, kind=I64, align=1 }     -> x0
+    v95  LoadLocal { off=-1, kind=I64 }                   -> x0
     v96  Bswap { value=v95, width=8 }                     -> x0
     v97  Imm(0)                                           -> x1
     v98  BinopI { op=ne, lhs=v96, rhs_imm=72623859790382856 } -> x0

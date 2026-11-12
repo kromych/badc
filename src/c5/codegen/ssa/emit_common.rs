@@ -3085,7 +3085,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             "passes::index_fold::fold_slot_addresses",
             &mut ssa_funcs,
             |funcs| {
-                super::super::passes::index_fold::fold_slot_addresses(funcs);
+                super::super::passes::index_fold::fold_slot_addresses(funcs, native.strict_align);
             },
         );
         // Rebuild the single modulo where the builder's split quotient

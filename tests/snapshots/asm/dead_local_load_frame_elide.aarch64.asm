@@ -51,7 +51,7 @@ Disassembly of section .text:
                	sturb	w2, [x29, #-0x2]
                	mov	x2, #0x8                // =8
                	sturb	w2, [x29, #-0x1]
-               	ldr	x2, [x0]
+               	ldur	x2, [x29, #-0x8]
                	rev	x2, x2
                	mov	x17, #0x708             // =1800
                	movk	x17, #0x506, lsl #16

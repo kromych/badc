@@ -29,15 +29,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movabsq	$0x400000003, %rcx      # imm = 0x400000003
-               	movq	%rcx, (%rax)
-               	movl	(%rax), %ecx
-               	movl	%ecx, <rip> # <addr>
-               	movl	0x4(%rax), %eax
+               	movabsq	$0x400000003, %rax      # imm = 0x400000003
+               	movq	%rax, -0x10(%rbp)
+               	movl	-0x10(%rbp), %eax
                	movl	%eax, <rip> # <addr>
-               	cmpl	$0x3, %ecx
+               	movl	-0xc(%rbp), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	cmpl	$0x3, %eax
                	jne	<addr>
+               	movq	%rcx, %rax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -60,11 +60,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	cmpl	$0x7, %ecx
+               	movl	-0x8(%rbp), %eax
+               	movl	-0x4(%rbp), %ecx
+               	cmpl	$0x7, %eax
                	jne	<addr>
-               	cmpl	$0x8, %eax
+               	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

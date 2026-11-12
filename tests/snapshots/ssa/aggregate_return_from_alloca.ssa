@@ -998,7 +998,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=6
     v157 RetPart(1, kind=I64)                             -> x2
     v158 StoreLocal { off=-2, value=v156, kind=I64 }      -> -
     v159 LocalAddr(-2)                                    -> x0
-    v160 Store { addr=v159, disp=8, value=v157, kind=I32, align=1 } -> -
+    v160 StoreLocal { off=-2, disp=8, value=v157, kind=I32 } -> -
     v161 LocalAddr(-2)                                    -> x0
     v162 Imm(0)                                           -> x0
     v163 LoadLocal { off=-2, kind=U8 }                    -> x0

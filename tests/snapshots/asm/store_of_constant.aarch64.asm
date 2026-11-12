@@ -300,12 +300,11 @@ Disassembly of section .text:
                	ldrb	w16, [x1, #0xc]
                	strb	w16, [x0, #0xc]
                	bl	<addr>
-               	sub	x0, x29, #0x98
-               	ldur	x1, [x0, #0x1]
+               	ldur	x0, [x29, #-0x97]
                	mov	x17, #-0x3              // =-3
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.ne	<addr>
-               	ldursw	x0, [x0, #0x9]
+               	ldursw	x0, [x29, #-0x8f]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
                	cmp	w0, w17

@@ -154,7 +154,7 @@ Disassembly of section .text:
                	shlq	$0x4, %rcx
                	addq	%rcx, %rax
                	movups	(%rax), %xmm0
-               	movups	%xmm0, (%r8)
+               	movups	%xmm0, -0x10(%rbp)
                	xorl	%eax, %eax
                	testl	%edx, %edx
                	jne	<addr>
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %edx
                	jl	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movups	%xmm1, (%rax)
+               	movups	%xmm1, -0x10(%rbp)
                	movl	$0x10, %edx
                	movq	%rdi, %rsi
                	movq	%rax, %rdi

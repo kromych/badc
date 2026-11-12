@@ -12671,7 +12671,8 @@ fn size_bound_keeps_the_object_in_memory() {
 
 /// An aggregate whose reads an earlier pass forwarded, with its writes
 /// dropped, holds only loads nothing reads: the split gives up its storage
-/// with them, and no load of a frame slot is left for the frame to keep.
+/// with them, and no load of a frame slot is left for the frame to keep
+/// but the volatile object's own.
 #[test]
 fn forwarded_aggregate_leaves_no_slot_load() {
     const SRC: &str = "struct p { long a, b; };\n\
@@ -12688,7 +12689,7 @@ fn forwarded_aggregate_leaves_no_slot_load() {
             assert!(
                 !insts
                     .iter()
-                    .any(|(_, i)| i.starts_with("LoadLocal { off=-")),
+                    .any(|(_, i)| i.starts_with("LoadLocal { off=-") && !i.contains("volatile")),
                 "{target:?}: {name} keeps no slot load: {body}"
             );
         }
@@ -13465,13 +13466,15 @@ fn volatile_parameter_entry_copy_stores_volatile() {
                 .filter(|(_, i)| i.starts_with(head) && (!volatile || i.contains(", volatile")))
                 .count()
         };
-        // A read of the copy's own slot folds the frame offset into the
-        // load, so it carries its volatile mark in `LoadLocal` form.
+        // An access of the copy's own slot folds the frame offset into it,
+        // so it carries its volatile mark in `LoadLocal` / `StoreLocal`
+        // form.
         let volatile_loads = count("Load {", true) + count("LoadLocal {", true);
+        let copy_stores = |volatile| count("Store {", volatile) + count("StoreLocal {", volatile);
         assert!(
             !has_inst(&insts, &["Mcpy"])
-                && count("Store {", false) == stores
-                && count("Store {", true) == stores
+                && copy_stores(false) == stores
+                && copy_stores(true) == stores
                 && volatile_loads >= 2,
             "{target:?}: the parameter is copied and read through volatile accesses: {body}"
         );

@@ -368,7 +368,7 @@ fn ent_pc=440 n_params=2 variadic=false locals=2
     v105 Imm(0)                                           -> x0
     v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
-    v108 Store { addr=v93, disp=0, value=v99, kind=V128, align=1 } -> -
+    v108 StoreLocal { off=-2, value=v99, kind=V128 }      -> -
     v109 LifetimeEnd(0)                                   -> -
     v110 LifetimeEnd(0)                                   -> -
     v111 Imm(0)                                           -> x0
@@ -502,7 +502,7 @@ fn ent_pc=440 n_params=2 variadic=false locals=2
     v137 Imm(0)                                           -> x1
     v138 Imm(0)                                           -> x1
     v139 Imm(0)                                           -> x1
-    v140 Store { addr=v123, disp=0, value=v7, kind=V128, align=1 } -> -
+    v140 StoreLocal { off=-2, value=v7, kind=V128 }       -> -
     v141 LifetimeEnd(0)                                   -> -
     v142 LifetimeEnd(0)                                   -> -
     v143 LifetimeEnd(0)                                   -> -

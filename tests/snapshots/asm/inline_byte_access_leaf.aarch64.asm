@@ -34,7 +34,7 @@ Disassembly of section .text:
                	cmp	w0, #0x40
                	b.lo	<addr>
                	sub	x3, x29, #0x40
-               	ldr	x0, [x3]
+               	ldur	x0, [x29, #-0x40]
                	rev	x0, x0
                	mov	x17, #0x5360            // =21344
                	movk	x17, #0x3946, lsl #16
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w0, [x3]
+               	ldur	w0, [x29, #-0x40]
                	mov	x17, #0x1205            // =4613
                	movk	x17, #0x2c1f, lsl #16
                	cmp	w0, w17
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movk	x0, #0x403, lsl #16
                	movk	x0, #0x605, lsl #32
                	movk	x0, #0x807, lsl #48
-               	str	x0, [x4]
+               	stur	x0, [x29, #-0x80]
                	ldurb	w0, [x29, #-0x80]
                	cmp	w0, #0x1
                	b.ne	<addr>
@@ -71,79 +71,79 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x4]
+               	ldur	x0, [x29, #-0x80]
                	rev	x0, x0
-               	ldr	x1, [x3]
+               	ldur	x1, [x29, #-0x40]
                	rev	x1, x1
-               	ldr	w2, [x3]
+               	ldur	w2, [x29, #-0x40]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4]
-               	ldr	x0, [x4, #0x8]
+               	stur	x0, [x29, #-0x80]
+               	ldur	x0, [x29, #-0x78]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x8]
+               	ldur	x1, [x29, #-0x38]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x4]
+               	ldur	w2, [x29, #-0x3c]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x8]
-               	ldr	x0, [x4, #0x10]
+               	stur	x0, [x29, #-0x78]
+               	ldur	x0, [x29, #-0x70]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x10]
+               	ldur	x1, [x29, #-0x30]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x8]
+               	ldur	w2, [x29, #-0x38]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x10]
-               	ldr	x0, [x4, #0x18]
+               	stur	x0, [x29, #-0x70]
+               	ldur	x0, [x29, #-0x68]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x18]
+               	ldur	x1, [x29, #-0x28]
                	rev	x1, x1
-               	ldr	w2, [x3, #0xc]
+               	ldur	w2, [x29, #-0x34]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x18]
-               	ldr	x0, [x4, #0x20]
+               	stur	x0, [x29, #-0x68]
+               	ldur	x0, [x29, #-0x60]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x20]
+               	ldur	x1, [x29, #-0x20]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x10]
+               	ldur	w2, [x29, #-0x30]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x20]
-               	ldr	x0, [x4, #0x28]
+               	stur	x0, [x29, #-0x60]
+               	ldur	x0, [x29, #-0x58]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x28]
+               	ldur	x1, [x29, #-0x18]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x14]
+               	ldur	w2, [x29, #-0x2c]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x28]
-               	ldr	x0, [x4, #0x30]
+               	stur	x0, [x29, #-0x58]
+               	ldur	x0, [x29, #-0x50]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x30]
+               	ldur	x1, [x29, #-0x10]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x18]
+               	ldur	w2, [x29, #-0x28]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x30]
-               	ldr	x0, [x4, #0x38]
+               	stur	x0, [x29, #-0x50]
+               	ldur	x0, [x29, #-0x48]
                	rev	x0, x0
-               	ldr	x1, [x3, #0x38]
+               	ldur	x1, [x29, #-0x8]
                	rev	x1, x1
-               	ldr	w2, [x3, #0x1c]
+               	ldur	w2, [x29, #-0x24]
                	add	x1, x1, x2
                	eor	x0, x0, x1
                	rev	x0, x0
-               	str	x0, [x4, #0x38]
-               	ldr	x0, [x4]
+               	stur	x0, [x29, #-0x48]
+               	ldur	x0, [x29, #-0x80]
                	rev	x0, x0
                	mov	x17, #0x626d            // =25197
                	movk	x17, #0x6063, lsl #16

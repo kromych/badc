@@ -43,106 +43,104 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jb	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax), %rcx
-               	bswapq	%rcx
+               	movq	-0x40(%rbp), %rax
+               	bswapq	%rax
                	movabsq	$0x5121f2c39465360, %r11 # imm = 0x5121F2C39465360
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	(%rax), %ecx
-               	cmpl	$0x2c1f1205, %ecx       # imm = 0x2C1F1205
+               	movl	-0x40(%rbp), %eax
+               	cmpl	$0x2c1f1205, %eax       # imm = 0x2C1F1205
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x80(%rbp), %rcx
-               	movabsq	$0x807060504030201, %rdx # imm = 0x807060504030201
-               	movq	%rdx, (%rcx)
-               	movzbq	-0x80(%rbp), %rdx
-               	cmpl	$0x1, %edx
+               	movabsq	$0x807060504030201, %rax # imm = 0x807060504030201
+               	movq	%rax, -0x80(%rbp)
+               	movzbq	-0x80(%rbp), %rax
+               	cmpl	$0x1, %eax
                	jne	<addr>
-               	movzbq	-0x79(%rbp), %rdx
-               	cmpl	$0x8, %edx
+               	movzbq	-0x79(%rbp), %rax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movq	(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	(%rax), %rsi
-               	bswapq	%rsi
-               	movl	(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x8(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x4(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x8(%rcx)
-               	movq	0x10(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x10(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x8(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x10(%rcx)
-               	movq	0x18(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x18(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0xc(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x18(%rcx)
-               	movq	0x20(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x20(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x10(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x20(%rcx)
-               	movq	0x28(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x28(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x14(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x28(%rcx)
-               	movq	0x30(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x30(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x18(%rax), %edi
-               	addq	%rdi, %rsi
-               	xorq	%rsi, %rdx
-               	bswapq	%rdx
-               	movq	%rdx, 0x30(%rcx)
-               	movq	0x38(%rcx), %rdx
-               	bswapq	%rdx
-               	movq	0x38(%rax), %rsi
-               	bswapq	%rsi
-               	movl	0x1c(%rax), %eax
-               	addq	%rsi, %rax
-               	xorq	%rdx, %rax
+               	movq	-0x80(%rbp), %rax
                	bswapq	%rax
-               	movq	%rax, 0x38(%rcx)
-               	movq	(%rcx), %rax
+               	movq	-0x40(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x40(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x80(%rbp)
+               	movq	-0x78(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x38(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x3c(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x78(%rbp)
+               	movq	-0x70(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x30(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x38(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x70(%rbp)
+               	movq	-0x68(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x28(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x34(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x68(%rbp)
+               	movq	-0x60(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x20(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x30(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x60(%rbp)
+               	movq	-0x58(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x18(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x2c(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x58(%rbp)
+               	movq	-0x50(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x10(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x28(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x50(%rbp)
+               	movq	-0x48(%rbp), %rax
+               	bswapq	%rax
+               	movq	-0x8(%rbp), %rcx
+               	bswapq	%rcx
+               	movl	-0x24(%rbp), %edx
+               	addq	%rdx, %rcx
+               	xorq	%rcx, %rax
+               	bswapq	%rax
+               	movq	%rax, -0x48(%rbp)
+               	movq	-0x80(%rbp), %rax
                	bswapq	%rax
                	movabsq	$0x4101c286063626d, %r11 # imm = 0x4101C286063626D
                	cmpq	%r11, %rax

@@ -749,8 +749,7 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	w1, [x0, #0x8]
+               	stur	w1, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x10]
                	ldurb	w1, [x29, #-0xf]
                	ldurb	w2, [x29, #-0xe]

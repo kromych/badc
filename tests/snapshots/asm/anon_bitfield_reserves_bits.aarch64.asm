@@ -36,14 +36,14 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x2]
                	sturb	w0, [x29, #-0x1]
                	mov	x2, #0x1                // =1
-               	str	w2, [x1]
+               	stur	w2, [x29, #-0x10]
                	mov	x2, #0x3344             // =13124
                	movk	x2, #0x1122, lsl #16
                	stur	w2, [x29, #-0x8]
                	mov	x2, #0x7788             // =30600
                	movk	x2, #0x5566, lsl #16
                	stur	w2, [x29, #-0x4]
-               	ldr	w2, [x1]
+               	ldur	w2, [x29, #-0x10]
                	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x16               // =22

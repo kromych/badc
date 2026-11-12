@@ -97,19 +97,19 @@ Disassembly of section .text:
                	incq	%rcx
                	movb	%cl, -0x5(%rbp)
                	leaq	-0x20(%rbp), %rdx
-               	movq	(%rax), %rsi
-               	movl	0x8(%rax), %ecx
+               	movq	-0x10(%rbp), %rsi
+               	movl	-0x8(%rbp), %ecx
                	movq	%rsi, -0x20(%rbp)
                	movl	%ecx, -0x18(%rbp)
                	movq	(%rdx), %r10
                	movq	%r10, (%rax)
                	movl	0x8(%rdx), %r10d
                	movl	%r10d, 0x8(%rax)
-               	movl	(%rax), %edx
-               	andq	$0xfffff, %rdx          # imm = 0xFFFFF
-               	cmpl	$0xfffff, %edx          # imm = 0xFFFFF
+               	movl	-0x10(%rbp), %eax
+               	andq	$0xfffff, %rax          # imm = 0xFFFFF
+               	cmpl	$0xfffff, %eax          # imm = 0xFFFFF
                	jne	<addr>
-               	movq	0x2(%rax), %rax
+               	movq	-0xe(%rbp), %rax
                	sarq	$0x4, %rax
                	movabsq	$0xfffffffffff, %r11    # imm = 0xFFFFFFFFFFF
                	andq	%r11, %rax

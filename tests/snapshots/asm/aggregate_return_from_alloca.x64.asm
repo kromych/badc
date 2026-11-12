@@ -579,8 +579,7 @@ Disassembly of section .text:
                	movq	%r12, %rdi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movl	%edx, 0x8(%rax)
+               	movl	%edx, -0x8(%rbp)
                	movzbq	-0x10(%rbp), %rax
                	movzbq	-0xf(%rbp), %rcx
                	movzbq	-0xe(%rbp), %rdx

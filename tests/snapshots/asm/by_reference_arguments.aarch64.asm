@@ -168,21 +168,20 @@ Disassembly of section .text:
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0xd8
                	mov	x0, #0x5                // =5
-               	str	x0, [x2]
+               	stur	x0, [x29, #-0xd8]
                	mov	x0, #0x6                // =6
-               	str	x0, [x2, #0x8]
+               	stur	x0, [x29, #-0xd0]
                	mov	x0, #0x7                // =7
-               	str	x0, [x2, #0x10]
+               	stur	x0, [x29, #-0xc8]
                	mov	x1, #0x1                // =1
                	sub	x0, x29, #0xa8
-               	ldr	x3, [x2]
-               	str	x3, [x0]
-               	ldr	x3, [x2, #0x8]
-               	str	x3, [x0, #0x8]
-               	ldr	x2, [x2, #0x10]
-               	str	x2, [x0, #0x10]
+               	ldur	x2, [x29, #-0xd8]
+               	stur	x2, [x29, #-0xa8]
+               	ldur	x2, [x29, #-0xd0]
+               	stur	x2, [x29, #-0xa0]
+               	ldur	x2, [x29, #-0xc8]
+               	stur	x2, [x29, #-0x98]
                	bl	<addr>
                	cmp	x0, #0x7
                	b.eq	<addr>

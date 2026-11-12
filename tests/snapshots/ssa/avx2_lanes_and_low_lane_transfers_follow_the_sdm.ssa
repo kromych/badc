@@ -516,16 +516,16 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v514 Extend { value=v513, kind=I32 }                  -> x0
     v515 Imm(0)                                           -> x0
     v516 LocalAddr(-4)                                    -> x0
-    v517 LocalAddr(-170)                                  -> x2
-    v518 Extend { value=v505, kind=I32 }                  -> x6
-    v519 BinopI { op=shl, lhs=v505, rhs_imm=5 }           -> x6
-    v520 Binop { op=add, lhs=v517, rhs=v519 }             -> x2
-    v521 Imm(0)                                           -> x6
+    v517 LocalAddr(-170)                                  -> x0
+    v518 Extend { value=v505, kind=I32 }                  -> x2
+    v519 BinopI { op=shl, lhs=v505, rhs_imm=5 }           -> x2
+    v520 Binop { op=add, lhs=v517, rhs=v519 }             -> x0
+    v521 Imm(0)                                           -> x2
     v522 Load { addr=v520, disp=0, kind=V256 }            -> d0
-    v523 Imm(0)                                           -> x2
-    v524 Imm(0)                                           -> x2
-    v525 Imm(0)                                           -> x2
-    v526 Store { addr=v516, disp=0, value=v522, kind=V256, align=1 } -> -
+    v523 Imm(0)                                           -> x0
+    v524 Imm(0)                                           -> x0
+    v525 Imm(0)                                           -> x0
+    v526 StoreLocal { off=-4, value=v522, kind=V256 }     -> -
     v527 LifetimeEnd(0)                                   -> -
     v528 Imm(0)                                           -> x13
     v529 BinopI { op=mul, lhs=v513, rhs_imm=0 }           -> x7
@@ -643,7 +643,7 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v551 Imm(0)                                           -> x0
     v552 Imm(0)                                           -> x0
     v553 Imm(0)                                           -> x0
-    v554 Store { addr=v547, disp=0, value=v541, kind=V256, align=1 } -> -
+    v554 StoreLocal { off=-4, value=v541, kind=V256 }     -> -
     v555 LifetimeEnd(0)                                   -> -
     v556 LocalAddr(-4)                                    -> x0
     v557 Imm(0)                                           -> x0
@@ -722,7 +722,7 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v651 Imm(0)                                           -> x2
     v652 Imm(0)                                           -> x2
     v653 Imm(0)                                           -> x2
-    v654 Store { addr=v643, disp=0, value=v645, kind=V256, align=1 } -> -
+    v654 StoreLocal { off=-4, value=v645, kind=V256 }     -> -
     v655 LifetimeEnd(0)                                   -> -
     v656 LifetimeEnd(0)                                   -> -
     v657 Imm(0)                                           -> x2
@@ -817,7 +817,7 @@ fn ent_pc=1361 n_params=1 variadic=false locals=4
     v738 Imm(0)                                           -> x0
     v739 Imm(0)                                           -> x0
     v740 Imm(0)                                           -> x0
-    v741 Store { addr=v670, disp=0, value=v727, kind=V256, align=1 } -> -
+    v741 StoreLocal { off=-4, value=v727, kind=V256 }     -> -
     v742 LifetimeEnd(0)                                   -> -
     v743 LifetimeEnd(0)                                   -> -
     v744 LocalAddr(-4)                                    -> x0
@@ -1075,7 +1075,7 @@ fn ent_pc=1362 n_params=1 variadic=false locals=4
     v151 Imm(0)                                           -> x0
     v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
-    v154 Store { addr=v144, disp=0, value=v150, kind=V128, align=1 } -> -
+    v154 StoreLocal { off=-3, value=v150, kind=V128 }     -> -
     v155 LifetimeEnd(0)                                   -> -
     v156 LocalAddr(-3)                                    -> x0
     v157 Imm(0)                                           -> x0
@@ -1748,7 +1748,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v23  LocalAddr(-22)                                   -> x7
     v24  LocalAddr(-18)                                   -> x8
     v25  Imm(0)                                           -> x0
-    v26  Load { addr=v23, disp=0, kind=V256, align=1 }    -> d0
+    v26  LoadLocal { off=-22, kind=V256 }                 -> d0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
@@ -1756,7 +1756,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v31  Imm(0)                                           -> x0
     v32  LifetimeEnd(0)                                   -> -
     v33  Imm(0)                                           -> x0
-    v34  Load { addr=v24, disp=0, kind=V256, align=1 }    -> d1
+    v34  LoadLocal { off=-18, kind=V256 }                 -> d1
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
@@ -1929,16 +1929,16 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v367 Binop { op=shl, lhs=v364, rhs=v366 }             -> x1
     v368 Extend { value=v367, kind=I32 }                  -> x0
     v369 LocalAddr(-14)                                   -> x0
-    v370 LocalAddr(-283)                                  -> x2
-    v371 Extend { value=v361, kind=I32 }                  -> x6
-    v372 BinopI { op=shl, lhs=v361, rhs_imm=5 }           -> x6
-    v373 Binop { op=add, lhs=v370, rhs=v372 }             -> x2
-    v374 Imm(0)                                           -> x6
+    v370 LocalAddr(-283)                                  -> x0
+    v371 Extend { value=v361, kind=I32 }                  -> x2
+    v372 BinopI { op=shl, lhs=v361, rhs_imm=5 }           -> x2
+    v373 Binop { op=add, lhs=v370, rhs=v372 }             -> x0
+    v374 Imm(0)                                           -> x2
     v375 Load { addr=v373, disp=0, kind=V256 }            -> d2
-    v376 Imm(0)                                           -> x2
-    v377 Imm(0)                                           -> x2
-    v378 Imm(0)                                           -> x2
-    v379 Store { addr=v369, disp=0, value=v375, kind=V256, align=1 } -> -
+    v376 Imm(0)                                           -> x0
+    v377 Imm(0)                                           -> x0
+    v378 Imm(0)                                           -> x0
+    v379 StoreLocal { off=-14, value=v375, kind=V256 }    -> -
     v380 LifetimeEnd(0)                                   -> -
     v381 BinopI { op=shl, lhs=v367, rhs_imm=3 }           -> x0
     v382 Extend { value=v381, kind=I32, nsw }             -> [spill 0]
@@ -2170,7 +2170,7 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     v499 Imm(0)                                           -> x0
     v500 Imm(0)                                           -> x0
     v501 Imm(0)                                           -> x0
-    v502 Store { addr=v492, disp=0, value=v498, kind=V256, align=1 } -> -
+    v502 StoreLocal { off=-4, value=v498, kind=V256 }     -> -
     v503 LifetimeEnd(0)                                   -> -
     v504 Imm(0)                                           -> x0
     terminator Jmp(b54)   (exit_acc=v504)

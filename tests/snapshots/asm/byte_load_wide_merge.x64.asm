@@ -71,36 +71,35 @@ Disassembly of section .text:
                	movb	$-0x34, -0x5(%rbp)
                	movb	$-0x23, -0x4(%rbp)
                	movb	$-0x12, -0x3(%rbp)
-               	leaq	-0x10(%rbp), %rax
                	movb	$-0x1, -0x2(%rbp)
                	movb	$0x10, -0x1(%rbp)
-               	movl	(%rax), %ecx
-               	movl	%ecx, %edx
-               	bswapl	%edx
-               	cmpl	$0x11223344, %edx       # imm = 0x11223344
+               	movl	-0x10(%rbp), %eax
+               	movl	%eax, %ecx
+               	bswapl	%ecx
+               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpl	$0x44332211, %ecx       # imm = 0x44332211
+               	cmpl	$0x44332211, %eax       # imm = 0x44332211
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	0x1(%rax), %ecx
-               	bswapl	%ecx
-               	cmpl	$0x22334455, %ecx       # imm = 0x22334455
+               	movl	-0xf(%rbp), %eax
+               	bswapl	%eax
+               	cmpl	$0x22334455, %eax       # imm = 0x22334455
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	0x3(%rax), %ecx
-               	cmpl	$0x77665544, %ecx       # imm = 0x77665544
+               	movl	-0xd(%rbp), %eax
+               	cmpl	$0x77665544, %eax       # imm = 0x77665544
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movq	(%rax), %rax
+               	movq	-0x10(%rbp), %rax
                	bswapq	%rax
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
                	cmpq	%r11, %rax
@@ -108,16 +107,15 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x1(%rax), %rcx
-               	bswapq	%rcx
+               	movq	-0xf(%rbp), %rax
+               	bswapq	%rax
                	movabsq	$0x2233445566778899, %r11 # imm = 0x2233445566778899
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movzwq	0x5(%rax), %rax
+               	movzwq	-0xb(%rbp), %rax
                	cmpl	$0x7766, %eax           # imm = 0x7766
                	je	<addr>
                	movl	$0x7, %eax

@@ -1162,9 +1162,8 @@ Disassembly of section .text:
                	movl	$0x20, %ecx
                	testq	%rax, %rax
                	cmovneq	%rcx, %r13
-               	leaq	-0xc0(%rbp), %rax
                	movups	(%r12), %xmm0
-               	movups	%xmm0, 0x10(%rax)
+               	movups	%xmm0, -0xb0(%rbp)
                	xorl	%ecx, %ecx
                	movl	%ecx, -0x28(%rbp)
                	movq	%rcx, -0x70(%rbp)

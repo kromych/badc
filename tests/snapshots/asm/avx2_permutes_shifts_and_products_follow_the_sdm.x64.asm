@@ -159,10 +159,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	vmovups	(%rax), %ymm0
+               	vmovups	-0x40(%rbp), %ymm0
                	leaq	-0x20(%rbp), %rax
-               	vmovups	(%rax), %ymm1
+               	vmovups	-0x20(%rbp), %ymm1
                	movups	-0x60(%rbp), %xmm2
                	movups	-0x50(%rbp), %xmm3
                	leaq	-0x58(%rbp), %rcx

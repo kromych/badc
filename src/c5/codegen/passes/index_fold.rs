@@ -435,11 +435,18 @@ fn foldable_displaced_addresses(
         .collect()
 }
 
-/// The slot and displacement a frame address names, for an access the
-/// local forms can carry: no alignment bound below the natural one (they
-/// state none, so the strict-alignment lowering would widen the transfer).
-fn folded_slot(insts: &[Inst], addr: ValueId, disp: i32, align: u8) -> Option<(i64, i32)> {
-    if align != 0 {
+/// The slot and displacement a frame address names, for a `width`-byte
+/// access the local forms can carry: they state no alignment bound, which
+/// only the `strict_align` lowering reads, so there an access bounded below
+/// its width keeps its address.
+fn folded_slot(
+    insts: &[Inst],
+    addr: ValueId,
+    disp: i32,
+    (width, align): (u8, u8),
+    strict_align: bool,
+) -> Option<(i64, i32)> {
+    if strict_align && align != 0 && align < width {
         return None;
     }
     match insts.get(addr as usize)? {
@@ -454,7 +461,7 @@ fn folded_slot(insts: &[Inst], addr: ValueId, disp: i32, align: u8) -> Option<(i
 /// the duplicate `LocalAddr`s the builder emits per access -- it keeps
 /// them out of its own cache -- are already merged. The address itself
 /// is left in place for its other uses; the emit skips it once dead.
-pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
+pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa], strict_align: bool) {
     for func in funcs.iter_mut() {
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for (idx, inst) in func.insts.iter().enumerate() {
@@ -466,13 +473,18 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     volatile,
                     align,
                     ..
-                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
-                    Inst::LoadLocal {
-                        off,
-                        disp,
-                        kind: *kind,
-                        volatile: *volatile,
-                    }
+                } => folded_slot(
+                    &func.insts,
+                    *addr,
+                    *disp,
+                    (load_width(*kind), *align),
+                    strict_align,
+                )
+                .map(|(off, disp)| Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind: *kind,
+                    volatile: *volatile,
                 }),
                 Inst::Store {
                     addr,
@@ -482,15 +494,20 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     volatile,
                     align,
                     ..
-                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
-                    Inst::StoreLocal {
-                        off,
-                        disp,
-                        value: *value,
-                        kind: *kind,
-                        volatile: *volatile,
-                        nsw: false,
-                    }
+                } => folded_slot(
+                    &func.insts,
+                    *addr,
+                    *disp,
+                    (store_width(*kind), *align),
+                    strict_align,
+                )
+                .map(|(off, disp)| Inst::StoreLocal {
+                    off,
+                    disp,
+                    value: *value,
+                    kind: *kind,
+                    volatile: *volatile,
+                    nsw: false,
                 }),
                 _ => None,
             };
@@ -1090,15 +1107,18 @@ mod tests {
         assert!(kept(&out, 4));
     }
 
-    /// The local forms carry the displacement and no alignment bound.
+    /// The local forms carry the displacement and no alignment bound, so
+    /// under `strict_align` an access with one keeps its address.
     #[test]
     fn a_local_address_folds_at_any_offset_and_natural_alignment() {
         let insts = vec![Inst::LocalAddr(-3)];
-        assert_eq!(folded_slot(&insts, 0, 0, 0), Some((-3, 0)));
-        assert_eq!(folded_slot(&insts, 0, 8, 0), Some((-3, 8)));
-        assert_eq!(folded_slot(&insts, 0, 0, 1), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), true), Some((-3, 0)));
+        assert_eq!(folded_slot(&insts, 0, 8, (8, 0), true), Some((-3, 8)));
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 8), true), Some((-3, 0)));
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), true), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), false), Some((-3, 0)));
         // Only a frame address folds; a computed one keeps its `Load`.
         let insts = vec![Inst::Imm(0)];
-        assert_eq!(folded_slot(&insts, 0, 0, 0), None);
+        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), false), None);
     }
 }

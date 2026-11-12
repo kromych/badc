@@ -3495,9 +3495,9 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     terminator Bz { cond=v865, target=b36, fall=b34 }   (exit_acc=v865)
   block 36  start_pc=0
     v874 LocalAddr(-4)                                    -> x0
-    v875 BinopI { op=add, lhs=v874, rhs_imm=1 }           -> x1
-    v876 Imm(0)                                           -> x1
-    v877 Load { addr=v874, disp=1, kind=V128, align=1 }   -> d0
+    v875 BinopI { op=add, lhs=v874, rhs_imm=1 }           -> x0
+    v876 Imm(0)                                           -> x0
+    v877 LoadLocal { off=-4, disp=1, kind=V128 }          -> d0
     v878 Imm(0)                                           -> x0
     v879 Imm(0)                                           -> x0
     v880 Imm(0)                                           -> x0

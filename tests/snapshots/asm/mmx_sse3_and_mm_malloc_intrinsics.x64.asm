@@ -945,8 +945,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x11, %eax
                	jl	<addr>
-               	leaq	-0x20(%rbp), %rax
-               	movups	0x1(%rax), %xmm0
+               	movups	-0x1f(%rbp), %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	cmpl	$0x4030201, %eax        # imm = 0x4030201

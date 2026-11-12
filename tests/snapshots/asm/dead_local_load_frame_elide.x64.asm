@@ -54,7 +54,7 @@ Disassembly of section .text:
                	movb	$0x7, -0x2(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	movb	$0x8, -0x1(%rbp)
-               	movq	(%rdi), %rax
+               	movq	-0x8(%rbp), %rax
                	bswapq	%rax
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
                	cmpq	%r11, %rax

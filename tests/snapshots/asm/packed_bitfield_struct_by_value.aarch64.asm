@@ -100,20 +100,20 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sturb	w0, [x29, #-0x5]
                	sub	x2, x29, #0x20
-               	ldr	x3, [x1]
-               	ldr	w0, [x1, #0x8]
+               	ldur	x3, [x29, #-0x10]
+               	ldur	w0, [x29, #-0x8]
                	stur	x3, [x29, #-0x20]
                	stur	w0, [x29, #-0x18]
                	ldr	x16, [x2]
                	str	x16, [x1]
                	ldr	w16, [x2, #0x8]
                	str	w16, [x1, #0x8]
-               	ldr	w2, [x1]
-               	and	x2, x2, #0xfffff
+               	ldur	w1, [x29, #-0x10]
+               	and	x1, x1, #0xfffff
                	mov	x17, #0xfffff           // =1048575
-               	cmp	w2, w17
+               	cmp	w1, w17
                	b.ne	<addr>
-               	ldur	x1, [x1, #0x2]
+               	ldur	x1, [x29, #-0xe]
                	ubfx	x1, x1, #4, #44
                	mov	x17, #0x7ffffffffff     // =8796093022207
                	cmp	x1, x17

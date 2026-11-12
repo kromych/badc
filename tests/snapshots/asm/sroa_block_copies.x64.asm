@@ -140,19 +140,18 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
                	movq	$0x0, -0x10(%rbp)
                	movq	$0x0, -0x8(%rbp)
                	movq	%rsi, -0x10(%rbp)
-               	leaq	0x1(%rsi), %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	movq	(%rax), %rsi
-               	movq	%rsi, (%rdi)
-               	movq	0x8(%rax), %rax
-               	movq	%rax, 0x8(%rdi)
-               	leaq	(%rcx,%rdx), %rax
+               	leaq	0x1(%rsi), %rax
+               	movq	%rax, -0x8(%rbp)
+               	movq	-0x10(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
+               	movq	-0x10(%rbp), %rdx
+               	movq	%rdx, (%rdi)
+               	movq	-0x8(%rbp), %rdx
+               	movq	%rdx, 0x8(%rdi)
+               	addq	%rcx, %rax
                	leave
                	retq
 

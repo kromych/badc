@@ -32,8 +32,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	s0, [x29, #-0x28]
-               	str	d0, [sp, #0x10]
-               	ldr	d0, [sp, #0x10]
                	fneg	s0, s0
                	fmov	s1, #-2.00000000
                	fcmp	s0, s1
@@ -112,8 +110,6 @@ Disassembly of section .text:
                	ret
                	ldur	d0, [x29, #-0x18]
                	fneg	d0, d0
-               	str	d0, [sp, #0x10]
-               	ldr	d0, [sp, #0x10]
                	fabs	d0, d0
                	fmov	d1, #7.50000000
                	fcmp	d0, d1
@@ -143,8 +139,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	d1, [x0, #0x18]
                	add	v1.8b, v0.8b, v1.8b
-               	str	d0, [sp, #0x10]
-               	ldr	d0, [sp, #0x10]
                	neg	v0.8b, v0.8b
                	smov	x0, v1.b[0]
                	cmp	x0, #0xb

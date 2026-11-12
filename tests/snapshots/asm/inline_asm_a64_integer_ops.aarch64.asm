@@ -132,17 +132,11 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	sbfiz	x0, x5, #4, #4
                	cbz	x4, <addr>
-               	str	x5, [sp]
-               	str	x7, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	bfi	x0, x1, #8, #8
+               	mov	x0, x5
+               	bfi	x0, x7, #8, #8
                	cbz	x4, <addr>
-               	str	x5, [sp]
-               	str	x6, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	bfxil	x0, x1, #4, #8
+               	mov	x0, x5
+               	bfxil	x0, x6, #4, #8
                	cbz	x4, <addr>
                	sxtw	x0, w8
                	cbz	x4, <addr>

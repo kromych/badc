@@ -28,13 +28,11 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x2, [x0, #0x8]
-               	ldr	x1, [x0, #0x10]
-               	str	x2, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	add	x0, x0, x1
+               	ldr	x1, [x0, #0x8]
+               	ldr	x0, [x0, #0x10]
+               	mov	x16, x1
+               	add	x16, x16, x0
+               	mov	x0, x16
                	cmp	x0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

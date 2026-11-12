@@ -6743,3 +6743,29 @@ return 0;\n}\n";
         "the target is staged through a second slot: {insns:x?}"
     );
 }
+
+/// AArch64: a read-write register operand (`+r`, `+w`) binds to its value's
+/// register, as an input or output does, with no staging through the frame;
+/// a 16-byte `w` input named by an lvalue reads through its address.
+#[test]
+fn a64_read_write_asm_operands_bind_without_the_frame() {
+    const SRC: &str = "typedef float f4 __attribute__((vector_size(16)));\n\
+long add(long x, long y) { __asm__(\"add %0, %0, %1\" : \"+r\"(x) : \"r\"(y)); return x; }\n\
+f4 fma_v(f4 acc, f4 b, f4 c) {\n\
+__asm__(\"fmla %0.4s, %1.4s, %2.4s\" : \"+w\"(acc) : \"w\"(b), \"w\"(c)); return acc; }\n\
+void fma_p(f4 *d, const f4 *a, const f4 *b, const f4 *c) { f4 acc = *a;\n\
+__asm__(\"fmla %0.4s, %1.4s, %2.4s\" : \"+w\"(acc) : \"w\"(*b), \"w\"(*c)); *d = acc; }\n";
+    // `fmla v.4s, v.4s, v.4s`.
+    let fmla = |w: u32| w & 0xFFE0_FC00 == 0x4E20_CC00;
+    let mut m = Misses::default();
+    for (name, len) in [("add", 2), ("fma_v", 2), ("fma_p", 6)] {
+        let ws = a64(SRC, name);
+        m.expect(ws.len() == len, || format!("{name}: {ws:08x?}"));
+        if name != "add" {
+            m.expect(ws.iter().any(|&w| fmla(w)), || {
+                format!("{name}: no fmla: {ws:08x?}")
+            });
+        }
+    }
+    m.finish();
+}

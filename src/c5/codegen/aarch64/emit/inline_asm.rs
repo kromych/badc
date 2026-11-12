@@ -1241,6 +1241,8 @@ fn form_static(
 /// How a bound input without a register reaches its scratch.
 enum BoundLoad {
     Vector(Place, u8),
+    /// A 16-byte operand read through its address.
+    VectorAt(Place, Option<i64>, u8),
     Double(Place, u8),
     Int(Place, u8),
     Const(i64, u8),
@@ -1274,7 +1276,9 @@ fn fp_access(load: bool, width: u8, vt: u8) -> u32 {
 /// Bind each input to the register its value occupies, or to a scratch;
 /// each value output to its own register, or to a scratch no other output
 /// holds, which it may share with an input, as a template reads its inputs
-/// before it writes a non-`&` output. The SIMD inputs load first: a q / d
+/// before it writes a non-`&` output. A read-write operand takes its
+/// output's register, loaded with its input, unless an input occupies it,
+/// else a scratch no input shares. The SIMD loads come first: a q / d
 /// reload may form its address in x16.
 fn bind_operands(
     asm: &super::super::ir::AsmBlock,
@@ -1308,6 +1312,49 @@ fn bind_operands(
     };
     let mut op_reg: Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
     let mut loads: Vec<BoundLoad> = Vec::new();
+    let simd = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
+    let own = |i: usize, place: Place| match (simd(i), place) {
+        (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => Some(r),
+        _ => None,
+    };
+    // The registers the operands read before the template: (operand, bank, reg).
+    let reads: Vec<(usize, bool, u8)> = (asm.operands.iter().zip(args).enumerate())
+        .filter(|(_, (op, a))| op.is_rw || (!op.is_output && !takes_imm(op, **a)))
+        .filter_map(|(j, (_, &a))| own(j, place_of(alloc, a)).map(|r| (j, simd(j), r)))
+        .collect();
+    let mut rw: Vec<(usize, u8)> = Vec::new();
+    for &(i, place) in outs.iter().filter(|&&(i, _)| asm.operands[i].is_rw) {
+        let b = simd(i);
+        let r = match own(i, place) {
+            Some(r)
+                if !reads
+                    .iter()
+                    .any(|&(j, rb, rr)| j != i && rb == b && rr == r) =>
+            {
+                r
+            }
+            _ => take(if b { &mut fp } else { &mut gp })?,
+        };
+        op_reg[i] = Some(r);
+        rw.push((i, r));
+    }
+    let rw_load = |i: usize, r: u8| -> Result<BoundLoad, alloc::string::String> {
+        let place = place_of(alloc, args[i]);
+        Ok(match (simd(i), place) {
+            (true, _) if asm.operands[i].width == 16 => BoundLoad::Vector(place, r),
+            (true, _) => BoundLoad::Double(place, r),
+            (false, Place::IntReg(_) | Place::Spill(_)) => BoundLoad::Int(place, r),
+            (false, _) => BoundLoad::Const(
+                crate::c5::asm::asm_operand_const(func, args[i]).ok_or_else(|| {
+                    alloc::string::String::from("aarch64 inline asm: operand without a value")
+                })?,
+                r,
+            ),
+        })
+    };
+    for &(i, r) in rw.iter().filter(|&&(i, _)| simd(i)) {
+        loads.push(rw_load(i, r)?);
+    }
     let inputs = || {
         asm.operands
             .iter()
@@ -1320,11 +1367,14 @@ fn bind_operands(
     };
     for (i, (op, &a)) in inputs().filter(|(_, (op, _))| matches!(op.constraint, C::Fp)) {
         let place = place_of(alloc, a);
+        let by_address = op.width == 16 && !op.value;
         op_reg[i] = Some(match place {
-            Place::FpReg(r) => r,
+            Place::FpReg(r) if !by_address => r,
             _ => {
                 let s = take(&mut fp)?;
-                loads.push(if op.width == 16 {
+                loads.push(if by_address {
+                    BoundLoad::VectorAt(place, crate::c5::asm::asm_operand_const(func, a), s)
+                } else if op.width == 16 {
                     BoundLoad::Vector(place, s)
                 } else {
                     BoundLoad::Double(place, s)
@@ -1358,17 +1408,21 @@ fn bind_operands(
             }
         });
     }
-    let simd = |i: usize| matches!(asm.operands[i].constraint, C::Fp);
-    let own = |i: usize, place: Place| match (simd(i), place) {
-        (true, Place::FpReg(r)) | (false, Place::IntReg(r)) => Some(r),
-        _ => None,
-    };
+    for &(i, r) in rw.iter().filter(|&&(i, _)| !simd(i)) {
+        loads.push(rw_load(i, r)?);
+    }
     let mut held: [Vec<u8>; 2] = [Vec::new(), Vec::new()];
     for &(i, place) in outs {
         held[usize::from(simd(i))].extend(own(i, place));
     }
-    let mut out_scratch = false;
-    for &(i, place) in outs {
+    for &(i, r) in &rw {
+        held[usize::from(simd(i))].push(r);
+    }
+    let mut out_scratch = rw.iter().any(|&(i, r)| {
+        outs.iter()
+            .any(|&(j, place)| j == i && own(i, place) != Some(r))
+    });
+    for &(i, place) in outs.iter().filter(|&&(i, _)| !asm.operands[i].is_rw) {
         op_reg[i] = Some(match own(i, place) {
             Some(r) => r,
             None => {
@@ -1403,14 +1457,37 @@ fn emit_bound_loads(
         || alloc::string::String::from("aarch64 inline asm: operand not in a loadable place");
     for load in loads {
         match *load {
+            // A value already in another register is copied: the operand
+            // register is written by the template.
             BoundLoad::Vector(place, s) => {
-                materialize_v128(out.code, place, s, frame, Reg(16)).ok_or_else(lost)?;
+                let v = materialize_v128(out.code, place, s, frame, Reg(16)).ok_or_else(lost)?;
+                if v != s {
+                    emit(out.code, super::encode::enc_mov_v16b(s, v));
+                }
+            }
+            BoundLoad::VectorAt(place, c, s) => {
+                let base = match (place, c) {
+                    (Place::IntReg(r), _) => Reg(r),
+                    (Place::Spill(_), _) => {
+                        materialize_int(out.code, place, Reg(16), frame).ok_or_else(lost)?
+                    }
+                    (_, Some(c)) => {
+                        load_imm64(out.code, Reg(16), c as u64);
+                        Reg(16)
+                    }
+                    _ => return Err(lost()),
+                };
+                emit(out.code, super::encode::enc_ldr_q_imm(s, base, 0));
             }
             BoundLoad::Double(place, s) => {
-                materialize_fp(out.code, place, s, frame).ok_or_else(lost)?;
+                let v = materialize_fp(out.code, place, s, frame).ok_or_else(lost)?;
+                if v != s {
+                    emit(out.code, super::encode::enc_fmov_d_d(s, v));
+                }
             }
             BoundLoad::Int(place, s) => {
-                materialize_int(out.code, place, Reg(s), frame).ok_or_else(lost)?;
+                let r = materialize_int(out.code, place, Reg(s), frame).ok_or_else(lost)?;
+                super::encode::emit_mov_reg(out.code, Reg(s), r);
             }
             BoundLoad::Const(c, s) => load_imm64(out.code, Reg(s), c as u64),
             BoundLoad::Static(a, rd, temp) => {

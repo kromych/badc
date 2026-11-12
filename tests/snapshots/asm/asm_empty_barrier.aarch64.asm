@@ -25,8 +25,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	str	w0, [x1, #0x20]
                	mov	w0, w0
-               	str	x0, [sp]
-               	ldr	x0, [sp]
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

@@ -200,387 +200,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x7
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x7
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x7
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x7
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_u8>:
@@ -770,387 +602,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x7
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x7
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.16b, v1.16b, #0x7
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.16b, v0.16b, #0x7
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.8b, v1.8b, #0x8
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.8b, v0.8b, #0x8
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u8_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u8_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u8_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.16b, v1.16b, #0x8
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.16b, v0.16b, #0x8
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_s16>:
@@ -1340,387 +1004,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0xf
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0xf
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0xf
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0xf
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_u16>:
@@ -1910,387 +1406,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.4h, v1.4h, #0xf
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.4h, v0.4h, #0xf
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.8h, v1.8h, #0xf
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.8h, v0.8h, #0xf
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.4h, v1.4h, #0x10
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.4h, v0.4h, #0x10
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u16_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u16_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u16_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_s32>:
@@ -2480,387 +1808,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x1f
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x1f
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x1f
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x1f
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_u32>:
@@ -3050,387 +2210,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.2s, v1.2s, #0x1f
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.2s, v0.2s, #0x1f
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.4s, v1.4s, #0x1f
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.4s, v0.4s, #0x1f
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	v0.2s, v1.2s, #0x20
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	v16.2s, v0.2s, #0x20
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u32_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u32_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u32_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.4s, v1.4s, #0x20
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.4s, v0.4s, #0x20
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_s64>:
@@ -3620,387 +2612,219 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ssra	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ssra	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ssra	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ssra	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	srsra	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	srsra	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	srsra	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	srsra	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x3f
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x3f
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x3f
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x3f
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_s64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vshl_u64>:
@@ -4190,435 +3014,246 @@ Disassembly of section .text:
                	ret
 
 <w_vsra_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsra_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	usra	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	usra	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsraq_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	usra	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	usra	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsra_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	ursra	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	ursra	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vrsraq_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	ursra	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	ursra	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x0
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x0
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	d0, d1, #0x3f
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	d16, d0, #0x3f
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x0
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x0
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x3f
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x3f
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x1
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x1
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsri_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sri	d0, d1, #0x40
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sri	d16, d0, #0x40
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u64_lo>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x1
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x1
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u64_mid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x5
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x5
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_u64_hi>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.2d, v1.2d, #0x40
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.2d, v0.2d, #0x40
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsli_n_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	ldr	d1, [x1]
-               	ldr	d0, [x2]
-               	str	d0, [sp]
-               	str	d1, [sp, #0x8]
-               	ldr	d0, [sp]
-               	ldr	d1, [sp, #0x8]
-               	sli	v0.8b, v1.8b, #0x3
+               	ldr	d0, [x1]
+               	ldr	d1, [x2]
+               	fmov	d16, d1
+               	sli	v16.8b, v0.8b, #0x3
+               	fmov	d0, d16
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsriq_n_p16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sri	v0.8h, v1.8h, #0x10
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sri	v16.8h, v0.8h, #0x10
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsliq_n_p64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	ldr	q1, [x1]
-               	ldr	q0, [x2]
-               	str	q0, [sp]
-               	str	q1, [sp, #0x10]
-               	ldr	q0, [sp]
-               	ldr	q1, [sp, #0x10]
-               	sli	v0.2d, v1.2d, #0x3f
+               	ldr	q0, [x1]
+               	ldr	q1, [x2]
+               	mov	v16.16b, v1.16b
+               	sli	v16.2d, v0.2d, #0x3f
+               	mov	v0.16b, v16.16b
                	str	q0, [x0]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmovn_s16>:

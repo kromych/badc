@@ -27,14 +27,12 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	stp	xzr, xzr, [x1]
                	stp	xzr, xzr, [x1, #0x10]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	ld4	{ v0.s, v1.s, v2.s, v3.s }[0], [x0], #16
-               	ld4	{ v0.s, v1.s, v2.s, v3.s }[3], [x0]
-               	st4	{ v0.s, v1.s, v2.s, v3.s }[0], [x1], #16
-               	st4	{ v0.s, v1.s, v2.s, v3.s }[3], [x1]
+               	mov	x16, x0
+               	mov	x17, x1
+               	ld4	{ v0.s, v1.s, v2.s, v3.s }[0], [x16], #16
+               	ld4	{ v0.s, v1.s, v2.s, v3.s }[3], [x16]
+               	st4	{ v0.s, v1.s, v2.s, v3.s }[0], [x17], #16
+               	st4	{ v0.s, v1.s, v2.s, v3.s }[3], [x17]
                	ldur	w0, [x29, #-0x20]
                	ldur	w1, [x29, #-0x40]
                	cmp	w0, w1
@@ -115,12 +113,10 @@ Disassembly of section .text:
                	sub	x1, x29, #0x18
                	stp	xzr, xzr, [x1]
                	str	xzr, [x1, #0x10]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	ld3	{ v5.d, v6.d, v7.d }[1], [x0], #24
-               	st3	{ v5.d, v6.d, v7.d }[1], [x1]
+               	mov	x16, x0
+               	mov	x17, x1
+               	ld3	{ v5.d, v6.d, v7.d }[1], [x16], #24
+               	st3	{ v5.d, v6.d, v7.d }[1], [x17]
                	ldur	x0, [x29, #-0x18]
                	ldur	x1, [x29, #-0x38]
                	cmp	x0, x1
@@ -138,13 +134,10 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	q0, [x1]
-               	str	x0, [sp]
-               	stur	q0, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldur	q0, [sp, #0x8]
-               	st1	{ v0.s }[1], [x0]
-               	add	x0, x0, #0x4
-               	st1	{ v0.s }[3], [x0]
+               	mov	x16, x0
+               	st1	{ v0.s }[1], [x16]
+               	add	x16, x16, #0x4
+               	st1	{ v0.s }[3], [x16]
                	ldur	w0, [x29, #-0x8]
                	cmp	w0, #0x9
                	b.ne	<addr>

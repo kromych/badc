@@ -791,12 +791,17 @@ pub(crate) fn asm_binds_directly(
             return false;
         }
         if op.is_output && !addressed {
-            if !op.value || op.is_rw || op.early_clobber {
+            if !op.value || op.early_clobber {
                 return false;
             }
+            // A read-write operand's register is loaded before the template,
+            // so its scratch is one no input shares.
+            let rw = usize::from(op.is_rw);
             match op.constraint {
-                C::Reg if op.width <= 8 => gp_out += 1,
-                C::Fp => fp_out += 1,
+                C::Reg if op.width <= 8 => (gp_out, gp_in) = (gp_out + 1, gp_in + rw),
+                C::Fp if !op.is_rw || op.width <= 8 || op.width == 16 => {
+                    (fp_out, fp_in) = (fp_out + 1, fp_in + rw)
+                }
                 _ => return false,
             }
             continue;
@@ -823,9 +828,7 @@ pub(crate) fn asm_binds_directly(
                     gp_in += 1;
                 }
             }
-            C::Fp if !op.static_arg && (op.width <= 8 || (op.width == 16 && op.value)) => {
-                fp_in += 1
-            }
+            C::Fp if !op.static_arg && (op.width <= 8 || op.width == 16) => fp_in += 1,
             _ => return false,
         }
     }

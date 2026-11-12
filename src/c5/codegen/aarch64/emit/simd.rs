@@ -27,12 +27,16 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 /// Whether the instruction computes in the register of the row's first
 /// source: the three-operand forms but the four-register `eor3` and
 /// `bcax`, the accumulating and inserting shifts by an immediate, the AES
-/// rounds and `sha256su0`.
+/// rounds, `sha256su0` and `sha1su1`.
 fn accumulates(row: &SimdOp) -> bool {
     use simd::Sem;
     match row.sem {
         Sem::Eor3 | Sem::Bcax => false,
-        Sem::ShrAcc(..) | Sem::ShiftInsert(..) | Sem::AesRound(_) | Sem::Sha256Su0 => true,
+        Sem::ShrAcc(..)
+        | Sem::ShiftInsert(..)
+        | Sem::AesRound(_)
+        | Sem::Sha256Su0
+        | Sem::Sha1Su1 => true,
         _ => row.form == Form::Vvv,
     }
 }
@@ -73,6 +77,19 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
             row.mnem,
             &[v(*rd, 4, true), v(*rn, 3, high), v(*rm, 3, high)],
         );
+    }
+    // The SHA-1 hash names its state as a q register and `e` as an s one.
+    if let (crate::c5::simd::Sem::Sha1Hash(_), [rd, rn, rm]) = (row.sem, regs) {
+        let w = Opnd::VecReg {
+            num: *rm,
+            size: 2,
+            q: true,
+        };
+        let e = Opnd::VReg {
+            num: *rn,
+            is_d: false,
+        };
+        return table::encode(row.mnem, &[Opnd::QReg(*rd), e, w]);
     }
     // The SHA-256 hash names its state halves as q registers.
     if let (crate::c5::simd::Sem::Sha256Hash(_), [rd, rn, rm]) = (row.sem, regs) {

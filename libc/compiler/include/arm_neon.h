@@ -1055,22 +1055,18 @@ __BADC_INTRIN poly128_t vmull_high_p64(poly64x2_t __a, poly64x2_t __b) {
  * updates accumulate into their first operand. */
 #define __BADC_NEON_SHA1H(name, insn)                                       \
     __BADC_INTRIN uint32x4_t name(uint32x4_t __abcd, uint32_t __e, uint32x4_t __wk) { \
-        __asm__(insn " %q0, %s1, %2.4s" : "+w"(__abcd) : "w"(__e), "w"(__wk)); \
-        return __abcd;                                                      \
+        return (uint32x4_t)__builtin_neon_##insn##_4s(__abcd, (uint32x4_t){__e}, __wk); \
     }
-__BADC_NEON_SHA1H(vsha1cq_u32, "sha1c")
-__BADC_NEON_SHA1H(vsha1pq_u32, "sha1p")
-__BADC_NEON_SHA1H(vsha1mq_u32, "sha1m")
-__BADC_INTRIN uint32_t vsha1h_u32(uint32_t __e) {
-    uint32_t __r;
-    __asm__("sha1h %s0, %s1" : "=w"(__r) : "w"(__e));
-    return __r;
+__BADC_NEON_SHA1H(vsha1cq_u32, sha1c)
+__BADC_NEON_SHA1H(vsha1pq_u32, sha1p)
+__BADC_NEON_SHA1H(vsha1mq_u32, sha1m)
+/* sha1h is the rotation of e left by 30, which a general register does. */
+__BADC_INTRIN uint32_t vsha1h_u32(uint32_t __e) { return __e << 30 | __e >> 2; }
+__BADC_INTRIN uint32x4_t vsha1su0q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    return (uint32x4_t)__builtin_neon_sha1su0_4s(__a, __b, __c);
 }
-__BADC_NEON_FN3(vsha1su0q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
-                __BADC_NEON_I3("sha1su0", 4s, 4s, 4s))
 __BADC_INTRIN uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
-    __asm__("sha1su1 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
-    return __a;
+    return (uint32x4_t)__builtin_neon_sha1su1_4s(__a, __b);
 }
 #define __BADC_NEON_SHAQ(name, T, insn, A)                                  \
     __BADC_NEON_FN3(name, T, T, T, insn " %q0, %q1, %2." #A)

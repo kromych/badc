@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, SimdOp};
+use super::simd::{AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, Sha1F, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -583,6 +583,11 @@ const NARROW: &[SimdOp] = &[
     long!("pmull2", Vv, Long, (PolyMul, false), "16b", V8hi, 1, 16, true),
     long!("pmull", Vv, Long, (PolyMul, false), "1d", V2di, 8, 8, false),
     long!("pmull2", Vv, Long, (PolyMul, false), "2d", V2di, 8, 16, true),
+    row("__builtin_neon_sha1c_4s", "sha1c", Form::Vvv, Ret::V4si, Sem::Sha1Hash(Sha1F::Choose), 16),
+    row("__builtin_neon_sha1p_4s", "sha1p", Form::Vvv, Ret::V4si, Sem::Sha1Hash(Sha1F::Parity), 16),
+    row("__builtin_neon_sha1m_4s", "sha1m", Form::Vvv, Ret::V4si, Sem::Sha1Hash(Sha1F::Majority), 16),
+    row("__builtin_neon_sha1su0_4s", "sha1su0", Form::Vvv, Ret::V4si, Sem::Sha1Su0, 16),
+    row("__builtin_neon_sha1su1_4s", "sha1su1", Form::Vv, Ret::V4si, Sem::Sha1Su1, 16),
     row("__builtin_neon_sha256h_4s", "sha256h", Form::Vvv, Ret::V4si, Sem::Sha256Hash(true), 16),
     row("__builtin_neon_sha256h2_4s", "sha256h2", Form::Vvv, Ret::V4si, Sem::Sha256Hash(false), 16),
     row("__builtin_neon_sha256su0_4s", "sha256su0", Form::Vv, Ret::V4si, Sem::Sha256Su0, 16),

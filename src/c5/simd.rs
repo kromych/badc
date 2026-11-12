@@ -308,6 +308,13 @@ pub(crate) enum Sem {
     Sha256Hash(bool),
     Sha256Su0,
     Sha256Su1,
+    /// FEAT_SHA1: four rounds of the hash on the state `abcd` and `e` in the
+    /// second operand's low word, with the round function `sha1c`
+    /// (choose), `sha1p` (parity) or `sha1m` (majority) names, and the two
+    /// message schedule updates.
+    Sha1Hash(Sha1F),
+    Sha1Su0,
+    Sha1Su1,
     /// Data movement: the form carries the direction.
     Move,
     /// Hardware random number generator.
@@ -564,6 +571,14 @@ pub(crate) enum FOp {
     Sqrt,
     MaxNan,
     MinNan,
+}
+
+/// The round function of a SHA-1 hash update.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Sha1F {
+    Choose,
+    Parity,
+    Majority,
 }
 
 /// A conversion, from the low lanes of the source to the low lanes of the
@@ -1033,6 +1048,16 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             let mut o = [0u8; 16];
             for i in 0..16 {
                 o[i] = (acc[i] & a[i]) | (!acc[i] & b[i]);
+            }
+            return Some(o);
+        }
+        Sem::Sha1Hash(f) => return Some(sha1_hash(acc, lane(a, 4, 0) as u32, b, f)),
+        Sem::Sha1Su0 => {
+            let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+            let mut o = [0u8; 16];
+            for e in 0..4 {
+                let t = if e < 2 { w(acc, e + 2) } else { w(a, e - 2) };
+                set_lane(&mut o, 4, e, u64::from(t ^ w(acc, e) ^ w(b, e)));
             }
             return Some(o);
         }
@@ -1677,6 +1702,18 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             };
         }
         Sem::AesMix => o = mix_columns(a, MIX),
+        Sem::Sha1Su1 => {
+            let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+            let t: [u32; 4] =
+                core::array::from_fn(|i| w(a, i) ^ if i < 3 { w(b, i + 1) } else { 0 });
+            for e in 0..4 {
+                let mut x = t[e].rotate_left(1);
+                if e == 3 {
+                    x ^= t[0].rotate_left(2);
+                }
+                set_lane(&mut o, 4, e, u64::from(x));
+            }
+        }
         Sem::Sha256Su0 => {
             let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
             for e in 0..4 {
@@ -1736,6 +1773,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
+        Sem::Sha1Hash(_) | Sem::Sha1Su0 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
@@ -1869,6 +1907,34 @@ pub(crate) fn eval_wide(
             }
         }
     }
+    o
+}
+
+/// Four SHA-1 rounds over the state `x` (`abcd`) and `y` (`e`) with the
+/// schedule words of `w` and round function `f`, as the Arm ARM's
+/// `SHA1C` / `SHA1P` / `SHA1M`: the state after them.
+fn sha1_hash(x: &[u8; 16], mut y: u32, w: &[u8; 16], f: Sha1F) -> [u8; 16] {
+    let word = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+    let mut x: [u32; 4] = core::array::from_fn(|i| word(x, i));
+    for e in 0..4 {
+        let (b, c, d) = (x[1], x[2], x[3]);
+        let t = match f {
+            Sha1F::Choose => ((c ^ d) & b) ^ d,
+            Sha1F::Parity => b ^ c ^ d,
+            Sha1F::Majority => (b & c) | ((b | c) & d),
+        };
+        y = y
+            .wrapping_add(x[0].rotate_left(5))
+            .wrapping_add(t)
+            .wrapping_add(word(w, e));
+        x[1] = x[1].rotate_left(30);
+        // The 160-bit y:x rotated left by one word.
+        (x, y) = ([y, x[0], x[1], x[2]], x[3]);
+    }
+    let mut o = [0u8; 16];
+    x.iter()
+        .enumerate()
+        .for_each(|(e, &v)| set_lane(&mut o, 4, e, u64::from(v)));
     o
 }
 

@@ -2501,3 +2501,12 @@ fn an_8_byte_vector_lane_stays_in_its_register() {
     assert!(has(0xc5, 3), "vpextrw $3 not in the emitted code");
     assert!(has(0xc4, 2), "vpinsrw $2 not in the emitted code");
 }
+
+/// A row that returns a narrower vector than its operands stores its
+/// result's width, the bound the inliner checks a result slot write by.
+#[test]
+fn a_narrowing_row_stores_its_result_width() {
+    let op = simd::lookup("__builtin_ia32_extract128i256").expect("the row");
+    let stores: Vec<_> = simd::get(op).stores().collect();
+    assert_eq!(stores, [(0, 16)]);
+}

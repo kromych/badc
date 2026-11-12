@@ -596,14 +596,17 @@ impl SimdOp {
     /// the pointer operand as well. The store form has no destination of
     /// its own; its 16 bytes go through the pointer operand, its first.
     pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
-        let width =
-            if self.form.returns_vector() || matches!(self.form, Form::Store | Form::MaskStore) {
-                self.bytes
-            } else if self.form == Form::ToInt || self.int_width == 8 {
-                self.int_width
-            } else {
-                4
-            };
+        // A result's own width: a narrowing or extracting row writes fewer
+        // bytes than its operands hold.
+        let width = if self.form.returns_vector() {
+            self.ret_bytes()
+        } else if matches!(self.form, Form::Store | Form::MaskStore) {
+            self.bytes
+        } else if self.form == Form::ToInt || self.int_width == 8 {
+            self.int_width
+        } else {
+            4
+        };
         let pointer = (self.form == Form::RdRand).then_some((1, self.int_width));
         core::iter::once((0, width)).chain(pointer)
     }

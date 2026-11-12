@@ -60,13 +60,66 @@ const MAX_ROUNDS: usize = 4;
 
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
-        let folded = fold_round(func);
+        let folded = fold_round(func) | fold_constant_lanes(func);
         let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
         if !folded && !lanes && !forwarded {
             return;
         }
     }
+}
+
+/// A constant written into a lane of an 8-byte vector that is itself a
+/// constant -- zero, undefined, or a `VecConst` -- is the constant with that
+/// lane replaced: the vector's one 64-bit lane, which the targets build
+/// in a general register and move over whole.
+fn fold_constant_lanes(func: &mut FunctionSsa) -> bool {
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes: 8,
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let w = u32::from(store_width(kind));
+        if !matches!(
+            kind,
+            StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+        ) || u32::from(off) + w > 8
+        {
+            continue;
+        }
+        let Some(&Inst::Imm(x)) = func.insts.get(value as usize) else {
+            continue;
+        };
+        let base = match func.insts.get(vec as usize) {
+            Some(Inst::Imm(0) | Inst::Undef) => 0u64,
+            Some(&Inst::VecConst {
+                imm,
+                kind: k,
+                bytes: 8,
+            }) => {
+                let bits = 8 * u32::from(store_width(k));
+                let lane = imm as u64 & (u64::MAX >> (64 - bits));
+                (0..64 / bits).fold(0, |p, j| p | lane << (j * bits))
+            }
+            _ => continue,
+        };
+        let mask = (u64::MAX >> (64 - 8 * w)) << (8 * u32::from(off));
+        let merged = (base & !mask) | ((x as u64) << (8 * u32::from(off)) & mask);
+        func.insts[i] = Inst::VecConst {
+            imm: merged as i64,
+            kind: StoreKind::I64,
+            bytes: 8,
+        };
+        changed = true;
+    }
+    changed
 }
 
 /// Bytes a lane insert of `kind` writes.
@@ -174,11 +227,17 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                     }
                     break;
                 }
-                // And of a constant splat, the constant read at the width.
+                // And of a constant splat, its lane's bytes at the offset
+                // the read takes within the lane.
                 Inst::VecConst {
                     imm, kind: stored, ..
                 } => {
-                    let lane = imm as u64;
+                    let size = store_width(stored);
+                    let at = off % size;
+                    if at + width > size {
+                        break;
+                    }
+                    let lane = (imm as u64) >> (8 * u32::from(at));
                     let read = match kind {
                         LoadKind::I8 => Some(lane as i8 as i64),
                         LoadKind::U8 => Some(lane as u8 as i64),
@@ -189,9 +248,7 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                         LoadKind::I64 => Some(imm),
                         _ => None,
                     };
-                    if store_width(stored) == width
-                        && let Some(k) = read
-                    {
+                    if let Some(k) = read {
                         func.insts[i] = Inst::Imm(k);
                         changed = true;
                     }

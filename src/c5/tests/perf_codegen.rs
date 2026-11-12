@@ -3196,6 +3196,14 @@ u32 zero(unsigned x) { return (u32){x - x, x - x, x - x, x - x}; }\n";
         let words = a64(SRC, name);
         m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
     }
+    // An 8-byte vector of different constant lanes is one 64-bit constant
+    // moved over: `movabsq`, `vmovq` and `ret`.
+    let lanes = x64(
+        "typedef signed char v8c __attribute__((vector_size(8)));\n\
+v8c f(void) { signed char b = 1; return (v8c){b, 2, 3, 4, 5, 6, 7, (signed char)(b + 7)}; }\n",
+        "f",
+    );
+    m.expect(lanes.len() == 3, || format!("x86-64 lanes: {lanes:x?}"));
     for (name, n) in [("z", 1), ("andall", 1), ("cpl", 3), ("zero", 2)] {
         let insns = x64(SRC, name);
         m.expect(insns.len() == n, || format!("x86-64 {name}: {insns:x?}"));

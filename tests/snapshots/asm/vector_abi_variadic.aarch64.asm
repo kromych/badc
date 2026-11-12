@@ -562,114 +562,63 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x6                // =6
-               	fmov	d1, #0.25000000
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
-               	fmov	d0, x2
-               	mov	v0.b[0], w1
-               	mov	x3, #0x2                // =2
-               	mov	v0.b[1], w3
-               	mov	x4, #0x3                // =3
-               	mov	v0.b[2], w4
-               	mov	x1, #0x4                // =4
-               	mov	v0.b[3], w1
-               	mov	x2, #0x5                // =5
-               	mov	v0.b[4], w2
-               	mov	v0.b[5], w0
-               	mov	x5, #0x7                // =7
-               	mov	v0.b[6], w5
-               	mov	x6, #0x8                // =8
-               	mov	v0.b[7], w6
+               	fmov	d0, #0.25000000
                	sub	x7, x29, #0x38
-               	mov	x8, v0.d[0]
-               	stur	x8, [x29, #-0x38]
-               	fmov	d2, #0.50000000
-               	mov	v0.b[0], w3
-               	mov	v0.b[1], w4
-               	mov	v0.b[2], w1
-               	mov	v0.b[3], w2
-               	mov	v0.b[4], w0
-               	mov	v0.b[5], w5
-               	mov	v0.b[6], w6
-               	mov	x3, #0x9                // =9
-               	mov	v0.b[7], w3
-               	sub	x8, x29, #0x30
-               	mov	x9, v0.d[0]
-               	stur	x9, [x29, #-0x30]
-               	fmov	d3, #0.75000000
-               	mov	v0.b[0], w4
-               	mov	v0.b[1], w1
-               	mov	v0.b[2], w2
-               	mov	v0.b[3], w0
-               	mov	v0.b[4], w5
-               	mov	v0.b[5], w6
-               	mov	v0.b[6], w3
-               	mov	x4, #0xa                // =10
-               	mov	v0.b[7], w4
-               	sub	x9, x29, #0x28
-               	mov	x5, v0.d[0]
-               	stur	x5, [x29, #-0x28]
-               	fmov	d4, #1.00000000
-               	mov	v0.b[0], w1
-               	mov	v0.b[1], w2
-               	mov	x1, #0x6                // =6
-               	mov	v0.b[2], w1
-               	mov	x2, #0x7                // =7
-               	mov	v0.b[3], w2
-               	mov	x5, #0x8                // =8
-               	mov	v0.b[4], w5
-               	mov	v0.b[5], w3
-               	mov	v0.b[6], w4
-               	mov	x6, #0xb                // =11
-               	mov	v0.b[7], w6
-               	sub	x10, x29, #0x20
-               	mov	x11, v0.d[0]
-               	stur	x11, [x29, #-0x20]
-               	fmov	d5, #1.25000000
-               	mov	x11, #0x5               // =5
-               	mov	v0.b[0], w11
-               	mov	v0.b[1], w1
-               	mov	v0.b[2], w2
-               	mov	v0.b[3], w5
-               	mov	v0.b[4], w3
-               	mov	v0.b[5], w4
-               	mov	v0.b[6], w6
-               	mov	x3, #0xc                // =12
-               	mov	v0.b[7], w3
+               	mov	x1, #0x201              // =513
+               	movk	x1, #0x403, lsl #16
+               	movk	x1, #0x605, lsl #32
+               	movk	x1, #0x807, lsl #48
+               	stur	x1, [x29, #-0x38]
+               	fmov	d1, #0.50000000
+               	sub	x1, x29, #0x30
+               	mov	x2, #0x302              // =770
+               	movk	x2, #0x504, lsl #16
+               	movk	x2, #0x706, lsl #32
+               	movk	x2, #0x908, lsl #48
+               	stur	x2, [x29, #-0x30]
+               	fmov	d2, #0.75000000
+               	sub	x2, x29, #0x28
+               	mov	x3, #0x403              // =1027
+               	movk	x3, #0x605, lsl #16
+               	movk	x3, #0x807, lsl #32
+               	movk	x3, #0xa09, lsl #48
+               	stur	x3, [x29, #-0x28]
+               	fmov	d3, #1.00000000
+               	sub	x3, x29, #0x20
+               	mov	x4, #0x504              // =1284
+               	movk	x4, #0x706, lsl #16
+               	movk	x4, #0x908, lsl #32
+               	movk	x4, #0xb0a, lsl #48
+               	stur	x4, [x29, #-0x20]
+               	fmov	d4, #1.25000000
                	sub	x4, x29, #0x18
-               	mov	x6, v0.d[0]
-               	stur	x6, [x29, #-0x18]
-               	fmov	d6, #1.50000000
-               	mov	v0.b[0], w1
-               	mov	v0.b[1], w2
-               	mov	v0.b[2], w5
-               	mov	x1, #0x9                // =9
-               	mov	v0.b[3], w1
-               	mov	x1, #0xa                // =10
-               	mov	v0.b[4], w1
-               	mov	x1, #0xb                // =11
-               	mov	v0.b[5], w1
-               	mov	v0.b[6], w3
-               	mov	x1, #0xd                // =13
-               	mov	v0.b[7], w1
-               	sub	x1, x29, #0x8
-               	mov	x2, v0.d[0]
-               	stur	x2, [x29, #-0x8]
-               	str	d5, [sp]
-               	str	d6, [sp, #0x10]
+               	mov	x5, #0x605              // =1541
+               	movk	x5, #0x807, lsl #16
+               	movk	x5, #0xa09, lsl #32
+               	movk	x5, #0xc0b, lsl #48
+               	stur	x5, [x29, #-0x18]
+               	fmov	d5, #1.50000000
+               	sub	x5, x29, #0x8
+               	mov	x6, #0x706              // =1798
+               	movk	x6, #0x908, lsl #16
+               	movk	x6, #0xb0a, lsl #32
+               	movk	x6, #0xd0c, lsl #48
+               	stur	x6, [x29, #-0x8]
+               	str	d4, [sp]
+               	str	d5, [sp, #0x10]
                	mov	x16, x4
                	ldr	x17, [x16]
                	str	x17, [sp, #0x8]
-               	mov	x16, x1
+               	mov	x16, x5
                	ldr	x17, [x16]
                	str	x17, [sp, #0x18]
-               	fmov	d0, d1
-               	fmov	d6, d4
-               	fmov	d4, d3
+               	fmov	d4, d2
+               	fmov	d6, d3
+               	fmov	d2, d1
                	ldr	d1, [x7]
-               	ldr	d3, [x8]
-               	ldr	d5, [x9]
-               	ldr	d7, [x10]
+               	ldr	d3, [x1]
+               	ldr	d5, [x2]
+               	ldr	d7, [x3]
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]

@@ -514,100 +514,21 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x6, %edi
-               	movabsq	$0x3fd0000000000000, %rdx # imm = 0x3FD0000000000000
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
-               	vpinsrb	$0x0, %eax, %xmm0, %xmm0
-               	movl	$0x2, %eax
-               	vpinsrb	$0x1, %eax, %xmm0, %xmm0
-               	movl	$0x3, %ecx
-               	vpinsrb	$0x2, %ecx, %xmm0, %xmm0
-               	movl	$0x4, %esi
-               	vpinsrb	$0x3, %esi, %xmm0, %xmm0
-               	movl	$0x5, %esi
-               	vpinsrb	$0x4, %esi, %xmm0, %xmm0
-               	vpinsrb	$0x5, %edi, %xmm0, %xmm0
-               	movl	$0x7, %esi
-               	vpinsrb	$0x6, %esi, %xmm0, %xmm0
-               	movl	$0x8, %esi
-               	vpinsrb	$0x7, %esi, %xmm0, %xmm0
+               	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
                	leaq	-0x38(%rbp), %r9
-               	vmovq	%xmm0, %rsi
-               	movq	%rsi, -0x38(%rbp)
-               	movabsq	$0x3fe0000000000000, %rsi # imm = 0x3FE0000000000000
-               	vpinsrb	$0x0, %eax, %xmm0, %xmm0
-               	vpinsrb	$0x1, %ecx, %xmm0, %xmm0
-               	movl	$0x4, %eax
-               	vpinsrb	$0x2, %eax, %xmm0, %xmm0
-               	movl	$0x5, %eax
-               	vpinsrb	$0x3, %eax, %xmm0, %xmm0
-               	movl	$0x6, %eax
-               	vpinsrb	$0x4, %eax, %xmm0, %xmm0
-               	movl	$0x7, %eax
-               	vpinsrb	$0x5, %eax, %xmm0, %xmm0
-               	movl	$0x8, %eax
-               	vpinsrb	$0x6, %eax, %xmm0, %xmm0
-               	movl	$0x9, %eax
-               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
-               	leaq	-0x30(%rbp), %rax
-               	vmovq	%xmm0, %rcx
-               	movq	%rcx, -0x30(%rbp)
-               	movabsq	$0x3fe8000000000000, %rcx # imm = 0x3FE8000000000000
-               	movl	$0x3, %r8d
-               	vpinsrb	$0x0, %r8d, %xmm0, %xmm0
-               	movl	$0x4, %r8d
-               	vpinsrb	$0x1, %r8d, %xmm0, %xmm0
-               	movl	$0x5, %r8d
-               	vpinsrb	$0x2, %r8d, %xmm0, %xmm0
-               	movl	$0x6, %r8d
-               	vpinsrb	$0x3, %r8d, %xmm0, %xmm0
-               	movl	$0x7, %r8d
-               	vpinsrb	$0x4, %r8d, %xmm0, %xmm0
-               	movl	$0x8, %r8d
-               	vpinsrb	$0x5, %r8d, %xmm0, %xmm0
-               	movl	$0x9, %r8d
-               	vpinsrb	$0x6, %r8d, %xmm0, %xmm0
-               	movl	$0xa, %r8d
-               	vpinsrb	$0x7, %r8d, %xmm0, %xmm0
-               	vmovq	%xmm0, %r8
+               	movabsq	$0x807060504030201, %rcx # imm = 0x807060504030201
+               	movq	%rcx, -0x38(%rbp)
+               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
+               	leaq	-0x30(%rbp), %rdx
+               	movabsq	$0x908070605040302, %rsi # imm = 0x908070605040302
+               	movq	%rsi, -0x30(%rbp)
+               	movabsq	$0x3fe8000000000000, %rsi # imm = 0x3FE8000000000000
+               	movabsq	$0xa09080706050403, %r8 # imm = 0xA09080706050403
                	movq	%r8, -0x28(%rbp)
                	leaq	-0x28(%rbp), %r8
                	movabsq	$0x3ff0000000000000, %r10 # imm = 0x3FF0000000000000
                	movq	%r10, 0xc8(%rsp)
-               	movl	$0x4, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x0, %r11d, %xmm0, %xmm0
-               	movl	$0x5, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x1, %r11d, %xmm0, %xmm0
-               	movl	$0x6, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x2, %r11d, %xmm0, %xmm0
-               	movl	$0x7, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x3, %r11d, %xmm0, %xmm0
-               	movl	$0x8, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x4, %r11d, %xmm0, %xmm0
-               	movl	$0x9, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x5, %r11d, %xmm0, %xmm0
-               	movl	$0xa, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x6, %r11d, %xmm0, %xmm0
-               	movl	$0xb, %r10d
-               	movq	%r10, 0xc0(%rsp)
-               	movq	0xc0(%rsp), %r11
-               	vpinsrb	$0x7, %r11d, %xmm0, %xmm0
-               	vmovq	%xmm0, %r10
+               	movabsq	$0xb0a090807060504, %r10 # imm = 0xB0A090807060504
                	movq	%r10, 0xc0(%rsp)
                	movq	0xc0(%rsp), %r10
                	movq	%r10, -0x20(%rbp)
@@ -615,39 +536,7 @@ Disassembly of section .text:
                	movq	%r10, 0xc0(%rsp)
                	movabsq	$0x3ff4000000000000, %r10 # imm = 0x3FF4000000000000
                	movq	%r10, 0xb8(%rsp)
-               	movl	$0x5, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x0, %r11d, %xmm0, %xmm0
-               	movl	$0x6, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x1, %r11d, %xmm0, %xmm0
-               	movl	$0x7, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x2, %r11d, %xmm0, %xmm0
-               	movl	$0x8, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x3, %r11d, %xmm0, %xmm0
-               	movl	$0x9, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x4, %r11d, %xmm0, %xmm0
-               	movl	$0xa, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x5, %r11d, %xmm0, %xmm0
-               	movl	$0xb, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x6, %r11d, %xmm0, %xmm0
-               	movl	$0xc, %r10d
-               	movq	%r10, 0xb0(%rsp)
-               	movq	0xb0(%rsp), %r11
-               	vpinsrb	$0x7, %r11d, %xmm0, %xmm0
-               	vmovq	%xmm0, %r10
+               	movabsq	$0xc0b0a0908070605, %r10 # imm = 0xC0B0A0908070605
                	movq	%r10, 0xb0(%rsp)
                	movq	0xb0(%rsp), %r10
                	movq	%r10, -0x18(%rbp)
@@ -655,39 +544,7 @@ Disassembly of section .text:
                	movq	%r10, 0xb0(%rsp)
                	movabsq	$0x3ff8000000000000, %r10 # imm = 0x3FF8000000000000
                	movq	%r10, 0xa8(%rsp)
-               	movl	$0x6, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x0, %r11d, %xmm0, %xmm0
-               	movl	$0x7, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x1, %r11d, %xmm0, %xmm0
-               	movl	$0x8, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x2, %r11d, %xmm0, %xmm0
-               	movl	$0x9, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x3, %r11d, %xmm0, %xmm0
-               	movl	$0xa, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x4, %r11d, %xmm0, %xmm0
-               	movl	$0xb, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x5, %r11d, %xmm0, %xmm0
-               	movl	$0xc, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x6, %r11d, %xmm0, %xmm0
-               	movl	$0xd, %r10d
-               	movq	%r10, 0xa0(%rsp)
-               	movq	0xa0(%rsp), %r11
-               	vpinsrb	$0x7, %r11d, %xmm0, %xmm0
-               	vmovq	%xmm0, %r10
+               	movabsq	$0xd0c0b0a09080706, %r10 # imm = 0xD0C0B0A09080706
                	movq	%r10, 0xa0(%rsp)
                	movq	0xa0(%rsp), %r10
                	movq	%r10, -0x8(%rbp)
@@ -704,13 +561,13 @@ Disassembly of section .text:
                	movq	0xc0(%rsp), %r10
                	movq	(%r10), %r11
                	movq	%r11, 0x18(%rsp)
-               	movq	%rdx, %xmm0
-               	movq	%rsi, %xmm2
-               	movq	%rcx, %xmm4
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm2
+               	movq	%rsi, %xmm4
                	movsd	0xe8(%rsp), %xmm6
                	movq	%r9, %r10
                	movsd	(%r10), %xmm1
-               	movq	%rax, %r10
+               	movq	%rdx, %r10
                	movsd	(%r10), %xmm3
                	movq	%r8, %r10
                	movsd	(%r10), %xmm5

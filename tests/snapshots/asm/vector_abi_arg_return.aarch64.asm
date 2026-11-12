@@ -320,76 +320,51 @@ Disassembly of section .text:
                	umov	w0, v0.b[15]
                	cmp	w0, #0x63
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
-               	fmov	d0, x1
-               	mov	v0.b[0], w0
-               	mov	x0, #0x28               // =40
-               	mov	x1, #0x0                // =0
-               	fmov	d1, x1
-               	mov	v1.b[0], w0
-               	mov	x0, #0x2                // =2
-               	mov	v0.b[1], w0
-               	mov	x1, #0x29               // =41
-               	mov	v1.b[1], w1
-               	mov	x1, #0x3                // =3
-               	mov	v0.b[2], w1
-               	mov	x2, #0x2a               // =42
-               	mov	v1.b[2], w2
-               	mov	x2, #0x4                // =4
-               	mov	v0.b[3], w2
-               	mov	x2, #0x2b               // =43
-               	mov	v1.b[3], w2
-               	mov	x2, #0x5                // =5
-               	mov	v0.b[4], w2
-               	mov	x2, #0x2c               // =44
-               	mov	v1.b[4], w2
-               	mov	x2, #0x6                // =6
-               	mov	v0.b[5], w2
-               	mov	x2, #0x2d               // =45
-               	mov	v1.b[5], w2
-               	mov	x2, #0x7                // =7
-               	mov	v0.b[6], w2
-               	mov	x2, #0x2e               // =46
-               	mov	v1.b[6], w2
-               	mov	x2, #0x8                // =8
-               	mov	v0.b[7], w2
-               	mov	x2, #0x2f               // =47
-               	mov	v1.b[7], w2
+               	mov	x16, #0x201             // =513
+               	movk	x16, #0x403, lsl #16
+               	movk	x16, #0x605, lsl #32
+               	movk	x16, #0x807, lsl #48
+               	fmov	d0, x16
+               	mov	x16, #0x2928            // =10536
+               	movk	x16, #0x2b2a, lsl #16
+               	movk	x16, #0x2d2c, lsl #32
+               	movk	x16, #0x2f2e, lsl #48
+               	fmov	d1, x16
                	sub	v0.8b, v1.8b, v0.8b
-               	umov	w2, v0.b[0]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[0]
+               	cmp	w0, #0x27
                	b.eq	<addr>
+               	mov	x0, #0x2                // =2
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	umov	w2, v0.b[1]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[1]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[2]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[2]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[3]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[3]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[4]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[4]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[5]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[5]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[6]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[6]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	umov	w2, v0.b[7]
-               	cmp	w2, #0x27
+               	umov	w0, v0.b[7]
+               	cmp	w0, #0x27
                	b.ne	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	q0, [x2]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	q1, [x2]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	q0, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	q1, [x0]
                	fadd	v0.4s, v0.4s, v1.4s
                	mov	s1, v0.s[0]
                	fmov	s2, #11.00000000
@@ -409,10 +384,11 @@ Disassembly of section .text:
                	fmov	s1, w16
                	fcmp	s0, s1
                	b.eq	<addr>
-               	mov	x0, x1
+               	mov	x0, #0x3                // =3
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	add	v0.16b, v0.16b, v0.16b
                	umov	w0, v0.b[0]

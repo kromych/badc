@@ -14,28 +14,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x16, #0x5               // =5
-               	movk	x16, #0x7, lsl #32
-               	fmov	d0, x16
-               	smov	x0, v0.s[0]
-               	cmp	x0, #0x5
-               	b.ne	<addr>
-               	smov	x0, v0.s[1]
-               	cmp	x0, #0x7
-               	b.ne	<addr>
-               	smov	x0, v0.h[0]
-               	cmp	x0, #0x5
-               	b.ne	<addr>
-               	smov	x0, v0.h[1]
-               	cbnz	x0, <addr>
-               	smov	x0, v0.h[2]
-               	cmp	x0, #0x7
-               	b.ne	<addr>
-               	smov	x0, v0.h[3]
-               	cbz	x0, <addr>
-               	mov	x0, #0x2                // =2
-               	ret
                	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x1                // =1
                	ret

@@ -2638,6 +2638,16 @@ pub(super) fn emit_vec_const(
     } else if lane == mask {
         let w = wide_reg(full, rd);
         encode_wide(code, "vpcmpeqd", &[w, w, w])?;
+    } else if bytes == 8 && bits == 64 {
+        // One lane fills the vector: `vmovq` clears the bits above it.
+        super::encode::emit_mov_r_imm64(code, SCRATCH_R11, lane as i64);
+        let g = Concrete::Reg {
+            reg: SCRATCH_R11.0,
+            size: AsmRegSize::Quad,
+        };
+        encode_wide(code, "vmovq", &[g, r])?;
+        super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
+        return Ok(());
     } else {
         super::encode::emit_mov_r_imm64(code, SCRATCH_R11, lane as i64);
         let (mov, size) = if bits == 64 {

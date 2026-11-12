@@ -212,6 +212,15 @@ Disassembly of section .text:
                	vpcmpeqd	%ymm0, %ymm0, %ymm0
                	retq
 
+<k_lanes>:
+               	movabsq	$-0xf8f9fafbfcfdff, %r11 # imm = 0xFF07060504030201
+               	vmovq	%r11, %xmm0
+               	retq
+
+<k_lane_read>:
+               	movl	$0x155df3, %eax         # imm = 0x155DF3
+               	retq
+
 <add_k>:
                	vmovd	%edi, %xmm1
                	vpbroadcastd	%xmm1, %xmm1
@@ -1061,7 +1070,44 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x8, %eax
                	jb	<addr>
+               	vzeroupper
+               	callq	<addr>
+               	leaq	-0x28(%rbp), %rcx
+               	movsd	%xmm0, -0x28(%rbp)
                	xorl	%eax, %eax
+               	movsbq	(%rcx,%rax), %rdx
+               	leaq	0x1(%rax), %rsi
+               	cmpl	%esi, %edx
+               	jne	<addr>
+               	incq	%rax
+               	cmpl	$0x7, %eax
+               	jl	<addr>
+               	movsbq	-0x21(%rbp), %rax
+               	cmpl	$-0x1, %eax
+               	je	<addr>
+               	movl	$0x21, %eax
+               	leaq	-0x90(%rbp), %rsp
+               	popq	%rbx
+               	vzeroupper
+               	leave
+               	retq
+               	vzeroupper
+               	callq	<addr>
+               	cmpl	$0x155df3, %eax         # imm = 0x155DF3
+               	je	<addr>
+               	movl	$0x22, %eax
+               	leaq	-0x90(%rbp), %rsp
+               	popq	%rbx
+               	vzeroupper
+               	leave
+               	retq
+               	xorl	%eax, %eax
+               	leaq	-0x90(%rbp), %rsp
+               	popq	%rbx
+               	vzeroupper
+               	leave
+               	retq
+               	movl	$0x20, %eax
                	leaq	-0x90(%rbp), %rsp
                	popq	%rbx
                	vzeroupper

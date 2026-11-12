@@ -69,6 +69,19 @@ __attribute__((noinline)) v2i k_d8(void) { int w = 0x12345; return (v2i){w, w}; 
 __attribute__((noinline)) v8i k_y32(void) { int w = 0x12345; return (v8i){w, w, w, w, w, w, w, w}; }
 __attribute__((noinline)) v8i k_y32_ones(void) { int w = -1; return (v8i){w, w, w, w, w, w, w, w}; }
 
+/* An 8-byte vector of different constant lanes is one 64-bit constant;
+ * a lane read of it reads that lane. */
+__attribute__((noinline)) v8c k_lanes(void) {
+    signed char b = 1;
+    return (v8c){b, (signed char)(b + 1), (signed char)(b + 2), (signed char)(b + 3),
+                 (signed char)(b + 4), (signed char)(b + 5), (signed char)(b + 6), -b};
+}
+__attribute__((noinline)) int k_lane_read(void) {
+    short h = 7;
+    v4s v = {h, (short)(h * 2), (short)-h, (short)(h + 1000)};
+    return v[1] * 100000 + v[2] * 100 + v[3];
+}
+
 /* A splat as an operand, and a lane read of one. */
 __attribute__((noinline)) v4i add_k(v4i v, int k) { return v + (v4i){k, k, k, k}; }
 __attribute__((noinline)) int lane_of(int x, int i) {
@@ -168,5 +181,16 @@ int main(void) {
     CHECK_LANES(v8i, int, ky, 0x12345, 30);
     v8i kyo = k_y32_ones();
     CHECK_LANES(v8i, int, kyo, -1, 31);
+
+    v8c kl = k_lanes();
+    signed char lanes[8];
+    memcpy(lanes, &kl, 8);
+    for (int i = 0; i < 7; i++)
+        if (lanes[i] != i + 1)
+            return 32;
+    if (lanes[7] != -1)
+        return 33;
+    if (k_lane_read() != 14 * 100000 - 700 + 1007)
+        return 34;
     return 0;
 }

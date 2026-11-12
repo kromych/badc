@@ -358,6 +358,19 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
+<k_lanes>:
+               	mov	x16, #0x201             // =513
+               	movk	x16, #0x403, lsl #16
+               	movk	x16, #0x605, lsl #32
+               	movk	x16, #0xff07, lsl #48
+               	fmov	d0, x16
+               	ret
+
+<k_lane_read>:
+               	mov	x0, #0x5df3             // =24051
+               	movk	x0, #0x15, lsl #16
+               	ret
+
 <add_k>:
                	dup	v1.4s, w0
                	add	v0.4s, v0.4s, v1.4s
@@ -1127,7 +1140,42 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	bl	<addr>
+               	sub	x1, x29, #0x28
+               	stur	d0, [x29, #-0x28]
                	mov	x0, #0x0                // =0
+               	ldrsb	x2, [x1, x0]
+               	add	x3, x0, #0x1
+               	cmp	w2, w3
+               	b.ne	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x7
+               	b.lt	<addr>
+               	ldursb	x0, [x29, #-0x21]
+               	mov	x17, #-0x1              // =-1
+               	cmp	w0, w17
+               	b.eq	<addr>
+               	mov	x0, #0x21               // =33
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	bl	<addr>
+               	mov	x17, #0x5df3            // =24051
+               	movk	x17, #0x15, lsl #16
+               	cmp	w0, w17
+               	b.eq	<addr>
+               	mov	x0, #0x22               // =34
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0xc0]
+               	ldp	x20, x21, [sp, #0x10]
+               	ldr	d8, [sp], #0xd0
+               	ret
+               	mov	x0, #0x20               // =32
                	ldp	x29, x30, [sp, #0xc0]
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0xd0

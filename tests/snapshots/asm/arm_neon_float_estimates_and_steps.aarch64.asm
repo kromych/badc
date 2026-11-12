@@ -618,9 +618,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	fmov	s0, w0
+               	movi	d0, #0000000000000000
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	adrp	x3, <addr>

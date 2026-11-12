@@ -767,22 +767,6 @@ Disassembly of section .text:
                	movl	$0x28, %eax
                	leave
                	retq
-               	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	vmovq	%r11, %xmm1
-               	vpbroadcastq	%xmm1, %xmm1
-               	vmovd	%xmm1, %eax
-               	movl	$0x89abcdef, %r11d      # imm = 0x89ABCDEF
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	vpextrd	$0x1, %xmm1, %eax
-               	cmpq	$0x1234567, %rax        # imm = 0x1234567
-               	jne	<addr>
-               	vpextrd	$0x3, %xmm1, %eax
-               	cmpq	$0x1234567, %rax        # imm = 0x1234567
-               	je	<addr>
-               	movl	$0x29, %eax
-               	leave
-               	retq
                	vpcmpeqd	%xmm2, %xmm2, %xmm2
                	movl	$0x1, %r11d
                	vmovd	%r11d, %xmm1
@@ -1316,20 +1300,13 @@ Disassembly of section .text:
                	vmovq	%r11, %xmm1
                	vpbroadcastq	%xmm1, %xmm1
                	movabsq	$0x200000001, %rax      # imm = 0x200000001
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x0, %rax, %xmm2, %xmm2
-               	vpextrb	$0x0, %xmm2, %eax
+               	vpinsrq	$0x0, %rax, %xmm1, %xmm1
+               	vpextrb	$0x0, %xmm1, %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	vpextrb	$0x4, %xmm2, %eax
+               	vpextrb	$0x4, %xmm1, %eax
                	cmpl	$0x2, %eax
                	jne	<addr>
-               	vpextrb	$0x8, %xmm1, %eax
-               	cmpl	$0xee, %eax
-               	je	<addr>
-               	movl	$0x4d, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rax # <addr>
                	movups	%xmm0, (%rax)
                	vpextrb	$0x0, %xmm0, %eax
@@ -1419,5 +1396,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
+               	leave
+               	retq
+               	movl	$0x4d, %eax
                	leave
                	retq

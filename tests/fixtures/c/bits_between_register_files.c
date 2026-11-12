@@ -1,6 +1,7 @@
 // An object written as a double and read as a 64-bit integer, or the
 // reverse, reads the same 64 bits (C17 6.5.2.3p3 and footnote 97): a union
-// member, a pointer cast, and a structure of two 8-byte vectors copied out.
+// member, a pointer cast, a memcpy between two objects, and a structure of
+// two 8-byte vectors copied out.
 // Each result is checked against the bytes through a volatile object.
 // Returns 0 when every check passes; each failure returns a distinct code.
 
@@ -60,6 +61,22 @@ __attribute__((noinline)) double mix(const double *p, int n) {
     return x.d;
 }
 
+__attribute__((noinline)) unsigned long long copy_bits(double d) {
+    unsigned long long u;
+    memcpy(&u, &d, sizeof u);
+    return u;
+}
+__attribute__((noinline)) double copy_from(unsigned long long u) {
+    double d;
+    memcpy(&d, &u, sizeof d);
+    return d;
+}
+__attribute__((noinline)) unsigned copy_float_bits(float f) {
+    unsigned u;
+    memcpy(&u, &f, sizeof u);
+    return u;
+}
+
 static unsigned long long ref_bits(double d) {
     volatile double v = d;
     unsigned long long u;
@@ -109,5 +126,11 @@ int main(void) {
     }
     if (ref_bits(mix(p, 5)) != ref_bits(want.d))
         return 9;
+    if (copy_bits(s) != ref_bits(s))
+        return 10;
+    if (ref_bits(copy_from(0x8000000000000001ull)) != 0x8000000000000001ull)
+        return 11;
+    if (copy_float_bits(-1.5f) != 0xbfc00000u)
+        return 12;
     return 0;
 }

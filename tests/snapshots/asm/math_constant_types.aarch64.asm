@@ -20,10 +20,6 @@ Disassembly of section .text:
                	mov	x16, #0x7fc00000        // =2143289344
                	fmov	s0, w16
                	stur	s0, [x29, #-0x10]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x10
-               	ldr	w16, [x1]
-               	str	w16, [x0]
                	ldur	w0, [x29, #-0x10]
                	and	x0, x0, #0xffc00000
                	mov	x17, #0x7fc00000        // =2143289344

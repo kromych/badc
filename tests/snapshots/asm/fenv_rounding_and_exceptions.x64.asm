@@ -25,77 +25,14 @@ Disassembly of section .text:
                	int3
                	int3
 
-<d>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, %rsi
-               	movsd	%xmm0, -0x20(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
-               	leaq	<rip>, %rdi # <addr>
-               	movq	-0x20(%rbp), %rdx
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movl	$0x3d, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
-               	testb	$0x1, %al
-               	je	<addr>
-               	leaq	<rip>, %rsi
-               	testb	$0x4, %al
-               	je	<addr>
-               	leaq	<rip>, %rdx
-               	testb	$0x8, %al
-               	je	<addr>
-               	leaq	<rip>, %rcx
-               	testb	$0x10, %al
-               	je	<addr>
-               	leaq	<rip>, %r8
-               	testb	$0x20, %al
-               	je	<addr>
-               	leaq	<rip>, %r9
-               	testl	%eax, %eax
-               	je	<addr>
-               	leaq	<rip>, %rax
-               	subq	$0x10, %rsp
-               	movq	%rax, (%rsp)
-               	movb	$0x0, %al
-               	callq	<addr>
-               	addq	$0x10, %rsp
-               	movl	$0x3d, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	jmp	<addr>
-               	leaq	<rip>, %r9
-               	jmp	<addr>
-               	leaq	<rip>, %r8
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	jmp	<addr>
-               	leaq	<rip>, %rsi
-               	jmp	<addr>
-
 <f>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rdi, %rsi
-               	movss	%xmm0, -0x10(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movl	(%rcx), %r10d
-               	movl	%r10d, (%rax)
+               	movss	%xmm0, -0x8(%rbp)
+               	movl	-0x8(%rbp), %edx
                	leaq	<rip>, %rdi # <addr>
-               	movl	-0x10(%rbp), %edx
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x3d, %edi
@@ -176,45 +113,243 @@ Disassembly of section .text:
                	movq	%r14, %rsi
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3c30000000000000, %rax # imm = 0x3C30000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	subsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -222,21 +357,120 @@ Disassembly of section .text:
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movabsq	$0x3c90000000000000, %rax # imm = 0x3C90000000000000
                	movq	%rax, %xmm15
                	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -244,31 +478,196 @@ Disassembly of section .text:
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	mulsd	%xmm1, %xmm0
                	movabsq	$0x170000000000000, %rax # imm = 0x170000000000000
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movl	$0x1, %eax
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	sqrtsd	%xmm0, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
@@ -279,13 +678,79 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm2
                	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3fc0000000000000, %rax # imm = 0x3FC0000000000000
                	movsd	<rip>, %xmm1 # <addr>
                	movq	%rax, %xmm15
                	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movss	<rip>, %xmm0 # <addr>
@@ -322,17 +787,50 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	cvtsi2ss	%rax, %xmm0
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movq	<rip>, %rax # <addr>
                	xorps	%xmm0, %xmm0
                	movq	%rax, %r10
@@ -346,6 +844,39 @@ Disassembly of section .text:
                	orq	%r10, %r11
                	cvtsi2sd	%r11, %xmm0
                	addsd	%xmm0, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
@@ -359,17 +890,47 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm0 # <addr>
                	cvtsd2ss	%xmm0, %xmm0
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
-               	callq	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movsd	<rip>, %xmm0 # <addr>
-               	cvttsd2si	%xmm0, %rdx
+               	movq	%xmm0, %rdx
                	leaq	<rip>, %rdi # <addr>
                	movb	$0x0, %al
                	callq	<addr>
@@ -439,23 +1000,158 @@ Disassembly of section .text:
                	movl	$0x3d, %edi
                	xorl	%eax, %eax
                	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
+               	movsd	<rip>, %xmm0 # <addr>
+               	cvttsd2si	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
                	leaq	<rip>, %r12 # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%r12, %rdi
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movq	%r12, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %r12 # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%r12, %rdi
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movq	%r12, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %r12 # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%r12, %rdi
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movq	%r12, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %r12 # <addr>
                	movss	<rip>, %xmm0 # <addr>
@@ -572,6 +1268,282 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
                	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
@@ -678,16 +1650,82 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	mulsd	%xmm1, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3fefffffffffffff, %rax # imm = 0x3FEFFFFFFFFFFFFF
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movss	<rip>, %xmm0 # <addr>
@@ -1374,8 +2412,41 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x28(%rbp)
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	-0x28(%rbp), %xmm0
+               	movq	%xmm0, %rdx
+               	leaq	<rip>, %rdi # <addr>
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	leaq	<rip>, %rdi # <addr>
+               	testb	$0x1, %al
+               	je	<addr>
+               	leaq	<rip>, %rsi
+               	testb	$0x4, %al
+               	je	<addr>
+               	leaq	<rip>, %rdx
+               	testb	$0x8, %al
+               	je	<addr>
+               	leaq	<rip>, %rcx
+               	testb	$0x10, %al
+               	je	<addr>
+               	leaq	<rip>, %r8
+               	testb	$0x20, %al
+               	je	<addr>
+               	leaq	<rip>, %r9
+               	testl	%eax, %eax
+               	je	<addr>
+               	leaq	<rip>, %rax
+               	subq	$0x10, %rsp
+               	movq	%rax, (%rsp)
+               	movb	$0x0, %al
+               	callq	<addr>
+               	addq	$0x10, %rsp
+               	movl	$0x3d, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
                	movsd	-0x28(%rbp), %xmm0
                	movsd	-0x28(%rbp), %xmm1
@@ -1502,6 +2573,42 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r9
+               	jmp	<addr>
+               	leaq	<rip>, %r8
+               	jmp	<addr>
+               	leaq	<rip>, %rcx
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	jmp	<addr>
+               	leaq	<rip>, %rsi
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	jmp	<addr>
                	leaq	<rip>, %r9

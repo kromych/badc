@@ -863,10 +863,10 @@ fn ent_pc=15 n_params=0 variadic=false locals=27
     v527 Imm(0)                                           -> x0
     v528 LoadLocal { off=-9, kind=F64 }                   -> d0
     v529 Imm(0)                                           -> x0
-    v530 StoreLocal { off=-24, value=v528, kind=F64 }     -> -
+    v530 Imm(0)                                           -> x0
     v531 Imm(0)                                           -> x0
     v532 FpCast { kind=FpBits, value=v528 }               -> x0
-    v533 LifetimeEnd(-24)                                 -> -
+    v533 LifetimeEnd(0)                                   -> -
     v534 BinopI { op=ne, lhs=v532, rhs_imm=0 }            -> x1
     v535 Imm(1)                                           -> x1
     v536 Imm(0)                                           -> x1
@@ -877,10 +877,10 @@ fn ent_pc=15 n_params=0 variadic=false locals=27
     v539 BinopI { op=add, lhs=v526, rhs_imm=8 }           -> x0
     v540 LoadLocal { off=-9, disp=8, kind=F64 }           -> d0
     v541 Imm(0)                                           -> x0
-    v542 StoreLocal { off=-24, value=v540, kind=F64 }     -> -
+    v542 Imm(0)                                           -> x0
     v543 Imm(0)                                           -> x0
     v544 FpCast { kind=FpBits, value=v540 }               -> x0
-    v545 LifetimeEnd(-24)                                 -> -
+    v545 LifetimeEnd(0)                                   -> -
     v546 BinopI { op=ne, lhs=v544, rhs_imm=-9223372036854775808 } -> x0
     v547 BinopI { op=ne, lhs=v546, rhs_imm=0 }            -> x1
     v548 Imm(0)                                           -> x1

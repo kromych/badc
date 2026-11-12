@@ -200,7 +200,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
     terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
-fn ent_pc=13 n_params=0 variadic=false locals=2
+fn ent_pc=13 n_params=0 variadic=false locals=1
   spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -223,7 +223,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x1
     v19  FpCast { kind=FpBits, value=v10 }                -> x1
-    v20  LifetimeEnd(-2)                                  -> -
+    v20  LifetimeEnd(0)                                   -> -
     v21  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x2
     v22  Imm(0)                                           -> x2
     terminator Bnz { cond=v19, target=b2, fall=b1 }   (exit_acc=v21)
@@ -246,7 +246,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v34  Imm(0)                                           -> x2
     v35  Imm(0)                                           -> x2
     v36  FpCast { kind=FpBits, value=v13 }                -> x2
-    v37  LifetimeEnd(-2)                                  -> -
+    v37  LifetimeEnd(0)                                   -> -
     v38  BinopI { op=ne, lhs=v36, rhs_imm=-9223372036854775808 } -> x2
     v39  Imm(0)                                           -> x6
     terminator Bnz { cond=v38, target=b5, fall=b4 }   (exit_acc=v38)
@@ -269,7 +269,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v51  Imm(0)                                           -> x0
     v52  Imm(0)                                           -> x0
     v53  FpCast { kind=FpBits, value=v49 }                -> x0
-    v54  LifetimeEnd(-2)                                  -> -
+    v54  LifetimeEnd(0)                                   -> -
     v55  BinopI { op=ne, lhs=v53, rhs_imm=-9223372036854775808 } -> x0
     terminator Bz { cond=v55, target=b8, fall=b7 }   (exit_acc=v55)
   block 7  start_pc=0
@@ -308,7 +308,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  FpCast { kind=FpBits, value=v78 }                -> x0
-    v83  LifetimeEnd(-2)                                  -> -
+    v83  LifetimeEnd(0)                                   -> -
     v84  BinopI { op=ne, lhs=v82, rhs_imm=-4610560118520545280 } -> x0
     v85  Imm(0)                                           -> x1
     v86  Imm(0)                                           -> x1
@@ -394,7 +394,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v142 Imm(0)                                           -> x0
     v143 Imm(0)                                           -> x0
     v144 FpCast { kind=FpBits, value=v140 }               -> x0
-    v145 LifetimeEnd(-2)                                  -> -
+    v145 LifetimeEnd(0)                                   -> -
     v146 BinopI { op=ne, lhs=v144, rhs_imm=4652218415073722368 } -> x0
     terminator Bz { cond=v146, target=b25, fall=b24 }   (exit_acc=v146)
   block 24  start_pc=0
@@ -425,7 +425,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
     v165 FpCast { kind=FpBits, value=v161 }               -> x0
-    v166 LifetimeEnd(-2)                                  -> -
+    v166 LifetimeEnd(0)                                   -> -
     v167 BinopI { op=ne, lhs=v165, rhs_imm=4591870180066957722 } -> x0
     terminator Bz { cond=v167, target=b30, fall=b29 }   (exit_acc=v167)
   block 29  start_pc=0
@@ -462,7 +462,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v190 Imm(0)                                           -> x0
     v191 Imm(0)                                           -> x0
     v192 FpCast { kind=FpBits, value=v188 }               -> x0
-    v193 LifetimeEnd(-2)                                  -> -
+    v193 LifetimeEnd(0)                                   -> -
     v194 BinopI { op=ne, lhs=v192, rhs_imm=4614256656552045848 } -> x0
     terminator Bz { cond=v194, target=b35, fall=b34 }   (exit_acc=v194)
   block 34  start_pc=0
@@ -504,7 +504,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v222 Imm(0)                                           -> x0
     v223 Imm(0)                                           -> x0
     v224 FpCast { kind=FpBits, value=v220 }               -> x0
-    v225 LifetimeEnd(-2)                                  -> -
+    v225 LifetimeEnd(0)                                   -> -
     v226 BinopI { op=ne, lhs=v224, rhs_imm=4696837146684686336 } -> x0
     v227 Imm(0)                                           -> x1
     v228 Imm(0)                                           -> x1
@@ -520,7 +520,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v234 Imm(0)                                           -> x0
     v235 Imm(0)                                           -> x0
     v236 FpCast { kind=FpBits, value=v232 }               -> x0
-    v237 LifetimeEnd(-2)                                  -> -
+    v237 LifetimeEnd(0)                                   -> -
     v238 BinopI { op=ne, lhs=v236, rhs_imm=1036831949 }   -> x0
     v239 Imm(0)                                           -> x1
     terminator Bnz { cond=v238, target=b42, fall=b41 }   (exit_acc=v238)
@@ -631,7 +631,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v319 Imm(0)                                           -> x0
     v320 Imm(0)                                           -> x0
     v321 FpCast { kind=FpBits, value=v317 }               -> x0
-    v322 LifetimeEnd(-2)                                  -> -
+    v322 LifetimeEnd(0)                                   -> -
     v323 BinopI { op=ne, lhs=v321, rhs_imm=0 }            -> x1
     v324 Imm(0)                                           -> x1
     terminator Bnz { cond=v321, target=b55, fall=b54 }   (exit_acc=v323)
@@ -644,7 +644,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v330 Imm(0)                                           -> x0
     v331 Imm(0)                                           -> x0
     v332 FpCast { kind=FpBits, value=v328 }               -> x0
-    v333 LifetimeEnd(-2)                                  -> -
+    v333 LifetimeEnd(0)                                   -> -
     v334 BinopI { op=ne, lhs=v332, rhs_imm=-9223372036854775808 } -> x0
     v335 Imm(0)                                           -> x1
     v336 Imm(0)                                           -> x1
@@ -671,7 +671,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v351 Imm(0)                                           -> x0
     v352 Imm(0)                                           -> x0
     v353 FpCast { kind=FpBits, value=v349 }               -> x0
-    v354 LifetimeEnd(-2)                                  -> -
+    v354 LifetimeEnd(0)                                   -> -
     v355 BinopI { op=ne, lhs=v353, rhs_imm=4599075939470750515 } -> x0
     v356 Imm(0)                                           -> x1
     v357 Imm(0)                                           -> x1

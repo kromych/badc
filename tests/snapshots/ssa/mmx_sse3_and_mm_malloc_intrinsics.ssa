@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=404 ---
 ; name=mmx
-fn ent_pc=404 n_params=0 variadic=false locals=2
+fn ent_pc=404 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -300,7 +300,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v294 Imm(0)                                           -> x0
     v295 LifetimeEnd(0)                                   -> -
     v296 Imm(0)                                           -> x0
-    v297 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v297 Undef                                            -> x0
     v298 Imm(0)                                           -> x0
     v299 Imm(0)                                           -> x0
     v300 Imm(0)                                           -> x0
@@ -518,7 +518,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v512 Imm(0)                                           -> x0
     v513 LifetimeEnd(0)                                   -> -
     v514 Imm(0)                                           -> x0
-    v515 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v515 Undef                                            -> x0
     v516 Imm(0)                                           -> x0
     v517 Imm(0)                                           -> x0
     v518 Imm(0)                                           -> x0
@@ -672,7 +672,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v666 Imm(0)                                           -> x0
     v667 LifetimeEnd(0)                                   -> -
     v668 Imm(0)                                           -> x0
-    v669 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v669 Undef                                            -> x0
     v670 Imm(0)                                           -> x0
     v671 Imm(0)                                           -> x0
     v672 Imm(0)                                           -> x0
@@ -762,7 +762,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v756 Imm(1009946523175357185)                         -> x0
     v757 Imm(0)                                           -> x0
     v758 Imm(0)                                           -> x0
-    v759 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v759 Undef                                            -> x0
     v760 Imm(0)                                           -> x0
     v761 Imm(0)                                           -> x0
     v762 Imm(0)                                           -> x0
@@ -837,7 +837,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v831 Imm(1299307214527663877)                         -> x0
     v832 Imm(0)                                           -> x0
     v833 Imm(0)                                           -> x0
-    v834 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v834 Undef                                            -> x0
     v835 Imm(0)                                           -> x0
     v836 Imm(0)                                           -> x0
     v837 Imm(0)                                           -> x0
@@ -898,7 +898,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v892 Imm(2251816994013187)                            -> x0
     v893 Imm(0)                                           -> x0
     v894 Imm(0)                                           -> x0
-    v895 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v895 Undef                                            -> x0
     v896 Imm(0)                                           -> x0
     v897 Imm(0)                                           -> x0
     v898 Imm(0)                                           -> x0
@@ -942,7 +942,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v936 Imm(12884901889)                                 -> x0
     v937 Imm(0)                                           -> x0
     v938 Imm(0)                                           -> x0
-    v939 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v939 Undef                                            -> x0
     v940 Imm(0)                                           -> x0
     v941 Imm(0)                                           -> x0
     v942 Imm(0)                                           -> x0
@@ -989,7 +989,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v983 Imm(17179869186)                                 -> x0
     v984 Imm(0)                                           -> x0
     v985 Imm(0)                                           -> x0
-    v986 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v986 Undef                                            -> x0
     v987 Imm(0)                                           -> x0
     v988 Imm(0)                                           -> x0
     v989 Imm(0)                                           -> x0
@@ -1898,7 +1898,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v1907 Imm(0)                                           -> x0
     v1908 Imm(0)                                           -> x0
     v1909 Imm(0)                                           -> x0
-    v1910 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v1910 Undef                                            -> x0
     v1911 Imm(0)                                           -> x0
     v1912 Imm(0)                                           -> x0
     v1913 Imm(15)                                          -> x0
@@ -1923,7 +1923,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v1932 BinopI { op=add, lhs=v1915, rhs_imm=6 }          -> x1
     v1933 StoreLocal { off=-1, disp=6, value=v1917, kind=I16 } -> -
     v1934 Imm(0)                                           -> x0
-    v1935 LifetimeEnd(-2)                                  -> -
+    v1935 LifetimeEnd(0)                                   -> -
     v1936 LifetimeEnd(0)                                   -> -
     v1937 Imm(0)                                           -> x0
     v1938 LoadLocal { off=-1, kind=F64 }                   -> d0
@@ -1935,7 +1935,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v1944 VecExtract { vec=v1938, off=0, kind=I64, bytes=8 } -> x0
     v1945 Imm(0)                                           -> x1
     v1946 Imm(0)                                           -> x1
-    v1947 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v1947 Undef                                            -> x1
     v1948 BinopI { op=ne, lhs=v1944, rhs_imm=-9223231297218904064 } -> x0
     v1949 Imm(1)                                           -> x1
     v1950 Imm(0)                                           -> x1
@@ -1971,14 +1971,14 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v1978 Imm(0)                                           -> x0
     v1979 Imm(0)                                           -> x0
     v1980 Imm(0)                                           -> x0
-    v1981 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v1981 Undef                                            -> x0
     v1982 Imm(1)                                           -> x0
     v1983 Imm(0)                                           -> x0
     v1984 LocalAddr(-1)                                    -> x1
     v1985 StoreLocal { off=-1, value=v1983, kind=I64 }     -> -
     v1986 LocalAddr(-1)                                    -> x1
     v1987 Imm(0)                                           -> x1
-    v1988 LifetimeEnd(-2)                                  -> -
+    v1988 LifetimeEnd(0)                                   -> -
     v1989 LifetimeEnd(0)                                   -> -
     v1990 Imm(0)                                           -> x1
     v1991 Imm(0)                                           -> x1
@@ -1990,7 +1990,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v1997 Imm(0)                                           -> x1
     v1998 Imm(0)                                           -> x1
     v1999 Imm(0)                                           -> x1
-    v2000 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2000 Undef                                            -> x1
     v2001 Imm(0)                                           -> x1
     v2002 Imm(0)                                           -> x1
     v2003 Imm(0)                                           -> x1
@@ -2089,7 +2089,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2094 Imm(-1)                                          -> x1
     v2095 Imm(0)                                           -> x1
     v2096 Imm(0)                                           -> x1
-    v2097 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2097 Undef                                            -> x1
     v2098 Imm(0)                                           -> x1
     v2099 Imm(0)                                           -> x1
     v2100 Imm(0)                                           -> x1
@@ -2120,7 +2120,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2125 Imm(0)                                           -> x1
     v2126 Imm(0)                                           -> x1
     v2127 Imm(0)                                           -> x1
-    v2128 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2128 Undef                                            -> x1
     v2129 Imm(0)                                           -> x1
     v2130 Imm(0)                                           -> x1
     v2131 Imm(28)                                          -> x1
@@ -2135,7 +2135,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2140 BinopI { op=add, lhs=v1915, rhs_imm=4 }          -> x2
     v2141 StoreLocal { off=-1, disp=4, value=v2135, kind=I32 } -> -
     v2142 Imm(0)                                           -> x1
-    v2143 LifetimeEnd(-1)                                  -> -
+    v2143 LifetimeEnd(0)                                   -> -
     v2144 LifetimeEnd(0)                                   -> -
     v2145 Imm(0)                                           -> x1
     v2146 LoadLocal { off=-1, kind=F64 }                   -> d0
@@ -2147,7 +2147,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2152 VecExtract { vec=v2146, off=0, kind=I64, bytes=8 } -> x1
     v2153 Imm(0)                                           -> x2
     v2154 Imm(0)                                           -> x2
-    v2155 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2155 Undef                                            -> x2
     v2156 BinopI { op=ne, lhs=v2152, rhs_imm=64424509455 } -> x1
     v2157 Imm(0)                                           -> x2
     v2158 Imm(0)                                           -> x2
@@ -2174,21 +2174,21 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2175 Imm(0)                                           -> x1
     v2176 Imm(0)                                           -> x1
     v2177 Imm(0)                                           -> x1
-    v2178 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v2178 Undef                                            -> x1
     v2179 Imm(0)                                           -> x1
     v2180 Imm(0)                                           -> x1
-    v2181 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2181 Undef                                            -> x1
     v2182 Imm(-9223372036854775808)                        -> x1
     v2183 LocalAddr(-1)                                    -> x2
     v2184 StoreLocal { off=-1, value=v2182, kind=I64 }     -> -
     v2185 Imm(0)                                           -> x1
-    v2186 LifetimeEnd(-2)                                  -> -
-    v2187 LifetimeEnd(-1)                                  -> -
+    v2186 LifetimeEnd(0)                                   -> -
+    v2187 LifetimeEnd(0)                                   -> -
     v2188 Imm(0)                                           -> x1
     v2189 Imm(-9223372036854775808)                        -> x1
     v2190 Imm(0)                                           -> x1
     v2191 Imm(0)                                           -> x1
-    v2192 Imm(-9223372036854775808)                        -> x1
+    v2192 Undef                                            -> x1
     v2193 Imm(0)                                           -> x1
     v2194 Imm(1)                                           -> x1
     v2195 Imm(0)                                           -> x1
@@ -2205,20 +2205,20 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2206 Imm(0)                                           -> x1
     v2207 Imm(0)                                           -> x1
     v2208 Imm(0)                                           -> x1
-    v2209 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v2209 Undef                                            -> x1
     v2210 Imm(1)                                           -> x1
     v2211 Imm(0)                                           -> x1
     v2212 LocalAddr(-1)                                    -> x1
     v2213 StoreLocal { off=-1, value=v1983, kind=I64 }     -> -
     v2214 LocalAddr(-1)                                    -> x0
     v2215 Imm(0)                                           -> x0
-    v2216 LifetimeEnd(-2)                                  -> -
-    v2217 LifetimeEnd(-1)                                  -> -
+    v2216 LifetimeEnd(0)                                   -> -
+    v2217 LifetimeEnd(0)                                   -> -
     v2218 Imm(0)                                           -> x0
     v2219 Imm(0)                                           -> x0
     v2220 Imm(0)                                           -> x0
     v2221 Imm(0)                                           -> x0
-    v2222 Imm(0)                                           -> x0
+    v2222 Undef                                            -> x0
     v2223 Imm(0)                                           -> x0
     v2224 Imm(0)                                           -> x0
     v2225 Imm(0)                                           -> x0
@@ -2239,21 +2239,21 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2240 Imm(0)                                           -> x0
     v2241 Imm(0)                                           -> x0
     v2242 Imm(0)                                           -> x0
-    v2243 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2243 Undef                                            -> x0
     v2244 Imm(0)                                           -> x0
     v2245 Imm(0)                                           -> x0
-    v2246 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2246 Undef                                            -> x0
     v2247 Imm(1152921504606846975)                         -> x0
     v2248 LocalAddr(-1)                                    -> x1
     v2249 StoreLocal { off=-1, value=v2247, kind=I64 }     -> -
     v2250 Imm(0)                                           -> x0
-    v2251 LifetimeEnd(-1)                                  -> -
-    v2252 LifetimeEnd(-1)                                  -> -
+    v2251 LifetimeEnd(0)                                   -> -
+    v2252 LifetimeEnd(0)                                   -> -
     v2253 Imm(0)                                           -> x0
     v2254 Imm(1152921504606846975)                         -> x0
     v2255 Imm(0)                                           -> x0
     v2256 Imm(0)                                           -> x0
-    v2257 Imm(1152921504606846975)                         -> x0
+    v2257 Undef                                            -> x0
     v2258 Imm(0)                                           -> x0
     v2259 Imm(0)                                           -> x0
     v2260 Imm(0)                                           -> x0
@@ -2314,7 +2314,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2315 Imm(-12884901892)                                -> x0
     v2316 Imm(0)                                           -> x0
     v2317 Imm(0)                                           -> x0
-    v2318 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2318 Undef                                            -> x0
     v2319 Imm(0)                                           -> x0
     v2320 Imm(0)                                           -> x0
     v2321 Imm(0)                                           -> x0
@@ -2345,7 +2345,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2346 Imm(-1152657617789587456)                        -> x0
     v2347 Imm(0)                                           -> x0
     v2348 Imm(0)                                           -> x0
-    v2349 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2349 Undef                                            -> x0
     v2350 Imm(0)                                           -> x0
     v2351 Imm(1)                                           -> x0
     v2352 Imm(0)                                           -> x0
@@ -2386,7 +2386,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2387 Imm(0)                                           -> x0
     v2388 Imm(0)                                           -> x0
     v2389 Imm(0)                                           -> x0
-    v2390 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2390 Undef                                            -> x0
     v2391 Imm(0)                                           -> x0
     v2392 Imm(0)                                           -> x0
     v2393 Imm(0)                                           -> x0
@@ -2402,7 +2402,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2403 Imm(-4222189076152336)                           -> x0
     v2404 Imm(0)                                           -> x0
     v2405 Imm(0)                                           -> x0
-    v2406 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2406 Undef                                            -> x0
     v2407 Imm(0)                                           -> x0
     v2408 Imm(0)                                           -> x0
     v2409 Imm(0)                                           -> x0
@@ -2417,7 +2417,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2418 Imm(1148435428713435120)                         -> x0
     v2419 Imm(0)                                           -> x0
     v2420 Imm(0)                                           -> x0
-    v2421 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2421 Undef                                            -> x0
     v2422 Imm(0)                                           -> x0
     v2423 Imm(0)                                           -> x0
     v2424 Imm(0)                                           -> x0
@@ -2552,13 +2552,13 @@ fn ent_pc=404 n_params=0 variadic=false locals=2
     v2555 Imm(0)                                           -> x0
     v2556 Imm(0)                                           -> x0
     v2557 Imm(0)                                           -> x0
-    v2558 LoadLocal { off=-1, kind=F64 }                   -> d0
-    v2559 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2558 Undef                                            -> x0
+    v2559 Undef                                            -> x0
     v2560 Imm(1)                                           -> x0
     v2561 Imm(0)                                           -> x0
     v2562 Imm(0)                                           -> x0
     v2563 Imm(0)                                           -> x0
-    v2564 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v2564 Undef                                            -> x0
     v2565 Imm(0)                                           -> x0
     v2566 Imm(0)                                           -> x0
     v2567 Imm(0)                                           -> x0

@@ -83,12 +83,8 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xa, %eax
-               	movl	$0x3f800000, -0x10(%rbp) # imm = 0x3F800000
-               	leaq	-0x8(%rbp), %rcx
-               	leaq	-0x10(%rbp), %rdx
-               	movl	(%rdx), %r10d
-               	movl	%r10d, (%rcx)
-               	movl	-0x10(%rbp), %esi
+               	movl	$0x3f800000, -0x8(%rbp) # imm = 0x3F800000
+               	movl	-0x8(%rbp), %esi
                	cmpl	$0x3f800000, %esi       # imm = 0x3F800000
                	je	<addr>
                	leaq	<rip>, %rdi

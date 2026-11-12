@@ -377,11 +377,9 @@ Disassembly of section .text:
                	ucvtf	d0, x0
                	fmov	d1, #0.50000000
                	fadd	d0, d0, d1
-               	stur	xzr, [x29, #-0x40]
-               	stur	d0, [x29, #-0x40]
                	fmov	x0, d0
-               	ldur	x1, [x29, #-0x40]
-               	cmp	x0, x1
+               	fmov	x1, d0
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x80]

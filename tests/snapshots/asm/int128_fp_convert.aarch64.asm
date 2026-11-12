@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <chk_to_fp>:
-               	stp	x20, x21, [sp, #-0x50]!
+               	stp	x20, x21, [sp, #-0x40]!
                	stp	x22, x23, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x8, x0
                	mov	x0, x6
                	adrp	x7, <page>
@@ -100,9 +100,9 @@ Disassembly of section .text:
                	fmov	x1, d0
                	cmp	x1, x2
                	b.eq	<addr>
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret
                	ldr	x1, [x7, #0x20]
                	ldr	x2, [x8, #0x28]
@@ -180,9 +180,9 @@ Disassembly of section .text:
                	cmp	w1, w3
                	b.eq	<addr>
                	add	x0, x0, #0x1
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret
                	adrp	x6, <page>
                	ldr	x2, [x6, #0x20]
@@ -272,9 +272,9 @@ Disassembly of section .text:
                	cmp	x1, x4
                	b.eq	<addr>
                	add	x0, x0, #0x2
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret
                	ldr	x2, [x6, #0x20]
                	ldr	x1, [x7, #0x28]
@@ -361,14 +361,14 @@ Disassembly of section .text:
                	cmp	w1, w5
                	b.eq	<addr>
                	add	x0, x0, #0x3
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
+               	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
+               	ldp	x20, x21, [sp], #0x40
                	ret
 
 <chk_from_fp>:

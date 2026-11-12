@@ -2113,9 +2113,9 @@ mod tests {
     fn own_cell_left_in_the_frame_keeps_its_split() {
         let insts = alloc::vec![
             Inst::LocalAddr(-2),      // v0
-            pun(0, 0, LoadKind::F64), // v1
+            pun(0, 0, LoadKind::F32), // v1
             Inst::Imm(3),             // v2
-            store(0, 2),              // v3
+            store32(0, 0, 2),         // v3
         ];
         let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);

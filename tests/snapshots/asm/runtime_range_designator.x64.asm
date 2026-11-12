@@ -83,7 +83,6 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	movq	$0x0, -0x48(%rbp)
-               	movq	$0x0, -0x40(%rbp)
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -91,18 +90,17 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x48(%rbp)
                	movq	-0x48(%rbp), %rcx
-               	movq	%rcx, -0x40(%rbp)
-               	leaq	-0x68(%rbp), %rcx
-               	movq	$0x0, (%rcx)
-               	movl	$0x0, 0x8(%rcx)
-               	movl	<rip>, %ecx # <addr>
-               	incq	%rcx
-               	movl	%ecx, <rip> # <addr>
+               	leaq	-0x68(%rbp), %rdx
+               	movq	$0x0, (%rdx)
+               	movl	$0x0, 0x8(%rdx)
+               	movl	<rip>, %edx # <addr>
+               	incq	%rdx
+               	movl	%edx, <rip> # <addr>
                	movl	$0x40400000, -0x68(%rbp) # imm = 0x40400000
-               	movl	-0x68(%rbp), %ecx
-               	movl	%ecx, -0x60(%rbp)
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0x5, %ecx
+               	movl	-0x68(%rbp), %edx
+               	movl	%edx, -0x60(%rbp)
+               	movl	<rip>, %edx # <addr>
+               	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x67, %eax
                	testq	%rax, %rax
@@ -170,7 +168,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	-0x40(%rbp), %xmm0
+               	movq	%rcx, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

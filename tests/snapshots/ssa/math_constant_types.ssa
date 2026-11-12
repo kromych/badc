@@ -6,16 +6,16 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2143289344)                                  -> x0 [f32]
     v2   StoreLocal { off=-2, value=v1, kind=F32 }        -> -
-    v3   LocalAddr(-1)                                    -> x1
-    v4   LocalAddr(-2)                                    -> x2
-    v5   Mcpy { dst=v3, src=v4, size=4, align=4 }         -> -
-    v6   LoadLocal { off=-2, kind=U32 }                   -> x1
-    v7   BinopI { op=and, lhs=v6, rhs_imm=4290772992 }    -> x1
+    v3   LoadLocal { off=-2, kind=U32 }                   -> x1
+    v4   Imm(0)                                           -> x2
+    v5   Imm(0)                                           -> x2
+    v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x2
+    v7   BinopI { op=and, lhs=v3, rhs_imm=4290772992 }    -> x1
     v8   BinopI { op=ne, lhs=v7, rhs_imm=2143289344 }     -> x1
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(7)                                           -> x0
-    v10  LifetimeEnd(-1)                                  -> -
+    v10  LifetimeEnd(0)                                   -> -
     v11  LifetimeEnd(-2)                                  -> -
     terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
@@ -75,17 +75,17 @@ fn ent_pc=19 n_params=0 variadic=false locals=2
     terminator Bnz { cond=v53, target=b7, fall=b6 }   (low word)   (exit_acc=v58)
   block 6  start_pc=0
     v62  Imm(9)                                           -> x0
-    v63  LifetimeEnd(-1)                                  -> -
+    v63  LifetimeEnd(0)                                   -> -
     v64  LifetimeEnd(-2)                                  -> -
     terminator Return(v62)   (exit_acc=v62)
   block 7  start_pc=0
     v65  Imm(0)                                           -> x0
-    v66  LifetimeEnd(-1)                                  -> -
+    v66  LifetimeEnd(0)                                   -> -
     v67  LifetimeEnd(-2)                                  -> -
     terminator Return(v65)   (exit_acc=v65)
   block 8  start_pc=0
     v44  Imm(8)                                           -> x0
-    v45  LifetimeEnd(-1)                                  -> -
+    v45  LifetimeEnd(0)                                   -> -
     v46  LifetimeEnd(-2)                                  -> -
     terminator Return(v44)   (exit_acc=v44)
 ; --- SSA dump (ok=true) ent_pc=0 ---

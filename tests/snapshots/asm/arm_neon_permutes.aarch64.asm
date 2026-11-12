@@ -1642,31 +1642,18 @@ Disassembly of section .text:
                	ldr	d0, [x0, #0x10]
                	adrp	x0, <addr>
                	ldr	d1, [x0, #0x18]
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x10]
-               	stur	x0, [x29, #-0x8]
                	zip1	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x10]
                	zip2	v3.4h, v0.4h, v1.4h
-               	stur	d3, [x29, #-0x8]
                	sub	x1, x29, #0x90
                	stur	d2, [x29, #-0x90]
                	stur	d3, [x29, #-0x88]
-               	stur	x0, [x29, #-0x10]
-               	stur	x0, [x29, #-0x8]
                	uzp1	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x10]
                	uzp2	v3.4h, v0.4h, v1.4h
-               	stur	d3, [x29, #-0x8]
                	sub	x2, x29, #0x80
                	stur	d2, [x29, #-0x80]
                	stur	d3, [x29, #-0x78]
-               	stur	x0, [x29, #-0x10]
-               	stur	x0, [x29, #-0x8]
                	trn1	v2.4h, v0.4h, v1.4h
-               	stur	d2, [x29, #-0x10]
                	trn2	v3.4h, v0.4h, v1.4h
-               	stur	d3, [x29, #-0x8]
                	sub	x3, x29, #0x70
                	stur	d2, [x29, #-0x70]
                	stur	d3, [x29, #-0x68]
@@ -1690,6 +1677,7 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x4]
                	stp	xzr, xzr, [x4, #0x10]
                	stp	xzr, xzr, [x4, #0x20]
+               	mov	x0, #0x0                // =0
                	ldr	x16, [x1]
                	str	x16, [x4]
                	add	x1, x1, #0x8

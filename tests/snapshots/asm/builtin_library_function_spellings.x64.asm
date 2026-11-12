@@ -66,7 +66,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	leaq	-0x20(%rbp), %rdi
                	movl	$0x20, %esi
                	leaq	<rip>, %rdx
@@ -158,26 +158,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movabsq	$-0x4010000000000000, %rcx # imm = 0xBFF0000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x30(%rbp)
-               	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x28(%rbp)
-               	movq	-0x30(%rbp), %rax
-               	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
-               	andq	%r11, %rax
-               	movq	-0x28(%rbp), %rcx
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	andq	%r11, %rcx
-               	orq	%rcx, %rax
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rax, %xmm0
-               	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	jp	<addr>
-               	jne	<addr>
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -252,8 +232,5 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xa, %eax
-               	leave
-               	retq
-               	movl	$0x7, %eax
                	leave
                	retq

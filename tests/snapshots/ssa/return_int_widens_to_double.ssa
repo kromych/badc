@@ -1,11 +1,11 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=2
+fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4647591670144040960)                         -> x0
-    v2   StoreLocal { off=-2, value=v1, kind=F64 }        -> -
+    v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(4647591670144040960)                         -> x0
     v5   Imm(0)                                           -> x0
@@ -29,22 +29,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v23  Imm(-1)                                          -> x0
     v24  Imm(-4616189618054758400)                        -> x0
     v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-1)                                    -> x0
-    v27  LocalAddr(-2)                                    -> x1
-    v28  Mcpy { dst=v26, src=v27, size=8, align=8 }       -> -
-    v29  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v30  BinopI { op=ne, lhs=v29, rhs_imm=4647591670144040960 } -> x0
-    terminator Bz { cond=v30, target=b2, fall=b1 }   (exit_acc=v30)
-  block 1  start_pc=0
-    v43  Imm(5)                                           -> x0
-    v44  LifetimeEnd(-1)                                  -> -
-    v45  LifetimeEnd(-2)                                  -> -
-    terminator Return(v43)   (exit_acc=v43)
-  block 2  start_pc=0
-    v46  Imm(0)                                           -> x0
-    v47  LifetimeEnd(-1)                                  -> -
-    v48  LifetimeEnd(-2)                                  -> -
-    terminator Return(v46)   (exit_acc=v46)
+    v26  Imm(4647591670144040960)                         -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x0
+    v32  LifetimeEnd(0)                                   -> -
+    v33  LifetimeEnd(0)                                   -> -
+    terminator Return(v31)   (exit_acc=v31)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

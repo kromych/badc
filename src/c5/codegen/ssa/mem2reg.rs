@@ -26,7 +26,8 @@ use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    ValueId,
 };
 
 /// Frame slots the promotion may serve: those accessed via `LoadLocal`
@@ -1070,6 +1071,10 @@ struct SlotAccess {
     non_fp_load: bool,
     fp_load_kind: Option<LoadKind>,
     fp_load_kind_uniform: bool,
+    /// An access at a kind other than `I64` / `F64`.
+    not_8_byte: bool,
+    /// A single-precision value stored.
+    single_store: bool,
 }
 
 impl SlotAccess {
@@ -1105,6 +1110,7 @@ fn slot_accesses(
                 } if !cursor.escaped(*off) => {
                     let Some(a) = out.get_mut(off) else { continue };
                     a.has_load = true;
+                    a.not_8_byte |= !matches!(kind, LoadKind::I64 | LoadKind::F64);
                     match a.load_kind {
                         None => a.load_kind = Some(*kind),
                         Some(k) if k == *kind => {}
@@ -1150,6 +1156,8 @@ fn slot_accesses(
                         || super::reg_alloc::produces_fp_result(stored);
                     let Some(a) = out.get_mut(off) else { continue };
                     a.has_store = true;
+                    a.not_8_byte |= !matches!(kind, StoreKind::I64 | StoreKind::F64);
+                    a.single_store |= is_fp && func.f32_values.get(*value as usize) == Some(&true);
                     match a.store_kind {
                         None => a.store_kind = Some(*kind),
                         Some(k) if k == *kind => {}
@@ -1417,6 +1425,28 @@ fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
 // has its uses redirected to the reaching definition, and a promoted
 // `StoreLocal` its id -- which the c5 semantics treat as the stored
 // value -- redirected to that value; both are then replaced with `Imm(0)`.
+/// The register file of an 8-byte slot read or written both as a double and
+/// as a 64-bit integer: the FP file when every stored value is a double,
+/// else the integer file. An access in the other file moves the bits
+/// (`FpCastKind::FpBits` / `BitsFp`).
+fn slot_bits_class(a: &SlotAccess) -> Option<SlotClass> {
+    if a.not_8_byte || a.single_store {
+        return None;
+    }
+    Some(if a.int_store {
+        SlotClass::Int
+    } else {
+        SlotClass::Fp(LoadKind::F64)
+    })
+}
+
+/// A double held in an FP register, which an integer-file slot takes as
+/// its bits.
+fn fp_double(func: &FunctionSsa, value: ValueId) -> bool {
+    let inst = &func.insts[value as usize];
+    !matches!(inst, Inst::Imm(_)) && super::reg_alloc::produces_fp_result(inst)
+}
+
 // Promote eligible slots and return the offsets actually promoted
 // (their frame loads and stores removed), so the debug-info emitter
 // can drop the now-stale frame location for those locals.
@@ -1454,6 +1484,100 @@ pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -
     f()
 }
 
+/// A copy of 1, 2, 4 or 8 bytes between two one-cell frame objects, each
+/// named by an address only the copy reads and computed just ahead of it,
+/// becomes a load and a store of that width: the objects keep no address.
+/// An object with a volatile access keeps its copy.
+fn copy_words(func: &mut FunctionSsa) {
+    let words = |size: i64| matches!(size, 1 | 2 | 4 | 8);
+    if !func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::Mcpy { size, .. } if words(*size)))
+    {
+        return;
+    }
+    let mut uses = alloc::vec![0u32; func.insts.len()];
+    for inst in &func.insts {
+        inst.for_each_operand(|v| uses[v as usize] += 1);
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(|v| uses[v as usize] += 1);
+        if block.exit_acc != NO_VALUE {
+            uses[block.exit_acc as usize] += 1;
+        }
+    }
+    let volatile: BTreeSet<i64> = func
+        .insts
+        .iter()
+        .filter_map(|i| match *i {
+            Inst::LoadLocal {
+                off,
+                volatile: true,
+                ..
+            }
+            | Inst::StoreLocal {
+                off,
+                volatile: true,
+                ..
+            } => Some(off),
+            _ => None,
+        })
+        .collect();
+    let kept = |off: i64| {
+        volatile.contains(&off) || func.multi_cell_slots.iter().any(|&(base, _)| base == off)
+    };
+    let mut rewrites = Vec::new();
+    for block in &func.blocks {
+        let range = block.inst_range.start as usize..block.inst_range.end as usize;
+        for i in range.start + 2..range.end {
+            let Inst::Mcpy { dst, src, size, .. } = func.insts[i] else {
+                continue;
+            };
+            let (dst, src) = (dst as usize, src as usize);
+            let (Inst::LocalAddr(to), Inst::LocalAddr(from)) = (&func.insts[dst], &func.insts[src])
+            else {
+                continue;
+            };
+            let (load, store) = match size {
+                8 => (LoadKind::I64, StoreKind::I64),
+                4 => (LoadKind::U32, StoreKind::I32),
+                2 => (LoadKind::U16, StoreKind::I16),
+                1 => (LoadKind::U8, StoreKind::I8),
+                _ => continue,
+            };
+            if dst.min(src) != i - 2
+                || dst.max(src) != i - 1
+                || uses[dst] != 1
+                || uses[src] != 1
+                || to == from
+                || kept(*to)
+                || kept(*from)
+            {
+                continue;
+            }
+            rewrites.push((i, *to, *from, load, store));
+        }
+    }
+    for (i, to, from, load, store) in rewrites {
+        func.insts[i - 2] = Inst::LoadLocal {
+            off: from,
+            disp: 0,
+            kind: load,
+            volatile: false,
+        };
+        func.insts[i - 1] = Inst::Imm(0);
+        func.insts[i] = Inst::StoreLocal {
+            off: to,
+            disp: 0,
+            value: (i - 2) as ValueId,
+            kind: store,
+            volatile: false,
+            nsw: false,
+        };
+    }
+}
+
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
@@ -1470,6 +1594,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // the dynamic region and promote safely (`candidate_slots` already
     // excludes the reserved slot), so such a local's constant reaches
     // an `"i"` asm operand.
+    copy_words(func);
     let candidates = candidate_slots(func);
     if candidates.is_empty() {
         return Vec::new();
@@ -1564,14 +1689,27 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // bails the slot if a load is wider than its reaching store (a
     // type-pun reading bytes the narrower store never wrote).
     let mut mixed_slots: BTreeSet<i64> = BTreeSet::new();
-    let slots: BTreeSet<i64> = promotable
+    // Slots accessed in both register files ([`slot_bits_class`]).
+    let mut bits: alloc::collections::BTreeMap<i64, SlotClass> =
+        alloc::collections::BTreeMap::new();
+    let mut slots: BTreeSet<i64> = promotable
         .iter()
         .copied()
         .filter(|s| !label_merges.contains(s))
         .filter(|s| phi_promote || !phi_blocks.contains_key(s))
         .filter(|s| {
             let a = &access[s];
-            match slot_class(a) {
+            let class = slot_class(a);
+            let fallback = !escape.escapes(*s)
+                && class.is_none_or(|c| c == SlotClass::Int && !slot_has_only_int_kinds(a));
+            if fallback && let Some(c) = slot_bits_class(a) {
+                if let SlotClass::Fp(kind) = c {
+                    fp_slot_kind.insert(*s, kind);
+                }
+                bits.insert(*s, c);
+                return true;
+            }
+            match class {
                 // Mixed int + fp stores (a union / type-pun): keep
                 // frame-resident.
                 None => false,
@@ -1605,6 +1743,36 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             }
         })
         .collect();
+    // A double stored into an integer-file slot becomes the cast in place,
+    // so nothing may read that store's id as the stored value.
+    if bits.values().any(|&c| c == SlotClass::Int) {
+        let mut read = BTreeSet::new();
+        for inst in &func.insts {
+            inst.for_each_operand(|v| {
+                read.insert(v);
+            });
+        }
+        for block in &func.blocks {
+            block.terminator.for_each_operand(|v| {
+                read.insert(v);
+            });
+        }
+        for (id, inst) in func.insts.iter().enumerate() {
+            if let Inst::StoreLocal {
+                disp: 0,
+                off,
+                value,
+                ..
+            } = inst
+                && bits.get(off) == Some(&SlotClass::Int)
+                && fp_double(func, *value)
+                && read.contains(&(id as ValueId))
+            {
+                slots.remove(off);
+            }
+        }
+        bits.retain(|s, _| slots.contains(s));
+    }
     mixed_slots.retain(|s| slots.contains(s));
     // Drop FP-kind entries for slots that did not survive the filter
     // (a mixed slot returns `None` before reaching the insert, so this
@@ -1771,6 +1939,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                                 && narrow_load
                                     .get(off)
                                     .is_some_and(|&k| signed_narrow_bits(k).is_some());
+                            let marked = marked
+                                || (bits.get(off) == Some(&SlotClass::Int)
+                                    && fp_double(func, *value));
                             saved.push((*off, current.get(off).copied()));
                             current.insert(*off, (if marked { id } else { *value }, w));
                             // The stores of a slot whose address is
@@ -1866,7 +2037,38 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 kind,
                 nsw: true,
             };
+        } else if let Inst::StoreLocal {
+            disp: 0,
+            off,
+            value,
+            ..
+        } = func.insts[id as usize]
+            && bits.contains_key(&off)
+        {
+            func.insts[id as usize] = Inst::FpCast {
+                kind: FpCastKind::FpBits,
+                value,
+            };
         }
+    }
+    // A load of the other register file's kind casts the slot's bits.
+    for (&load_id, slot) in &load_slot {
+        let (Some(&class), Some(v)) = (bits.get(slot), redirect[load_id as usize]) else {
+            continue;
+        };
+        let Inst::LoadLocal { kind, .. } = func.insts[load_id as usize] else {
+            continue;
+        };
+        let cast = match (class, kind) {
+            (SlotClass::Int, LoadKind::F64) => FpCastKind::BitsFp,
+            (SlotClass::Fp(_), LoadKind::I64) => FpCastKind::FpBits,
+            _ => continue,
+        };
+        func.insts[load_id as usize] = Inst::FpCast {
+            kind: cast,
+            value: v,
+        };
+        redirect[load_id as usize] = None;
     }
     store_ids.retain(|id| !marked_stores.contains(id));
 
@@ -1958,7 +2160,13 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
+            let acc = marked_value.get(&block.exit_acc).copied();
+            block.exit_acc = match acc {
+                Some(v) if matches!(func.insts[block.exit_acc as usize], Inst::FpCast { .. }) => {
+                    resolve(&redirect, v)
+                }
+                _ => resolve(&redirect, block.exit_acc),
+            };
         }
         block
             .terminator
@@ -2362,6 +2570,220 @@ mod tests {
         // The return now reads the stored value (id 0), not the load.
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
         assert_eq!(f.blocks[1].exit_acc, 0);
+    }
+
+    /// A slot written as a double in block 0 and read in block 1, where
+    /// `tail` follows the load of `load`.
+    fn bits_slot(load: LoadKind, tail: Vec<Inst>, ret: ValueId) -> FunctionSsa {
+        let mut insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::F64,
+            },
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                value: 0,
+                kind: StoreKind::F64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: load,
+                volatile: false,
+            },
+        ];
+        insts.extend(tail);
+        let end = insts.len() as u32;
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..end,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            },
+        ];
+        func_with(insts, blocks)
+    }
+
+    /// A slot written as a double and as an integer lives in the integer
+    /// file: the double's store moves its bits there, and a read as a
+    /// double moves them back.
+    #[test]
+    fn a_slot_written_in_both_register_files_moves_the_bits() {
+        let tail = alloc::vec![
+            Inst::BinopI {
+                op: BinOp::Xor,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: LoadKind::F64,
+                volatile: false,
+            },
+        ];
+        let mut f = bits_slot(LoadKind::I64, tail, 5);
+        run(&mut f);
+        assert!(
+            matches!(
+                f.insts[1],
+                Inst::FpCast {
+                    kind: FpCastKind::FpBits,
+                    value: 0
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert!(
+            matches!(f.insts[3], Inst::BinopI { lhs: 1, .. }),
+            "{:?}",
+            f.insts
+        );
+        assert!(
+            matches!(
+                f.insts[5],
+                Inst::FpCast {
+                    kind: FpCastKind::BitsFp,
+                    value: 3
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(5)));
+        assert_eq!(f.blocks[0].exit_acc, 0, "the block names the stored double");
+    }
+
+    /// A slot written only as a double and read as an integer stays in the
+    /// FP file; the read moves the bits.
+    #[test]
+    fn a_double_read_as_an_integer_moves_the_bits() {
+        let mut f = bits_slot(LoadKind::I64, Vec::new(), 2);
+        run(&mut f);
+        assert!(
+            matches!(
+                f.insts[2],
+                Inst::FpCast {
+                    kind: FpCastKind::FpBits,
+                    value: 0
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(2)));
+    }
+
+    /// A double's store read as the stored value cannot become the bits, so
+    /// a slot that also holds an integer keeps it in memory.
+    #[test]
+    fn a_read_store_keeps_a_two_file_slot_in_memory() {
+        let tail = alloc::vec![
+            Inst::Fneg(1),
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                value: 2,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+        ];
+        let mut f = bits_slot(LoadKind::I64, tail, 3);
+        run(&mut f);
+        assert!(
+            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            "{:?}",
+            f.insts
+        );
+        assert!(
+            matches!(f.insts[2], Inst::LoadLocal { .. }),
+            "{:?}",
+            f.insts
+        );
+    }
+
+    /// An 8-byte copy between two one-cell objects, its addresses computed
+    /// just ahead of it, is a load and a store, and both objects promote:
+    /// the copy of a double's bits returns their cast.
+    #[test]
+    fn a_word_copy_between_objects_promotes_both() {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::F64,
+            },
+            Inst::StoreLocal {
+                disp: 0,
+                off: -2,
+                value: 0,
+                kind: StoreKind::F64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LocalAddr(-1),
+            Inst::LocalAddr(-2),
+            Inst::Mcpy {
+                dst: 2,
+                src: 3,
+                size: 8,
+                align: 8,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..6,
+            terminator: Terminator::Return(5),
+            exit_acc: 5,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(
+            matches!(
+                f.insts[2],
+                Inst::FpCast {
+                    kind: FpCastKind::FpBits,
+                    value: 0
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "{:?}",
+            f.insts
+        );
+        assert!(
+            !f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::Mcpy { .. } | Inst::LocalAddr(_)))
+        );
     }
 
     /// A constant stored at an FP kind and read back at that kind, in the

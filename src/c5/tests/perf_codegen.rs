@@ -3314,6 +3314,21 @@ __m128i isub(__m128i a, __m128i b) { return _mm_sub_epi32(b, a); }\n";
     m.finish();
 }
 
+/// A float converted to `int` is the 64-bit conversion's value, already
+/// sign-extended for every float the conversion is defined on (C17
+/// 6.3.1.4p1): the floor idiom `(a < (int)a) ? (int)a - 1 : (int)a` takes no
+/// `sxtw` after the `fcvtzs`.
+#[test]
+fn a_float_to_int_conversion_needs_no_sign_extension() {
+    const SRC: &str = "int ff(float a) { int ai = (int)a; return (a < ai) ? ai - 1 : ai; }\n";
+    let words = a64(SRC, "ff");
+    let sxtw = |w: &u32| w & 0xFFFF_FC00 == 0x9340_7C00;
+    assert!(
+        words.len() <= 6 && !words.iter().any(sxtw),
+        "aarch64 ff: {words:08x?}"
+    );
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

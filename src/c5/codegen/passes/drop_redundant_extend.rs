@@ -52,7 +52,8 @@
 //! redirect chains so stacked extends collapse.
 
 use crate::c5::ir::{
-    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    BinOp, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    ValueId,
 };
 use alloc::vec::Vec;
 
@@ -979,7 +980,17 @@ fn run_one(func: &mut FunctionSsa) {
                     lbits < ebits
                 }
             });
-        if load_covers || collapsing[idx] || (*kind == LoadKind::I32 && !high[idx]) {
+        // A conversion to `int` is already the sign-extended value for
+        // every operand it is defined on (C17 6.3.1.4p1).
+        let converted = *kind == LoadKind::I32
+            && matches!(
+                func.insts.get(*value as usize),
+                Some(Inst::FpCast {
+                    kind: FpCastKind::FpToInt,
+                    ..
+                })
+            );
+        if load_covers || converted || collapsing[idx] || (*kind == LoadKind::I32 && !high[idx]) {
             redirect[idx] = Some(*value);
         }
     }

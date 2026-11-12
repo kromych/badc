@@ -446,7 +446,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm1
                	vpermilpd	$0x0, %xmm1, %xmm2 # xmm2 = xmm1[0,0]
-               	vpermilpd	$0x0, %xmm1, %xmm1 # xmm1 = xmm1[0,0]
                	movapd	%xmm0, %xmm3
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm3

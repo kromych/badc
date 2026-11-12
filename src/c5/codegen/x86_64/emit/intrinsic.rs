@@ -2567,6 +2567,10 @@ pub(super) fn emit_vec_extract(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("VecExtract: dst not fp reg / spill");
         };
+        // A scalar reads only its low bits: the low lane in place is it.
+        if loff == 0 && x == dd.0 && matches!(dst, Place::FpReg(_)) {
+            return Ok(());
+        }
         let ops = match kind {
             LoadKind::F64 => [imm(loff / 8), wide_reg(16, x), wide_reg(16, dd.0)],
             _ => [imm(loff / 4), wide_reg(16, x), wide_reg(16, dd.0)],
@@ -2745,16 +2749,14 @@ pub(super) fn emit_vec_insert(
         StoreKind,
         u8,
     ),
-    blank: bool,
+    blank: Option<bool>,
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
     use super::asm::Concrete;
-    use crate::c5::ir::AsmRegSize;
     let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
     let w = VecWidth::of_bytes(bytes);
-    let q = |r: Reg, size| Concrete::Reg { reg: r.0, size };
     let mirror = |code: &mut Vec<u8>, rd: u8| {
         if bytes > 16 {
             mirror_wide_dst(code, w, dst, Reg(rd), frame);
@@ -2774,7 +2776,7 @@ pub(super) fn emit_vec_insert(
         };
         // The low part over a zero or undefined vector: a VEX move clears
         // the bits above it.
-        if blank && off == 0 {
+        if blank.is_some() && off == 0 {
             encode_wide(code, "vmovdqa", &[wide_reg(16, p.0), wide_reg(16, rd)])?;
             mirror(code, rd);
             return Ok(());
@@ -2801,6 +2803,77 @@ pub(super) fn emit_vec_insert(
         mirror(code, rd);
         return Ok(());
     }
+    // Doubles in registers: the low one of each paired by `vunpcklpd`, and
+    // a low one over a vector of no value is its own register.
+    if kind == StoreKind::F64
+        && bytes == 16
+        && let Place::FpReg(v) = place_of(alloc, value)
+    {
+        let rd = match dst {
+            Place::FpReg(r) => r,
+            _ => sa,
+        };
+        match (off, blank, place_of(alloc, vec)) {
+            (0, Some(true), _) if rd == v => {}
+            (0, Some(_), _) => encode_wide(code, "vmovq", &[wide_reg(16, v), wide_reg(16, rd)])?,
+            (8, _, Place::FpReg(n)) => encode_wide(
+                code,
+                "vunpcklpd",
+                &[wide_reg(16, v), wide_reg(16, n), wide_reg(16, rd)],
+            )?,
+            _ => {
+                return emit_vec_insert_gpr(
+                    code,
+                    (vec, value, off, kind, bytes),
+                    blank,
+                    dst,
+                    alloc,
+                    frame,
+                );
+            }
+        }
+        mirror(code, rd);
+        return Ok(());
+    }
+    emit_vec_insert_gpr(
+        code,
+        (vec, value, off, kind, bytes),
+        blank,
+        dst,
+        alloc,
+        frame,
+    )
+}
+
+/// [`emit_vec_insert`] of a scalar lane through a general register.
+fn emit_vec_insert_gpr(
+    code: &mut Vec<u8>,
+    (vec, value, off, kind, bytes): (
+        super::super::ir::ValueId,
+        super::super::ir::ValueId,
+        u8,
+        StoreKind,
+        u8,
+    ),
+    blank: Option<bool>,
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::asm::Concrete;
+    use crate::c5::ir::AsmRegSize;
+    let (sa, sb) = (frame.fp_scratch[0], frame.fp_scratch[1]);
+    let w = VecWidth::of_bytes(bytes);
+    let q = |r: Reg, size| Concrete::Reg { reg: r.0, size };
+    let mirror = |code: &mut Vec<u8>, rd: u8| {
+        if bytes > 16 {
+            mirror_wide_dst(code, w, dst, Reg(rd), frame);
+        } else if bytes == 8 {
+            super::mem::mirror_fp_dst(code, dst, Reg(rd), frame);
+        } else {
+            mirror_v128_dst(code, dst, Reg(rd), frame);
+        }
+    };
     // The value into a general register first, as the result may take a
     // float value's register.
     let gpr = match kind {
@@ -2833,7 +2906,7 @@ pub(super) fn emit_vec_insert(
     };
     // The low lane over a zero or undefined vector: `vmovq` / `vmovd` clear
     // the bits above it.
-    if blank && off == 0 && esize >= 4 {
+    if blank.is_some() && off == 0 && esize >= 4 {
         let mov = if esize == 8 { "vmovq" } else { "vmovd" };
         encode_wide(code, mov, &[q(gpr, size), wide_reg(16, rd)])?;
         mirror(code, rd);

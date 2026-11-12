@@ -445,7 +445,6 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm2
                	vmulsd	%xmm2, %xmm3, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm3
-               	vpermilpd	$0x0, %xmm3, %xmm3 # xmm3 = xmm3[0,0]
                	divsd	%xmm1, %xmm2
                	ucomisd	%xmm2, %xmm3
                	jp	<addr>

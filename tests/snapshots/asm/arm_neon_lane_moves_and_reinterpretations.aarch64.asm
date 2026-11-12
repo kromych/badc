@@ -1244,14 +1244,12 @@ Disassembly of section .text:
 
 <w_vdup_n_f32>:
                	ldr	d0, [x1]
-               	mov	s0, v0.s[0]
                	dup	v0.2s, v0.s[0]
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_f32>:
                	ldr	q0, [x1]
-               	mov	s0, v0.s[0]
                	dup	v0.4s, v0.s[0]
                	str	q0, [x0]
                	ret
@@ -1422,7 +1420,6 @@ Disassembly of section .text:
 
 <w_vmovq_n_f64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[0]
                	dup	v0.2d, v0.d[0]
                	str	q0, [x0]
                	ret
@@ -1885,7 +1882,6 @@ Disassembly of section .text:
 <w_vset_lane_f32>:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
-               	mov	s1, v1.s[0]
                	mov	v0.s[0], v1.s[0]
                	str	d0, [x0]
                	ret
@@ -1893,7 +1889,6 @@ Disassembly of section .text:
 <w_vsetq_lane_f32>:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
-               	mov	s1, v1.s[0]
                	mov	v0.s[3], v1.s[0]
                	str	q0, [x0]
                	ret
@@ -2076,7 +2071,6 @@ Disassembly of section .text:
 <w_vsetq_lane_f64>:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
-               	mov	d1, v1.d[0]
                	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
                	ret

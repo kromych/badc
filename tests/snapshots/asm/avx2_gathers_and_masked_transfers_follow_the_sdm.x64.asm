@@ -191,7 +191,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movups	(%rsp), %xmm0
                	vpinsrd	$0x0, %eax, %xmm0, %xmm0
-               	vpermilps	$0x0, %xmm0, %xmm0 # xmm0 = xmm0[0,0,0,0]
                	leave
                	retq
 
@@ -207,8 +206,6 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	vmovq	%xmm0, %r11
-               	vmovq	%r11, %xmm0
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	movapd	%xmm0, %xmm14
@@ -221,7 +218,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movups	(%rsp), %xmm0
                	vpinsrq	$0x0, %rax, %xmm0, %xmm0
-               	vpermilpd	$0x0, %xmm0, %xmm0 # xmm0 = xmm0[0,0]
                	leave
                	retq
 
@@ -8662,11 +8658,9 @@ Disassembly of section .text:
                	movq	0x8(%rsp), %rcx
                	movq	0x10(%rsp), %rdx
                	movq	0x18(%rsp), %rsi
-               	xorl	%edi, %edi
                	vmovq	%rax, %xmm0
                	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
                	movups	%xmm0, -0x3b(%rbp)
-               	xorl	%eax, %eax
                	vmovq	%rdx, %xmm0
                	vpinsrq	$0x1, %rsi, %xmm0, %xmm0
                	movups	%xmm0, -0x1f(%rbp)
@@ -10460,7 +10454,6 @@ Disassembly of section .text:
                	sarq	%rcx
                	andq	$0x1, %rcx
                	movq	(%rax,%rcx,8), %rax
-               	xorl	%ecx, %ecx
                	vmovq	%rax, %xmm1
                	leaq	0x100(%rsp), %rax
                	vpextrq	$0x1, %xmm0, %rcx

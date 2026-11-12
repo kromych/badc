@@ -261,7 +261,7 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(0)                                           -> x0
+    v6   Undef                                            -> x0
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
     v9   Imm(0)                                           -> x1
@@ -428,7 +428,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=0
     v16  Imm(0)                                           -> x1
     v17  VecExtract { vec=v0, off=0, kind=F64, bytes=16 } -> d0
     v18  Binop { op=fsub, lhs=v17, rhs=v14 }              -> d0
-    v19  Imm(0)                                           -> x1
+    v19  Undef                                            -> x1
     v20  VecInsert { vec=v19, value=v18, off=0, kind=F64, bytes=16 } -> d0
     v21  Imm(0)                                           -> x1
     v22  Imm(8)                                           -> x1

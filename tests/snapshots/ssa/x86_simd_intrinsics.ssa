@@ -6319,53 +6319,53 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4581 LifetimeEnd(0)                                   -> -
     terminator Return(v4576)   (exit_acc=v4576)
   block 190  start_pc=0
-    v4582 Imm(3)                                           -> x1
-    v4583 Imm(0)                                           -> x0
-    v4584 Imm(0)                                           -> x0
-    v4585 Imm(-64)                                         -> x0
-    v4586 Imm(-64)                                         -> x0
-    v4587 Imm(0)                                           -> x0
-    v4588 Imm(0)                                           -> x0
-    v4589 Imm(0)                                           -> x0
-    v4590 Imm(0)                                           -> x0
-    v4591 Imm(0)                                           -> x0
-    v4592 Undef                                            -> x0
-    v4593 Imm(0)                                           -> x0
-    v4594 Imm(0)                                           -> x0
-    v4595 Imm(4)                                           -> x0
-    v4596 Imm(0)                                           -> x0
-    v4597 Undef                                            -> x0
-    v4598 Imm(0)                                           -> x0
-    v4599 Imm(0)                                           -> x0
-    v4600 Imm(8)                                           -> x0
-    v4601 Imm(0)                                           -> x0
-    v4602 Undef                                            -> x0
-    v4603 Imm(0)                                           -> x0
-    v4604 Imm(0)                                           -> x0
-    v4605 Imm(12)                                          -> x0
-    v4606 Imm(0)                                           -> x0
+    v4582 Imm(3)                                           -> x0
+    v4583 Imm(0)                                           -> x1
+    v4584 Imm(0)                                           -> x1
+    v4585 Imm(-64)                                         -> x1
+    v4586 Imm(-64)                                         -> x1
+    v4587 Imm(0)                                           -> x1
+    v4588 Imm(0)                                           -> x1
+    v4589 Imm(0)                                           -> x1
+    v4590 Imm(0)                                           -> x1
+    v4591 Imm(0)                                           -> x1
+    v4592 Undef                                            -> x1
+    v4593 Imm(0)                                           -> x1
+    v4594 Imm(0)                                           -> x1
+    v4595 Imm(4)                                           -> x1
+    v4596 Imm(0)                                           -> x1
+    v4597 Undef                                            -> x1
+    v4598 Imm(0)                                           -> x1
+    v4599 Imm(0)                                           -> x1
+    v4600 Imm(8)                                           -> x1
+    v4601 Imm(0)                                           -> x1
+    v4602 Undef                                            -> x1
+    v4603 Imm(0)                                           -> x1
+    v4604 Imm(0)                                           -> x1
+    v4605 Imm(12)                                          -> x1
+    v4606 Imm(0)                                           -> x1
     v4607 VecConst { imm=-64, kind=I32, bytes=16 }         -> d0
-    v4608 Imm(0)                                           -> x0
-    v4609 Imm(0)                                           -> x0
-    v4610 Imm(0)                                           -> x0
-    v4611 Imm(0)                                           -> x0
-    v4612 Imm(0)                                           -> x0
-    v4613 Imm(0)                                           -> x0
+    v4608 Imm(0)                                           -> x1
+    v4609 Imm(0)                                           -> x1
+    v4610 Imm(0)                                           -> x1
+    v4611 Imm(0)                                           -> x1
+    v4612 Imm(0)                                           -> x1
+    v4613 Imm(0)                                           -> x1
     v4614 SimdVal { op=__builtin_ia32_psradi128, imm=None, args=[v4607, v4582] } -> d0
-    v4615 Imm(0)                                           -> x0
-    v4616 Imm(0)                                           -> x0
-    v4617 Imm(0)                                           -> x0
-    v4618 Imm(0)                                           -> x0
-    v4619 Imm(0)                                           -> x0
-    v4620 Imm(0)                                           -> x0
-    v4621 Imm(0)                                           -> x0
+    v4615 Imm(0)                                           -> x1
+    v4616 Imm(0)                                           -> x1
+    v4617 Imm(0)                                           -> x1
+    v4618 Imm(0)                                           -> x1
+    v4619 Imm(0)                                           -> x1
+    v4620 Imm(0)                                           -> x1
+    v4621 Imm(0)                                           -> x1
     v4622 LifetimeEnd(0)                                   -> -
     v4623 LifetimeEnd(0)                                   -> -
-    v4624 Imm(0)                                           -> x0
-    v4625 Imm(0)                                           -> x0
-    v4626 Imm(0)                                           -> x0
-    v4627 VecExtract { vec=v4614, off=0, kind=U32, bytes=16 } -> x0
-    v4628 BinopI { op=ne, lhs=v4627, rhs_imm=4294967288 }  -> x0
+    v4624 Imm(0)                                           -> x1
+    v4625 Imm(0)                                           -> x1
+    v4626 Imm(0)                                           -> x1
+    v4627 VecExtract { vec=v4614, off=0, kind=U32, bytes=16 } -> x1
+    v4628 BinopI { op=ne, lhs=v4627, rhs_imm=4294967288 }  -> x1
     terminator Bz { cond=v4628, target=b192, fall=b191 }   (exit_acc=v4628)
   block 191  start_pc=0
     v4629 Imm(64)                                          -> x0
@@ -6376,44 +6376,44 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4634 LifetimeEnd(0)                                   -> -
     terminator Return(v4629)   (exit_acc=v4629)
   block 192  start_pc=0
-    v4635 Imm(0)                                           -> x0
-    v4636 Imm(0)                                           -> x0
-    v4637 ImmData(512)                                     -> x0
+    v4635 Imm(0)                                           -> x1
+    v4636 Imm(0)                                           -> x1
+    v4637 ImmData(512)                                     -> x1
     v4638 Load { addr=v4637, disp=0, kind=V128, align=8 }  -> d0
-    v4639 Imm(0)                                           -> x0
-    v4640 Imm(0)                                           -> x0
-    v4641 Imm(0)                                           -> x0
-    v4642 Imm(0)                                           -> x0
-    v4643 Imm(0)                                           -> x0
-    v4644 Imm(0)                                           -> x0
-    v4645 Imm(0)                                           -> x0
-    v4646 Imm(0)                                           -> x0
+    v4639 Imm(0)                                           -> x1
+    v4640 Imm(0)                                           -> x1
+    v4641 Imm(0)                                           -> x1
+    v4642 Imm(0)                                           -> x1
+    v4643 Imm(0)                                           -> x1
+    v4644 Imm(0)                                           -> x1
+    v4645 Imm(0)                                           -> x1
+    v4646 Imm(0)                                           -> x1
     v4647 SimdVal { op=__builtin_ia32_psrldqi128, imm=Some(3), args=[v4638] } -> d1
-    v4648 Imm(0)                                           -> x0
-    v4649 Imm(0)                                           -> x0
-    v4650 Imm(0)                                           -> x0
-    v4651 Imm(0)                                           -> x0
-    v4652 Imm(0)                                           -> x0
-    v4653 Imm(0)                                           -> x0
-    v4654 Imm(0)                                           -> x0
+    v4648 Imm(0)                                           -> x1
+    v4649 Imm(0)                                           -> x1
+    v4650 Imm(0)                                           -> x1
+    v4651 Imm(0)                                           -> x1
+    v4652 Imm(0)                                           -> x1
+    v4653 Imm(0)                                           -> x1
+    v4654 Imm(0)                                           -> x1
     v4655 LifetimeEnd(0)                                   -> -
-    v4656 Imm(0)                                           -> x0
-    v4657 Imm(0)                                           -> x0
-    v4658 Imm(0)                                           -> x0
-    v4659 VecExtract { vec=v4647, off=0, kind=U8, bytes=16 } -> x0
-    v4660 BinopI { op=ne, lhs=v4659, rhs_imm=3 }           -> x0
+    v4656 Imm(0)                                           -> x1
+    v4657 Imm(0)                                           -> x1
+    v4658 Imm(0)                                           -> x1
+    v4659 VecExtract { vec=v4647, off=0, kind=U8, bytes=16 } -> x1
+    v4660 BinopI { op=ne, lhs=v4659, rhs_imm=3 }           -> x1
     v4661 BinopI { op=and, lhs=v4660, rhs_imm=4294967295 } -> x2
     v4662 BinopI { op=ne, lhs=v4659, rhs_imm=3 }           -> x2
     v4663 Imm(1)                                           -> x2
     v4664 Imm(0)                                           -> x2
     terminator Bnz { cond=v4660, target=b196, fall=b193 }   (exit_acc=v4662)
   block 193  start_pc=0
-    v4665 Imm(0)                                           -> x0
-    v4666 Imm(12)                                          -> x0
-    v4667 Imm(12)                                          -> x0
-    v4668 Imm(0)                                           -> x0
-    v4669 VecExtract { vec=v4647, off=12, kind=U8, bytes=16 } -> x0
-    v4670 BinopI { op=ne, lhs=v4669, rhs_imm=15 }          -> x0
+    v4665 Imm(0)                                           -> x1
+    v4666 Imm(12)                                          -> x1
+    v4667 Imm(12)                                          -> x1
+    v4668 Imm(0)                                           -> x1
+    v4669 VecExtract { vec=v4647, off=12, kind=U8, bytes=16 } -> x1
+    v4670 BinopI { op=ne, lhs=v4669, rhs_imm=15 }          -> x1
     v4671 BinopI { op=and, lhs=v4670, rhs_imm=4294967295 } -> x2
     v4672 BinopI { op=ne, lhs=v4669, rhs_imm=15 }          -> x2
     v4673 BinopI { op=ne, lhs=v4672, rhs_imm=0 }           -> x2
@@ -6424,11 +6424,11 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4678 Imm(0)                                           -> x2
     terminator Bnz { cond=v4670, target=b196, fall=b194 }   (exit_acc=v4672)
   block 194  start_pc=0
-    v4679 Imm(0)                                           -> x0
-    v4680 Imm(13)                                          -> x0
-    v4681 Imm(13)                                          -> x0
-    v4682 Imm(0)                                           -> x0
-    v4683 VecExtract { vec=v4647, off=13, kind=U8, bytes=16 } -> x0
+    v4679 Imm(0)                                           -> x1
+    v4680 Imm(13)                                          -> x1
+    v4681 Imm(13)                                          -> x1
+    v4682 Imm(0)                                           -> x1
+    v4683 VecExtract { vec=v4647, off=13, kind=U8, bytes=16 } -> x1
     v4684 BinopI { op=ne, lhs=v4683, rhs_imm=0 }           -> x2
     v4685 BinopI { op=ne, lhs=v4684, rhs_imm=0 }           -> x2
     v4686 Imm(0)                                           -> x2
@@ -6437,11 +6437,11 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4689 Imm(0)                                           -> x2
     terminator Bnz { cond=v4683, target=b196, fall=b195 }   (exit_acc=v4684)
   block 195  start_pc=0
-    v4690 Imm(0)                                           -> x0
-    v4691 Imm(15)                                          -> x0
-    v4692 Imm(15)                                          -> x0
-    v4693 Imm(0)                                           -> x0
-    v4694 VecExtract { vec=v4647, off=15, kind=U8, bytes=16 } -> x0
+    v4690 Imm(0)                                           -> x1
+    v4691 Imm(15)                                          -> x1
+    v4692 Imm(15)                                          -> x1
+    v4693 Imm(0)                                           -> x1
+    v4694 VecExtract { vec=v4647, off=15, kind=U8, bytes=16 } -> x1
     v4695 BinopI { op=ne, lhs=v4694, rhs_imm=0 }           -> x2
     v4696 Imm(0)                                           -> x2
     v4697 Imm(0)                                           -> x2
@@ -6456,38 +6456,38 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4704 LifetimeEnd(0)                                   -> -
     terminator Return(v4699)   (exit_acc=v4699)
   block 197  start_pc=0
-    v4705 Imm(0)                                           -> x0
-    v4706 Imm(0)                                           -> x0
-    v4707 Imm(48879)                                       -> x0
+    v4705 Imm(0)                                           -> x1
+    v4706 Imm(0)                                           -> x1
+    v4707 Imm(48879)                                       -> x1
     v4708 Imm(0)                                           -> x2
     v4709 Imm(0)                                           -> x2
     v4710 SimdVal { op=__builtin_ia32_vec_set_v8hi, imm=Some(2), args=[v4638, v4707] } -> d1
-    v4711 Imm(0)                                           -> x0
-    v4712 Imm(0)                                           -> x0
-    v4713 Imm(0)                                           -> x0
-    v4714 Imm(0)                                           -> x0
-    v4715 Imm(0)                                           -> x0
-    v4716 Imm(0)                                           -> x0
-    v4717 Imm(0)                                           -> x0
+    v4711 Imm(0)                                           -> x1
+    v4712 Imm(0)                                           -> x1
+    v4713 Imm(0)                                           -> x1
+    v4714 Imm(0)                                           -> x1
+    v4715 Imm(0)                                           -> x1
+    v4716 Imm(0)                                           -> x1
+    v4717 Imm(0)                                           -> x1
     v4718 LifetimeEnd(0)                                   -> -
-    v4719 Imm(0)                                           -> x0
-    v4720 Imm(4)                                           -> x0
-    v4721 Imm(4)                                           -> x0
-    v4722 Imm(0)                                           -> x0
-    v4723 VecExtract { vec=v4710, off=4, kind=U8, bytes=16 } -> x0
-    v4724 BinopI { op=ne, lhs=v4723, rhs_imm=239 }         -> x0
+    v4719 Imm(0)                                           -> x1
+    v4720 Imm(4)                                           -> x1
+    v4721 Imm(4)                                           -> x1
+    v4722 Imm(0)                                           -> x1
+    v4723 VecExtract { vec=v4710, off=4, kind=U8, bytes=16 } -> x1
+    v4724 BinopI { op=ne, lhs=v4723, rhs_imm=239 }         -> x1
     v4725 BinopI { op=and, lhs=v4724, rhs_imm=4294967295 } -> x2
     v4726 BinopI { op=ne, lhs=v4723, rhs_imm=239 }         -> x2
     v4727 Imm(1)                                           -> x2
     v4728 Imm(0)                                           -> x2
     terminator Bnz { cond=v4724, target=b200, fall=b198 }   (exit_acc=v4726)
   block 198  start_pc=0
-    v4729 Imm(0)                                           -> x0
-    v4730 Imm(5)                                           -> x0
-    v4731 Imm(5)                                           -> x0
-    v4732 Imm(0)                                           -> x0
-    v4733 VecExtract { vec=v4710, off=5, kind=U8, bytes=16 } -> x0
-    v4734 BinopI { op=ne, lhs=v4733, rhs_imm=190 }         -> x0
+    v4729 Imm(0)                                           -> x1
+    v4730 Imm(5)                                           -> x1
+    v4731 Imm(5)                                           -> x1
+    v4732 Imm(0)                                           -> x1
+    v4733 VecExtract { vec=v4710, off=5, kind=U8, bytes=16 } -> x1
+    v4734 BinopI { op=ne, lhs=v4733, rhs_imm=190 }         -> x1
     v4735 BinopI { op=and, lhs=v4734, rhs_imm=4294967295 } -> x2
     v4736 BinopI { op=ne, lhs=v4733, rhs_imm=190 }         -> x2
     v4737 BinopI { op=ne, lhs=v4736, rhs_imm=0 }           -> x2
@@ -6497,12 +6497,12 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4741 Imm(0)                                           -> x2
     terminator Bnz { cond=v4734, target=b200, fall=b199 }   (exit_acc=v4736)
   block 199  start_pc=0
-    v4742 Imm(0)                                           -> x0
-    v4743 Imm(6)                                           -> x0
-    v4744 Imm(6)                                           -> x0
-    v4745 Imm(0)                                           -> x0
-    v4746 VecExtract { vec=v4710, off=6, kind=U8, bytes=16 } -> x0
-    v4747 BinopI { op=ne, lhs=v4746, rhs_imm=6 }           -> x0
+    v4742 Imm(0)                                           -> x1
+    v4743 Imm(6)                                           -> x1
+    v4744 Imm(6)                                           -> x1
+    v4745 Imm(0)                                           -> x1
+    v4746 VecExtract { vec=v4710, off=6, kind=U8, bytes=16 } -> x1
+    v4747 BinopI { op=ne, lhs=v4746, rhs_imm=6 }           -> x1
     v4748 BinopI { op=and, lhs=v4747, rhs_imm=4294967295 } -> x2
     v4749 BinopI { op=ne, lhs=v4746, rhs_imm=6 }           -> x2
     v4750 Imm(0)                                           -> x2
@@ -6518,102 +6518,102 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4758 LifetimeEnd(0)                                   -> -
     terminator Return(v4753)   (exit_acc=v4753)
   block 201  start_pc=0
-    v4759 Imm(128)                                         -> x0
-    v4760 Imm(-128)                                        -> x0
-    v4761 Imm(-128)                                        -> x0
-    v4762 Imm(0)                                           -> x0
-    v4763 Imm(0)                                           -> x0
-    v4764 Imm(0)                                           -> x0
-    v4765 Imm(0)                                           -> x0
-    v4766 Imm(0)                                           -> x0
-    v4767 Undef                                            -> x0
-    v4768 Imm(0)                                           -> x0
-    v4769 Imm(0)                                           -> x0
-    v4770 Imm(1)                                           -> x0
-    v4771 Imm(0)                                           -> x0
-    v4772 Undef                                            -> x0
-    v4773 Imm(0)                                           -> x0
-    v4774 Imm(0)                                           -> x0
-    v4775 Imm(2)                                           -> x0
-    v4776 Imm(0)                                           -> x0
-    v4777 Undef                                            -> x0
-    v4778 Imm(0)                                           -> x0
-    v4779 Imm(0)                                           -> x0
-    v4780 Imm(3)                                           -> x0
-    v4781 Imm(0)                                           -> x0
-    v4782 Undef                                            -> x0
-    v4783 Imm(0)                                           -> x0
-    v4784 Imm(0)                                           -> x0
-    v4785 Imm(4)                                           -> x0
-    v4786 Imm(0)                                           -> x0
-    v4787 Undef                                            -> x0
-    v4788 Imm(0)                                           -> x0
-    v4789 Imm(0)                                           -> x0
-    v4790 Imm(5)                                           -> x0
-    v4791 Imm(0)                                           -> x0
-    v4792 Undef                                            -> x0
-    v4793 Imm(0)                                           -> x0
-    v4794 Imm(0)                                           -> x0
-    v4795 Imm(6)                                           -> x0
-    v4796 Imm(0)                                           -> x0
-    v4797 Undef                                            -> x0
-    v4798 Imm(0)                                           -> x0
-    v4799 Imm(0)                                           -> x0
-    v4800 Imm(7)                                           -> x0
-    v4801 Imm(0)                                           -> x0
-    v4802 Undef                                            -> x0
-    v4803 Imm(0)                                           -> x0
-    v4804 Imm(0)                                           -> x0
-    v4805 Imm(8)                                           -> x0
-    v4806 Imm(0)                                           -> x0
-    v4807 Undef                                            -> x0
-    v4808 Imm(0)                                           -> x0
-    v4809 Imm(0)                                           -> x0
-    v4810 Imm(9)                                           -> x0
-    v4811 Imm(0)                                           -> x0
-    v4812 Undef                                            -> x0
-    v4813 Imm(0)                                           -> x0
-    v4814 Imm(0)                                           -> x0
-    v4815 Imm(10)                                          -> x0
-    v4816 Imm(0)                                           -> x0
-    v4817 Undef                                            -> x0
-    v4818 Imm(0)                                           -> x0
-    v4819 Imm(0)                                           -> x0
-    v4820 Imm(11)                                          -> x0
-    v4821 Imm(0)                                           -> x0
-    v4822 Undef                                            -> x0
-    v4823 Imm(0)                                           -> x0
-    v4824 Imm(0)                                           -> x0
-    v4825 Imm(12)                                          -> x0
-    v4826 Imm(0)                                           -> x0
-    v4827 Undef                                            -> x0
-    v4828 Imm(0)                                           -> x0
-    v4829 Imm(0)                                           -> x0
-    v4830 Imm(13)                                          -> x0
-    v4831 Imm(0)                                           -> x0
-    v4832 Undef                                            -> x0
-    v4833 Imm(0)                                           -> x0
-    v4834 Imm(0)                                           -> x0
-    v4835 Imm(14)                                          -> x0
-    v4836 Imm(0)                                           -> x0
-    v4837 Undef                                            -> x0
-    v4838 Imm(0)                                           -> x0
-    v4839 Imm(0)                                           -> x0
-    v4840 Imm(15)                                          -> x0
-    v4841 Imm(0)                                           -> x0
+    v4759 Imm(128)                                         -> x1
+    v4760 Imm(-128)                                        -> x1
+    v4761 Imm(-128)                                        -> x1
+    v4762 Imm(0)                                           -> x1
+    v4763 Imm(0)                                           -> x1
+    v4764 Imm(0)                                           -> x1
+    v4765 Imm(0)                                           -> x1
+    v4766 Imm(0)                                           -> x1
+    v4767 Undef                                            -> x1
+    v4768 Imm(0)                                           -> x1
+    v4769 Imm(0)                                           -> x1
+    v4770 Imm(1)                                           -> x1
+    v4771 Imm(0)                                           -> x1
+    v4772 Undef                                            -> x1
+    v4773 Imm(0)                                           -> x1
+    v4774 Imm(0)                                           -> x1
+    v4775 Imm(2)                                           -> x1
+    v4776 Imm(0)                                           -> x1
+    v4777 Undef                                            -> x1
+    v4778 Imm(0)                                           -> x1
+    v4779 Imm(0)                                           -> x1
+    v4780 Imm(3)                                           -> x1
+    v4781 Imm(0)                                           -> x1
+    v4782 Undef                                            -> x1
+    v4783 Imm(0)                                           -> x1
+    v4784 Imm(0)                                           -> x1
+    v4785 Imm(4)                                           -> x1
+    v4786 Imm(0)                                           -> x1
+    v4787 Undef                                            -> x1
+    v4788 Imm(0)                                           -> x1
+    v4789 Imm(0)                                           -> x1
+    v4790 Imm(5)                                           -> x1
+    v4791 Imm(0)                                           -> x1
+    v4792 Undef                                            -> x1
+    v4793 Imm(0)                                           -> x1
+    v4794 Imm(0)                                           -> x1
+    v4795 Imm(6)                                           -> x1
+    v4796 Imm(0)                                           -> x1
+    v4797 Undef                                            -> x1
+    v4798 Imm(0)                                           -> x1
+    v4799 Imm(0)                                           -> x1
+    v4800 Imm(7)                                           -> x1
+    v4801 Imm(0)                                           -> x1
+    v4802 Undef                                            -> x1
+    v4803 Imm(0)                                           -> x1
+    v4804 Imm(0)                                           -> x1
+    v4805 Imm(8)                                           -> x1
+    v4806 Imm(0)                                           -> x1
+    v4807 Undef                                            -> x1
+    v4808 Imm(0)                                           -> x1
+    v4809 Imm(0)                                           -> x1
+    v4810 Imm(9)                                           -> x1
+    v4811 Imm(0)                                           -> x1
+    v4812 Undef                                            -> x1
+    v4813 Imm(0)                                           -> x1
+    v4814 Imm(0)                                           -> x1
+    v4815 Imm(10)                                          -> x1
+    v4816 Imm(0)                                           -> x1
+    v4817 Undef                                            -> x1
+    v4818 Imm(0)                                           -> x1
+    v4819 Imm(0)                                           -> x1
+    v4820 Imm(11)                                          -> x1
+    v4821 Imm(0)                                           -> x1
+    v4822 Undef                                            -> x1
+    v4823 Imm(0)                                           -> x1
+    v4824 Imm(0)                                           -> x1
+    v4825 Imm(12)                                          -> x1
+    v4826 Imm(0)                                           -> x1
+    v4827 Undef                                            -> x1
+    v4828 Imm(0)                                           -> x1
+    v4829 Imm(0)                                           -> x1
+    v4830 Imm(13)                                          -> x1
+    v4831 Imm(0)                                           -> x1
+    v4832 Undef                                            -> x1
+    v4833 Imm(0)                                           -> x1
+    v4834 Imm(0)                                           -> x1
+    v4835 Imm(14)                                          -> x1
+    v4836 Imm(0)                                           -> x1
+    v4837 Undef                                            -> x1
+    v4838 Imm(0)                                           -> x1
+    v4839 Imm(0)                                           -> x1
+    v4840 Imm(15)                                          -> x1
+    v4841 Imm(0)                                           -> x1
     v4842 VecConst { imm=-128, kind=I8, bytes=16 }         -> d2
-    v4843 Imm(0)                                           -> x0
-    v4844 Imm(0)                                           -> x0
-    v4845 Imm(0)                                           -> x0
-    v4846 Imm(0)                                           -> x0
-    v4847 Imm(0)                                           -> x0
-    v4848 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v4842] } -> x0
+    v4843 Imm(0)                                           -> x1
+    v4844 Imm(0)                                           -> x1
+    v4845 Imm(0)                                           -> x1
+    v4846 Imm(0)                                           -> x1
+    v4847 Imm(0)                                           -> x1
+    v4848 SimdVal { op=__builtin_ia32_pmovmskb128, imm=None, args=[v4842] } -> x1
     v4849 Imm(0)                                           -> x2
     v4850 Extend { value=v4848, kind=I32 }                 -> x2
     v4851 Extend { value=v4848, kind=I32 }                 -> x2
     v4852 LifetimeEnd(0)                                   -> -
     v4853 Extend { value=v4848, kind=I32 }                 -> x2
-    v4854 BinopI { op=ne, lhs=v4848, rhs_imm=65535 }       -> x0
+    v4854 BinopI { op=ne, lhs=v4848, rhs_imm=65535 }       -> x1
     terminator Bz { cond=v4854, target=b203, fall=b202 }   (exit_acc=v4854)
   block 202  start_pc=0
     v4855 Imm(67)                                          -> x0
@@ -6624,8 +6624,8 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v4860 LifetimeEnd(0)                                   -> -
     terminator Return(v4855)   (exit_acc=v4855)
   block 203  start_pc=0
-    v4861 Imm(0)                                           -> x0
-    v4862 Imm(0)                                           -> x0
+    v4861 Imm(0)                                           -> x1
+    v4862 Imm(0)                                           -> x1
     v4863 Imm(0)                                           -> x2
     v4864 Imm(0)                                           -> x2
     v4865 Imm(0)                                           -> x2
@@ -7376,209 +7376,209 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5576 Imm(3)                                           -> x2
     v5577 Imm(0)                                           -> x2
     v5578 VecInsert { vec=v5564, value=v4582, off=2, kind=I8, bytes=16 } -> d1
-    v5579 Imm(0)                                           -> x1
-    v5580 Imm(2)                                           -> x1
-    v5581 Imm(3)                                           -> x1
-    v5582 Imm(3)                                           -> x1
-    v5583 Imm(3)                                           -> x1
-    v5584 Imm(1)                                           -> x1
-    v5585 Imm(0)                                           -> x1
-    v5586 Imm(3)                                           -> x1
-    v5587 Imm(3)                                           -> x1
-    v5588 Imm(4)                                           -> x1
-    v5589 Imm(4)                                           -> x1
-    v5590 Imm(4)                                           -> x1
+    v5579 Imm(0)                                           -> x0
+    v5580 Imm(2)                                           -> x0
+    v5581 Imm(3)                                           -> x0
+    v5582 Imm(3)                                           -> x0
+    v5583 Imm(3)                                           -> x0
+    v5584 Imm(1)                                           -> x0
+    v5585 Imm(0)                                           -> x0
+    v5586 Imm(3)                                           -> x0
+    v5587 Imm(3)                                           -> x0
+    v5588 Imm(4)                                           -> x0
+    v5589 Imm(4)                                           -> x0
+    v5590 Imm(4)                                           -> x0
     v5591 Imm(0)                                           -> x2
     v5592 VecInsert { vec=v5578, value=v5590, off=3, kind=I8, bytes=16 } -> d1
-    v5593 Imm(0)                                           -> x1
-    v5594 Imm(3)                                           -> x1
-    v5595 Imm(4)                                           -> x1
-    v5596 Imm(4)                                           -> x1
-    v5597 Imm(4)                                           -> x1
-    v5598 Imm(1)                                           -> x1
-    v5599 Imm(0)                                           -> x1
-    v5600 Imm(4)                                           -> x1
-    v5601 Imm(4)                                           -> x1
-    v5602 Imm(5)                                           -> x1
-    v5603 Imm(5)                                           -> x1
-    v5604 Imm(5)                                           -> x1
+    v5593 Imm(0)                                           -> x0
+    v5594 Imm(3)                                           -> x0
+    v5595 Imm(4)                                           -> x0
+    v5596 Imm(4)                                           -> x0
+    v5597 Imm(4)                                           -> x0
+    v5598 Imm(1)                                           -> x0
+    v5599 Imm(0)                                           -> x0
+    v5600 Imm(4)                                           -> x0
+    v5601 Imm(4)                                           -> x0
+    v5602 Imm(5)                                           -> x0
+    v5603 Imm(5)                                           -> x0
+    v5604 Imm(5)                                           -> x0
     v5605 Imm(0)                                           -> x2
     v5606 VecInsert { vec=v5592, value=v5604, off=4, kind=I8, bytes=16 } -> d1
-    v5607 Imm(0)                                           -> x1
-    v5608 Imm(4)                                           -> x1
-    v5609 Imm(5)                                           -> x1
-    v5610 Imm(5)                                           -> x1
-    v5611 Imm(5)                                           -> x1
-    v5612 Imm(1)                                           -> x1
-    v5613 Imm(0)                                           -> x1
-    v5614 Imm(5)                                           -> x1
-    v5615 Imm(5)                                           -> x1
-    v5616 Imm(6)                                           -> x1
-    v5617 Imm(6)                                           -> x1
-    v5618 Imm(6)                                           -> x1
+    v5607 Imm(0)                                           -> x0
+    v5608 Imm(4)                                           -> x0
+    v5609 Imm(5)                                           -> x0
+    v5610 Imm(5)                                           -> x0
+    v5611 Imm(5)                                           -> x0
+    v5612 Imm(1)                                           -> x0
+    v5613 Imm(0)                                           -> x0
+    v5614 Imm(5)                                           -> x0
+    v5615 Imm(5)                                           -> x0
+    v5616 Imm(6)                                           -> x0
+    v5617 Imm(6)                                           -> x0
+    v5618 Imm(6)                                           -> x0
     v5619 Imm(0)                                           -> x2
     v5620 VecInsert { vec=v5606, value=v5618, off=5, kind=I8, bytes=16 } -> d1
-    v5621 Imm(0)                                           -> x1
-    v5622 Imm(5)                                           -> x1
-    v5623 Imm(6)                                           -> x1
-    v5624 Imm(6)                                           -> x1
-    v5625 Imm(6)                                           -> x1
-    v5626 Imm(1)                                           -> x1
-    v5627 Imm(0)                                           -> x1
-    v5628 Imm(6)                                           -> x1
-    v5629 Imm(6)                                           -> x1
-    v5630 Imm(7)                                           -> x1
-    v5631 Imm(7)                                           -> x1
-    v5632 Imm(7)                                           -> x1
+    v5621 Imm(0)                                           -> x0
+    v5622 Imm(5)                                           -> x0
+    v5623 Imm(6)                                           -> x0
+    v5624 Imm(6)                                           -> x0
+    v5625 Imm(6)                                           -> x0
+    v5626 Imm(1)                                           -> x0
+    v5627 Imm(0)                                           -> x0
+    v5628 Imm(6)                                           -> x0
+    v5629 Imm(6)                                           -> x0
+    v5630 Imm(7)                                           -> x0
+    v5631 Imm(7)                                           -> x0
+    v5632 Imm(7)                                           -> x0
     v5633 Imm(0)                                           -> x2
     v5634 VecInsert { vec=v5620, value=v5632, off=6, kind=I8, bytes=16 } -> d1
-    v5635 Imm(0)                                           -> x1
-    v5636 Imm(6)                                           -> x1
-    v5637 Imm(7)                                           -> x1
-    v5638 Imm(7)                                           -> x1
-    v5639 Imm(7)                                           -> x1
-    v5640 Imm(1)                                           -> x1
-    v5641 Imm(0)                                           -> x1
-    v5642 Imm(7)                                           -> x1
-    v5643 Imm(7)                                           -> x1
-    v5644 Imm(8)                                           -> x1
-    v5645 Imm(8)                                           -> x1
-    v5646 Imm(8)                                           -> x1
+    v5635 Imm(0)                                           -> x0
+    v5636 Imm(6)                                           -> x0
+    v5637 Imm(7)                                           -> x0
+    v5638 Imm(7)                                           -> x0
+    v5639 Imm(7)                                           -> x0
+    v5640 Imm(1)                                           -> x0
+    v5641 Imm(0)                                           -> x0
+    v5642 Imm(7)                                           -> x0
+    v5643 Imm(7)                                           -> x0
+    v5644 Imm(8)                                           -> x0
+    v5645 Imm(8)                                           -> x0
+    v5646 Imm(8)                                           -> x0
     v5647 Imm(0)                                           -> x2
     v5648 VecInsert { vec=v5634, value=v5646, off=7, kind=I8, bytes=16 } -> d1
-    v5649 Imm(0)                                           -> x1
-    v5650 Imm(7)                                           -> x1
-    v5651 Imm(8)                                           -> x1
-    v5652 Imm(8)                                           -> x1
-    v5653 Imm(8)                                           -> x1
-    v5654 Imm(1)                                           -> x1
-    v5655 Imm(0)                                           -> x1
-    v5656 Imm(8)                                           -> x1
-    v5657 Imm(8)                                           -> x1
-    v5658 Imm(9)                                           -> x1
-    v5659 Imm(9)                                           -> x1
-    v5660 Imm(9)                                           -> x1
-    v5661 Imm(0)                                           -> x1
+    v5649 Imm(0)                                           -> x0
+    v5650 Imm(7)                                           -> x0
+    v5651 Imm(8)                                           -> x0
+    v5652 Imm(8)                                           -> x0
+    v5653 Imm(8)                                           -> x0
+    v5654 Imm(1)                                           -> x0
+    v5655 Imm(0)                                           -> x0
+    v5656 Imm(8)                                           -> x0
+    v5657 Imm(8)                                           -> x0
+    v5658 Imm(9)                                           -> x0
+    v5659 Imm(9)                                           -> x0
+    v5660 Imm(9)                                           -> x0
+    v5661 Imm(0)                                           -> x0
     v5662 VecInsert { vec=v5648, value=v5660, off=8, kind=I8, bytes=16 } -> d2
-    v5663 Imm(0)                                           -> x1
-    v5664 Imm(8)                                           -> x1
-    v5665 Imm(9)                                           -> x1
-    v5666 Imm(9)                                           -> x1
-    v5667 Imm(9)                                           -> x1
-    v5668 Imm(1)                                           -> x1
-    v5669 Imm(0)                                           -> x1
-    v5670 Imm(9)                                           -> x1
-    v5671 Imm(9)                                           -> x1
-    v5672 Imm(10)                                          -> x1
-    v5673 Imm(10)                                          -> x1
-    v5674 Imm(10)                                          -> x1
-    v5675 Imm(0)                                           -> x1
+    v5663 Imm(0)                                           -> x0
+    v5664 Imm(8)                                           -> x0
+    v5665 Imm(9)                                           -> x0
+    v5666 Imm(9)                                           -> x0
+    v5667 Imm(9)                                           -> x0
+    v5668 Imm(1)                                           -> x0
+    v5669 Imm(0)                                           -> x0
+    v5670 Imm(9)                                           -> x0
+    v5671 Imm(9)                                           -> x0
+    v5672 Imm(10)                                          -> x0
+    v5673 Imm(10)                                          -> x0
+    v5674 Imm(10)                                          -> x0
+    v5675 Imm(0)                                           -> x0
     v5676 VecInsert { vec=v5662, value=v5674, off=9, kind=I8, bytes=16 } -> d2
-    v5677 Imm(0)                                           -> x1
-    v5678 Imm(9)                                           -> x1
-    v5679 Imm(10)                                          -> x1
-    v5680 Imm(10)                                          -> x1
-    v5681 Imm(10)                                          -> x1
-    v5682 Imm(1)                                           -> x1
-    v5683 Imm(0)                                           -> x1
-    v5684 Imm(10)                                          -> x1
-    v5685 Imm(10)                                          -> x1
-    v5686 Imm(11)                                          -> x1
-    v5687 Imm(11)                                          -> x1
-    v5688 Imm(11)                                          -> x1
-    v5689 Imm(0)                                           -> x1
+    v5677 Imm(0)                                           -> x0
+    v5678 Imm(9)                                           -> x0
+    v5679 Imm(10)                                          -> x0
+    v5680 Imm(10)                                          -> x0
+    v5681 Imm(10)                                          -> x0
+    v5682 Imm(1)                                           -> x0
+    v5683 Imm(0)                                           -> x0
+    v5684 Imm(10)                                          -> x0
+    v5685 Imm(10)                                          -> x0
+    v5686 Imm(11)                                          -> x0
+    v5687 Imm(11)                                          -> x0
+    v5688 Imm(11)                                          -> x0
+    v5689 Imm(0)                                           -> x0
     v5690 VecInsert { vec=v5676, value=v5688, off=10, kind=I8, bytes=16 } -> d2
-    v5691 Imm(0)                                           -> x1
-    v5692 Imm(10)                                          -> x1
-    v5693 Imm(11)                                          -> x1
-    v5694 Imm(11)                                          -> x1
-    v5695 Imm(11)                                          -> x1
-    v5696 Imm(1)                                           -> x1
-    v5697 Imm(0)                                           -> x1
-    v5698 Imm(11)                                          -> x1
-    v5699 Imm(11)                                          -> x1
-    v5700 Imm(12)                                          -> x1
-    v5701 Imm(12)                                          -> x1
-    v5702 Imm(12)                                          -> x1
-    v5703 Imm(0)                                           -> x1
+    v5691 Imm(0)                                           -> x0
+    v5692 Imm(10)                                          -> x0
+    v5693 Imm(11)                                          -> x0
+    v5694 Imm(11)                                          -> x0
+    v5695 Imm(11)                                          -> x0
+    v5696 Imm(1)                                           -> x0
+    v5697 Imm(0)                                           -> x0
+    v5698 Imm(11)                                          -> x0
+    v5699 Imm(11)                                          -> x0
+    v5700 Imm(12)                                          -> x0
+    v5701 Imm(12)                                          -> x0
+    v5702 Imm(12)                                          -> x0
+    v5703 Imm(0)                                           -> x0
     v5704 VecInsert { vec=v5690, value=v5702, off=11, kind=I8, bytes=16 } -> d2
-    v5705 Imm(0)                                           -> x1
-    v5706 Imm(11)                                          -> x1
-    v5707 Imm(12)                                          -> x1
-    v5708 Imm(12)                                          -> x1
-    v5709 Imm(12)                                          -> x1
-    v5710 Imm(1)                                           -> x1
-    v5711 Imm(0)                                           -> x1
-    v5712 Imm(12)                                          -> x1
-    v5713 Imm(12)                                          -> x1
-    v5714 Imm(13)                                          -> x1
-    v5715 Imm(13)                                          -> x1
-    v5716 Imm(13)                                          -> x1
-    v5717 Imm(0)                                           -> x1
+    v5705 Imm(0)                                           -> x0
+    v5706 Imm(11)                                          -> x0
+    v5707 Imm(12)                                          -> x0
+    v5708 Imm(12)                                          -> x0
+    v5709 Imm(12)                                          -> x0
+    v5710 Imm(1)                                           -> x0
+    v5711 Imm(0)                                           -> x0
+    v5712 Imm(12)                                          -> x0
+    v5713 Imm(12)                                          -> x0
+    v5714 Imm(13)                                          -> x0
+    v5715 Imm(13)                                          -> x0
+    v5716 Imm(13)                                          -> x0
+    v5717 Imm(0)                                           -> x0
     v5718 VecInsert { vec=v5704, value=v5716, off=12, kind=I8, bytes=16 } -> d2
-    v5719 Imm(0)                                           -> x1
-    v5720 Imm(12)                                          -> x1
-    v5721 Imm(13)                                          -> x1
-    v5722 Imm(13)                                          -> x1
-    v5723 Imm(13)                                          -> x1
-    v5724 Imm(1)                                           -> x1
-    v5725 Imm(0)                                           -> x1
-    v5726 Imm(13)                                          -> x1
-    v5727 Imm(13)                                          -> x1
-    v5728 Imm(14)                                          -> x1
-    v5729 Imm(14)                                          -> x1
-    v5730 Imm(14)                                          -> x1
-    v5731 Imm(0)                                           -> x1
+    v5719 Imm(0)                                           -> x0
+    v5720 Imm(12)                                          -> x0
+    v5721 Imm(13)                                          -> x0
+    v5722 Imm(13)                                          -> x0
+    v5723 Imm(13)                                          -> x0
+    v5724 Imm(1)                                           -> x0
+    v5725 Imm(0)                                           -> x0
+    v5726 Imm(13)                                          -> x0
+    v5727 Imm(13)                                          -> x0
+    v5728 Imm(14)                                          -> x0
+    v5729 Imm(14)                                          -> x0
+    v5730 Imm(14)                                          -> x0
+    v5731 Imm(0)                                           -> x0
     v5732 VecInsert { vec=v5718, value=v5730, off=13, kind=I8, bytes=16 } -> d2
-    v5733 Imm(0)                                           -> x1
-    v5734 Imm(13)                                          -> x1
-    v5735 Imm(14)                                          -> x1
-    v5736 Imm(14)                                          -> x1
-    v5737 Imm(14)                                          -> x1
-    v5738 Imm(1)                                           -> x1
-    v5739 Imm(0)                                           -> x1
-    v5740 Imm(14)                                          -> x1
-    v5741 Imm(14)                                          -> x1
-    v5742 Imm(15)                                          -> x1
-    v5743 Imm(15)                                          -> x1
-    v5744 Imm(15)                                          -> x1
-    v5745 Imm(0)                                           -> x1
+    v5733 Imm(0)                                           -> x0
+    v5734 Imm(13)                                          -> x0
+    v5735 Imm(14)                                          -> x0
+    v5736 Imm(14)                                          -> x0
+    v5737 Imm(14)                                          -> x0
+    v5738 Imm(1)                                           -> x0
+    v5739 Imm(0)                                           -> x0
+    v5740 Imm(14)                                          -> x0
+    v5741 Imm(14)                                          -> x0
+    v5742 Imm(15)                                          -> x0
+    v5743 Imm(15)                                          -> x0
+    v5744 Imm(15)                                          -> x0
+    v5745 Imm(0)                                           -> x0
     v5746 VecInsert { vec=v5732, value=v5744, off=14, kind=I8, bytes=16 } -> d2
-    v5747 Imm(0)                                           -> x1
-    v5748 Imm(14)                                          -> x1
-    v5749 Imm(15)                                          -> x1
-    v5750 Imm(15)                                          -> x1
-    v5751 Imm(15)                                          -> x1
-    v5752 Imm(1)                                           -> x1
-    v5753 Imm(0)                                           -> x1
-    v5754 Imm(15)                                          -> x1
-    v5755 Imm(15)                                          -> x1
-    v5756 Imm(16)                                          -> x1
-    v5757 Imm(16)                                          -> x1
-    v5758 Imm(16)                                          -> x1
-    v5759 Imm(0)                                           -> x1
+    v5747 Imm(0)                                           -> x0
+    v5748 Imm(14)                                          -> x0
+    v5749 Imm(15)                                          -> x0
+    v5750 Imm(15)                                          -> x0
+    v5751 Imm(15)                                          -> x0
+    v5752 Imm(1)                                           -> x0
+    v5753 Imm(0)                                           -> x0
+    v5754 Imm(15)                                          -> x0
+    v5755 Imm(15)                                          -> x0
+    v5756 Imm(16)                                          -> x0
+    v5757 Imm(16)                                          -> x0
+    v5758 Imm(16)                                          -> x0
+    v5759 Imm(0)                                           -> x0
     v5760 VecInsert { vec=v5746, value=v5758, off=15, kind=I8, bytes=16 } -> d2
-    v5761 Imm(0)                                           -> x1
-    v5762 Imm(15)                                          -> x1
-    v5763 Imm(16)                                          -> x1
-    v5764 Imm(16)                                          -> x1
-    v5765 Imm(16)                                          -> x1
-    v5766 Imm(0)                                           -> x1
-    v5767 Imm(0)                                           -> x1
-    v5768 Imm(0)                                           -> x1
-    v5769 Imm(0)                                           -> x1
-    v5770 Imm(0)                                           -> x1
-    v5771 Imm(0)                                           -> x1
-    v5772 Imm(0)                                           -> x1
-    v5773 VecExtract { vec=v5648, off=0, kind=I64, bytes=16 } -> x1
-    v5774 Imm(0)                                           -> x2
-    v5775 Imm(0)                                           -> x2
-    v5776 VecInsert { vec=v4862, value=v5773, off=0, kind=I64, bytes=16 } -> d1
-    v5777 Imm(0)                                           -> x1
-    v5778 Imm(0)                                           -> x1
-    v5779 Imm(0)                                           -> x1
-    v5780 Imm(8)                                           -> x1
-    v5781 Imm(0)                                           -> x1
+    v5761 Imm(0)                                           -> x0
+    v5762 Imm(15)                                          -> x0
+    v5763 Imm(16)                                          -> x0
+    v5764 Imm(16)                                          -> x0
+    v5765 Imm(16)                                          -> x0
+    v5766 Imm(0)                                           -> x0
+    v5767 Imm(0)                                           -> x0
+    v5768 Imm(0)                                           -> x0
+    v5769 Imm(0)                                           -> x0
+    v5770 Imm(0)                                           -> x0
+    v5771 Imm(0)                                           -> x2
+    v5772 Imm(0)                                           -> x2
+    v5773 VecExtract { vec=v5648, off=0, kind=I64, bytes=16 } -> x2
+    v5774 Imm(0)                                           -> x6
+    v5775 Imm(0)                                           -> x6
+    v5776 VecInsert { vec=v5770, value=v5773, off=0, kind=I64, bytes=16 } -> d1
+    v5777 Imm(0)                                           -> x0
+    v5778 Imm(0)                                           -> x0
+    v5779 Imm(0)                                           -> x0
+    v5780 Imm(8)                                           -> x0
+    v5781 Imm(0)                                           -> x0
     v5782 VecInsert { vec=v5776, value=v4862, off=8, kind=I64, bytes=16 } -> d2
     v5783 Imm(0)                                           -> x0
     v5784 Imm(0)                                           -> x0

@@ -138,6 +138,38 @@ fn store_width(kind: StoreKind) -> u8 {
 /// Inserts `fold_lane_reads` looks through for the lane it reads.
 const LANE_DEPTH: u32 = 64;
 
+/// A 16-byte vector built as its low 8 bytes inserted into zero and its
+/// high 8 bytes inserted over that, when the zero and the low insert have
+/// no other reader: every byte is written, so the zero is undefined and the
+/// low insert needs no clearing of the bytes above its lane.
+fn blank_under_pairs(func: &mut FunctionSsa) -> bool {
+    let mut uses = vec![0u32; func.insts.len()];
+    let mut count = |v: ValueId| {
+        if let Some(u) = uses.get_mut(v as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    func.blocks
+        .iter()
+        .for_each(|b| b.terminator.for_each_operand(&mut count));
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let low = crate::c5::codegen::ssa::vector_slots::pair_low(func, &uses, &func.insts[i]);
+        if let Some(low) = low
+            && let Inst::VecInsert { vec: zero, .. } = func.insts[low as usize]
+            && uses[zero as usize] == 1
+            && matches!(func.insts[zero as usize], Inst::Imm(0))
+        {
+            func.insts[zero as usize] = Inst::Undef;
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Rewrite each `VecExtract` whose lane the vector's inserts determine:
 /// the value an insert of the same lane and width wrote, read back as the
 /// extract's kind reads it from memory (a sign or zero extension of its low
@@ -147,7 +179,7 @@ const LANE_DEPTH: u32 = 64;
 /// insert over an insert of the same
 /// lane takes that insert's vector. Returns whether anything was rewritten.
 fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
-    let mut changed = false;
+    let mut changed = blank_under_pairs(func);
     // A lane written over the same lane of an insert writes over that
     // insert's vector.
     for i in 0..func.insts.len() {

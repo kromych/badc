@@ -3161,9 +3161,9 @@ void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
 
 /// A half of a 16-byte vector parameter taken through `memcpy` is a lane of
 /// its register, and two 8-byte halves stored side by side and read back
-/// whole are one insert, as with gcc 16: `mov d0, v0.d[1]` and
-/// `mov v0.d[1], v1.d[0]` on AArch64, each from a store to the frame and a
-/// reload.
+/// whole are one insert, as with gcc 16: nothing for the low half,
+/// `mov d0, v0.d[1]` and `mov v0.d[1], v1.d[0]` on AArch64, each from a
+/// store to the frame and a reload.
 #[test]
 fn vector_halves_move_in_registers() {
     const SRC: &str = "typedef signed char i8x16 __attribute__((vector_size(16)));\n\
@@ -3179,7 +3179,7 @@ i8x16 comb(i8x8 a, i8x8 b) {\n\
     const RET: u32 = 0xD65F_03C0;
     let mut m = Misses::default();
     for (name, want) in [
-        ("lo", &[0x5E08_0400u32, RET][..]),
+        ("lo", &[RET][..]),
         ("hi", &[0x5E18_0400, RET]),
         ("comb", &[0x6E18_0420, RET]),
     ] {
@@ -3187,6 +3187,37 @@ i8x16 comb(i8x8 a, i8x8 b) {\n\
         m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
         let insns = x64(SRC, name);
         m.expect(insns.len() <= 3, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// A 64-bit lane inserted between two registers is one instruction: `zip1`
+/// or `vunpcklpd` pairs the low lanes into any register, and a low lane
+/// written over the value's register copies the vector's high lane beside
+/// it. A vector of two doubles needs no zero under its low half, and a
+/// scalar read of lane 0 already in its register emits nothing.
+#[test]
+fn a_64_bit_lane_moves_in_one_instruction() {
+    const SRC: &str = "typedef double d1 __attribute__((vector_size(8)));\n\
+typedef double d2 __attribute__((vector_size(16)));\n\
+d2 swap_comb(d1 a, d1 b) { return (d2){b[0], a[0]}; }\n\
+d2 low_over(d1 a, d2 b) { d2 r = b; r[0] = a[0]; return r; }\n\
+double lane0(d2 a) { return a[0]; }\n\
+d2 pair(d2 a, d2 b) { return (d2){b[0], a[0]}; }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("swap_comb", &[0x4EC0_3820u32, RET][..]),
+        ("low_over", &[0x6E18_4420, RET]),
+        ("lane0", &[RET]),
+        ("pair", &[0x4EC0_3820, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+    }
+    for (name, n) in [("lane0", 1), ("pair", 2)] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == n, || format!("x86-64 {name}: {insns:x?}"));
     }
     m.finish();
 }

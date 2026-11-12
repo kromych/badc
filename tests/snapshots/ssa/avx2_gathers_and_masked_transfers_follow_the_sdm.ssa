@@ -322,18 +322,18 @@ fn ent_pc=470 n_params=2 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
     v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
+    v11  Undef                                            -> x0
     v12  Imm(0)                                           -> x2
     v13  Imm(0)                                           -> x2
     v14  Imm(0)                                           -> x2
     v15  Imm(0)                                           -> x2
     v16  VecInsert { vec=v11, value=v1, off=0, kind=F64, bytes=16 } -> d0
-    v17  Imm(0)                                           -> x2
-    v18  Imm(0)                                           -> x2
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x2
     v20  Imm(8)                                           -> x2
     v21  Imm(0)                                           -> x2
-    v22  VecInsert { vec=v16, value=v11, off=8, kind=F64, bytes=16 } -> [spill 0]
+    v22  VecInsert { vec=v16, value=v18, off=8, kind=F64, bytes=16 } -> [spill 0]
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
@@ -19401,7 +19401,7 @@ fn ent_pc=1367 n_params=0 variadic=false locals=20
     v241 Imm(0)                                           -> x7
     v242 Imm(0)                                           -> x7
     v243 Imm(0)                                           -> x7
-    v244 Imm(0)                                           -> x7
+    v244 Undef                                            -> x7
     v245 Imm(0)                                           -> x8
     v246 Imm(0)                                           -> x8
     v247 Imm(0)                                           -> x8
@@ -19438,7 +19438,7 @@ fn ent_pc=1367 n_params=0 variadic=false locals=20
     v278 Imm(0)                                           -> x0
     v279 Imm(0)                                           -> x0
     v280 Imm(0)                                           -> x0
-    v281 Imm(0)                                           -> x0
+    v281 Undef                                            -> x0
     v282 Imm(0)                                           -> x1
     v283 Imm(0)                                           -> x1
     v284 Imm(0)                                           -> x1
@@ -22973,7 +22973,7 @@ fn ent_pc=1369 n_params=0 variadic=false locals=49
     v1252 BinopI { op=shl, lhs=v1251, rhs_imm=3 }          -> x2
     v1253 Binop { op=add, lhs=v1246, rhs=v1252 }           -> x2
     v1254 LoadIndexed { base=v1246, index=v1251, scale=8, kind=I64 } -> x0
-    v1255 Imm(0)                                           -> x1
+    v1255 Undef                                            -> x1
     v1256 VecInsert { vec=v1255, value=v1254, off=0, kind=I64, bytes=16 } -> d1
     v1257 Imm(0)                                           -> x0
     v1258 Imm(0)                                           -> x0

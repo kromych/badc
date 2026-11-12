@@ -38,7 +38,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	d0, v0.d[0]
                	eor	v0.8b, v0.8b, v1.8b
                	mov	x0, v0.d[0]
                	mov	x17, #0x800000000000    // =140737488355328

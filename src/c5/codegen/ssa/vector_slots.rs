@@ -128,6 +128,32 @@ fn lane_store_bytes(kind: StoreKind) -> Option<u8> {
     }
 }
 
+/// The low half of a 16-byte vector `inst` completes: `inst` inserts the
+/// high 8 bytes over a low 8-byte insert nothing else reads, so the vector
+/// under that low insert is overwritten everywhere.
+pub(crate) fn pair_low(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<ValueId> {
+    let half = |kind: StoreKind| matches!(kind, StoreKind::F64 | StoreKind::I64);
+    let &Inst::VecInsert {
+        vec: low,
+        off: 8,
+        kind,
+        bytes: 16,
+        ..
+    } = inst
+    else {
+        return None;
+    };
+    match func.insts.get(low as usize)? {
+        &Inst::VecInsert {
+            off: 0,
+            kind: k,
+            bytes: 16,
+            ..
+        } if half(kind) && half(k) && uses.get(low as usize) == Some(&1) => Some(low),
+        _ => None,
+    }
+}
+
 /// Rewrite the eligible slots of `func`; returns them.
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {

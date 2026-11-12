@@ -101,7 +101,6 @@ Disassembly of section .text:
                	retq
 
 <mk_l>:
-               	xorl	%eax, %eax
                	vmovq	%rdi, %xmm0
                	vpinsrq	$0x1, %rsi, %xmm0, %xmm0
                	movapd	%xmm0, %xmm15
@@ -150,22 +149,16 @@ Disassembly of section .text:
 
 <put_d>:
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	vpermilpd	$0x0, %xmm0, %xmm0 # xmm0 = xmm0[0,0]
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0
-               	xorl	%ecx, %ecx
-               	vmovq	%xmm0, %r11
-               	vmovq	%r11, %xmm0
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm1
-               	vmovq	%xmm1, %r11
-               	vpinsrq	$0x1, %r11, %xmm0, %xmm0
+               	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	retq
 
 <get_d>:
                	movapd	%xmm0, %xmm1
                	mulpd	%xmm0, %xmm1
-               	vpermilpd	$0x0, %xmm1, %xmm1 # xmm1 = xmm1[0,0]
                	movapd	%xmm0, %xmm15
                	mulpd	%xmm0, %xmm15
                	movapd	%xmm15, %xmm0
@@ -199,9 +192,7 @@ Disassembly of section .text:
 
 <put_d4>:
                	vextracti128	$0x1, %ymm0, %xmm2
-               	vmovq	%xmm1, %r11
-               	movapd	%xmm2, %xmm1
-               	vpinsrq	$0x1, %r11, %xmm1, %xmm1
+               	vunpcklpd	%xmm1, %xmm2, %xmm1 # xmm1 = xmm2[0],xmm1[0]
                	vinserti128	$0x1, %xmm1, %ymm0, %ymm0
                	vmulpd	%ymm0, %ymm0, %ymm0
                	retq
@@ -209,7 +200,6 @@ Disassembly of section .text:
 <get_d4>:
                	vaddpd	%ymm0, %ymm0, %ymm0
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpermilpd	$0x0, %xmm0, %xmm0 # xmm0 = xmm0[0,0]
                	vzeroupper
                	retq
 
@@ -819,7 +809,6 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	vextracti128	$0x1, %ymm0, %xmm1
-               	vpermilpd	$0x0, %xmm1, %xmm1 # xmm1 = xmm1[0,0]
                	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm1

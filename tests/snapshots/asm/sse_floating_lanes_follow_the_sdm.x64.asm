@@ -2858,17 +2858,17 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	xorl	%eax, %eax
                	movups	0x60(%rsp), %xmm14
                	vmovq	%xmm14, %rcx
                	vmovq	%rcx, %xmm0
                	movups	0x50(%rsp), %xmm14
-               	vmovq	%xmm14, %rcx
-               	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
+               	vmovq	%xmm14, %rax
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	leaq	-0xe0(%rbp), %rdx
                	movups	%xmm0, -0xe0(%rbp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
+               	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rdi
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
@@ -2876,17 +2876,17 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	xorl	%eax, %eax
                	movups	0x60(%rsp), %xmm14
                	vpextrq	$0x1, %xmm14, %rcx
                	vmovq	%rcx, %xmm0
                	movups	0x50(%rsp), %xmm14
-               	vpextrq	$0x1, %xmm14, %rcx
-               	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
+               	vpextrq	$0x1, %xmm14, %rax
+               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	leaq	-0xe0(%rbp), %rdx
                	movups	%xmm0, -0xe0(%rbp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
+               	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rdi
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
@@ -2933,7 +2933,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	%rcx, <rip> # <addr>
-               	xorl	%eax, %eax
                	movups	0x60(%rsp), %xmm0
                	vpextrq	$0x1, %xmm0, %r8
                	vmovq	%r8, %xmm1
@@ -2944,6 +2943,7 @@ Disassembly of section .text:
                	movups	%xmm0, -0xe0(%rbp)
                	movq	<rip>, %rcx # <addr>
                	movabsq	$0x100000001b3, %rsi    # imm = 0x100000001B3
+               	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rdi
                	xorq	%rdi, %rcx
                	imulq	%rsi, %rcx
@@ -2981,8 +2981,8 @@ Disassembly of section .text:
                	movq	%rcx, <rip> # <addr>
                	movups	0x50(%rsp), %xmm14
                	vpextrq	$0x1, %xmm14, %r8
-               	xorl	%eax, %eax
                	vmovq	%r8, %xmm0
+               	xorl	%eax, %eax
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	leaq	-0xe0(%rbp), %rdx
                	movups	%xmm0, -0xe0(%rbp)
@@ -3544,9 +3544,7 @@ Disassembly of section .text:
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
                	movsd	-0x10(%rbp), %xmm2
-               	vmovq	%xmm2, %r11
-               	movapd	%xmm0, %xmm14
-               	vpinsrq	$0x1, %r11, %xmm14, %xmm14
+               	vunpcklpd	%xmm2, %xmm0, %xmm14 # xmm14 = xmm0[0],xmm2[0]
                	movups	%xmm14, 0x70(%rsp)
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rsi
@@ -3669,9 +3667,7 @@ Disassembly of section .text:
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
                	movsd	-0x10(%rbp), %xmm0
-               	vmovq	%xmm0, %r11
-               	movapd	%xmm1, %xmm14
-               	vpinsrq	$0x1, %r11, %xmm14, %xmm14
+               	vunpcklpd	%xmm0, %xmm1, %xmm14 # xmm14 = xmm1[0],xmm0[0]
                	movups	%xmm14, 0x80(%rsp)
                	leaq	-0xb0(%rbp), %r9
                	movups	0x60(%rsp), %xmm14
@@ -3825,7 +3821,6 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	vfmsub213sd	%xmm15, %xmm0, %xmm2 # xmm2 = (xmm0 * xmm2) - xmm15
                	vpermilps	$0x0, %xmm1, %xmm3 # xmm3 = xmm1[0,0,0,0]
-               	vpermilps	$0x0, %xmm1, %xmm1 # xmm1 = xmm1[0,0,0,0]
                	vmulss	%xmm1, %xmm3, %xmm1
                	cvtss2sd	%xmm1, %xmm1
                	movq	%rcx, %xmm15

@@ -73,7 +73,6 @@ Disassembly of section .text:
                	ret
 
 <mk_l>:
-               	mov	x2, #0x0                // =0
                	fmov	d0, x0
                	mov	v0.d[1], x1
                	add	v0.2d, v0.2d, v0.2d
@@ -90,8 +89,7 @@ Disassembly of section .text:
                	mov	s3, v0.s[0]
                	fmul	s3, s3, s2
                	mov	x0, #0x0                // =0
-               	fmov	s16, s3
-               	mov	v3.16b, v16.16b
+               	fmov	s3, s3
                	fmul	s1, s1, s2
                	mov	v16.16b, v3.16b
                	mov	v16.s[1], v1.s[0]
@@ -114,18 +112,13 @@ Disassembly of section .text:
 
 <put_d>:
                	fmov	d2, #0.50000000
-               	mov	d0, v0.d[0]
                	fsub	d0, d0, d2
-               	mov	x0, #0x0                // =0
-               	fmov	d16, d0
-               	mov	v0.16b, v16.16b
                	fsub	d1, d1, d2
                	mov	v0.d[1], v1.d[0]
                	ret
 
 <get_d>:
                	fmul	v1.2d, v0.2d, v0.2d
-               	mov	d1, v1.d[0]
                	fmul	v0.2d, v0.2d, v0.2d
                	mov	d0, v0.d[1]
                	fadd	d0, d1, d0
@@ -307,8 +300,7 @@ Disassembly of section .text:
 
 <three>:
                	mov	x0, #0x0                // =0
-               	fmov	s16, s0
-               	fmov	d0, d16
+               	fmov	s0, s0
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	mov	v0.s[1], v17.s[0]
@@ -317,8 +309,7 @@ Disassembly of section .text:
                	mov	v16.16b, v3.16b
                	mov	v16.s[1], v1.s[0]
                	fmov	d1, d16
-               	fmov	s16, s2
-               	fmov	d2, d16
+               	fmov	s2, s2
                	fmov	d17, x1
                	mov	v2.s[1], v17.s[0]
                	ret

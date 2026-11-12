@@ -511,7 +511,11 @@ pub(super) fn emit_inst(
             kind,
             bytes,
         } => {
-            let blank = matches!(fcx.func.insts[*vec as usize], Inst::Undef | Inst::Imm(0));
+            let blank = match fcx.func.insts[*vec as usize] {
+                Inst::Undef => Some(true),
+                Inst::Imm(0) => Some(false),
+                _ => None,
+            };
             let lane = (*vec, *value, *off, *kind, *bytes);
             emit_vec_insert(code, lane, blank, dst, alloc, frame)
         }

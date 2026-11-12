@@ -36,8 +36,7 @@ Disassembly of section .text:
                	ldur	s0, [x29, #-0x10]
                	fmov	s0, s0
                	mov	x0, #0x0                // =0
-               	fmov	s16, s0
-               	fmov	d0, d16
+               	fmov	s0, s0
                	smov	x0, v0.s[0]
                	eor	x0, x0, #0x1
                	mov	x17, #0x1               // =1

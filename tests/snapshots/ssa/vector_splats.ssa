@@ -1763,7 +1763,7 @@ fn ent_pc=31 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   Imm(0)                                           -> x0
+    v4   Undef                                            -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0

@@ -306,7 +306,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fdiv	v19.2d, v5.2d, v2.2d
-               	mov	d19, v19.d[0]
                	fmov	d21, #5.25000000
                	fcmp	d19, d21
                	b.eq	<addr>
@@ -732,8 +731,7 @@ Disassembly of section .text:
                	mov	d4, v0.d[0]
                	mov	x0, #0x0                // =0
                	mov	s6, v4.s[0]
-               	fmov	s16, s6
-               	mov	v6.16b, v16.16b
+               	fmov	s6, s6
                	mov	s4, v4.s[1]
                	mov	v16.16b, v6.16b
                	mov	v16.s[1], v4.s[0]
@@ -861,7 +859,6 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	q0, [x0]
-               	mov	d0, v0.d[0]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x35               // =53

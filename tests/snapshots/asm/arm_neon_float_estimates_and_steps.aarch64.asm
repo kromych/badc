@@ -526,8 +526,7 @@ Disassembly of section .text:
                	str	w1, [x0, #0x20]
                	mov	s0, v2.s[3]
                	mov	x0, #0x0                // =0
-               	fmov	s16, s0
-               	fmov	d0, d16
+               	fmov	s0, s0
                	mov	w0, v0.s[0]
                	ubfx	x0, x0, #23, #8
                	mov	w1, v0.s[0]
@@ -542,7 +541,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	q0, [x0]
                	frsqrte	v0.2d, v0.2d
-               	mov	d0, v0.d[0]
                	mov	x0, v0.d[0]
                	ubfx	x0, x0, #52, #11
                	mov	x1, v0.d[0]

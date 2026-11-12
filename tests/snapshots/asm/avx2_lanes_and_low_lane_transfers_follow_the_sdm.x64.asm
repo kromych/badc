@@ -274,22 +274,21 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	xorl	%eax, %eax
                	movq	-0x8(%rbp), %rdx
                	vmovq	%rdx, %xmm0
+               	xorl	%eax, %eax
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	leaq	0x3(%r14), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movl	-0x8(%rbp), %ecx
-               	vmovd	%ecx, %xmm0
+               	movl	-0x8(%rbp), %edx
+               	vmovd	%edx, %xmm0
                	vpinsrd	$0x1, %eax, %xmm0, %xmm0
                	vpinsrd	$0x2, %eax, %xmm0, %xmm0
                	vpinsrd	$0x3, %eax, %xmm0, %xmm0
                	movups	%xmm0, -0x40(%rbp)
                	leaq	0x5(%r14), %rax
-               	leaq	-0x8(%rbp), %rcx
                	movzwq	(%rax), %r10
                	movw	%r10w, (%rcx)
                	xorl	%r12d, %r12d

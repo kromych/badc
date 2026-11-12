@@ -1017,11 +1017,24 @@ pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
 /// `INS <Vd>.<T>[index], <Vn>.<T>[0]` -- copy the low element of `vn` into
 /// one element of `vd`, the others unchanged.
 pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> u32 {
+    enc_ins_elem_from(vd, esize, index, vn, 0)
+}
+
+/// `INS <Vd>.<T>[index], <Vn>.<T>[from]`.
+pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u32) -> u32 {
     debug_assert!(vd < 32 && vn < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 8);
-    debug_assert!(index * esize < 16);
+    debug_assert!(index * esize < 16 && from * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    0x6E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
+    let imm4 = from << esize.trailing_zeros();
+    0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32)
+}
+
+/// `ZIP1 <Vd>.2D, <Vn>.2D, <Vm>.2D` -- the low element of `vn`, then the
+/// low element of `vm`.
+pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> u32 {
+    debug_assert!(vd < 32 && vn < 32 && vm < 32);
+    0x4EC0_3800 | ((vm as u32) << 16) | ((vn as u32) << 5) | (vd as u32)
 }
 
 /// `DUP <Vd>.<T>, <R>n` -- every `esize`-byte lane of `vd`, all 16 bytes
@@ -2978,6 +2991,9 @@ mod tests {
         // mov v1.s[2], v5.s[0] / v0.d[1], v7.d[0]
         assert_eq!(enc_ins_elem(1, 4, 2, 5), 0x6E14_04A1);
         assert_eq!(enc_ins_elem(0, 8, 1, 7), 0x6E18_04E0);
+        // mov v1.d[1], v2.d[1]; zip1 v3.2d, v4.2d, v5.2d
+        assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1), 0x6E18_4441);
+        assert_eq!(enc_zip1_2d(3, 4, 5), 0x4EC5_3883);
         // mov s0, v2.s[3] / d6, v1.d[1]
         assert_eq!(enc_dup_elem_scalar(0, 2, 4, 3), 0x5E1C_0440);
         assert_eq!(enc_dup_elem_scalar(6, 1, 8, 1), 0x5E18_0426);

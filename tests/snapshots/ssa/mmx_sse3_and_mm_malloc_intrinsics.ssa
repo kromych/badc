@@ -3250,7 +3250,7 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     v582 Imm(0)                                           -> x0
     v583 Imm(0)                                           -> x0
     v584 Imm(0)                                           -> x0
-    v585 Imm(0)                                           -> x0
+    v585 Undef                                            -> x0
     v586 Imm(0)                                           -> x0
     v587 Imm(0)                                           -> x0
     v588 Imm(0)                                           -> x0
@@ -3340,7 +3340,7 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     v666 Imm(0)                                           -> x0
     v667 Imm(0)                                           -> x0
     v668 Imm(0)                                           -> x0
-    v669 Imm(0)                                           -> x0
+    v669 Undef                                            -> x0
     v670 Imm(0)                                           -> x0
     v671 Imm(0)                                           -> x0
     v672 Imm(0)                                           -> x0
@@ -3394,7 +3394,7 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     v720 Imm(0)                                           -> x0
     v721 Imm(0)                                           -> x0
     v722 Imm(0)                                           -> x0
-    v723 Imm(0)                                           -> x0
+    v723 Undef                                            -> x0
     v724 Imm(0)                                           -> x0
     v725 Imm(0)                                           -> x0
     v726 Imm(0)                                           -> x0
@@ -3504,7 +3504,7 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     v820 Imm(0)                                           -> x2
     v821 LocalAddr(-2)                                    -> x2
     v822 Imm(0)                                           -> x2
-    v823 Imm(0)                                           -> x2
+    v823 Undef                                            -> x2
     v824 Imm(0)                                           -> x2
     v825 LoadLocal { off=-2, kind=F64 }                   -> d0
     v826 Imm(0)                                           -> x2
@@ -3532,7 +3532,7 @@ fn ent_pc=405 n_params=0 variadic=false locals=4
     v848 Imm(0)                                           -> x2
     v849 Imm(0)                                           -> x2
     v850 Imm(0)                                           -> x2
-    v851 Imm(0)                                           -> x2
+    v851 Undef                                            -> x2
     v852 Imm(0)                                           -> x2
     v853 Imm(0)                                           -> x2
     v854 Imm(0)                                           -> x2

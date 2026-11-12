@@ -1628,7 +1628,7 @@ fn ent_pc=399 n_params=2 variadic=false locals=5
     v16  Imm(0)                                           -> x1
     v17  Mcpy { dst=v15, src=v3, size=8, align=1 }        -> -
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
+    v19  Undef                                            -> x0
     v20  Imm(0)                                           -> x0
     v21  ImmData(8)                                       -> x0
     v22  BinopI { op=and, lhs=v8, rhs_imm=4294967295 }    -> x1
@@ -3472,20 +3472,20 @@ fn ent_pc=402 n_params=1 variadic=false locals=6
     v251 Imm(0)                                           -> x0
     v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0
-    v254 Imm(0)                                           -> x0
+    v254 Undef                                            -> x0
     v255 Imm(0)                                           -> x1
     v256 Imm(0)                                           -> x1
     v257 Imm(0)                                           -> x1
-    v258 Imm(0)                                           -> x1
-    v259 VecExtract { vec=v246, off=0, kind=I64, bytes=16 } -> x1
-    v260 Imm(0)                                           -> x2
-    v261 Imm(0)                                           -> x2
+    v258 Imm(0)                                           -> x2
+    v259 VecExtract { vec=v246, off=0, kind=I64, bytes=16 } -> x2
+    v260 Imm(0)                                           -> x6
+    v261 Imm(0)                                           -> x6
     v262 VecInsert { vec=v254, value=v259, off=0, kind=I64, bytes=16 } -> d0
-    v263 Imm(0)                                           -> x1
-    v264 Imm(0)                                           -> x1
-    v265 Imm(8)                                           -> x1
-    v266 Imm(0)                                           -> x1
-    v267 VecInsert { vec=v262, value=v254, off=8, kind=I64, bytes=16 } -> d0
+    v263 Imm(0)                                           -> x0
+    v264 Imm(0)                                           -> x0
+    v265 Imm(8)                                           -> x0
+    v266 Imm(0)                                           -> x0
+    v267 VecInsert { vec=v262, value=v257, off=8, kind=I64, bytes=16 } -> d0
     v268 Imm(0)                                           -> x0
     v269 Imm(0)                                           -> x0
     v270 LifetimeEnd(0)                                   -> -
@@ -3515,17 +3515,17 @@ fn ent_pc=402 n_params=1 variadic=false locals=6
   block 4  start_pc=0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
+    v19  Undef                                            -> x0
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
     v23  VecInsert { vec=v19, value=v192, off=0, kind=I64, bytes=16 } -> d0
-    v24  Imm(0)                                           -> x1
-    v25  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x1
     v27  Imm(8)                                           -> x1
     v28  Imm(0)                                           -> x1
-    v29  VecInsert { vec=v23, value=v19, off=8, kind=I64, bytes=16 } -> d0
+    v29  VecInsert { vec=v23, value=v25, off=8, kind=I64, bytes=16 } -> d0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
     v32  Imm(0)                                           -> x0

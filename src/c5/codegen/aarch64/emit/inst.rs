@@ -525,7 +525,11 @@ pub(super) fn emit_inst(
         } => emit_vec_insert(
             code,
             (*vec, *value, *off, *kind, *bytes),
-            matches!(func.insts[*vec as usize], Inst::Undef | Inst::Imm(0)),
+            match func.insts[*vec as usize] {
+                Inst::Undef => Some(true),
+                Inst::Imm(0) => Some(false),
+                _ => None,
+            },
             (dst, alloc, frame, scratch),
         ),
         Inst::VecSplat { value, kind, bytes } => {
@@ -835,6 +839,10 @@ fn emit_vec_extract(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("VecExtract: dst not fp reg / spill");
         };
+        // A scalar reads only its low bits: the low lane in place is it.
+        if index == 0 && dd == qn && matches!(dst, Place::FpReg(_)) {
+            return Ok(());
+        }
         emit(code, enc_dup_elem_scalar(dd, qn, esize, index));
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
@@ -853,6 +861,7 @@ fn emit_vec_extract(
 
 /// `Inst::VecInsert`: `ins` of the value into the lane of a copy of the
 /// vector, from a general register or from the low element of an FP one.
+/// `blank` is `Some(undefined)` for a vector of no value or of zero.
 fn emit_vec_insert(
     code: &mut Vec<u8>,
     (vec, value, off, kind, bytes): (
@@ -862,7 +871,7 @@ fn emit_vec_insert(
         StoreKind,
         u8,
     ),
-    blank: bool,
+    blank: Option<bool>,
     (dst, alloc, frame, scratch): (Place, &Allocation, Frame, &ScratchPool),
 ) -> Emit {
     use super::encode::{enc_ins_elem, enc_ins_gen};
@@ -905,22 +914,49 @@ fn emit_vec_insert(
         };
         r.0
     };
+    // A 64-bit lane between two registers: `zip1` pairs the low lanes
+    // into any register, and a result over the value keeps its low lane.
+    if float
+        && esize == 8
+        && bytes == 16
+        && let (Place::FpReg(d), Place::FpReg(n)) = (dst, place_of(alloc, vec))
+        && d != n
+    {
+        if off == 8 {
+            emit(code, super::encode::enc_zip1_2d(d, n, src));
+            return Ok(());
+        }
+        if d == src {
+            emit(code, super::encode::enc_ins_elem_from(d, 8, 1, n, 1));
+            return Ok(());
+        }
+    }
     let qd = match dst {
         Place::FpReg(r) if !(float && r == src) => r,
         _ => frame.fp_scratch[0],
     };
     // The low lane over a zero or undefined vector: a scalar `fmov` clears
-    // the bits above it.
-    if blank && off == 0 && esize >= 4 {
-        emit(
-            code,
-            match (float, esize) {
-                (true, 8) => super::encode::enc_fmov_d_d(qd, src),
-                (true, _) => super::encode::enc_fmov_s_s(qd, src),
-                (false, 8) => super::encode::enc_fmov_x_to_d(qd, Reg(src)),
-                (false, _) => super::encode::enc_fmov_w_to_s(qd, Reg(src)),
-            },
-        );
+    // the bits above it, and over an undefined one the value's register
+    // already is the result.
+    if let Some(undefined) = blank
+        && off == 0
+        && esize >= 4
+    {
+        let qd = match dst {
+            Place::FpReg(r) => r,
+            _ => frame.fp_scratch[0],
+        };
+        if !(undefined && float && qd == src) {
+            emit(
+                code,
+                match (float, esize) {
+                    (true, 8) => super::encode::enc_fmov_d_d(qd, src),
+                    (true, _) => super::encode::enc_fmov_s_s(qd, src),
+                    (false, 8) => super::encode::enc_fmov_x_to_d(qd, Reg(src)),
+                    (false, _) => super::encode::enc_fmov_w_to_s(qd, Reg(src)),
+                },
+            );
+        }
         propagate(code, qd);
         return Ok(());
     }

@@ -916,22 +916,31 @@ fn filled_locals(func: &FunctionSsa) -> BTreeSet<i64> {
 /// Make each `Inst::Undef` an instruction or a terminator reads the
 /// constant zero, which suits every kind and register file, ahead of
 /// allocation. One only phis read stays: its edges move nothing and keep
-/// it unplaced.
+/// it unplaced. So does the vector under the low half of a pair
+/// ([`super::vector_slots::pair_low`]): the halves overwrite all of it.
 pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
     if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
         return;
     }
     let counts = super::reg_alloc::compute_use_counts(func);
     let reads = super::reg_alloc::operands_read(func, &counts);
+    let lows: BTreeSet<ValueId> = func
+        .insts
+        .iter()
+        .filter_map(|inst| super::vector_slots::pair_low(func, &counts, inst))
+        .collect();
     let mut read = alloc::vec![false; func.insts.len()];
     let mut mark = |v: ValueId| {
         if let Some(r) = read.get_mut(v as usize) {
             *r = true;
         }
     };
-    for (inst, &live) in func.insts.iter().zip(&reads) {
-        if live && !matches!(inst, Inst::Phi { .. }) {
-            inst.for_each_operand(&mut mark);
+    for (v, (inst, &live)) in func.insts.iter().zip(&reads).enumerate() {
+        match inst {
+            _ if !live => {}
+            Inst::Phi { .. } => {}
+            Inst::VecInsert { value, .. } if lows.contains(&(v as ValueId)) => mark(*value),
+            _ => inst.for_each_operand(&mut mark),
         }
     }
     for block in &func.blocks {

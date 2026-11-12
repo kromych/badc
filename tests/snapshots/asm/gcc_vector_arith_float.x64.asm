@@ -275,9 +275,7 @@ Disassembly of section .text:
                	addss	%xmm5, %xmm4
                	movss	%xmm4, -0x14(%rbp)
                	vextracti128	$0x1, %ymm1, %xmm4
-               	vpermilps	$0x0, %xmm4, %xmm4 # xmm4 = xmm4[0,0,0,0]
                	vextracti128	$0x1, %ymm2, %xmm5
-               	vpermilps	$0x0, %xmm5, %xmm5 # xmm5 = xmm5[0,0,0,0]
                	addss	%xmm5, %xmm4
                	movss	%xmm4, -0x10(%rbp)
                	vextracti128	$0x1, %ymm1, %xmm4
@@ -327,9 +325,7 @@ Disassembly of section .text:
                	mulss	%xmm5, %xmm4
                	movss	%xmm4, -0x14(%rbp)
                	vextracti128	$0x1, %ymm1, %xmm4
-               	vpermilps	$0x0, %xmm4, %xmm4 # xmm4 = xmm4[0,0,0,0]
                	vextracti128	$0x1, %ymm2, %xmm5
-               	vpermilps	$0x0, %xmm5, %xmm5 # xmm5 = xmm5[0,0,0,0]
                	mulss	%xmm5, %xmm4
                	movss	%xmm4, -0x10(%rbp)
                	vextracti128	$0x1, %ymm1, %xmm4

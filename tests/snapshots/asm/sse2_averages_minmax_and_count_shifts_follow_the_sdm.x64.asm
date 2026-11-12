@@ -1256,10 +1256,10 @@ Disassembly of section .text:
                	cvtsi2ss	%rbx, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
                	movups	(%r12), %xmm0
-               	xorl	%eax, %eax
-               	vmovq	%xmm0, %rcx
-               	vmovq	%rcx, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
+               	xorl	%ecx, %ecx
+               	vmovq	%xmm0, %rdx
+               	vmovq	%rdx, %xmm0
+               	vpinsrq	$0x1, %rcx, %xmm0, %xmm0
                	leaq	-0x30(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -1269,8 +1269,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	xorl	%eax, %eax
                	vmovq	%rbx, %xmm0
+               	xorl	%eax, %eax
                	vpinsrq	$0x1, %rax, %xmm0, %xmm0
                	leaq	-0x20(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi

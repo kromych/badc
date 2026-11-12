@@ -596,6 +596,7 @@ fn invariant_op(inst: &Inst) -> bool {
                 | BinOp::Shr
                 | BinOp::Shru
                 | BinOp::Ror
+                | BinOp::Ror32
                 | BinOp::Add
                 | BinOp::Sub
                 | BinOp::Mul

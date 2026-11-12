@@ -759,6 +759,7 @@ pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
         BinOp::Ror => super::encode::enc_rorv(rd, rn, rm),
+        BinOp::Ror32 => super::encode::enc_rorv_w(rd, rn, rm),
         _ => return None,
     })
 }
@@ -877,6 +878,9 @@ pub(super) fn binop_imm_peephole(
         BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
         BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
+        BinOp::Ror32 => shift_amount
+            .filter(|&s| s < 32)
+            .map(|s| super::encode::enc_ror_imm_w(rd, rn, s)),
         // `x * (2^k + 1)` is `x + (x << k)`.
         BinOp::Mul => pow2_shift
             .map(|s| super::encode::enc_lsl_imm(rd, rn, s))

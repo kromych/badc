@@ -3267,6 +3267,26 @@ d2 dz(double x) { return (d2){x}; }\n";
     m.finish();
 }
 
+/// A 32-bit unsigned rotate by a constant is the 32-bit rotate
+/// instruction, as with gcc 16: `ror w0, w0, #2` and `rorl $2, %eax`.
+#[test]
+fn a_32_bit_rotate_is_one_instruction() {
+    const SRC: &str = "unsigned r(unsigned x) { return x << 30 | x >> 2; }\n\
+unsigned l(unsigned x) { return (x << 13) | (x >> 19); }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("r", &[0x1380_0800u32, RET][..]),
+        ("l", &[0x1380_4C00, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        m.expect(insns.len() <= 3, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

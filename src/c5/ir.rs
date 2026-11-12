@@ -1408,6 +1408,9 @@ pub(crate) enum BinOp {
     /// shift / OR shape to this opcode so x86_64's `ror` and
     /// aarch64's `ror` lower to a single instruction.
     Ror,
+    /// `Ror` of the low 32 bits, the result zero-extended: the rotate of a
+    /// 32-bit unsigned value, in the 32-bit forms.
+    Ror32,
     Add,
     Sub,
     Mul,
@@ -1599,6 +1602,7 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         BinOp::Mulh
         | BinOp::Mulhu
         | BinOp::Ror
+        | BinOp::Ror32
         | BinOp::Fadd
         | BinOp::Fsub
         | BinOp::Fmul

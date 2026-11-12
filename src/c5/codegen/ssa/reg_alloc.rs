@@ -635,14 +635,17 @@ const X86_RDX: u8 = 2;
 
 /// A shift or rotate.
 fn is_shift_op(op: BinOp) -> bool {
-    matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+    matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    )
 }
 
 /// A rotate, whose variable count x86-64 reads in cl: the shifts take
 /// the BMI2 `shlx` / `shrx` / `sarx` forms instead, which read the
 /// count in any register.
 fn is_cl_shift_op(op: BinOp) -> bool {
-    op == BinOp::Ror
+    matches!(op, BinOp::Ror | BinOp::Ror32)
 }
 
 /// The operands x86-64 may write the result of `inst` over, in its two-address
@@ -660,6 +663,7 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
         (BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror, Err(k)) if (0..64).contains(&k) => {
             [Some(lhs), None]
         }
+        (BinOp::Ror32, Err(k)) if (0..32).contains(&k) => [Some(lhs), None],
         (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None],
         (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None],
         (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None],

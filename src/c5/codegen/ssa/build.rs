@@ -2228,6 +2228,7 @@ pub(crate) fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
     match op {
         BinOp::Mulh | BinOp::Mulhu => None,
         BinOp::Ror if !(0..64).contains(&k2) => None,
+        BinOp::Ror32 if !(0..32).contains(&k2) => None,
         _ => crate::c5::vm::eval::fold_binop(op, k1, k2),
     }
 }

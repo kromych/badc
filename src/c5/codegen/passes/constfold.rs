@@ -991,6 +991,7 @@ fn binopi_safe(op: BinOp) -> bool {
             | BinOp::Shr
             | BinOp::Shru
             | BinOp::Ror
+            | BinOp::Ror32
             | BinOp::Eq
             | BinOp::Ne
             | BinOp::Lt
@@ -1016,6 +1017,7 @@ fn binopi_safe(op: BinOp) -> bool {
 fn imm_encodes_free(op: BinOp, imm: i64) -> bool {
     match op {
         BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => (0..64).contains(&imm),
+        BinOp::Ror32 => (0..32).contains(&imm),
         BinOp::Add | BinOp::Sub => imm.unsigned_abs() < 4096,
         BinOp::Mul => imm > 0 && (imm as u64).is_power_of_two(),
         BinOp::And => imm == 0xffff_ffff,

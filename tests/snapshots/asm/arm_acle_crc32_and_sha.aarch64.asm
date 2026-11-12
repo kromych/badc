@@ -384,9 +384,7 @@ Disassembly of section .text:
                	ldr	q2, [x4]
                	add	v1.4s, v2.4s, v1.4s
                	mov	w2, v0.s[0]
-               	mov	w2, w2
-               	lsl	x4, x2, #30
-               	orr	x4, x4, x2, lsr #2
+               	ror	w4, w2, #0x2
                	cmp	w0, #0x5
                	b.ge	<addr>
                	fmov	s2, w3

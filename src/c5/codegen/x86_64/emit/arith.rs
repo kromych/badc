@@ -909,9 +909,14 @@ fn shift_mnem(op: BinOp) -> Mnem {
         BinOp::Shl => Mnem::Shl,
         BinOp::Shr => Mnem::Sar,
         BinOp::Shru => Mnem::Shr,
-        BinOp::Ror => Mnem::Ror,
+        BinOp::Ror | BinOp::Ror32 => Mnem::Ror,
         _ => unreachable!("shift_mnem: non-shift op {op:?}"),
     }
+}
+
+/// The operand size of a shift or rotate: 4 for the 32-bit rotate.
+fn shift_size(op: BinOp) -> u8 {
+    if op == BinOp::Ror32 { 4 } else { 8 }
 }
 
 /// Stage the lhs into the destination of a two-operand op.
@@ -1169,7 +1174,10 @@ fn emit_int_binop(
     // moves the count into cl while preserving a live rcx with a push / pop,
     // which a count materialized into rcx here would defeat; r11 is always
     // safe.
-    let is_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror);
+    let is_shift = matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    );
     let rhs_scratch = if is_shift {
         if rd.0 == SCRATCH_R10.0 {
             SCRATCH_R11
@@ -1551,7 +1559,9 @@ fn emit_shift_by_count_reg(
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,
     };
-    let do_shift = |code: &mut Vec<u8>, target: Reg| emit_shift_cl(code, shift_mnem(op), 8, target);
+    let do_shift = |code: &mut Vec<u8>, target: Reg| {
+        emit_shift_cl(code, shift_mnem(op), shift_size(op), target)
+    };
     if rd.0 == Reg::RCX.0 {
         // Stage the value in a scratch disjoint from rcx and the count
         // register; r11 is reserved outside both allocator banks and
@@ -1598,7 +1608,7 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
     match op {
         // imm8 form in range, and the cl path for a count C99 6.5.7p3
         // leaves undefined; neither materializes the immediate.
-        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => false,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32 => false,
         BinOp::Mod | BinOp::Modu => false,
         BinOp::Mul => !(fits_i32 || (imm > 0 && (imm as u64).is_power_of_two())),
         BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => !fits_i32,
@@ -1698,9 +1708,17 @@ pub(super) fn emit_binop_imm(
             super::encode::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
             true
         }
-        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror if shift_amount.is_some() => {
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+            if shift_amount.is_some() =>
+        {
             stage_lhs(code, rd, rn);
-            emit_shift_ri(code, shift_mnem(op), 8, rd, shift_amount.unwrap());
+            emit_shift_ri(
+                code,
+                shift_mnem(op),
+                shift_size(op),
+                rd,
+                shift_amount.unwrap(),
+            );
             true
         }
         BinOp::Add if rd.0 != rn.0 && imm_fits_i32 => {
@@ -1766,7 +1784,10 @@ pub(super) fn emit_binop_imm(
     // A shift by a count outside 0..63 (C99 6.5.7p3 leaves it undefined)
     // routes through cl like the register-shift path, so the emit stays
     // well-formed.
-    if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror) {
+    if matches!(
+        op,
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
+    ) {
         return emit_shift_by_count_reg(
             code,
             op,

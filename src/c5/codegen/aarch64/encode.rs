@@ -712,6 +712,11 @@ pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_2C00, rd, rn, rm)
 }
 
+/// `RORV <Wd>, <Wn>, <Wm>` -- the 32-bit rotate, the result zero-extended.
+pub(crate) fn enc_rorv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_2C00, rd, rn, rm)
+}
+
 /// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
 pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
     0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
@@ -782,6 +787,15 @@ pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x93C0_0000
         | ((rn.0 as u32) << 16)
         | (((shift as u32) & 63) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `ROR <Wd>, <Wn>, #shift` (`EXTR Wd, Wn, Wn, #shift`) -- the 32-bit form.
+pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    0x1380_0000
+        | ((rn.0 as u32) << 16)
+        | (((shift as u32) & 31) << 10)
         | ((rn.0 as u32) << 5)
         | (rd.0 as u32)
 }
@@ -3019,6 +3033,9 @@ mod tests {
         assert_eq!(enc_ld1_st1_lane(true, 2, 8, 1, Reg(3)), 0x4D40_8462);
         assert_eq!(enc_ld1_st1_lane(false, 0, 4, 3, Reg(0)), 0x4D00_9000);
         assert_eq!(enc_ld1_st1_lane(false, 5, 8, 1, Reg(31)), 0x4D00_87E5);
+        // ror w0, w1, #2; rorv w0, w1, w2
+        assert_eq!(enc_ror_imm_w(Reg(0), Reg(1), 2), 0x1381_0820);
+        assert_eq!(enc_rorv_w(Reg(0), Reg(1), Reg(2)), 0x1AC2_2C20);
         // mov v1.d[1], v2.d[1]; zip1 v3.2d, v4.2d, v5.2d
         assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1), 0x6E18_4441);
         assert_eq!(enc_zip1_2d(3, 4, 5), 0x4EC5_3883);

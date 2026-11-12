@@ -1,8 +1,8 @@
 //! Recognize `(x >> c) | (x << (W - c))` shapes and fold them to a
 //! single `Ror`. Runs after `inline` so post-inline rotates
-//! exposed by parameter substitution become recognizable. Only the
-//! 64-bit form (`W == 64`) is matched; the per-arch emit rotates the
-//! full register.
+//! exposed by parameter substitution become recognizable. The 64-bit
+//! form rotates the full register; the 32-bit one, over a zero-extended
+//! word, is `Ror32` ([`match_rotate32`]).
 //!
 //! Three patterns are matched:
 //!
@@ -206,25 +206,114 @@ fn match_rotate(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)
     try_one(*lhs, *rhs).or_else(|| try_one(*rhs, *lhs))
 }
 
-/// Walk every function, rewrite recognized rotates to `Ror`.
+/// The value under a 32-bit truncation or zero-extension of `v` -- an
+/// `And` with `0xffffffff` or an unsigned 32-bit `Extend` -- or `v`.
+fn low_word(func: &FunctionSsa, v: ValueId) -> ValueId {
+    match func.insts.get(v as usize) {
+        Some(&Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm: 0xffff_ffff,
+        })
+        | Some(&Inst::Extend {
+            value: lhs,
+            kind: LoadKind::U32,
+            ..
+        }) => lhs,
+        _ => v,
+    }
+}
+
+/// A shift of `op` with its count, through a 32-bit truncation of it.
+fn shift32(func: &FunctionSsa, v: ValueId, want: BinOp) -> Option<(ValueId, ShiftAmount)> {
+    match *func.insts.get(low_word(func, v) as usize)? {
+        Inst::BinopI { op, lhs, rhs_imm } if op == want => Some((lhs, ShiftAmount::Imm(rhs_imm))),
+        Inst::Binop { op, lhs, rhs } if op == want => Some((lhs, ShiftAmount::Value(rhs))),
+        _ => None,
+    }
+}
+
+/// The 32-bit rotate the OR at `or_idx` computes: `(x >> c) | (x << (32 -
+/// c))` over a zero-extended `x`, the left shift's bits above 31 unread
+/// or cut, which `Ror32` computes from `x`'s low word. Returns that word
+/// and the right shift's count, by which the rotate turns.
+fn match_rotate32(func: &FunctionSsa, or_idx: usize) -> Option<(ValueId, RotateBy)> {
+    let Inst::Binop {
+        op: BinOp::Or,
+        lhs,
+        rhs,
+    } = func.insts[or_idx]
+    else {
+        return None;
+    };
+    let try_one = |a: ValueId, b: ValueId| -> Option<(ValueId, RotateBy)> {
+        let (xa, right) = shift32(func, a, BinOp::Shru)?;
+        let (xb, left) = shift32(func, b, BinOp::Shl)?;
+        // The right shift brings zeros down only from a zero-extended word.
+        let x = match func.insts.get(xa as usize)? {
+            Inst::BinopI {
+                op: BinOp::And,
+                rhs_imm: 0xffff_ffff,
+                ..
+            }
+            | Inst::Extend {
+                kind: LoadKind::U32,
+                ..
+            } if xa == xb => low_word(func, xa),
+            _ => return None,
+        };
+        let value = |c: &ShiftAmount| match *c {
+            ShiftAmount::Imm(k) => Some(k),
+            ShiftAmount::Value(v) => const_imm(func, v),
+        };
+        if let (Some(r), Some(l)) = (value(&right), value(&left)) {
+            return ((1..32).contains(&r) && r + l == 32).then_some((x, RotateBy::Imm(r)));
+        }
+        // `32 - n` against `n`, either way round, each through a 32-bit
+        // truncation: the right shift's count turns the rotate.
+        let ShiftAmount::Value(rc) = right else {
+            return None;
+        };
+        let ShiftAmount::Value(lc) = left else {
+            return None;
+        };
+        let minus = |v: ValueId| match func.insts.get(low_word(func, v) as usize)? {
+            &Inst::Binop {
+                op: BinOp::Sub,
+                lhs,
+                rhs,
+            } if const_imm(func, lhs) == Some(32) => Some(low_word(func, rhs)),
+            _ => None,
+        };
+        let complementary =
+            minus(lc) == Some(low_word(func, rc)) || minus(rc) == Some(low_word(func, lc));
+        complementary.then_some((x, RotateBy::Val(rc)))
+    };
+    try_one(lhs, rhs).or_else(|| try_one(rhs, lhs))
+}
+
+/// Walk every function, rewrite recognized rotates to `Ror` and the
+/// 32-bit ones to `Ror32`.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let n = func.insts.len();
-        let mut rewrites: Vec<(usize, ValueId, RotateBy)> = Vec::new();
+        let mut rewrites: Vec<(usize, ValueId, RotateBy, BinOp)> = Vec::new();
         for idx in 0..n {
             if let Some((x, by)) = match_rotate(func, idx) {
-                rewrites.push((idx, x, by));
+                rewrites.push((idx, x, by, BinOp::Ror));
+            } else if let Some((x, by)) = match_rotate32(func, idx) {
+                rewrites.push((idx, x, by, BinOp::Ror32));
             }
         }
-        for (idx, x, by) in rewrites {
+        for (idx, x, by, op) in rewrites {
             func.insts[idx] = match by {
                 RotateBy::Imm(c) => Inst::BinopI {
-                    op: BinOp::Ror,
+                    op,
                     lhs: x,
                     rhs_imm: c,
                 },
                 RotateBy::Val(vc) => Inst::Binop {
-                    op: BinOp::Ror,
+                    op,
                     lhs: x,
                     rhs: vc,
                 },

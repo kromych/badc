@@ -12669,6 +12669,32 @@ fn size_bound_keeps_the_object_in_memory() {
     }
 }
 
+/// A vector held in a register still folds against its constant template:
+/// a lane read past an insert of another lane reads the template's lane,
+/// and an array element stored from such a vector holds the template's
+/// bytes, so the function returns a constant.
+#[test]
+fn a_vector_value_folds_against_its_template() {
+    const SRC: &str = "typedef unsigned int u32x4 __attribute__((vector_size(16)));\n\
+        typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+        int f(void) {\n\
+            u32x4 v = {1, 2, 3, 4};\n\
+            v[2] = 30000;\n\
+            u8x16 a = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};\n\
+            u8x16 arr[2] = {a, a};\n\
+            return v[0] + v[1] + v[2] + v[3] + ((unsigned char *)&arr[1])[15];\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, insts) = optimized_function_full_pool(SRC, "f", target);
+        assert!(
+            !insts
+                .iter()
+                .any(|(_, i)| i.starts_with("VecExtract") || i.starts_with("LoadLocal")),
+            "{target:?}: the reads fold: {body}"
+        );
+    }
+}
+
 /// A broadcast writes no memory: lane reads of a vector copied from its
 /// constant template fold to the template's bytes past the all-ones splat
 /// `~` takes on x86-64, which cleared the known slot contents when it was

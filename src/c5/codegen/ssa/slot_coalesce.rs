@@ -1564,6 +1564,14 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             *s = nn;
         }
     }
+    // So do the objects of a vector type.
+    f.vector_objects
+        .retain(|&s| !movable(s) || new_off.contains_key(&s));
+    for s in &mut f.vector_objects {
+        if let Some(&nn) = new_off.get(s) {
+            *s = nn;
+        }
+    }
     f.multi_cell_slots.clear();
     f.locals = new_locals;
 

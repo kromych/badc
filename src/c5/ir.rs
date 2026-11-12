@@ -2764,6 +2764,10 @@ pub(crate) struct FunctionSsa {
     /// array reaches the canary before it reaches another object. Empty for
     /// a function that holds none.
     pub array_slots: Vec<i64>,
+    /// Base slot of each automatic object of a GNU vector type, which
+    /// `vector_slots` takes as a vector whether or not a SIMD operand
+    /// meets it.
+    pub vector_objects: Vec<i64>,
     /// Aggregate parameters the caller passes as the address of a copy the
     /// callee owns, copied into their slot groups on entry.
     pub owned_params: Vec<OwnedParam>,
@@ -3147,6 +3151,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             synthetic_base: _,
             multi_cell_slots: _,
             array_slots: _,
+            vector_objects: _,
             owned_params: _,
             over_aligned: _,
             frame_align: _,

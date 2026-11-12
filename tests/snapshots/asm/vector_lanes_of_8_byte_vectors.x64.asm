@@ -53,14 +53,15 @@ Disassembly of section .text:
                	movabsq	$0x200000001, %r11      # imm = 0x200000001
                	xorq	%r11, %rax
                	movq	%rax, -0x8(%rbp)
-               	movl	-0x4(%rbp), %eax
+               	movsd	-0x8(%rbp), %xmm0
+               	vpextrd	$0x1, %xmm0, %eax
                	leave
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x10(%rbp), %r9
                	leaq	<rip>, %rax
                	movq	(%rax), %r10
@@ -107,18 +108,23 @@ Disassembly of section .text:
                	movq	%rax, %r10
                	movsd	(%r10), %xmm1
                	callq	<addr>
-               	movsd	%xmm0, -0x10(%rbp)
-               	movswq	-0x10(%rbp), %rax
-               	cmpl	$0x63, %eax
+               	movsd	%xmm0, 0x8(%rsp)
+               	movsd	0x8(%rsp), %xmm1
+               	vpextrw	$0x0, %xmm1, %eax
+               	movswq	%ax, %rax
+               	cmpq	$0x63, %rax
                	jne	<addr>
-               	movswq	-0xe(%rbp), %rax
-               	cmpl	$0xc6, %eax
+               	vpextrw	$0x1, %xmm1, %eax
+               	movswq	%ax, %rax
+               	cmpq	$0xc6, %rax
                	jne	<addr>
-               	movswq	-0xc(%rbp), %rax
-               	cmpl	$-0x7, %eax
+               	vpextrw	$0x2, %xmm1, %eax
+               	movswq	%ax, %rax
+               	cmpq	$-0x7, %rax
                	jne	<addr>
-               	movswq	-0xa(%rbp), %rax
-               	cmpl	$0xfffffe6c, %eax       # imm = 0xFFFFFE6C
+               	vpextrw	$0x3, %xmm1, %eax
+               	movswq	%ax, %rax
+               	cmpq	$-0x194, %rax           # imm = 0xFE6C
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -135,13 +141,15 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	movzwq	-0xe(%rbp), %rax
-               	movzwq	-0xa(%rbp), %rcx
-               	movswq	%cx, %rcx
-               	cmpl	$0xfffffe6c, %ecx       # imm = 0xFFFFFE6C
-               	jne	<addr>
+               	movsd	0x8(%rsp), %xmm0
+               	vpextrw	$0x3, %xmm0, %eax
                	movswq	%ax, %rax
-               	cmpl	$0xc6, %eax
+               	movswq	%ax, %rax
+               	cmpl	$0xfffffe6c, %eax       # imm = 0xFFFFFE6C
+               	jne	<addr>
+               	vpextrw	$0x1, %xmm0, %eax
+               	movswq	%ax, %rax
+               	cmpq	$0xc6, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	leave

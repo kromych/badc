@@ -621,6 +621,10 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
             }
         });
     }
+    // An object of a 16-byte vector type is a vector whatever reads it.
+    if w.cells == 2 {
+        simd.extend(func.vector_objects.iter().copied());
+    }
     slots.retain(|s| !reject.contains(s) && reads.contains(s) && addr.values().any(|b| b == s));
     let mut vector: BTreeSet<i64> = simd.intersection(&slots).copied().collect();
     let mut grew = true;
@@ -1237,6 +1241,8 @@ fn cell_slots(func: &FunctionSsa) -> (BTreeSet<i64>, BTreeSet<ValueId>) {
             lanes.insert(off);
         }
     }
+    // An object of an 8-byte vector type holds one whatever accesses it.
+    whole_f64.extend(func.vector_objects.iter().copied());
     reject.extend(lanes.difference(&whole_f64).copied());
     slots.retain(|s| !reject.contains(s));
     // A read whose kind turns: every reader takes the bits in the SIMD file.
@@ -1382,6 +1388,7 @@ fn cell_slots(func: &FunctionSsa) -> (BTreeSet<i64>, BTreeSet<ValueId>) {
             }
         }
     }
+    touched.extend(func.vector_objects.iter().filter(|s| slots.contains(s)));
     let met: BTreeSet<i64> = touched.iter().map(|&s| root(&parent, s)).collect();
     slots.retain(|&s| met.contains(&root(&parent, s)));
     // The 64-bit integer reads that stay integers: lane reads of a vector.

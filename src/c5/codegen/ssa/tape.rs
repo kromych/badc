@@ -80,6 +80,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         synthetic_base: _,
         multi_cell_slots: _,
         array_slots: _,
+        vector_objects: _,
         owned_params: _,
         over_aligned: _,
         frame_align: _,

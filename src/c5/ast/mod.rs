@@ -931,6 +931,8 @@ pub(crate) struct FinishedFunction {
     /// storage above the other locals. Empty when the function declares
     /// no such object.
     pub array_slots: alloc::vec::Vec<i64>,
+    /// Base slots of the objects of a GNU vector type, for `FunctionSsa::vector_objects`.
+    pub vector_objects: alloc::vec::Vec<i64>,
     /// `(slot_off, align, size_bytes)` for each automatic object whose required
     /// alignment exceeds the 8-byte frame slot (C11 6.7.5 `_Alignas` / GNU
     /// `aligned`, or a type naturally aligned to 16). The walker packs these
@@ -1455,6 +1457,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             alloca_top_slot: _,
             multi_cell_slots: _,
             array_slots: _,
+            vector_objects: _,
             over_aligned_slots: _,
             ssp: _,
             label_data_slots,

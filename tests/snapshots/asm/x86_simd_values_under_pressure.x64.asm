@@ -123,14 +123,15 @@ Disassembly of section .text:
                	movups	0x1b0(%rsp), %xmm15
                	paddd	%xmm14, %xmm15
                	movups	%xmm15, 0x150(%rsp)
-               	leaq	-0x440(%rbp), %rdx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdx)
-               	movl	$0x3, -0x440(%rbp)
-               	movl	$0x0, -0x43c(%rbp)
-               	movl	$0x0, -0x438(%rbp)
-               	movl	$0x0, -0x434(%rbp)
-               	movq	-0x440(%rbp), %rcx
+               	movl	$0x3, %edx
+               	xorl	%ecx, %ecx
+               	vmovd	%edx, %xmm14
+               	movups	%xmm14, 0x140(%rsp)
+               	movups	0x140(%rsp), %xmm14
+               	vpinsrd	$0x1, %ecx, %xmm14, %xmm14
+               	movups	%xmm14, 0x140(%rsp)
+               	movups	0x140(%rsp), %xmm14
+               	vmovq	%xmm14, %rcx
                	movl	$0x40, %edx
                	cmpq	$0x40, %rcx
                	cmovaq	%rdx, %rcx

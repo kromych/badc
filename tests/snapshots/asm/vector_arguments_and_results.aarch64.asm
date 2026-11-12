@@ -144,16 +144,15 @@ Disassembly of section .text:
                	str	x16, [x7]
                	ldr	d0, [x7]
                	bl	<addr>
-               	stur	d0, [x29, #-0x8]
-               	ldursh	x0, [x29, #-0x8]
+               	smov	x0, v0.h[0]
                	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.ne	<addr>
-               	ldursh	x0, [x29, #-0x6]
-               	cmp	w0, #0x2
+               	smov	x0, v0.h[1]
+               	cmp	x0, #0x2
                	b.ne	<addr>
-               	ldursh	x0, [x29, #-0x2]
-               	cmp	w0, #0x4
+               	smov	x0, v0.h[3]
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x60

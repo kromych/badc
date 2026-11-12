@@ -116,11 +116,13 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
-    v8   LoadLocal { off=2, kind=I64 }                    -> x0
-    v9   Imm(0)                                           -> x1
-    v10  Store { addr=v8, disp=0, value=v1, kind=F64 }    -> -
-    v11  LifetimeEnd(0)                                   -> -
-    terminator Return(v8)   (exit_acc=v8)
+    v8   Imm(0)                                           -> x0
+    v9   LoadLocal { off=2, kind=I64 }                    -> x0
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Store { addr=v9, disp=0, value=v1, kind=F64 }    -> -
+    v13  LifetimeEnd(0)                                   -> -
+    terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=peek_f1
 fn ent_pc=5 n_params=3 variadic=false locals=0

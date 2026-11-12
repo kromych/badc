@@ -802,6 +802,7 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
             owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,

@@ -361,18 +361,22 @@ Disassembly of section .text:
                	movb	$-0x56, -0x2(%rbp)
                	movb	$-0x56, -0x1(%rbp)
                	leaq	0x1(%rcx), %rdx
-               	movq	-0x50(%rbp), %rax
+               	movups	-0x50(%rbp), %xmm0
+               	vmovq	%xmm0, %rax
                	movq	%rax, -0x20(%rbp)
                	leaq	-0x20(%rbp), %rax
                	movq	(%rax), %r10
                	movq	%r10, (%rdx)
                	leaq	0xb(%rcx), %rdx
-               	movl	-0x40(%rbp), %esi
+               	movups	-0x40(%rbp), %xmm0
+               	vmovd	%xmm0, %esi
+               	movslq	%esi, %rsi
                	movl	%esi, -0x20(%rbp)
                	movl	(%rax), %r10d
                	movl	%r10d, (%rdx)
                	leaq	0x11(%rcx), %rax
-               	movzwq	-0x30(%rbp), %rcx
+               	movups	-0x30(%rbp), %xmm0
+               	vpextrw	$0x0, %xmm0, %ecx
                	movswq	%cx, %rcx
                	movw	%cx, -0x20(%rbp)
                	leaq	-0x20(%rbp), %rcx
@@ -465,19 +469,11 @@ Disassembly of section .text:
                	retq
 
 <find16>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	andq	$0xffff, %rsi           # imm = 0xFFFF
-               	leaq	-0x10(%rbp), %rax
-               	vxorps	%ymm14, %ymm14, %ymm14
-               	vmovups	%xmm14, (%rax)
-               	movl	%esi, -0x10(%rbp)
                	xorl	%eax, %eax
-               	movl	%eax, -0xc(%rbp)
-               	movl	%eax, -0x8(%rbp)
-               	movl	%eax, -0x4(%rbp)
-               	movzwq	-0x10(%rbp), %rcx
+               	vmovd	%esi, %xmm0
+               	vpextrw	$0x0, %xmm0, %ecx
+               	movswq	%cx, %rcx
                	movswq	%cx, %rcx
                	vmovd	%ecx, %xmm0
                	vpbroadcastw	%xmm0, %ymm0
@@ -504,12 +500,10 @@ Disassembly of section .text:
                	jb	<addr>
                	xorl	%eax, %eax
                	vzeroupper
-               	leave
                	retq
                	shlq	%rax
                	addq	%rdi, %rax
                	vzeroupper
-               	leave
                	retq
                	shlq	%rax
                	addq	%rdi, %rax
@@ -520,7 +514,6 @@ Disassembly of section .text:
                	shlq	%rcx
                	addq	%rcx, %rax
                	vzeroupper
-               	leave
                	retq
 
 <main>:

@@ -86,23 +86,21 @@ Disassembly of section .text:
                	ret
 
 <put_f>:
-               	mov	v2.16b, v0.16b
-               	mov	v2.s[1], v1.s[0]
-               	fmov	s0, #2.00000000
-               	mov	s3, v2.s[0]
-               	fmul	s3, s3, s0
+               	fmov	s2, #2.00000000
+               	mov	s3, v0.s[0]
+               	fmul	s3, s3, s2
                	mov	x0, #0x0                // =0
                	fmov	s16, s3
                	mov	v3.16b, v16.16b
-               	fmul	s1, s1, s0
+               	fmul	s1, s1, s2
                	mov	v16.16b, v3.16b
                	mov	v16.s[1], v1.s[0]
                	mov	v1.16b, v16.16b
-               	mov	s3, v2.s[2]
-               	fmul	s3, s3, s0
+               	mov	s3, v0.s[2]
+               	fmul	s3, s3, s2
                	mov	v1.s[2], v3.s[0]
-               	mov	s2, v2.s[3]
-               	fmul	s0, s2, s0
+               	mov	s0, v0.s[3]
+               	fmul	s0, s0, s2
                	mov	v16.16b, v1.16b
                	mov	v16.s[3], v0.s[0]
                	mov	v0.16b, v16.16b
@@ -115,18 +113,14 @@ Disassembly of section .text:
                	ret
 
 <put_d>:
-               	mov	v2.16b, v0.16b
-               	mov	v2.d[1], v1.d[0]
-               	fmov	d0, #0.50000000
-               	mov	d2, v2.d[0]
-               	fsub	d2, d2, d0
+               	fmov	d2, #0.50000000
+               	mov	d0, v0.d[0]
+               	fsub	d0, d0, d2
                	mov	x0, #0x0                // =0
-               	fmov	d16, d2
-               	mov	v2.16b, v16.16b
-               	fsub	d0, d1, d0
-               	mov	v16.16b, v2.16b
-               	mov	v16.d[1], v0.d[0]
+               	fmov	d16, d0
                	mov	v0.16b, v16.16b
+               	fsub	d1, d1, d2
+               	mov	v0.d[1], v1.d[0]
                	ret
 
 <get_d>:
@@ -313,26 +307,21 @@ Disassembly of section .text:
                	ret
 
 <three>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x18
-               	str	xzr, [x0]
-               	stur	s0, [x29, #-0x18]
-               	stur	wzr, [x29, #-0x14]
-               	add	x1, x0, #0x8
-               	str	xzr, [x1]
-               	str	wzr, [x1]
-               	str	s1, [x1, #0x4]
-               	add	x0, x0, #0x10
-               	str	xzr, [x0]
-               	str	s2, [x0]
-               	str	wzr, [x0, #0x4]
-               	ldur	d0, [x29, #-0x18]
-               	ldur	d1, [x29, #-0x10]
-               	ldur	d2, [x29, #-0x8]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
+               	fmov	s16, s0
+               	fmov	d0, d16
+               	mov	x1, #0x0                // =0
+               	fmov	d17, x1
+               	mov	v0.s[1], v17.s[0]
+               	fmov	d17, x1
+               	fmov	s3, s17
+               	mov	v16.16b, v3.16b
+               	mov	v16.s[1], v1.s[0]
+               	fmov	d1, d16
+               	fmov	s16, s2
+               	fmov	d2, d16
+               	fmov	d17, x1
+               	mov	v2.s[1], v17.s[0]
                	ret
 
 <main>:

@@ -207,6 +207,7 @@ pub(crate) fn walk_program(
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
         func.array_slots.extend_from_slice(&f.array_slots);
+        func.vector_objects.extend_from_slice(&f.vector_objects);
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the

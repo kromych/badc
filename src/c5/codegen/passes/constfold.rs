@@ -122,6 +122,7 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
         else {
             continue;
         };
+        let read = vec;
         let width = match kind {
             LoadKind::F32 => 4,
             LoadKind::F64 => 8,
@@ -188,7 +189,15 @@ fn fold_lane_reads(func: &mut FunctionSsa) -> bool {
                 _ => break,
             }
         }
+        // Past inserts of other lanes the read takes the vector it reached,
+        // which a fold of that vector's lanes then sees.
         let Some((value, stored)) = found else {
+            if vec != read
+                && let Inst::VecExtract { vec: v, .. } = &mut func.insts[i]
+            {
+                *v = vec;
+                changed = true;
+            }
             continue;
         };
         let float = matches!(stored, StoreKind::F32 | StoreKind::F64);
@@ -1430,6 +1439,7 @@ mod tests {
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
             owned_params: Vec::new(),
             over_aligned: Default::default(),
             frame_align: 0,

@@ -179,15 +179,17 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	callq	<addr>
-               	movsd	%xmm0, -0x8(%rbp)
-               	movswq	-0x8(%rbp), %rax
-               	cmpl	$-0x1, %eax
+               	vpextrw	$0x0, %xmm0, %eax
+               	movswq	%ax, %rax
+               	cmpq	$-0x1, %rax
                	jne	<addr>
-               	movswq	-0x6(%rbp), %rax
-               	cmpl	$0x2, %eax
+               	vpextrw	$0x1, %xmm0, %eax
+               	movswq	%ax, %rax
+               	cmpq	$0x2, %rax
                	jne	<addr>
-               	movswq	-0x2(%rbp), %rax
-               	cmpl	$0x4, %eax
+               	vpextrw	$0x3, %xmm0, %eax
+               	movswq	%ax, %rax
+               	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave

@@ -270,6 +270,7 @@ impl SsaBuilder {
             synthetic_base: -1,
             multi_cell_slots: Vec::new(),
             array_slots: Vec::new(),
+            vector_objects: Vec::new(),
             owned_params: Vec::new(),
             over_aligned: Vec::new(),
             frame_align: 0,
@@ -720,6 +721,15 @@ impl SsaBuilder {
     /// frame slot `ret_slot_local`.
     pub(crate) fn set_call_ret_agg(&mut self, v: ValueId, ret_agg: u32, ret_slot_local: i64) {
         let ret_slot_local = self.call_result_slot(ret_slot_local);
+        // A vector result's temporary is an object of the vector type.
+        let vector = self
+            .func
+            .agg_descs
+            .get(ret_agg as usize)
+            .is_some_and(|d| d.vector);
+        if vector && !self.func.vector_objects.contains(&ret_slot_local) {
+            self.func.vector_objects.push(ret_slot_local);
+        }
         if let Inst::Call {
             ret_agg: ra,
             ret_slot_local: rs,

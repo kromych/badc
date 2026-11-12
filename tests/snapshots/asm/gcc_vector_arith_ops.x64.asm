@@ -6307,163 +6307,191 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
-               	leaq	0x60(%rsp), %rax
-               	leaq	0x40(%rsp), %rcx
-               	vmovups	(%rax), %xmm14
-               	vmovups	%xmm14, (%rcx)
-               	movzbq	0x40(%rsp), %rax
+               	movups	0x60(%rsp), %xmm0
+               	vpextrb	$0x0, %xmm0, %eax
                	shlq	%rax
                	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
-               	vpinsrb	$0x0, %eax, %xmm0, %xmm0
-               	movzbq	0x41(%rsp), %rax
+               	movq	%rcx, %xmm1
+               	vpinsrb	$0x0, %eax, %xmm1, %xmm1
+               	vpextrb	$0x1, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x1, %eax, %xmm0, %xmm0
-               	movzbq	0x42(%rsp), %rax
+               	vpinsrb	$0x1, %eax, %xmm1, %xmm1
+               	vpextrb	$0x2, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x2, %eax, %xmm0, %xmm0
-               	movzbq	0x43(%rsp), %rax
+               	vpinsrb	$0x2, %eax, %xmm1, %xmm1
+               	vpextrb	$0x3, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x3, %eax, %xmm0, %xmm0
-               	movzbq	0x44(%rsp), %rax
+               	vpinsrb	$0x3, %eax, %xmm1, %xmm1
+               	vpextrb	$0x4, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x4, %eax, %xmm0, %xmm0
-               	movzbq	0x45(%rsp), %rax
+               	vpinsrb	$0x4, %eax, %xmm1, %xmm1
+               	vpextrb	$0x5, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x5, %eax, %xmm0, %xmm0
-               	movzbq	0x46(%rsp), %rax
+               	vpinsrb	$0x5, %eax, %xmm1, %xmm1
+               	vpextrb	$0x6, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x6, %eax, %xmm0, %xmm0
-               	movzbq	0x47(%rsp), %rax
+               	vpinsrb	$0x6, %eax, %xmm1, %xmm1
+               	vpextrb	$0x7, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
-               	movzbq	0x48(%rsp), %rax
+               	vpinsrb	$0x7, %eax, %xmm1, %xmm1
+               	vpextrb	$0x8, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x8, %eax, %xmm0, %xmm0
-               	movzbq	0x49(%rsp), %rax
+               	vpinsrb	$0x8, %eax, %xmm1, %xmm1
+               	vpextrb	$0x9, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0x9, %eax, %xmm0, %xmm0
-               	movzbq	0x4a(%rsp), %rax
+               	vpinsrb	$0x9, %eax, %xmm1, %xmm1
+               	vpextrb	$0xa, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xa, %eax, %xmm0, %xmm0
-               	movzbq	0x4b(%rsp), %rax
+               	vpinsrb	$0xa, %eax, %xmm1, %xmm1
+               	vpextrb	$0xb, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xb, %eax, %xmm0, %xmm0
-               	movzbq	0x4c(%rsp), %rax
+               	vpinsrb	$0xb, %eax, %xmm1, %xmm1
+               	vpextrb	$0xc, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xc, %eax, %xmm0, %xmm0
-               	movzbq	0x4d(%rsp), %rax
+               	vpinsrb	$0xc, %eax, %xmm1, %xmm1
+               	vpextrb	$0xd, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xd, %eax, %xmm0, %xmm0
-               	movzbq	0x4e(%rsp), %rax
+               	vpinsrb	$0xd, %eax, %xmm1, %xmm1
+               	vpextrb	$0xe, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xe, %eax, %xmm0, %xmm0
-               	movzbq	0x4f(%rsp), %rax
+               	vpinsrb	$0xe, %eax, %xmm1, %xmm1
+               	vpextrb	$0xf, %xmm0, %eax
                	shlq	%rax
-               	vpinsrb	$0xf, %eax, %xmm0, %xmm0
-               	movsbq	0x40(%rsp), %rax
+               	vpinsrb	$0xf, %eax, %xmm1, %xmm1
+               	vpextrb	$0x0, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %rcx
                	sarq	$0x7, %rcx
-               	movsbq	0x41(%rsp), %rax
+               	vpextrb	$0x1, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %rdx
                	sarq	$0x7, %rdx
-               	movsbq	0x42(%rsp), %rax
+               	vpextrb	$0x2, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %rsi
                	sarq	$0x7, %rsi
-               	movsbq	0x43(%rsp), %rax
+               	vpextrb	$0x3, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %rdi
                	sarq	$0x7, %rdi
-               	movsbq	0x44(%rsp), %rax
+               	vpextrb	$0x4, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r8
                	sarq	$0x7, %r8
-               	movsbq	0x45(%rsp), %rax
+               	vpextrb	$0x5, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r9
                	sarq	$0x7, %r9
-               	movsbq	0x46(%rsp), %rax
+               	vpextrb	$0x6, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %rbx
                	sarq	$0x7, %rbx
-               	movsbq	0x47(%rsp), %rax
+               	vpextrb	$0x7, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x48(%rbp)
-               	movsbq	0x48(%rsp), %rax
+               	vpextrb	$0x8, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x50(%rbp)
-               	movsbq	0x49(%rsp), %rax
+               	vpextrb	$0x9, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x58(%rbp)
-               	movsbq	0x4a(%rsp), %rax
+               	vpextrb	$0xa, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x60(%rbp)
-               	movsbq	0x4b(%rsp), %rax
+               	vpextrb	$0xb, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x68(%rbp)
-               	movsbq	0x4c(%rsp), %rax
+               	vpextrb	$0xc, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x70(%rbp)
-               	movsbq	0x4d(%rsp), %rax
+               	vpextrb	$0xd, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x78(%rbp)
-               	movsbq	0x4e(%rsp), %rax
+               	vpextrb	$0xe, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x80(%rbp)
-               	movsbq	0x4f(%rsp), %rax
+               	vpextrb	$0xf, %xmm0, %eax
+               	movsbq	%al, %rax
                	movq	%rax, %r10
                	sarq	$0x7, %r10
                	movq	%r10, -0x88(%rbp)
                	movl	$0x1b, %eax
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
                	xorl	%r10d, %r10d
                	movq	%r10, -0x90(%rbp)
-               	movups	-0x98(%rbp), %xmm1
-               	vpinsrb	$0x0, %ecx, %xmm1, %xmm1
-               	andq	%rax, %rdx
-               	vpinsrb	$0x1, %edx, %xmm1, %xmm1
-               	andq	%rax, %rsi
-               	vpinsrb	$0x2, %esi, %xmm1, %xmm1
-               	andq	%rax, %rdi
-               	vpinsrb	$0x3, %edi, %xmm1, %xmm1
-               	andq	%rax, %r8
-               	vpinsrb	$0x4, %r8d, %xmm1, %xmm1
-               	andq	%rax, %r9
-               	vpinsrb	$0x5, %r9d, %xmm1, %xmm1
-               	andq	%rax, %rbx
-               	vpinsrb	$0x6, %ebx, %xmm1, %xmm1
+               	movups	-0x98(%rbp), %xmm0
+               	vpinsrb	$0x0, %ecx, %xmm0, %xmm0
+               	movsbq	%dl, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x1, %ecx, %xmm0, %xmm0
+               	movsbq	%sil, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x2, %ecx, %xmm0, %xmm0
+               	movsbq	%dil, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x3, %ecx, %xmm0, %xmm0
+               	movsbq	%r8b, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x4, %ecx, %xmm0, %xmm0
+               	movsbq	%r9b, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x5, %ecx, %xmm0, %xmm0
+               	movsbq	%bl, %rcx
+               	andq	%rax, %rcx
+               	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
                	movq	-0x48(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0x7, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
                	movq	-0x50(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0x8, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x8, %ecx, %xmm0, %xmm0
                	movq	-0x58(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0x9, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0x9, %ecx, %xmm0, %xmm0
                	movq	-0x60(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xa, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0xa, %ecx, %xmm0, %xmm0
                	movq	-0x68(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xb, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0xb, %ecx, %xmm0, %xmm0
                	movq	-0x70(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xc, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0xc, %ecx, %xmm0, %xmm0
                	movq	-0x78(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xd, %ecx, %xmm1, %xmm1
+               	vpinsrb	$0xd, %ecx, %xmm0, %xmm0
                	movq	-0x80(%rbp), %rcx
+               	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	vpinsrb	$0xe, %ecx, %xmm1, %xmm1
-               	movq	%rax, %r10
-               	movq	-0x88(%rbp), %rax
-               	andq	%r10, %rax
-               	vpinsrb	$0xf, %eax, %xmm1, %xmm1
+               	vpinsrb	$0xe, %ecx, %xmm0, %xmm0
+               	movq	-0x88(%rbp), %rcx
+               	movsbq	%cl, %rcx
+               	andq	%rcx, %rax
+               	vpinsrb	$0xf, %eax, %xmm0, %xmm0
                	pxor	%xmm1, %xmm0
                	movups	%xmm0, 0x40(%rsp)
                	leaq	0x60(%rsp), %rdi

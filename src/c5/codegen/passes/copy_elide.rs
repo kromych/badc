@@ -54,6 +54,14 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 
 /// The frame slot and byte offset an address value names: a
 /// `LocalAddr`, or a constant add off one.
+/// The frame cells of the object based at `slot`: its multi-cell record's,
+/// else one.
+fn cells(f: &FunctionSsa, slot: i64) -> i64 {
+    (f.multi_cell_slots.iter())
+        .find(|&&(b, _)| b == slot)
+        .map_or(1, |&(_, c)| c)
+}
+
 fn base_of(f: &FunctionSsa, v: ValueId) -> Option<(i64, i64)> {
     match f.insts.get(v as usize)? {
         Inst::LocalAddr(off) if *off < 0 => Some((*off, 0)),
@@ -121,6 +129,8 @@ fn run_one(f: &mut FunctionSsa) {
     // addresses of a temporary that name the destination in its place.
     let mut retargets: Vec<(usize, i64)> = Vec::new();
     let mut renamed: Vec<(usize, i64)> = Vec::new();
+    // Frame destinations taking an elided temporary of a vector type.
+    let mut vector_dsts: Vec<i64> = Vec::new();
     let mut escapes = Escapes::new(f);
     for blk in &f.blocks {
         for pc in blk.inst_range.clone() {
@@ -153,6 +163,9 @@ fn run_one(f: &mut FunctionSsa) {
                     renamed.extend(renames.iter().map(|&a| (a, d)));
                     elided.push((i, dst));
                     taken.insert(slot);
+                    if f.vector_objects.contains(&slot) && cells(f, d) == cells(f, slot) {
+                        vector_dsts.push(d);
+                    }
                 }
                 continue;
             };
@@ -169,10 +182,21 @@ fn run_one(f: &mut FunctionSsa) {
             }
             elided.push((i, dst));
             taken.insert(slot);
+            if let Some((d, 0)) = base_of(f, dst)
+                && f.vector_objects.contains(&slot)
+                && cells(f, d) == cells(f, slot)
+            {
+                vector_dsts.push(d);
+            }
         }
     }
     if elided.is_empty() {
         return;
+    }
+    for d in vector_dsts {
+        if !f.vector_objects.contains(&d) {
+            f.vector_objects.push(d);
+        }
     }
     for (call, d) in retargets {
         match &mut f.insts[call] {

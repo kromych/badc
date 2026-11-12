@@ -258,214 +258,195 @@ Disassembly of section .text:
 <save_state>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x50, %rsp
                	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x60(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x58(%rbp)
-               	movq	0x20(%rbp), %r10
                	movq	%r10, -0x50(%rbp)
-               	movq	0x28(%rbp), %r10
+               	movq	0x18(%rbp), %r10
                	movq	%r10, -0x48(%rbp)
-               	movq	0x30(%rbp), %r10
+               	movq	0x20(%rbp), %r10
                	movq	%r10, -0x40(%rbp)
-               	movq	0x38(%rbp), %r10
+               	movq	0x28(%rbp), %r10
                	movq	%r10, -0x38(%rbp)
-               	movq	0x40(%rbp), %r10
+               	movq	0x30(%rbp), %r10
                	movq	%r10, -0x30(%rbp)
-               	movq	0x48(%rbp), %r10
+               	movq	0x38(%rbp), %r10
                	movq	%r10, -0x28(%rbp)
-               	movq	0x50(%rbp), %r10
+               	movq	0x40(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	movq	0x58(%rbp), %r10
+               	movq	0x48(%rbp), %r10
                	movq	%r10, -0x18(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movzbq	-0x10(%rbp), %rax
+               	movq	0x50(%rbp), %r10
+               	movq	%r10, -0x10(%rbp)
+               	movq	0x58(%rbp), %r10
+               	movq	%r10, -0x8(%rbp)
+               	movups	-0x50(%rbp), %xmm0
+               	vpextrb	$0x0, %xmm0, %eax
                	movb	%al, (%rdi)
-               	movzbq	-0xf(%rbp), %rax
+               	vpextrb	$0x1, %xmm0, %eax
                	movb	%al, 0x1(%rdi)
-               	movzbq	-0xe(%rbp), %rax
+               	vpextrb	$0x2, %xmm0, %eax
                	movb	%al, 0x2(%rdi)
-               	movzbq	-0xd(%rbp), %rax
+               	vpextrb	$0x3, %xmm0, %eax
                	movb	%al, 0x3(%rdi)
-               	movzbq	-0xc(%rbp), %rax
+               	vpextrb	$0x4, %xmm0, %eax
                	movb	%al, 0x4(%rdi)
-               	movzbq	-0xb(%rbp), %rax
+               	vpextrb	$0x5, %xmm0, %eax
                	movb	%al, 0x5(%rdi)
-               	movzbq	-0xa(%rbp), %rax
+               	vpextrb	$0x6, %xmm0, %eax
                	movb	%al, 0x6(%rdi)
-               	movzbq	-0x9(%rbp), %rax
+               	vpextrb	$0x7, %xmm0, %eax
                	movb	%al, 0x7(%rdi)
-               	movzbq	-0x8(%rbp), %rax
+               	vpextrb	$0x8, %xmm0, %eax
                	movb	%al, 0x8(%rdi)
-               	movzbq	-0x7(%rbp), %rax
+               	vpextrb	$0x9, %xmm0, %eax
                	movb	%al, 0x9(%rdi)
-               	movzbq	-0x6(%rbp), %rax
+               	vpextrb	$0xa, %xmm0, %eax
                	movb	%al, 0xa(%rdi)
-               	movzbq	-0x5(%rbp), %rax
+               	vpextrb	$0xb, %xmm0, %eax
                	movb	%al, 0xb(%rdi)
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	-0x4(%rbp), %rax
+               	vpextrb	$0xc, %xmm0, %eax
                	movb	%al, 0xc(%rdi)
-               	movzbq	-0x3(%rbp), %rax
+               	vpextrb	$0xd, %xmm0, %eax
                	movb	%al, 0xd(%rdi)
-               	movzbq	-0x2(%rbp), %rax
+               	vpextrb	$0xe, %xmm0, %eax
                	movb	%al, 0xe(%rdi)
-               	movzbq	-0x1(%rbp), %rax
+               	vpextrb	$0xf, %xmm0, %eax
                	movb	%al, 0xf(%rdi)
                	leaq	0x10(%rdi), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	addq	$0x10, %rdx
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movzbq	-0x10(%rbp), %rcx
+               	movups	-0x40(%rbp), %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
                	movb	%cl, (%rax)
-               	movzbq	-0xf(%rbp), %rcx
+               	vpextrb	$0x1, %xmm0, %ecx
                	movb	%cl, 0x1(%rax)
-               	movzbq	-0xe(%rbp), %rcx
+               	vpextrb	$0x2, %xmm0, %ecx
                	movb	%cl, 0x2(%rax)
-               	movzbq	-0xd(%rbp), %rcx
+               	vpextrb	$0x3, %xmm0, %ecx
                	movb	%cl, 0x3(%rax)
-               	movzbq	-0xc(%rbp), %rcx
+               	vpextrb	$0x4, %xmm0, %ecx
                	movb	%cl, 0x4(%rax)
-               	movzbq	-0xb(%rbp), %rcx
+               	vpextrb	$0x5, %xmm0, %ecx
                	movb	%cl, 0x5(%rax)
-               	movzbq	-0xa(%rbp), %rcx
+               	vpextrb	$0x6, %xmm0, %ecx
                	movb	%cl, 0x6(%rax)
-               	movzbq	-0x9(%rbp), %rcx
+               	vpextrb	$0x7, %xmm0, %ecx
                	movb	%cl, 0x7(%rax)
-               	movzbq	-0x8(%rbp), %rcx
+               	vpextrb	$0x8, %xmm0, %ecx
                	movb	%cl, 0x8(%rax)
-               	movzbq	-0x7(%rbp), %rcx
+               	vpextrb	$0x9, %xmm0, %ecx
                	movb	%cl, 0x9(%rax)
-               	movzbq	-0x6(%rbp), %rcx
+               	vpextrb	$0xa, %xmm0, %ecx
                	movb	%cl, 0xa(%rax)
-               	movzbq	-0x5(%rbp), %rcx
+               	vpextrb	$0xb, %xmm0, %ecx
                	movb	%cl, 0xb(%rax)
-               	movzbq	-0x4(%rbp), %rcx
+               	vpextrb	$0xc, %xmm0, %ecx
                	movb	%cl, 0xc(%rax)
-               	movzbq	-0x3(%rbp), %rcx
+               	vpextrb	$0xd, %xmm0, %ecx
                	movb	%cl, 0xd(%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	-0x2(%rbp), %rdx
-               	movb	%dl, 0xe(%rax)
-               	movzbq	-0x1(%rbp), %rdx
-               	movb	%dl, 0xf(%rax)
+               	vpextrb	$0xe, %xmm0, %ecx
+               	movb	%cl, 0xe(%rax)
+               	vpextrb	$0xf, %xmm0, %ecx
+               	movb	%cl, 0xf(%rax)
                	leaq	0x20(%rdi), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	addq	$0x20, %rdx
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movzbq	-0x10(%rbp), %rcx
+               	movups	-0x30(%rbp), %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
                	movb	%cl, (%rax)
-               	movzbq	-0xf(%rbp), %rcx
+               	vpextrb	$0x1, %xmm0, %ecx
                	movb	%cl, 0x1(%rax)
-               	movzbq	-0xe(%rbp), %rcx
+               	vpextrb	$0x2, %xmm0, %ecx
                	movb	%cl, 0x2(%rax)
-               	movzbq	-0xd(%rbp), %rcx
+               	vpextrb	$0x3, %xmm0, %ecx
                	movb	%cl, 0x3(%rax)
-               	movzbq	-0xc(%rbp), %rcx
+               	vpextrb	$0x4, %xmm0, %ecx
                	movb	%cl, 0x4(%rax)
-               	movzbq	-0xb(%rbp), %rcx
+               	vpextrb	$0x5, %xmm0, %ecx
                	movb	%cl, 0x5(%rax)
-               	movzbq	-0xa(%rbp), %rcx
+               	vpextrb	$0x6, %xmm0, %ecx
                	movb	%cl, 0x6(%rax)
-               	movzbq	-0x9(%rbp), %rcx
+               	vpextrb	$0x7, %xmm0, %ecx
                	movb	%cl, 0x7(%rax)
-               	movzbq	-0x8(%rbp), %rcx
+               	vpextrb	$0x8, %xmm0, %ecx
                	movb	%cl, 0x8(%rax)
-               	movzbq	-0x7(%rbp), %rcx
+               	vpextrb	$0x9, %xmm0, %ecx
                	movb	%cl, 0x9(%rax)
-               	movzbq	-0x6(%rbp), %rcx
+               	vpextrb	$0xa, %xmm0, %ecx
                	movb	%cl, 0xa(%rax)
-               	movzbq	-0x5(%rbp), %rcx
+               	vpextrb	$0xb, %xmm0, %ecx
                	movb	%cl, 0xb(%rax)
-               	movzbq	-0x4(%rbp), %rcx
+               	vpextrb	$0xc, %xmm0, %ecx
                	movb	%cl, 0xc(%rax)
-               	movzbq	-0x3(%rbp), %rcx
+               	vpextrb	$0xd, %xmm0, %ecx
                	movb	%cl, 0xd(%rax)
-               	movzbq	-0x2(%rbp), %rcx
+               	vpextrb	$0xe, %xmm0, %ecx
                	movb	%cl, 0xe(%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	-0x1(%rbp), %rdx
-               	movb	%dl, 0xf(%rax)
+               	vpextrb	$0xf, %xmm0, %ecx
+               	movb	%cl, 0xf(%rax)
                	leaq	0x30(%rdi), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	addq	$0x30, %rdx
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movzbq	-0x10(%rbp), %rcx
+               	movups	-0x20(%rbp), %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
                	movb	%cl, (%rax)
-               	movzbq	-0xf(%rbp), %rcx
+               	vpextrb	$0x1, %xmm0, %ecx
                	movb	%cl, 0x1(%rax)
-               	movzbq	-0xe(%rbp), %rcx
+               	vpextrb	$0x2, %xmm0, %ecx
                	movb	%cl, 0x2(%rax)
-               	movzbq	-0xd(%rbp), %rcx
+               	vpextrb	$0x3, %xmm0, %ecx
                	movb	%cl, 0x3(%rax)
-               	movzbq	-0xc(%rbp), %rcx
+               	vpextrb	$0x4, %xmm0, %ecx
                	movb	%cl, 0x4(%rax)
-               	movzbq	-0xb(%rbp), %rcx
+               	vpextrb	$0x5, %xmm0, %ecx
                	movb	%cl, 0x5(%rax)
-               	movzbq	-0xa(%rbp), %rcx
+               	vpextrb	$0x6, %xmm0, %ecx
                	movb	%cl, 0x6(%rax)
-               	movzbq	-0x9(%rbp), %rcx
+               	vpextrb	$0x7, %xmm0, %ecx
                	movb	%cl, 0x7(%rax)
-               	movzbq	-0x8(%rbp), %rcx
+               	vpextrb	$0x8, %xmm0, %ecx
                	movb	%cl, 0x8(%rax)
-               	movzbq	-0x7(%rbp), %rcx
+               	vpextrb	$0x9, %xmm0, %ecx
                	movb	%cl, 0x9(%rax)
-               	movzbq	-0x6(%rbp), %rcx
+               	vpextrb	$0xa, %xmm0, %ecx
                	movb	%cl, 0xa(%rax)
-               	movzbq	-0x5(%rbp), %rcx
+               	vpextrb	$0xb, %xmm0, %ecx
                	movb	%cl, 0xb(%rax)
-               	movzbq	-0x4(%rbp), %rcx
+               	vpextrb	$0xc, %xmm0, %ecx
                	movb	%cl, 0xc(%rax)
-               	movzbq	-0x3(%rbp), %rcx
+               	vpextrb	$0xd, %xmm0, %ecx
                	movb	%cl, 0xd(%rax)
-               	movzbq	-0x2(%rbp), %rcx
+               	vpextrb	$0xe, %xmm0, %ecx
                	movb	%cl, 0xe(%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	movzbq	-0x1(%rbp), %rdx
-               	movb	%dl, 0xf(%rax)
+               	vpextrb	$0xf, %xmm0, %ecx
+               	movb	%cl, 0xf(%rax)
                	leaq	0x40(%rdi), %rax
-               	leaq	-0x60(%rbp), %rdx
-               	addq	$0x40, %rdx
-               	movups	(%rdx), %xmm14
-               	movups	%xmm14, (%rcx)
-               	movzbq	-0x10(%rbp), %rcx
+               	movups	-0x10(%rbp), %xmm0
+               	vpextrb	$0x0, %xmm0, %ecx
                	movb	%cl, (%rax)
-               	movzbq	-0xf(%rbp), %rcx
+               	vpextrb	$0x1, %xmm0, %ecx
                	movb	%cl, 0x1(%rax)
-               	movzbq	-0xe(%rbp), %rcx
+               	vpextrb	$0x2, %xmm0, %ecx
                	movb	%cl, 0x2(%rax)
-               	movzbq	-0xd(%rbp), %rcx
+               	vpextrb	$0x3, %xmm0, %ecx
                	movb	%cl, 0x3(%rax)
-               	movzbq	-0xc(%rbp), %rcx
+               	vpextrb	$0x4, %xmm0, %ecx
                	movb	%cl, 0x4(%rax)
-               	movzbq	-0xb(%rbp), %rcx
+               	vpextrb	$0x5, %xmm0, %ecx
                	movb	%cl, 0x5(%rax)
-               	movzbq	-0xa(%rbp), %rcx
+               	vpextrb	$0x6, %xmm0, %ecx
                	movb	%cl, 0x6(%rax)
-               	movzbq	-0x9(%rbp), %rcx
+               	vpextrb	$0x7, %xmm0, %ecx
                	movb	%cl, 0x7(%rax)
-               	movzbq	-0x8(%rbp), %rcx
+               	vpextrb	$0x8, %xmm0, %ecx
                	movb	%cl, 0x8(%rax)
-               	movzbq	-0x7(%rbp), %rcx
+               	vpextrb	$0x9, %xmm0, %ecx
                	movb	%cl, 0x9(%rax)
-               	movzbq	-0x6(%rbp), %rcx
+               	vpextrb	$0xa, %xmm0, %ecx
                	movb	%cl, 0xa(%rax)
-               	movzbq	-0x5(%rbp), %rcx
+               	vpextrb	$0xb, %xmm0, %ecx
                	movb	%cl, 0xb(%rax)
-               	movzbq	-0x4(%rbp), %rcx
+               	vpextrb	$0xc, %xmm0, %ecx
                	movb	%cl, 0xc(%rax)
-               	movzbq	-0x3(%rbp), %rcx
+               	vpextrb	$0xd, %xmm0, %ecx
                	movb	%cl, 0xd(%rax)
-               	movzbq	-0x2(%rbp), %rcx
+               	vpextrb	$0xe, %xmm0, %ecx
                	movb	%cl, 0xe(%rax)
-               	movzbq	-0x1(%rbp), %rcx
+               	vpextrb	$0xf, %xmm0, %ecx
                	movb	%cl, 0xf(%rax)
                	leave
                	retq

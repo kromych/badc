@@ -1202,6 +1202,7 @@ impl Compiler {
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
             array_slots: alloc::vec::Vec::new(),
+            vector_objects: alloc::vec::Vec::new(),
             over_aligned_slots: alloc::vec::Vec::new(),
             ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),

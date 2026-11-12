@@ -3120,6 +3120,45 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
     m.finish();
 }
 
+/// An object of a GNU vector type is a vector though no SIMD operation
+/// reads it: copied in from bytes and out through a pointer it is one load
+/// and one store, through an inlined function's result too, and one value
+/// in every lane is a broadcast and a store, as with gcc 16. Each took a
+/// frame copy, and the broadcast a store per lane.
+#[test]
+fn a_vector_object_moves_whole_without_a_simd_operation() {
+    const SRC: &str = "typedef signed char v8c __attribute__((vector_size(8)));\n\
+typedef signed char v16c __attribute__((vector_size(16)));\n\
+void ld8(v8c *r, const signed char *p) { v8c x; __builtin_memcpy(&x, p, 8); *r = x; }\n\
+void ld16(v16c *r, const signed char *p) { v16c x; __builtin_memcpy(&x, p, 16); *r = x; }\n\
+void dup16(v16c *r, signed char c) {\n\
+    *r = (v16c){c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c};\n\
+}\n\
+static inline __attribute__((always_inline)) v16c load(const signed char *p) {\n\
+    v16c x; __builtin_memcpy(&x, p, 16); return x;\n\
+}\n\
+void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let mut m = Misses::default();
+    for (name, want) in [
+        ("ld8", &[0xFD40_0020u32, 0xFD00_0000, RET][..]),
+        ("ld16", &[0x3DC0_0020, 0x3D80_0000, RET]),
+        ("wrap", &[0x3DC0_0020, 0x3D80_0000, RET]),
+    ] {
+        let words = a64(SRC, name);
+        m.expect(words == want, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        m.expect(insns.len() == 3, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    // `sxtb`, `dup v0.16b, w1`, `str q0, [x0]` and `ret`.
+    let dup = a64(SRC, "dup16");
+    m.expect(
+        dup.len() == 4 && dup[1] & 0xFFFF_FC00 == 0x4E01_0C00 && dup[2] == 0x3D80_0000,
+        || format!("aarch64 dup16: {dup:08x?}"),
+    );
+    m.finish();
+}
+
 /// A GNU vector of one value in every lane is a broadcast of it, as with
 /// gcc 16: `dup` from a general register or from an FP register's lane 0
 /// and `ret` on AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one

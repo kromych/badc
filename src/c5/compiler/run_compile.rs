@@ -1771,6 +1771,7 @@ impl Compiler {
         self.max_loc_offs = 0;
         self.multi_cell_temps.clear();
         self.array_temps.clear();
+        self.vector_temps.clear();
         self.func_over_aligned.clear();
         self.labels.clear();
         self.jumps = super::jumps::Jumps::default();
@@ -2204,8 +2205,15 @@ impl Compiler {
         // per-object `has_array`, kept per slot rather than folded into
         // the function's facts.
         let mut array_slots: Vec<i64> = Vec::new();
+        let mut vector_objects: Vec<i64> = core::mem::take(&mut self.vector_temps);
         for v in &self.variables[vars_start..] {
             if v.fp_slot < 0 {
+                if v.array_size == 0
+                    && super::types::is_vector_ty(&self.structs, v.type_tag)
+                    && !vector_objects.contains(&v.fp_slot)
+                {
+                    vector_objects.push(v.fp_slot);
+                }
                 let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
                 let aggregate = is_struct_value_ty(v.type_tag) || v.array_size > 0;
                 if cells > 1 || (cells == 1 && aggregate) {
@@ -2237,6 +2245,7 @@ impl Compiler {
         if let Some(ff) = self.finished_functions.last_mut() {
             ff.multi_cell_slots = multi_cell;
             ff.array_slots = array_slots;
+            ff.vector_objects = vector_objects;
             ff.over_aligned_slots = over_aligned;
             ff.ssp = ssp;
         }

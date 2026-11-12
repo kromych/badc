@@ -694,6 +694,31 @@ fn meet(a: &State, b: &State) -> State {
 /// Walk block `b` from `state`: tracked writes update the state, and
 /// with `fold` set, each load the state resolves rewrites to the
 /// initializer's value. Returns whether any load folded.
+/// The data offset `value` is a whole `w`-byte load from: the bytes a store
+/// of it writes, as a copy of them would.
+fn loaded_from(func: &FunctionSsa, ext: &BTreeSet<u32>, value: ValueId, w: i64) -> Option<i64> {
+    let Inst::Load {
+        addr,
+        disp,
+        kind,
+        volatile: false,
+        ..
+    } = func.insts.get(value as usize)?
+    else {
+        return None;
+    };
+    let width = match kind {
+        LoadKind::V128 => 16,
+        LoadKind::V256 => 32,
+        LoadKind::F64 => 8,
+        LoadKind::F32 => 4,
+        k => int_width(*k)?,
+    };
+    (width == w)
+        .then(|| data_addr(func, ext, *addr, i64::from(*disp)))
+        .flatten()
+}
+
 fn walk_block(
     func: &mut FunctionSsa,
     cd: &ConstData<'_>,
@@ -763,6 +788,9 @@ fn walk_block(
                     !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
                     store_width(*kind),
                 );
+                let loaded = (!*volatile)
+                    .then(|| loaded_from(func, ext, *value, w))
+                    .flatten();
                 match frame_addr(func, *addr, *disp as i64) {
                     Some(a) => {
                         kill(state, a, a + w);
@@ -770,6 +798,8 @@ fn walk_block(
                         // template writes the same bytes the copy did.
                         if zero {
                             state.insert(a, (a + w, Filled::Zero));
+                        } else if let Some(s) = loaded {
+                            state.insert(a, (a + w, Filled::Template(s)));
                         }
                     }
                     None => state.clear(),
@@ -788,6 +818,11 @@ fn walk_block(
                 kill(state, a, a + w);
                 if !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))) {
                     state.insert(a, (a + w, Filled::Zero));
+                } else if let Some(s) = (!*volatile)
+                    .then(|| loaded_from(func, ext, *value, w))
+                    .flatten()
+                {
+                    state.insert(a, (a + w, Filled::Template(s)));
                 }
             }
             Inst::Load {

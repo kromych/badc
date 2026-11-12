@@ -198,18 +198,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.b }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_s8>:
@@ -234,18 +226,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_s8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.b }[15], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_u8>:
@@ -270,18 +254,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.b }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_u8>:
@@ -306,18 +282,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_u8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.b }[15], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_p8>:
@@ -342,18 +310,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.b }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_p8>:
@@ -378,18 +338,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_p8>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.b }[15], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_s16>:
@@ -414,18 +366,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.h }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_s16>:
@@ -450,18 +394,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_s16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.h }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_u16>:
@@ -486,18 +422,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.h }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_u16>:
@@ -522,18 +450,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_u16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.h }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_p16>:
@@ -558,18 +478,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_p16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.h }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_p16>:
@@ -594,18 +506,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_p16>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.h }[7], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_s32>:
@@ -630,18 +534,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.s }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_s32>:
@@ -666,18 +562,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_s32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.s }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_u32>:
@@ -702,18 +590,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.s }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_u32>:
@@ -738,18 +618,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_u32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.s }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_f32>:
@@ -774,18 +646,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.s }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_f32>:
@@ -810,18 +674,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.s }[3], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_s64>:
@@ -846,18 +702,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.d }[0], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_s64>:
@@ -882,18 +730,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_s64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.d }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_u64>:
@@ -918,18 +758,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.d }[0], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_u64>:
@@ -954,18 +786,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_u64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.d }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_p64>:
@@ -990,18 +814,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_p64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.d }[0], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_p64>:
@@ -1026,18 +842,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_p64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.d }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1_f64>:
@@ -1062,18 +870,10 @@ Disassembly of section .text:
                	ret
 
 <w_vst1_lane_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x16, [x1]
-               	str	x16, [x0]
+               	ldr	d1, [x2]
+               	str	d1, [x0]
                	st1	{ v0.d }[0], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vld1q_f64>:
@@ -1098,29 +898,23 @@ Disassembly of section .text:
                	ret
 
 <w_vst1q_lane_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	ldr	q1, [x2]
+               	str	q1, [x0]
                	st1	{ v0.d }[1], [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vdup_n_s8>:
-               	ldrb	w1, [x1]
+               	ldr	d0, [x1]
+               	smov	x1, v0.b[0]
                	sxtb	x1, w1
                	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_s8>:
-               	ldrb	w1, [x1]
+               	ldr	q0, [x1]
+               	smov	x1, v0.b[0]
                	sxtb	x1, w1
                	dup	v0.16b, w1
                	str	q0, [x0]
@@ -1151,13 +945,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_u8>:
-               	ldrb	w1, [x1]
+               	ldr	d0, [x1]
+               	umov	w1, v0.b[0]
+               	and	x1, x1, #0xff
                	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_u8>:
-               	ldrb	w1, [x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.b[0]
+               	and	x1, x1, #0xff
                	dup	v0.16b, w1
                	str	q0, [x0]
                	ret
@@ -1187,13 +985,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_p8>:
-               	ldrb	w1, [x1]
+               	ldr	d0, [x1]
+               	umov	w1, v0.b[0]
+               	and	x1, x1, #0xff
                	dup	v0.8b, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_p8>:
-               	ldrb	w1, [x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.b[0]
+               	and	x1, x1, #0xff
                	dup	v0.16b, w1
                	str	q0, [x0]
                	ret
@@ -1223,14 +1025,16 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_s16>:
-               	ldrh	w1, [x1]
+               	ldr	d0, [x1]
+               	smov	x1, v0.h[0]
                	sxth	x1, w1
                	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_s16>:
-               	ldrh	w1, [x1]
+               	ldr	q0, [x1]
+               	smov	x1, v0.h[0]
                	sxth	x1, w1
                	dup	v0.8h, w1
                	str	q0, [x0]
@@ -1261,13 +1065,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_u16>:
-               	ldrh	w1, [x1]
+               	ldr	d0, [x1]
+               	umov	w1, v0.h[0]
+               	and	x1, x1, #0xffff
                	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_u16>:
-               	ldrh	w1, [x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.h[0]
+               	and	x1, x1, #0xffff
                	dup	v0.8h, w1
                	str	q0, [x0]
                	ret
@@ -1297,13 +1105,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_p16>:
-               	ldrh	w1, [x1]
+               	ldr	d0, [x1]
+               	umov	w1, v0.h[0]
+               	and	x1, x1, #0xffff
                	dup	v0.4h, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_p16>:
-               	ldrh	w1, [x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.h[0]
+               	and	x1, x1, #0xffff
                	dup	v0.8h, w1
                	str	q0, [x0]
                	ret
@@ -1333,14 +1145,16 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_s32>:
-               	ldr	w1, [x1]
+               	ldr	d0, [x1]
+               	smov	x1, v0.s[0]
                	sxtw	x1, w1
                	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_s32>:
-               	ldr	w1, [x1]
+               	ldr	q0, [x1]
+               	smov	x1, v0.s[0]
                	sxtw	x1, w1
                	dup	v0.4s, w1
                	str	q0, [x0]
@@ -1371,13 +1185,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_u32>:
-               	ldr	w1, [x1]
+               	ldr	d0, [x1]
+               	mov	w1, v0.s[0]
+               	mov	w1, w1
                	dup	v0.2s, w1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_u32>:
-               	ldr	w1, [x1]
+               	ldr	q0, [x1]
+               	mov	w1, v0.s[0]
+               	mov	w1, w1
                	dup	v0.4s, w1
                	str	q0, [x0]
                	ret
@@ -1407,31 +1225,17 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x8
-               	ldr	x16, [x1]
-               	str	x16, [x2]
-               	ldur	s0, [x29, #-0x8]
+               	ldr	d0, [x1]
+               	mov	s0, v0.s[0]
                	dup	v0.2s, v0.s[0]
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vmovq_n_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	ldur	s0, [x29, #-0x10]
+               	ldr	q0, [x1]
+               	mov	s0, v0.s[0]
                	dup	v0.4s, v0.s[0]
                	str	q0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vdup_lane_f32>:
@@ -1459,13 +1263,15 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_s64>:
-               	ldr	x1, [x1]
+               	ldr	d0, [x1]
+               	mov	x1, v0.d[0]
                	fmov	d0, x1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_s64>:
-               	ldr	x1, [x1]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[0]
                	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
@@ -1495,13 +1301,15 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_u64>:
-               	ldr	x1, [x1]
+               	ldr	d0, [x1]
+               	mov	x1, v0.d[0]
                	fmov	d0, x1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_u64>:
-               	ldr	x1, [x1]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[0]
                	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
@@ -1531,13 +1339,15 @@ Disassembly of section .text:
                	ret
 
 <w_vdup_n_p64>:
-               	ldr	x1, [x1]
+               	ldr	d0, [x1]
+               	mov	x1, v0.d[0]
                	fmov	d0, x1
                	str	d0, [x0]
                	ret
 
 <w_vmovq_n_p64>:
-               	ldr	x1, [x1]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[0]
                	dup	v0.2d, x1
                	str	q0, [x0]
                	ret
@@ -1573,17 +1383,10 @@ Disassembly of section .text:
                	ret
 
 <w_vmovq_n_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	ldur	d0, [x29, #-0x10]
+               	ldr	q0, [x1]
+               	mov	d0, v0.d[0]
                	dup	v0.2d, v0.d[0]
                	str	q0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vdup_lane_f64>:
@@ -1630,18 +1433,21 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_s8>:
-               	ldrb	w1, [x1, #0x7]
+               	ldr	d0, [x1]
+               	smov	x1, v0.b[7]
                	strb	w1, [x0]
                	ret
 
 <w_vgetq_lane_s8>:
-               	ldrb	w1, [x1, #0x1]
+               	ldr	q0, [x1]
+               	smov	x1, v0.b[1]
                	strb	w1, [x0]
                	ret
 
 <w_vset_lane_s8>:
                	ldr	d0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	d1, [x2]
+               	smov	x1, v1.b[0]
                	sxtb	x1, w1
                	mov	v0.b[0], w1
                	str	d0, [x0]
@@ -1649,7 +1455,8 @@ Disassembly of section .text:
 
 <w_vsetq_lane_s8>:
                	ldr	q0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	q1, [x2]
+               	smov	x1, v1.b[0]
                	sxtb	x1, w1
                	mov	v0.b[15], w1
                	str	q0, [x0]
@@ -1675,25 +1482,33 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_u8>:
-               	ldrb	w1, [x1, #0x7]
+               	ldr	d0, [x1]
+               	umov	w1, v0.b[7]
+               	and	x1, x1, #0xff
                	strb	w1, [x0]
                	ret
 
 <w_vgetq_lane_u8>:
-               	ldrb	w1, [x1, #0x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.b[1]
+               	and	x1, x1, #0xff
                	strb	w1, [x0]
                	ret
 
 <w_vset_lane_u8>:
                	ldr	d0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	d1, [x2]
+               	umov	w1, v1.b[0]
+               	and	x1, x1, #0xff
                	mov	v0.b[0], w1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_u8>:
                	ldr	q0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	q1, [x2]
+               	umov	w1, v1.b[0]
+               	and	x1, x1, #0xff
                	mov	v0.b[15], w1
                	str	q0, [x0]
                	ret
@@ -1718,25 +1533,33 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_p8>:
-               	ldrb	w1, [x1, #0x7]
+               	ldr	d0, [x1]
+               	umov	w1, v0.b[7]
+               	and	x1, x1, #0xff
                	strb	w1, [x0]
                	ret
 
 <w_vgetq_lane_p8>:
-               	ldrb	w1, [x1, #0x1]
+               	ldr	q0, [x1]
+               	umov	w1, v0.b[1]
+               	and	x1, x1, #0xff
                	strb	w1, [x0]
                	ret
 
 <w_vset_lane_p8>:
                	ldr	d0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	d1, [x2]
+               	umov	w1, v1.b[0]
+               	and	x1, x1, #0xff
                	mov	v0.b[0], w1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_p8>:
                	ldr	q0, [x1]
-               	ldrb	w1, [x2]
+               	ldr	q1, [x2]
+               	umov	w1, v1.b[0]
+               	and	x1, x1, #0xff
                	mov	v0.b[15], w1
                	str	q0, [x0]
                	ret
@@ -1761,18 +1584,21 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_s16>:
-               	ldrh	w1, [x1, #0x6]
+               	ldr	d0, [x1]
+               	smov	x1, v0.h[3]
                	strh	w1, [x0]
                	ret
 
 <w_vgetq_lane_s16>:
-               	ldrh	w1, [x1, #0x2]
+               	ldr	q0, [x1]
+               	smov	x1, v0.h[1]
                	strh	w1, [x0]
                	ret
 
 <w_vset_lane_s16>:
                	ldr	d0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	d1, [x2]
+               	smov	x1, v1.h[0]
                	sxth	x1, w1
                	mov	v0.h[0], w1
                	str	d0, [x0]
@@ -1780,7 +1606,8 @@ Disassembly of section .text:
 
 <w_vsetq_lane_s16>:
                	ldr	q0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	q1, [x2]
+               	smov	x1, v1.h[0]
                	sxth	x1, w1
                	mov	v0.h[7], w1
                	str	q0, [x0]
@@ -1806,25 +1633,33 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_u16>:
-               	ldrh	w1, [x1, #0x6]
+               	ldr	d0, [x1]
+               	umov	w1, v0.h[3]
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
                	ret
 
 <w_vgetq_lane_u16>:
-               	ldrh	w1, [x1, #0x2]
+               	ldr	q0, [x1]
+               	umov	w1, v0.h[1]
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
                	ret
 
 <w_vset_lane_u16>:
                	ldr	d0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	d1, [x2]
+               	umov	w1, v1.h[0]
+               	and	x1, x1, #0xffff
                	mov	v0.h[0], w1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_u16>:
                	ldr	q0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	q1, [x2]
+               	umov	w1, v1.h[0]
+               	and	x1, x1, #0xffff
                	mov	v0.h[7], w1
                	str	q0, [x0]
                	ret
@@ -1849,25 +1684,33 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_p16>:
-               	ldrh	w1, [x1, #0x6]
+               	ldr	d0, [x1]
+               	umov	w1, v0.h[3]
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
                	ret
 
 <w_vgetq_lane_p16>:
-               	ldrh	w1, [x1, #0x2]
+               	ldr	q0, [x1]
+               	umov	w1, v0.h[1]
+               	and	x1, x1, #0xffff
                	strh	w1, [x0]
                	ret
 
 <w_vset_lane_p16>:
                	ldr	d0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	d1, [x2]
+               	umov	w1, v1.h[0]
+               	and	x1, x1, #0xffff
                	mov	v0.h[0], w1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_p16>:
                	ldr	q0, [x1]
-               	ldrh	w1, [x2]
+               	ldr	q1, [x2]
+               	umov	w1, v1.h[0]
+               	and	x1, x1, #0xffff
                	mov	v0.h[7], w1
                	str	q0, [x0]
                	ret
@@ -1892,18 +1735,21 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_s32>:
-               	ldr	w1, [x1, #0x4]
+               	ldr	d0, [x1]
+               	smov	x1, v0.s[1]
                	str	w1, [x0]
                	ret
 
 <w_vgetq_lane_s32>:
-               	ldr	w1, [x1, #0x4]
+               	ldr	q0, [x1]
+               	smov	x1, v0.s[1]
                	str	w1, [x0]
                	ret
 
 <w_vset_lane_s32>:
                	ldr	d0, [x1]
-               	ldr	w1, [x2]
+               	ldr	d1, [x2]
+               	smov	x1, v1.s[0]
                	sxtw	x1, w1
                	mov	v0.s[0], w1
                	str	d0, [x0]
@@ -1911,7 +1757,8 @@ Disassembly of section .text:
 
 <w_vsetq_lane_s32>:
                	ldr	q0, [x1]
-               	ldr	w1, [x2]
+               	ldr	q1, [x2]
+               	smov	x1, v1.s[0]
                	sxtw	x1, w1
                	mov	v0.s[3], w1
                	str	q0, [x0]
@@ -1937,25 +1784,31 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_u32>:
-               	ldr	w1, [x1, #0x4]
+               	ldr	d0, [x1]
+               	mov	w1, v0.s[1]
                	str	w1, [x0]
                	ret
 
 <w_vgetq_lane_u32>:
-               	ldr	w1, [x1, #0x4]
+               	ldr	q0, [x1]
+               	mov	w1, v0.s[1]
                	str	w1, [x0]
                	ret
 
 <w_vset_lane_u32>:
                	ldr	d0, [x1]
-               	ldr	w1, [x2]
+               	ldr	d1, [x2]
+               	mov	w1, v1.s[0]
+               	mov	w1, w1
                	mov	v0.s[0], w1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_u32>:
                	ldr	q0, [x1]
-               	ldr	w1, [x2]
+               	ldr	q1, [x2]
+               	mov	w1, v1.s[0]
+               	mov	w1, w1
                	mov	v0.s[3], w1
                	str	q0, [x0]
                	ret
@@ -1980,59 +1833,31 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x8
-               	ldr	x16, [x1]
-               	str	x16, [x2]
-               	ldur	s0, [x29, #-0x4]
+               	ldr	d0, [x1]
+               	mov	s0, v0.s[1]
                	str	s0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vgetq_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	ldur	s0, [x29, #-0xc]
+               	ldr	q0, [x1]
+               	mov	s0, v0.s[1]
                	str	s0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vset_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	d0, [x1]
-               	sub	x1, x29, #0x8
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldur	s1, [x29, #-0x8]
+               	ldr	d1, [x2]
+               	mov	s1, v1.s[0]
                	mov	v0.s[0], v1.s[0]
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vsetq_lane_f32>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldur	s1, [x29, #-0x10]
+               	ldr	q1, [x2]
+               	mov	s1, v1.s[0]
                	mov	v0.s[3], v1.s[0]
                	str	q0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vget_low_s64>:
@@ -2055,25 +1880,28 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vgetq_lane_s64>:
-               	ldr	x1, [x1, #0x8]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[1]
                	str	x1, [x0]
                	ret
 
 <w_vset_lane_s64>:
                	ldr	d0, [x1]
-               	ldr	x1, [x2]
+               	ldr	d1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[0], x1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_s64>:
                	ldr	q0, [x1]
-               	ldr	x1, [x2]
+               	ldr	q1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[1], x1
                	str	q0, [x0]
                	ret
@@ -2098,25 +1926,28 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vgetq_lane_u64>:
-               	ldr	x1, [x1, #0x8]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[1]
                	str	x1, [x0]
                	ret
 
 <w_vset_lane_u64>:
                	ldr	d0, [x1]
-               	ldr	x1, [x2]
+               	ldr	d1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[0], x1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_u64>:
                	ldr	q0, [x1]
-               	ldr	x1, [x2]
+               	ldr	q1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[1], x1
                	str	q0, [x0]
                	ret
@@ -2141,25 +1972,28 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vgetq_lane_p64>:
-               	ldr	x1, [x1, #0x8]
+               	ldr	q0, [x1]
+               	mov	x1, v0.d[1]
                	str	x1, [x0]
                	ret
 
 <w_vset_lane_p64>:
                	ldr	d0, [x1]
-               	ldr	x1, [x2]
+               	ldr	d1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[0], x1
                	str	d0, [x0]
                	ret
 
 <w_vsetq_lane_p64>:
                	ldr	q0, [x1]
-               	ldr	x1, [x2]
+               	ldr	q1, [x2]
+               	mov	x1, v1.d[0]
                	mov	v0.d[1], x1
                	str	q0, [x0]
                	ret
@@ -2184,29 +2018,14 @@ Disassembly of section .text:
                	ret
 
 <w_vget_lane_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x8
-               	ldr	x16, [x1]
-               	str	x16, [x2]
-               	ldur	d0, [x29, #-0x8]
+               	ldr	d0, [x1]
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vgetq_lane_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	ldur	d0, [x29, #-0x8]
+               	ldr	q0, [x1]
+               	mov	d0, v0.d[1]
                	str	d0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vset_lane_f64>:
@@ -2217,28 +2036,21 @@ Disassembly of section .text:
                	ret
 
 <w_vsetq_lane_f64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	ldr	q0, [x1]
-               	sub	x1, x29, #0x10
-               	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x1]
-               	ldur	d1, [x29, #-0x10]
+               	ldr	q1, [x2]
+               	mov	d1, v1.d[0]
                	mov	v0.d[1], v1.d[0]
                	str	q0, [x0]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <w_vreinterpret_s8_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u8_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_u8>:
@@ -2252,13 +2064,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p8_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_p8>:
@@ -2272,13 +2084,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s16_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_s16>:
@@ -2292,13 +2104,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u16_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_u16>:
@@ -2312,13 +2124,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p16_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_p16>:
@@ -2332,13 +2144,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_s32>:
@@ -2352,13 +2164,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_u32>:
@@ -2372,13 +2184,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_f32>:
@@ -2392,13 +2204,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_s64>:
@@ -2412,13 +2224,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_u64>:
@@ -2432,13 +2244,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_p64>:
@@ -2452,13 +2264,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s8_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_s8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s8_f64>:
@@ -2482,13 +2294,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p8_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_p8>:
@@ -2502,13 +2314,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s16_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_s16>:
@@ -2522,13 +2334,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u16_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_u16>:
@@ -2542,13 +2354,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p16_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_p16>:
@@ -2562,13 +2374,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_s32>:
@@ -2582,13 +2394,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_u32>:
@@ -2602,13 +2414,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_f32>:
@@ -2622,13 +2434,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_s64>:
@@ -2642,13 +2454,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_u64>:
@@ -2662,13 +2474,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_p64>:
@@ -2682,13 +2494,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u8_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_u8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u8_f64>:
@@ -2712,13 +2524,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s16_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_s16>:
@@ -2732,13 +2544,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u16_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_u16>:
@@ -2752,13 +2564,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p16_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_p16>:
@@ -2772,13 +2584,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_s32>:
@@ -2792,13 +2604,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_u32>:
@@ -2812,13 +2624,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_f32>:
@@ -2832,13 +2644,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_s64>:
@@ -2852,13 +2664,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_u64>:
@@ -2872,13 +2684,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_p64>:
@@ -2892,13 +2704,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p8_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_p8>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p8_f64>:
@@ -2922,13 +2734,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u16_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_u16>:
@@ -2942,13 +2754,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p16_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_p16>:
@@ -2962,13 +2774,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_s32>:
@@ -2982,13 +2794,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_u32>:
@@ -3002,13 +2814,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_f32>:
@@ -3022,13 +2834,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_s64>:
@@ -3042,13 +2854,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_u64>:
@@ -3062,13 +2874,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_p64>:
@@ -3082,13 +2894,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s16_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_s16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s16_f64>:
@@ -3112,13 +2924,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p16_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_p16>:
@@ -3132,13 +2944,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_s32>:
@@ -3152,13 +2964,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_u32>:
@@ -3172,13 +2984,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_f32>:
@@ -3192,13 +3004,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_s64>:
@@ -3212,13 +3024,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_u64>:
@@ -3232,13 +3044,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_p64>:
@@ -3252,13 +3064,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u16_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_u16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u16_f64>:
@@ -3282,13 +3094,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s32_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_s32>:
@@ -3302,13 +3114,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_u32>:
@@ -3322,13 +3134,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_f32>:
@@ -3342,13 +3154,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_s64>:
@@ -3362,13 +3174,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_u64>:
@@ -3382,13 +3194,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_p64>:
@@ -3402,13 +3214,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p16_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_p16>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p16_f64>:
@@ -3432,13 +3244,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u32_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_u32>:
@@ -3452,13 +3264,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_f32>:
@@ -3472,13 +3284,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_s64>:
@@ -3492,13 +3304,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_u64>:
@@ -3512,13 +3324,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_p64>:
@@ -3532,13 +3344,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s32_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_s32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s32_f64>:
@@ -3562,13 +3374,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u32_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f32_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u32_f32>:
@@ -3582,13 +3394,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u32_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u32_s64>:
@@ -3602,13 +3414,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u32_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u32_u64>:
@@ -3622,13 +3434,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u32_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u32_p64>:
@@ -3642,13 +3454,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u32_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_u32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u32_f64>:
@@ -3672,13 +3484,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_f32_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_s64_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_f32_s64>:
@@ -3692,13 +3504,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_f32_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_f32_u64>:
@@ -3712,13 +3524,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_f32_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_f32_p64>:
@@ -3732,13 +3544,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_f32_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_f32>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_f32_f64>:
@@ -3762,13 +3574,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s64_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_u64_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s64_u64>:
@@ -3782,13 +3594,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s64_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s64_p64>:
@@ -3802,13 +3614,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_s64_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_s64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_s64_f64>:
@@ -3832,13 +3644,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u64_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_p64_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u64_p64>:
@@ -3852,13 +3664,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_u64_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_u64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_u64_f64>:
@@ -3882,13 +3694,13 @@ Disassembly of section .text:
                	ret
 
 <w_vreinterpret_p64_f64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpret_f64_p64>:
-               	ldr	x1, [x1]
-               	str	x1, [x0]
+               	ldr	d0, [x1]
+               	str	d0, [x0]
                	ret
 
 <w_vreinterpretq_p64_f64>:

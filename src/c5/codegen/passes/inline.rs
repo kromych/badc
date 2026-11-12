@@ -3517,6 +3517,13 @@ fn splice_multi_block(
             merged_array_slots.push(rec);
         }
     }
+    let mut merged_vector_objects = original.vector_objects;
+    for &slot in &callee.vector_objects {
+        let rec = slot - region_base;
+        if !merged_vector_objects.contains(&rec) {
+            merged_vector_objects.push(rec);
+        }
+    }
     // Merge the callee's over-aligned region behind the caller's, at the
     // caller's region size rounded up to the callee's alignment, so every
     // member keeps its alignment; the merged region takes the larger
@@ -3638,6 +3645,7 @@ fn splice_multi_block(
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
         array_slots: merged_array_slots,
+        vector_objects: merged_vector_objects,
         // The callee's parameters are the call's arguments here.
         owned_params: original.owned_params,
         over_aligned: merged_over_aligned,

@@ -414,6 +414,9 @@ impl Compiler {
         if facts.has_array && !self.array_temps.contains(&slot) {
             self.array_temps.push(slot);
         }
+        if super::types::is_vector_ty(&self.structs, ty) && !self.vector_temps.contains(&slot) {
+            self.vector_temps.push(slot);
+        }
     }
 
     /// Parse one declaration inside a function body: the declaration

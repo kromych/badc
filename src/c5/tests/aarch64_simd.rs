@@ -58,6 +58,8 @@ fn the_permutes_emit_their_instruction() {
         int16x4_t n(int16x4_t a, int16x4_t b) { return vext_s16(a, b, 3); }\n\
         float64x2_t wide(float32x2_t a) { return vcvt_f64_f32(a); }\n\
         float32x2_t narrow(float64x2_t a) { return vcvt_f32_f64(a); }\n\
+        int8x16_t dupq(int8x8_t a) { return vdupq_lane_s8(a, 7); }\n\
+        uint16x4_t dup(uint16x8_t a) { return vdup_laneq_u16(a, 6); }\n\
         int main(void) { return 0; }";
     let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
         .compile()
@@ -77,6 +79,8 @@ fn the_permutes_emit_their_instruction() {
         (0x2e01_3000, "ext v0.8b, v0.8b, v1.8b, #6"),
         (0x0e61_7800, "fcvtl v0.2d, v0.2s"),
         (0x0e61_6800, "fcvtn v0.2s, v0.2d"),
+        (0x4e0f_0400, "dup v0.16b, v0.b[7]"),
+        (0x0e1a_0400, "dup v0.4h, v0.h[6]"),
     ] {
         let needle = word.to_le_bytes();
         assert!(

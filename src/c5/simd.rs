@@ -427,6 +427,9 @@ pub(crate) enum Sem {
     /// The bytes of two vectors of the width, the first low, from the
     /// immediate's byte on (`ext`).
     Ext(u8),
+    /// The source's lane of the width the immediate names, in every lane
+    /// of the result (`dup` from an element).
+    DupLane(u8),
 }
 
 /// The permutation of a [`Sem::Perm`] form.
@@ -1375,6 +1378,12 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                     false => (lane(a, w, 2 * i) as i128, lane(a, w, 2 * i + 1) as i128),
                 };
                 set_lane(&mut o, 2 * w, i, (x + y) as u64 & mask(2 * w));
+            }
+        }
+        Sem::DupLane(w) => {
+            let x = lane(a, w, usize::from(imm));
+            for i in 0..16 / w as usize {
+                set_lane(&mut o, w, i, x);
             }
         }
         Sem::Ext(bytes) => {

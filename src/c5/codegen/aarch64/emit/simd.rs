@@ -19,6 +19,7 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
         Form::Vvv => Some((3, false)),
         Form::Shift => Some((1, true)),
         Form::VvI => Some((2, true)),
+        Form::VI => Some((1, true)),
         _ => None,
     }
 }
@@ -28,6 +29,23 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 /// accumulating form names its accumulator once, as the destination.
 fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::string::String> {
     use super::table::{self, Opnd};
+    // `dup` names its source lane in the operand: `vN.T[index]`.
+    if let (crate::c5::simd::Sem::DupLane(w), [rd, rn], Some(index)) = (row.sem, regs, imm) {
+        let (lane, bytes) = row.arrangement(0);
+        let ops = [
+            Opnd::VecReg {
+                num: *rd,
+                size: lane.trailing_zeros() as u8,
+                q: bytes == 16,
+            },
+            Opnd::VecElem {
+                num: *rn,
+                size: w.trailing_zeros() as u8,
+                index,
+            },
+        ];
+        return table::encode(row.mnem, &ops);
+    }
     let skip = usize::from(row.form == Form::Vvv);
     let mut ops: Vec<Opnd> = regs
         .iter()

@@ -1,5 +1,5 @@
 /* <arm_neon.h> lane permutes -- vzip1/2, vuzp1/2, vtrn1/2, the pairs
- * returning both halves, and vext -- on every element type and vector width they
+ * returning both halves, vext and vdup from a lane -- on every element type and vector width they
  * are defined for: each result checked against the permutation computed
  * lane by lane in C. The exit code has a bit per failing type; elsewhere
  * than AArch64 the unit is empty. */
@@ -96,11 +96,35 @@ static int check_ext(void) {
     return u[0] != 2.5 || u[1] != 3.5;
 }
 
+/* vdup from a lane: the source lane in every lane, from and to either width. */
+static int check_dup(void) {
+    int8x8_t d8;
+    int8x16_t q8;
+    uint16x8_t h;
+    uint16_t hh[8];
+    memcpy(&d8, A, 8); memcpy(&q8, A, 16); memcpy(&h, A, 16); memcpy(hh, A, 16);
+    int8x8_t a = vdup_lane_s8(d8, 5), c = vdup_laneq_s8(q8, 13);
+    int8x16_t b = vdupq_lane_s8(d8, 7), e = vdupq_laneq_s8(q8, 15);
+    uint16x4_t f = vdup_laneq_u16(h, 6);
+    uint16x8_t g = vdupq_laneq_u16(h, 3);
+    float32x2_t s = {1.5f, -2.5f};
+    float32x4_t t = vdupq_lane_f32(s, 1);
+    int64x2_t p = {7, -9};
+    int64x2_t u = vdupq_laneq_s64(p, 1);
+    for (int i = 0; i < 16; i++) {
+        if (i < 8 && (a[i] != (int8_t)A[5] || c[i] != (int8_t)A[13])) return 1;
+        if (b[i] != (int8_t)A[7] || e[i] != (int8_t)A[15]) return 1;
+        if ((i < 4 && f[i] != hh[6]) || (i < 8 && g[i] != hh[3])) return 1;
+        if (i < 4 && t[i] != -2.5f) return 1;
+    }
+    return u[0] != -9 || u[1] != -9;
+}
+
 int main(void) {
     return check_s8() | check_s8q() << 1 | check_u8() << 2 | check_u8q() << 3 | check_s16() << 4
          | check_s16q() << 5 | check_u16() << 6 | check_u16q() << 7 | check_s32() << 8
          | check_u32q() << 9 | check_f32() << 10 | check_f32q() << 11 | check_s64q() << 12
-         | check_f64q() << 13 | check_pairs() << 14 | check_ext() << 15;
+         | check_f64q() << 13 | check_pairs() << 14 | check_ext() << 15 | check_dup() << 16;
 }
 #else
 int main(void) { return 0; }

@@ -438,8 +438,27 @@ const fn unary(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem, bytes
     row(name, mnem, Form::V, ret, sem, bytes)
 }
 
+/// `dup` from lane `imm` of a `src`-byte vector into every lane of `ret`.
+const fn dupl(name: &'static str, ret: Ret, w: u8, src: u8) -> SimdOp {
+    row(name, "dup", Form::VI, ret, Sem::DupLane(w), src)
+}
+
 #[rustfmt::skip]
 const NARROW: &[SimdOp] = &[
+    dupl("__builtin_neon_dup_8b_d", Ret::V8qi, 1, 8),
+    dupl("__builtin_neon_dup_8b_q", Ret::V8qi, 1, 16),
+    dupl("__builtin_neon_dup_16b_d", Ret::V16qi, 1, 8),
+    dupl("__builtin_neon_dup_16b_q", Ret::V16qi, 1, 16),
+    dupl("__builtin_neon_dup_4h_d", Ret::V4hi, 2, 8),
+    dupl("__builtin_neon_dup_4h_q", Ret::V4hi, 2, 16),
+    dupl("__builtin_neon_dup_8h_d", Ret::V8hi, 2, 8),
+    dupl("__builtin_neon_dup_8h_q", Ret::V8hi, 2, 16),
+    dupl("__builtin_neon_dup_2s_d", Ret::V2si, 4, 8),
+    dupl("__builtin_neon_dup_2s_q", Ret::V2si, 4, 16),
+    dupl("__builtin_neon_dup_4s_d", Ret::V4si, 4, 8),
+    dupl("__builtin_neon_dup_4s_q", Ret::V4si, 4, 16),
+    dupl("__builtin_neon_dup_2d_d", Ret::V2di, 8, 8),
+    dupl("__builtin_neon_dup_2d_q", Ret::V2di, 8, 16),
     row("__builtin_neon_ext_8b", "ext", Form::VvI, Ret::V8qi, Sem::Ext(8), 8),
     row("__builtin_neon_ext_16b", "ext", Form::VvI, Ret::V16qi, Sem::Ext(16), 16),
     row("__builtin_neon_fcvtl_2s", "fcvtl", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 8),

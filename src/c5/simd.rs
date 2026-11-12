@@ -566,6 +566,16 @@ pub(crate) enum Cvt {
     /// The upper two singles.
     SingleToDoubleHigh,
     DoubleToSingle,
+    /// Every 8-byte integer lane to a `double`, signed when set.
+    Int64ToDouble {
+        signed: bool,
+    },
+    /// Every float lane of the width to an integer of that width, toward
+    /// zero, saturating, a NaN to zero: AArch64's `fcvtzs` / `fcvtzu`.
+    ToIntSat {
+        w: u8,
+        signed: bool,
+    },
 }
 
 /// The floating-point environment a row's lanes compute in, which rounds in
@@ -1777,6 +1787,45 @@ pub(crate) fn eval_wide(
     o
 }
 
+/// An 8-byte integer lane as a `double` in `env`, rounded once: an
+/// unsigned value from 2^63 up halves with its low bit kept sticky and
+/// doubles back.
+fn int64_to_double(env: &mut impl FloatEnv, n: u64, signed: bool) -> u64 {
+    if signed || n >> 63 == 0 {
+        return env.integer_to_float(n as i64, false);
+    }
+    let half = env.integer_to_float((n >> 1 | n & 1) as i64, false);
+    env.arith(FOp::Add, half, half, false)
+}
+
+/// A `double` bit pattern to a `bits`-wide integer toward zero in `env`,
+/// saturating to the range and a NaN to zero, as AArch64 converts; the
+/// environment raises invalid for both.
+fn saturate_to_int(env: &mut impl FloatEnv, a: u64, bits: u32, signed: bool) -> u64 {
+    let x = f64::from_bits(a);
+    let half = (1u64 << (bits - 1)) as f64;
+    let (low, high) = match signed {
+        true => (-half, half),
+        false => (0.0, 2.0 * half),
+    };
+    // Truncation keeps what lies above `low - 1`; a NaN fails every bound.
+    if !(x < high && (x > low - 1.0 || x == low)) {
+        env.to_int(a, true, 32, true);
+        return match () {
+            _ if x.is_nan() => 0,
+            _ if x > 0.0 && signed => (1 << (bits - 1)) - 1,
+            _ if x > 0.0 => u64::MAX,
+            _ if signed => 1 << (bits - 1),
+            _ => 0,
+        };
+    }
+    if !signed && bits == 64 && x >= half {
+        let d = env.arith(FOp::Sub, a, half.to_bits(), false);
+        return env.to_int(d, true, 64, true) as u64 | 1 << 63;
+    }
+    env.to_int(a, true, if signed { bits } else { 64 }, true) as u64
+}
+
 /// Lane `i` of width 4 or 8 as a `double` bit pattern; a NaN keeps its
 /// payload and whether it signals.
 fn flane(v: &[u8; 16], width: u8, i: usize) -> u64 {
@@ -1935,6 +1984,14 @@ pub(crate) fn eval_float_in(
                 Cvt::DoubleToSingle => (0..2).for_each(|i| {
                     let x = env.to_single(flane(a, 8, i));
                     set_flane(&mut o, 4, i, x);
+                }),
+                Cvt::Int64ToDouble { signed } => (0..2).for_each(|i| {
+                    let x = int64_to_double(env, lane(a, 8, i), signed);
+                    set_flane(&mut o, 8, i, x);
+                }),
+                Cvt::ToIntSat { w, signed } => (0..16 / w as usize).for_each(|i| {
+                    let x = saturate_to_int(env, flane(a, w, i), 8 * u32::from(w), signed);
+                    set_lane(&mut o, w, i, x & mask(w));
                 }),
             }
         }

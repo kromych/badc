@@ -500,6 +500,49 @@ fn the_polynomial_multiply_is_a_row() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
 }
 
+/// The integer and floating conversions of one lane width are rows: toward
+/// zero to an integer, saturating at the range and a NaN to zero, and an
+/// unsigned 64-bit lane to a `double` rounded once. Hardware, the
+/// interpreter and the constant folder agree on each edge.
+#[cfg(feature = "full")]
+#[test]
+fn the_lane_conversions_saturate_as_the_instructions_do() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int main(void) {\n\
+            volatile float nanf_ = __builtin_nanf(\"\");\n\
+            float32x4_t f = {nanf_, 3e9f, -3e9f, -0.75f};\n\
+            int32x4_t s = vcvtq_s32_f32(f);\n\
+            if (s[0] != 0 || s[1] != 2147483647 || s[2] != -2147483647 - 1 || s[3] != 0) return 1;\n\
+            uint32x4_t u = vcvtq_u32_f32((float32x4_t){-0.5f, 5e9f, 4294967040.0f, __builtin_inff()});\n\
+            if (u[0] != 0 || u[1] != 4294967295u || u[2] != 4294967040u || u[3] != 4294967295u) return 2;\n\
+            int64x2_t l = vcvtq_s64_f64((float64x2_t){-9.3e18, 1e19});\n\
+            if (l[0] != -9223372036854775807LL - 1 || l[1] != 9223372036854775807LL) return 3;\n\
+            uint64x2_t m = vcvtq_u64_f64((float64x2_t){9223372036854775808.0, 1.8e19});\n\
+            if (m[0] != 9223372036854775808ULL || m[1] != 18000000000000000000ULL) return 4;\n\
+            uint64x2_t big = {18446744073709551615ULL, 9223372036854777857ULL};\n\
+            float64x2_t d = vcvtq_f64_u64(big);\n\
+            if (d[0] != 18446744073709551616.0 || d[1] != 9223372036854777856.0) return 5;\n\
+            float64x2_t sd = vcvtq_f64_s64((int64x2_t){-9007199254740993LL, 3});\n\
+            if (sd[0] != -9007199254740992.0 || sd[1] != 3.0) return 6;\n\
+            float32x2_t uf = vcvt_f32_u32((uint32x2_t){4294967295u, 16777217u});\n\
+            if (uf[0] != 4294967296.0f || uf[1] != 16777216.0f) return 7;\n\
+            int32x2_t s2 = vcvt_s32_f32((float32x2_t){-2.9f, 2.9f});\n\
+            if (s2[0] != -2 || s2[1] != 2) return 8;\n\
+            return 42;\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+    let src = super::load_fixture("arm_neon_float_vectors.c");
+    let program = super::compile_str_bare_for(&src, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    let words = super::perf_codegen::a64_at(
+        "#include <arm_neon.h>\nint32x4_t f(float32x4_t a) { return vcvtq_s32_f32(a); }\n",
+        "f",
+        true,
+    );
+    assert_eq!(words, [0x4EA1_B800, 0xD65F_03C0], "f: {words:08x?}");
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

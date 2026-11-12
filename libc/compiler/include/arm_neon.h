@@ -1245,19 +1245,20 @@ __BADC_NEON_CMP(vclt, __BADC_NEON_B2R, __builtin_neon_fcmgt, <)
 
 /* Integer <-> floating lanes of one width; to integer truncates toward
  * zero and saturates. */
-#define __BADC_NEON_CVT(name, R, T, insn, A) __BADC_NEON_FN1(name, R, T, __BADC_NEON_I2(insn, A, A))
-__BADC_NEON_CVT(vcvt_f32_s32, float32x2_t, int32x2_t, "scvtf", 2s)
-__BADC_NEON_CVT(vcvtq_f32_s32, float32x4_t, int32x4_t, "scvtf", 4s)
-__BADC_NEON_CVT(vcvt_f32_u32, float32x2_t, uint32x2_t, "ucvtf", 2s)
-__BADC_NEON_CVT(vcvtq_f32_u32, float32x4_t, uint32x4_t, "ucvtf", 4s)
-__BADC_NEON_CVT(vcvtq_f64_s64, float64x2_t, int64x2_t, "scvtf", 2d)
-__BADC_NEON_CVT(vcvtq_f64_u64, float64x2_t, uint64x2_t, "ucvtf", 2d)
-__BADC_NEON_CVT(vcvt_s32_f32, int32x2_t, float32x2_t, "fcvtzs", 2s)
-__BADC_NEON_CVT(vcvtq_s32_f32, int32x4_t, float32x4_t, "fcvtzs", 4s)
-__BADC_NEON_CVT(vcvt_u32_f32, uint32x2_t, float32x2_t, "fcvtzu", 2s)
-__BADC_NEON_CVT(vcvtq_u32_f32, uint32x4_t, float32x4_t, "fcvtzu", 4s)
-__BADC_NEON_CVT(vcvtq_s64_f64, int64x2_t, float64x2_t, "fcvtzs", 2d)
-__BADC_NEON_CVT(vcvtq_u64_f64, uint64x2_t, float64x2_t, "fcvtzu", 2d)
+#define __BADC_NEON_CVT(name, R, T, insn, A)                               \
+    __BADC_INTRIN R name(T __a) { return (R)__builtin_neon_##insn##_##A(__a); }
+__BADC_NEON_CVT(vcvt_f32_s32, float32x2_t, int32x2_t, scvtf, 2s)
+__BADC_NEON_CVT(vcvtq_f32_s32, float32x4_t, int32x4_t, scvtf, 4s)
+__BADC_NEON_CVT(vcvt_f32_u32, float32x2_t, uint32x2_t, ucvtf, 2s)
+__BADC_NEON_CVT(vcvtq_f32_u32, float32x4_t, uint32x4_t, ucvtf, 4s)
+__BADC_NEON_CVT(vcvtq_f64_s64, float64x2_t, int64x2_t, scvtf, 2d)
+__BADC_NEON_CVT(vcvtq_f64_u64, float64x2_t, uint64x2_t, ucvtf, 2d)
+__BADC_NEON_CVT(vcvt_s32_f32, int32x2_t, float32x2_t, fcvtzs, 2s)
+__BADC_NEON_CVT(vcvtq_s32_f32, int32x4_t, float32x4_t, fcvtzs, 4s)
+__BADC_NEON_CVT(vcvt_u32_f32, uint32x2_t, float32x2_t, fcvtzu, 2s)
+__BADC_NEON_CVT(vcvtq_u32_f32, uint32x4_t, float32x4_t, fcvtzu, 4s)
+__BADC_NEON_CVT(vcvtq_s64_f64, int64x2_t, float64x2_t, fcvtzs, 2d)
+__BADC_NEON_CVT(vcvtq_u64_f64, uint64x2_t, float64x2_t, fcvtzu, 2d)
 __BADC_INTRIN float64x1_t vcvt_f64_s64(int64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
 __BADC_INTRIN float64x1_t vcvt_f64_u64(uint64x1_t __a) { return (float64x1_t){(float64_t)__a[0]}; }
 __BADC_INTRIN int64x1_t vcvt_s64_f64(float64x1_t __a) { return (int64x1_t){(int64_t)__a[0]}; }

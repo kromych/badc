@@ -488,8 +488,7 @@ __BADC_NEON_INT(__BADC_NEON_F_SHL, vqshl, __builtin_neon_sqshl, __builtin_neon_u
     __BADC_NEON_B2(op##_high_##n, WQ, WQ, NQ, k, si##2, ui##2, NAQ)
 #define __BADC_NEON_F_MOVL(_, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, ...) \
     __BADC_NEON_B1(vmovl_##n, WQ, ND, k, __builtin_neon_sxtl, __builtin_neon_uxtl, NA) \
-    __BADC_NEON_FN1(vmovl_high_##n, WQ, NQ,                               \
-                    __BADC_NEON_I2(__BADC_NEON_PICK(k, "sxtl2", "uxtl2"), WAQ, NAQ)) \
+    __BADC_NEON_B1(vmovl_high_##n, WQ, NQ, k, __builtin_neon_sxtl2, __builtin_neon_uxtl2, NAQ) \
     __BADC_NEON_B1(vpaddl_##n, WD, ND, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NA) \
     __BADC_NEON_B1(vpaddlq_##n, WQ, NQ, k, __builtin_neon_saddlp, __builtin_neon_uaddlp, NAQ)
 #define __BADC_NEON_F_MOVN(op, si, ui, n, w, k, ND, NQ, WD, WQ, NA, NAQ, WAD, WAQ, UND, UNQ) \
@@ -1265,17 +1264,13 @@ __BADC_INTRIN float64x2_t vcvt_f64_f32(float32x2_t __a) {
     return (float64x2_t)__builtin_neon_fcvtl_2s(__a);
 }
 __BADC_INTRIN float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
-    float64x2_t __r;
-    __asm__("fcvtl2 %0.2d, %1.4s" : "=w"(__r) : "w"(__a));
-    return __r;
+    return (float64x2_t)__builtin_neon_fcvtl2_4s(__a);
 }
 __BADC_INTRIN float32x2_t vcvt_f32_f64(float64x2_t __a) {
     return (float32x2_t)__builtin_neon_fcvtn_2d(__a);
 }
 __BADC_INTRIN float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
-    float32x4_t __r = {__lo[0], __lo[1], 0, 0};
-    __asm__("fcvtn2 %0.4s, %1.2d" : "+w"(__r) : "w"(__a));
-    return __r;
+    return vcombine_f32(__lo, vcvt_f32_f64(__a));
 }
 
 /* Structure loads: deinterleave lane by lane into the structure types. */

@@ -353,7 +353,26 @@ const fn narrow(
 
 /// A lengthening move, named by its narrow source arrangement.
 const fn extend(name: &'static str, mnem: &'static str, ret: Ret, w: u8, signed: bool) -> SimdOp {
-    row(name, mnem, Form::V, ret, Sem::Extend(w, 2 * w, signed), 8)
+    row(
+        name,
+        mnem,
+        Form::V,
+        ret,
+        Sem::Extend(w, 2 * w, signed, false),
+        8,
+    )
+}
+
+/// A lengthening move of the high half, named by its 16-byte source.
+const fn extend2(name: &'static str, mnem: &'static str, ret: Ret, w: u8, signed: bool) -> SimdOp {
+    row(
+        name,
+        mnem,
+        Form::V,
+        ret,
+        Sem::Extend(w, 2 * w, signed, true),
+        16,
+    )
 }
 
 /// A reduction across the lanes of a `bytes`-byte source of `w`-byte lanes.
@@ -559,6 +578,7 @@ const NARROW: &[SimdOp] = &[
     row("__builtin_neon_ext_8b", "ext", Form::VvI, Ret::V8qi, Sem::Ext(8), 8),
     row("__builtin_neon_ext_16b", "ext", Form::VvI, Ret::V16qi, Sem::Ext(16), 16),
     row("__builtin_neon_fcvtl_2s", "fcvtl", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 8),
+    row("__builtin_neon_fcvtl2_4s", "fcvtl2", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDoubleHigh), 16),
     row("__builtin_neon_fcvtn_2d", "fcvtn", Form::V, Ret::V2sf, Sem::Convert(Cvt::DoubleToSingle), 16),
     narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_4s", "xtn", Ret::V4hi, 4, NarrowKind::Trunc),
@@ -578,6 +598,12 @@ const NARROW: &[SimdOp] = &[
     extend("__builtin_neon_uxtl_8b", "uxtl", Ret::V8hi, 1, false),
     extend("__builtin_neon_uxtl_4h", "uxtl", Ret::V4si, 2, false),
     extend("__builtin_neon_uxtl_2s", "uxtl", Ret::V2di, 4, false),
+    extend2("__builtin_neon_sxtl2_16b", "sxtl2", Ret::V8hi, 1, true),
+    extend2("__builtin_neon_sxtl2_8h", "sxtl2", Ret::V4si, 2, true),
+    extend2("__builtin_neon_sxtl2_4s", "sxtl2", Ret::V2di, 4, true),
+    extend2("__builtin_neon_uxtl2_16b", "uxtl2", Ret::V8hi, 1, false),
+    extend2("__builtin_neon_uxtl2_8h", "uxtl2", Ret::V4si, 2, false),
+    extend2("__builtin_neon_uxtl2_4s", "uxtl2", Ret::V2di, 4, false),
     unary("__builtin_neon_saddlp_8b", "saddlp", Ret::V4hi, Sem::PairAddLong(1, true), 8),
     unary("__builtin_neon_saddlp_16b", "saddlp", Ret::V8hi, Sem::PairAddLong(1, true), 16),
     unary("__builtin_neon_saddlp_4h", "saddlp", Ret::V2si, Sem::PairAddLong(2, true), 8),

@@ -405,6 +405,63 @@ fn the_interpreter_runs_the_loads_stores_and_broadcasts() {
     );
 }
 
+/// `vmovl_high` lengthens the high half: one `sxtl2` / `uxtl2` (the
+/// `sshll2` / `ushll2` #0 alias) under `-O`, and in the interpreter the
+/// lanes from the middle of the source.
+#[cfg(feature = "full")]
+#[test]
+fn the_high_lengthening_moves_read_the_high_half() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int16x8_t a(int8x16_t v) { return vmovl_high_s8(v); }\n\
+        uint32x4_t b(uint16x8_t v) { return vmovl_high_u16(v); }\n\
+        int64x2_t c(int32x4_t v) { return vmovl_high_s32(v); }\n\
+        int main(void) {\n\
+            int8x16_t v = {0, 1, 2, 3, 4, 5, 6, 7, -8, -9, -10, -11, -12, -13, -14, -15};\n\
+            int16x8_t r = a(v);\n\
+            for (int i = 0; i < 8; i++) if (r[i] != -8 - i) return 1 + i;\n\
+            uint16x8_t u = {0, 1, 2, 3, 0xfff0, 0xfff1, 0xfff2, 0xfff3};\n\
+            uint32x4_t s = b(u);\n\
+            for (int i = 0; i < 4; i++) if (s[i] != 0xfff0u + i) return 20 + i;\n\
+            int64x2_t t = c((int32x4_t){1, 2, -3, -4});\n\
+            return t[0] == -3 && t[1] == -4 ? 42 : 30;\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("a", &[0x4F08_A400u32, RET][..]),
+        ("b", &[0x6F10_A400, RET]),
+        ("c", &[0x4F20_A400, RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+}
+
+/// The precision conversions of the high half: `vcvt_high_f64_f32` is
+/// `fcvtl2`, and `vcvt_high_f32_f64` narrows into a register and inserts
+/// it above the low half; the interpreter computes both.
+#[cfg(feature = "full")]
+#[test]
+fn the_high_precision_conversions_are_rows() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        float64x2_t hi(float32x4_t a) { return vcvt_high_f64_f32(a); }\n\
+        float32x4_t nh(float32x2_t lo, float64x2_t a) { return vcvt_high_f32_f64(lo, a); }\n\
+        int main(void) {\n\
+            float64x2_t w = hi((float32x4_t){1.5f, -2.0f, 3.25f, -8.0f});\n\
+            if (w[0] != 3.25 || w[1] != -8.0) return 1;\n\
+            float32x4_t n = nh((float32x2_t){0.5f, 4.0f}, (float64x2_t){2.0, -0.25});\n\
+            return n[0] == 0.5f && n[1] == 4.0f && n[2] == 2.0f && n[3] == -0.25f ? 42 : 2;\n\
+        }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let words = super::perf_codegen::a64_at(SRC, "hi", true);
+    assert_eq!(words, [0x4E61_7800, RET], "hi: {words:08x?}");
+    let words = super::perf_codegen::a64_at(SRC, "nh", true);
+    assert_eq!(words, [0x0E61_6821, 0x6E18_0420, RET], "nh: {words:08x?}");
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 42);
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

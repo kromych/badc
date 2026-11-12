@@ -1431,14 +1431,14 @@ fn sse41_lanes_follow_the_instruction() {
     let a = v([
         0x80, 0x7f, 0xff, 0x01, 0, 0, 0, 0x80, 9, 9, 9, 9, 0xfe, 0xff, 0xff, 0xff,
     ]);
-    let sx = simd::eval(Sem::Extend(1, 2, true), &a, &[0; 16], 0, 0);
+    let sx = simd::eval(Sem::Extend(1, 2, true, false), &a, &[0; 16], 0, 0);
     assert_eq!(&sx[..8], &[0x80, 0xff, 0x7f, 0x00, 0xff, 0xff, 0x01, 0x00]);
-    let zx = simd::eval(Sem::Extend(1, 2, false), &a, &[0; 16], 0, 0);
+    let zx = simd::eval(Sem::Extend(1, 2, false, false), &a, &[0; 16], 0, 0);
     assert_eq!(&zx[..8], &[0x80, 0x00, 0x7f, 0x00, 0xff, 0x00, 0x01, 0x00]);
     // Doubleword 1 is 0x80000000: sign-extended to the second quadword.
-    let dq = simd::eval(Sem::Extend(4, 8, true), &a, &[0; 16], 0, 0);
+    let dq = simd::eval(Sem::Extend(4, 8, true, false), &a, &[0; 16], 0, 0);
     assert_eq!(&dq[8..], &[0, 0, 0, 0x80, 0xff, 0xff, 0xff, 0xff]);
-    let bq = simd::eval(Sem::Extend(1, 8, false), &a, &[0; 16], 0, 0);
+    let bq = simd::eval(Sem::Extend(1, 8, false, false), &a, &[0; 16], 0, 0);
     assert_eq!(
         bq,
         v([0x80, 0, 0, 0, 0, 0, 0, 0, 0x7f, 0, 0, 0, 0, 0, 0, 0])

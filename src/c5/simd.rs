@@ -293,8 +293,9 @@ pub(crate) enum Sem {
     Rand,
     /// Products of each quadword's low doubleword, signed when `true`.
     MulEven(bool),
-    /// The low lanes widened from the first width to the second, signed when `true`.
-    Extend(u8, u8, bool),
+    /// The low lanes widened from the first width to the second, signed when
+    /// the first flag is set; the high half's lanes when the second is.
+    Extend(u8, u8, bool, bool),
     /// Lane `i` of the second operand where immediate bit `i` is set.
     Blend(u8),
     /// Floating-point arithmetic on lanes of the width; the scalar form
@@ -548,12 +549,20 @@ pub(crate) enum FOp {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Cvt {
     IntToSingle,
-    SingleToInt { truncate: bool },
+    SingleToInt {
+        truncate: bool,
+    },
     UIntToSingle,
-    SingleToUInt { truncate: bool },
+    SingleToUInt {
+        truncate: bool,
+    },
     IntToDouble,
-    DoubleToInt { truncate: bool },
+    DoubleToInt {
+        truncate: bool,
+    },
     SingleToDouble,
+    /// The upper two singles.
+    SingleToDoubleHigh,
     DoubleToSingle,
 }
 
@@ -731,7 +740,7 @@ impl SimdOp {
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
             Sem::Narrow(w, _) | Sem::ShrNarrow(w, _) => w,
             Sem::Extend(from, ..) => from,
-            Sem::Convert(Cvt::SingleToDouble) => 4,
+            Sem::Convert(Cvt::SingleToDouble | Cvt::SingleToDoubleHigh) => 4,
             Sem::Convert(Cvt::DoubleToSingle) => 8,
             _ => lane,
         };
@@ -1598,12 +1607,13 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, 8, i, x);
             }
         }
-        Sem::Extend(from, to, signed) => {
+        Sem::Extend(from, to, signed, high) => {
+            let base = if high { 8 / from as usize } else { 0 };
             for i in 0..16 / to as usize {
                 let x = if signed {
-                    slane(a, from, i) as u64
+                    slane(a, from, base + i) as u64
                 } else {
-                    lane(a, from, i)
+                    lane(a, from, base + i)
                 };
                 set_lane(&mut o, to, i, x & mask(to));
             }
@@ -1906,8 +1916,9 @@ pub(crate) fn eval_float_in(
                     let x = env.to_int(flane(a, 8, i), truncate, 32, true);
                     set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
                 }),
-                Cvt::SingleToDouble => (0..2).for_each(|i| {
-                    let x = env.widen(flane(a, 4, i));
+                Cvt::SingleToDouble | Cvt::SingleToDoubleHigh => (0..2).for_each(|i| {
+                    let from = if cvt == Cvt::SingleToDoubleHigh { 2 } else { 0 };
+                    let x = env.widen(flane(a, 4, from + i));
                     set_flane(&mut o, 8, i, x);
                 }),
                 Cvt::DoubleToSingle => (0..2).for_each(|i| {

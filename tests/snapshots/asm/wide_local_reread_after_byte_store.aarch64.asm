@@ -666,7 +666,6 @@ Disassembly of section .text:
                	shl	v0.16b, v0.16b, #0x1
                	eor	v0.16b, v0.16b, v1.16b
                	str	q0, [x0]
-               	ldr	q0, [x0]
                	umov	w0, v0.b[9]
                	cmp	w0, #0x62
                	b.ne	<addr>

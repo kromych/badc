@@ -558,8 +558,7 @@ Disassembly of section .text:
                	stur	q2, [x29, #-0x60]
                	sub	x2, x29, #0x40
                	stur	q0, [x29, #-0x40]
-               	ldur	q2, [x29, #-0x40]
-               	fdiv	v1.2d, v2.2d, v1.2d
+               	fdiv	v1.2d, v0.2d, v1.2d
                	stur	q1, [x29, #-0x40]
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x2, x0]

@@ -224,9 +224,10 @@ Disassembly of section .text:
                	ldur	q2, [x29, #-0x30]
                	sub	x2, x29, #0x100
                	stur	q2, [x29, #-0x100]
-               	ldr	q2, [sp]
-               	ldur	q3, [x29, #-0x100]
-               	sri	v2.16b, v3.16b, #0x3
+               	ldr	q3, [sp]
+               	mov	v16.16b, v3.16b
+               	sri	v16.16b, v2.16b, #0x3
+               	mov	v2.16b, v16.16b
                	sub	x3, x29, #0xc0
                	stur	q2, [x29, #-0xc0]
                	mov	x0, #0x0                // =0
@@ -247,10 +248,8 @@ Disassembly of section .text:
                	stur	q2, [x29, #-0xc0]
                	uzp2	v0.4s, v0.4s, v1.4s
                	stur	q0, [x29, #-0xb0]
-               	ldur	q0, [x29, #-0xc0]
-               	ldur	q1, [x29, #-0xb0]
-               	stur	q0, [x29, #-0x100]
-               	stur	q1, [x29, #-0xf0]
+               	stur	q2, [x29, #-0x100]
+               	stur	q0, [x29, #-0xf0]
                	ldur	w0, [x29, #-0x100]
                	ldur	w1, [x29, #-0xfc]
                	ldur	w2, [x29, #-0xf8]

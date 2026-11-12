@@ -1791,7 +1791,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v1948 Imm(0)                                           -> x0
     v1949 LoadLocal { off=-260, kind=V128 }                -> d1
     v1950 Imm(0)                                           -> x0
-    v1951 VecBinop { op=Fdiv, lane=F64, bytes=16, lhs=v1949, rhs=v13 } -> d1
+    v1951 VecBinop { op=Fdiv, lane=F64, bytes=16, lhs=v9, rhs=v13 } -> d1
     v1952 Imm(0)                                           -> x0
     v1953 Imm(0)                                           -> x0
     v1954 Imm(0)                                           -> x0

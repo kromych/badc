@@ -311,8 +311,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v16  Imm(0)                                           -> x0
     v17  LocalAddr(-157)                                  -> x0
     v18  Imm(0)                                           -> x0
-    v19  LoadLocal { off=-157, kind=V128 }                -> d0
-    v20  SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(1), args=[v19] } -> d1
+    v19  LoadLocal { off=-157, kind=V128 }                -> d1
+    v20  SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(1), args=[v5] } -> d1
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  LoadLocal { off=-157, kind=V128 }                -> d2
@@ -327,7 +327,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v32  Imm(0)                                           -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
-    v35  SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v19] } -> d1
+    v35  SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v5] } -> d1
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
@@ -336,7 +336,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
     v43  Imm(0)                                           -> x0
-    v44  SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v19, v35] } -> d3
+    v44  SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v5, v35] } -> d3
     v45  Imm(0)                                           -> x0
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
@@ -404,8 +404,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v109 LocalAddr(-157)                                  -> x0
     v110 BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v111 Imm(0)                                           -> x0
-    v112 LoadLocal { off=-157, disp=16, kind=V128 }       -> d0
-    v113 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(2), args=[v112] } -> d1
+    v112 LoadLocal { off=-157, disp=16, kind=V128 }       -> d1
+    v113 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(2), args=[v89] } -> d1
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0
     v116 LoadLocal { off=-157, disp=16, kind=V128 }       -> d2
@@ -420,7 +420,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
     v127 Imm(0)                                           -> x0
-    v128 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v112] } -> d1
+    v128 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v89] } -> d1
     v129 Imm(0)                                           -> x0
     v130 Imm(0)                                           -> x0
     v131 Imm(0)                                           -> x0
@@ -429,7 +429,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v134 Imm(0)                                           -> x0
     v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
-    v137 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v112, v128] } -> d3
+    v137 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v89, v128] } -> d3
     v138 Imm(0)                                           -> x0
     v139 Imm(0)                                           -> x0
     v140 Imm(0)                                           -> x0
@@ -497,8 +497,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v202 LocalAddr(-157)                                  -> x0
     v203 BinopI { op=add, lhs=v196, rhs_imm=32 }          -> x0
     v204 Imm(0)                                           -> x0
-    v205 LoadLocal { off=-157, disp=32, kind=V128 }       -> d0
-    v206 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(4), args=[v205] } -> d1
+    v205 LoadLocal { off=-157, disp=32, kind=V128 }       -> d1
+    v206 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(4), args=[v182] } -> d1
     v207 Imm(0)                                           -> x0
     v208 Imm(0)                                           -> x0
     v209 LoadLocal { off=-157, disp=32, kind=V128 }       -> d2
@@ -513,7 +513,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v218 Imm(0)                                           -> x0
     v219 Imm(0)                                           -> x0
     v220 Imm(0)                                           -> x0
-    v221 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v205] } -> d1
+    v221 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v182] } -> d1
     v222 Imm(0)                                           -> x0
     v223 Imm(0)                                           -> x0
     v224 Imm(0)                                           -> x0
@@ -522,7 +522,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v227 Imm(0)                                           -> x0
     v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
-    v230 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v205, v221] } -> d3
+    v230 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v182, v221] } -> d3
     v231 Imm(0)                                           -> x0
     v232 Imm(0)                                           -> x0
     v233 Imm(0)                                           -> x0
@@ -590,8 +590,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v295 LocalAddr(-157)                                  -> x0
     v296 BinopI { op=add, lhs=v196, rhs_imm=48 }          -> x0
     v297 Imm(0)                                           -> x0
-    v298 LoadLocal { off=-157, disp=48, kind=V128 }       -> d0
-    v299 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(8), args=[v298] } -> d1
+    v298 LoadLocal { off=-157, disp=48, kind=V128 }       -> d1
+    v299 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(8), args=[v275] } -> d1
     v300 Imm(0)                                           -> x0
     v301 Imm(0)                                           -> x0
     v302 LoadLocal { off=-157, disp=48, kind=V128 }       -> d2
@@ -606,7 +606,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v311 Imm(0)                                           -> x0
     v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x0
-    v314 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v298] } -> d1
+    v314 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v275] } -> d1
     v315 Imm(0)                                           -> x0
     v316 Imm(0)                                           -> x0
     v317 Imm(0)                                           -> x0
@@ -615,7 +615,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v320 Imm(0)                                           -> x0
     v321 Imm(0)                                           -> x0
     v322 Imm(0)                                           -> x0
-    v323 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v298, v314] } -> d3
+    v323 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v275, v314] } -> d3
     v324 Imm(0)                                           -> x0
     v325 Imm(0)                                           -> x0
     v326 Imm(0)                                           -> x0
@@ -683,8 +683,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v388 LocalAddr(-157)                                  -> x0
     v389 BinopI { op=add, lhs=v385, rhs_imm=64 }          -> x0
     v390 Imm(0)                                           -> x0
-    v391 LoadLocal { off=-157, disp=64, kind=V128 }       -> d0
-    v392 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(16), args=[v391] } -> d1
+    v391 LoadLocal { off=-157, disp=64, kind=V128 }       -> d1
+    v392 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(16), args=[v368] } -> d1
     v393 Imm(0)                                           -> x0
     v394 Imm(0)                                           -> x0
     v395 LoadLocal { off=-157, disp=64, kind=V128 }       -> d2
@@ -699,7 +699,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v404 Imm(0)                                           -> x0
     v405 Imm(0)                                           -> x0
     v406 Imm(0)                                           -> x0
-    v407 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v391] } -> d1
+    v407 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v368] } -> d1
     v408 Imm(0)                                           -> x0
     v409 Imm(0)                                           -> x0
     v410 Imm(0)                                           -> x0
@@ -708,7 +708,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v413 Imm(0)                                           -> x0
     v414 Imm(0)                                           -> x0
     v415 Imm(0)                                           -> x0
-    v416 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v391, v407] } -> d3
+    v416 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v368, v407] } -> d3
     v417 Imm(0)                                           -> x0
     v418 Imm(0)                                           -> x0
     v419 Imm(0)                                           -> x0
@@ -776,8 +776,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v481 LocalAddr(-157)                                  -> x0
     v482 BinopI { op=add, lhs=v385, rhs_imm=80 }          -> x0
     v483 Imm(0)                                           -> x0
-    v484 LoadLocal { off=-157, disp=80, kind=V128 }       -> d0
-    v485 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(32), args=[v484] } -> d1
+    v484 LoadLocal { off=-157, disp=80, kind=V128 }       -> d1
+    v485 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(32), args=[v461] } -> d1
     v486 Imm(0)                                           -> x0
     v487 Imm(0)                                           -> x0
     v488 LoadLocal { off=-157, disp=80, kind=V128 }       -> d2
@@ -792,7 +792,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v497 Imm(0)                                           -> x0
     v498 Imm(0)                                           -> x0
     v499 Imm(0)                                           -> x0
-    v500 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v484] } -> d1
+    v500 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v461] } -> d1
     v501 Imm(0)                                           -> x0
     v502 Imm(0)                                           -> x0
     v503 Imm(0)                                           -> x0
@@ -801,7 +801,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v506 Imm(0)                                           -> x0
     v507 Imm(0)                                           -> x0
     v508 Imm(0)                                           -> x0
-    v509 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v484, v500] } -> d3
+    v509 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v461, v500] } -> d3
     v510 Imm(0)                                           -> x0
     v511 Imm(0)                                           -> x0
     v512 Imm(0)                                           -> x0
@@ -869,8 +869,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v574 LocalAddr(-157)                                  -> x0
     v575 BinopI { op=add, lhs=v571, rhs_imm=96 }          -> x0
     v576 Imm(0)                                           -> x0
-    v577 LoadLocal { off=-157, disp=96, kind=V128 }       -> d0
-    v578 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(64), args=[v577] } -> d1
+    v577 LoadLocal { off=-157, disp=96, kind=V128 }       -> d1
+    v578 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(64), args=[v554] } -> d1
     v579 Imm(0)                                           -> x0
     v580 Imm(0)                                           -> x0
     v581 LoadLocal { off=-157, disp=96, kind=V128 }       -> d2
@@ -885,7 +885,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v590 Imm(0)                                           -> x0
     v591 Imm(0)                                           -> x0
     v592 Imm(0)                                           -> x0
-    v593 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v577] } -> d1
+    v593 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v554] } -> d1
     v594 Imm(0)                                           -> x0
     v595 Imm(0)                                           -> x0
     v596 Imm(0)                                           -> x0
@@ -894,7 +894,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v599 Imm(0)                                           -> x0
     v600 Imm(0)                                           -> x0
     v601 Imm(0)                                           -> x0
-    v602 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v577, v593] } -> d3
+    v602 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v554, v593] } -> d3
     v603 Imm(0)                                           -> x0
     v604 Imm(0)                                           -> x0
     v605 Imm(0)                                           -> x0
@@ -962,8 +962,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v667 LocalAddr(-157)                                  -> x0
     v668 BinopI { op=add, lhs=v571, rhs_imm=112 }         -> x0
     v669 Imm(0)                                           -> x0
-    v670 LoadLocal { off=-157, disp=112, kind=V128 }      -> d0
-    v671 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(128), args=[v670] } -> d1
+    v670 LoadLocal { off=-157, disp=112, kind=V128 }      -> d1
+    v671 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(128), args=[v647] } -> d1
     v672 Imm(0)                                           -> x0
     v673 Imm(0)                                           -> x0
     v674 LoadLocal { off=-157, disp=112, kind=V128 }      -> d2
@@ -978,7 +978,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v683 Imm(0)                                           -> x0
     v684 Imm(0)                                           -> x0
     v685 Imm(0)                                           -> x0
-    v686 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v670] } -> d1
+    v686 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v647] } -> d1
     v687 Imm(0)                                           -> x0
     v688 Imm(0)                                           -> x0
     v689 Imm(0)                                           -> x0
@@ -987,7 +987,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v692 Imm(0)                                           -> x0
     v693 Imm(0)                                           -> x0
     v694 Imm(0)                                           -> x0
-    v695 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v670, v686] } -> d3
+    v695 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v647, v686] } -> d3
     v696 Imm(0)                                           -> x0
     v697 Imm(0)                                           -> x0
     v698 Imm(0)                                           -> x0
@@ -1055,8 +1055,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v760 LocalAddr(-157)                                  -> x0
     v761 BinopI { op=add, lhs=v757, rhs_imm=128 }         -> x0
     v762 Imm(0)                                           -> x0
-    v763 LoadLocal { off=-157, disp=128, kind=V128 }      -> d0
-    v764 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(27), args=[v763] } -> d1
+    v763 LoadLocal { off=-157, disp=128, kind=V128 }      -> d1
+    v764 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(27), args=[v740] } -> d1
     v765 Imm(0)                                           -> x0
     v766 Imm(0)                                           -> x0
     v767 LoadLocal { off=-157, disp=128, kind=V128 }      -> d2
@@ -1071,7 +1071,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v776 Imm(0)                                           -> x0
     v777 Imm(0)                                           -> x0
     v778 Imm(0)                                           -> x0
-    v779 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v763] } -> d1
+    v779 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v740] } -> d1
     v780 Imm(0)                                           -> x0
     v781 Imm(0)                                           -> x0
     v782 Imm(0)                                           -> x0
@@ -1080,7 +1080,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v785 Imm(0)                                           -> x0
     v786 Imm(0)                                           -> x0
     v787 Imm(0)                                           -> x0
-    v788 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v763, v779] } -> d3
+    v788 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v740, v779] } -> d3
     v789 Imm(0)                                           -> x0
     v790 Imm(0)                                           -> x0
     v791 Imm(0)                                           -> x0
@@ -1148,8 +1148,8 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v853 LocalAddr(-157)                                  -> x0
     v854 BinopI { op=add, lhs=v757, rhs_imm=144 }         -> x0
     v855 Imm(0)                                           -> x0
-    v856 LoadLocal { off=-157, disp=144, kind=V128 }      -> d0
-    v857 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(54), args=[v856] } -> d1
+    v856 LoadLocal { off=-157, disp=144, kind=V128 }      -> d1
+    v857 SimdVal { op=__builtin_ia32_aeskeygenassist128, imm=Some(54), args=[v833] } -> d1
     v858 Imm(0)                                           -> x0
     v859 Imm(0)                                           -> x0
     v860 LoadLocal { off=-157, disp=144, kind=V128 }      -> d2
@@ -1164,7 +1164,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v869 Imm(0)                                           -> x0
     v870 Imm(0)                                           -> x0
     v871 Imm(0)                                           -> x0
-    v872 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v856] } -> d1
+    v872 SimdVal { op=__builtin_ia32_pslldqi128, imm=Some(4), args=[v833] } -> d1
     v873 Imm(0)                                           -> x0
     v874 Imm(0)                                           -> x0
     v875 Imm(0)                                           -> x0
@@ -1173,7 +1173,7 @@ fn ent_pc=1380 n_params=0 variadic=false locals=0
     v878 Imm(0)                                           -> x0
     v879 Imm(0)                                           -> x0
     v880 Imm(0)                                           -> x0
-    v881 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v856, v872] } -> d3
+    v881 SimdVal { op=__builtin_ia32_pxor128, imm=None, args=[v833, v872] } -> d3
     v882 Imm(0)                                           -> x0
     v883 Imm(0)                                           -> x0
     v884 Imm(0)                                           -> x0
@@ -7753,10 +7753,10 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5921 Imm(0)                                           -> x1
     v5922 Store { addr=v5915, disp=0, value=v4638, kind=V128, align=1 } -> -
     v5923 LifetimeEnd(0)                                   -> -
-    v5924 Imm(0)                                           -> x1
-    v5925 ImmData(544)                                     -> x1
-    v5926 Imm(0)                                           -> x1
-    v5927 Load { addr=v5915, disp=0, kind=V128, align=1 }  -> d0
+    v5924 Imm(0)                                           -> x0
+    v5925 ImmData(544)                                     -> x0
+    v5926 Imm(0)                                           -> x0
+    v5927 Load { addr=v5915, disp=0, kind=V128, align=1 }  -> d1
     v5928 Imm(0)                                           -> x0
     v5929 Imm(0)                                           -> x0
     v5930 Imm(0)                                           -> x0
@@ -7775,7 +7775,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5943 Imm(0)                                           -> x0
     v5944 Imm(0)                                           -> x0
     v5945 Imm(0)                                           -> x0
-    v5946 VecExtract { vec=v5927, off=0, kind=U8, bytes=16 } -> x0
+    v5946 VecExtract { vec=v4638, off=0, kind=U8, bytes=16 } -> x0
     v5947 Imm(0)                                           -> x1
     v5948 BinopI { op=ne, lhs=v5946, rhs_imm=0 }           -> x1
     terminator Bz { cond=v5946, target=b235, fall=b234 }   (exit_acc=v5948)
@@ -7797,7 +7797,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5955 Imm(1)                                           -> x0
     v5956 Imm(1)                                           -> x0
     v5957 Imm(0)                                           -> x0
-    v5958 VecExtract { vec=v5927, off=1, kind=U8, bytes=16 } -> x0
+    v5958 VecExtract { vec=v4638, off=1, kind=U8, bytes=16 } -> x0
     v5959 Imm(1)                                           -> x1
     v5960 BinopI { op=ne, lhs=v5958, rhs_imm=1 }           -> x0
     terminator Bz { cond=v5960, target=b236, fall=b234 }   (exit_acc=v5960)
@@ -7811,7 +7811,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5967 Imm(2)                                           -> x0
     v5968 Imm(2)                                           -> x0
     v5969 Imm(0)                                           -> x0
-    v5970 VecExtract { vec=v5927, off=2, kind=U8, bytes=16 } -> x0
+    v5970 VecExtract { vec=v4638, off=2, kind=U8, bytes=16 } -> x0
     v5971 Imm(2)                                           -> x1
     v5972 BinopI { op=ne, lhs=v5970, rhs_imm=2 }           -> x0
     terminator Bz { cond=v5972, target=b237, fall=b234 }   (exit_acc=v5972)
@@ -7825,7 +7825,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5979 Imm(3)                                           -> x0
     v5980 Imm(3)                                           -> x0
     v5981 Imm(0)                                           -> x0
-    v5982 VecExtract { vec=v5927, off=3, kind=U8, bytes=16 } -> x0
+    v5982 VecExtract { vec=v4638, off=3, kind=U8, bytes=16 } -> x0
     v5983 Imm(3)                                           -> x1
     v5984 BinopI { op=ne, lhs=v5982, rhs_imm=3 }           -> x0
     terminator Bz { cond=v5984, target=b238, fall=b234 }   (exit_acc=v5984)
@@ -7839,7 +7839,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v5991 Imm(4)                                           -> x0
     v5992 Imm(4)                                           -> x0
     v5993 Imm(0)                                           -> x0
-    v5994 VecExtract { vec=v5927, off=4, kind=U8, bytes=16 } -> x0
+    v5994 VecExtract { vec=v4638, off=4, kind=U8, bytes=16 } -> x0
     v5995 Imm(4)                                           -> x1
     v5996 BinopI { op=ne, lhs=v5994, rhs_imm=4 }           -> x0
     terminator Bz { cond=v5996, target=b239, fall=b234 }   (exit_acc=v5996)
@@ -7853,7 +7853,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6003 Imm(5)                                           -> x0
     v6004 Imm(5)                                           -> x0
     v6005 Imm(0)                                           -> x0
-    v6006 VecExtract { vec=v5927, off=5, kind=U8, bytes=16 } -> x0
+    v6006 VecExtract { vec=v4638, off=5, kind=U8, bytes=16 } -> x0
     v6007 Imm(5)                                           -> x1
     v6008 BinopI { op=ne, lhs=v6006, rhs_imm=5 }           -> x0
     terminator Bz { cond=v6008, target=b240, fall=b234 }   (exit_acc=v6008)
@@ -7867,7 +7867,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6015 Imm(6)                                           -> x0
     v6016 Imm(6)                                           -> x0
     v6017 Imm(0)                                           -> x0
-    v6018 VecExtract { vec=v5927, off=6, kind=U8, bytes=16 } -> x0
+    v6018 VecExtract { vec=v4638, off=6, kind=U8, bytes=16 } -> x0
     v6019 Imm(6)                                           -> x1
     v6020 BinopI { op=ne, lhs=v6018, rhs_imm=6 }           -> x0
     terminator Bz { cond=v6020, target=b241, fall=b234 }   (exit_acc=v6020)
@@ -7881,7 +7881,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6027 Imm(7)                                           -> x0
     v6028 Imm(7)                                           -> x0
     v6029 Imm(0)                                           -> x0
-    v6030 VecExtract { vec=v5927, off=7, kind=U8, bytes=16 } -> x0
+    v6030 VecExtract { vec=v4638, off=7, kind=U8, bytes=16 } -> x0
     v6031 Imm(7)                                           -> x1
     v6032 BinopI { op=ne, lhs=v6030, rhs_imm=7 }           -> x0
     terminator Bz { cond=v6032, target=b242, fall=b234 }   (exit_acc=v6032)
@@ -7895,7 +7895,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6039 Imm(8)                                           -> x0
     v6040 Imm(8)                                           -> x0
     v6041 Imm(0)                                           -> x0
-    v6042 VecExtract { vec=v5927, off=8, kind=U8, bytes=16 } -> x0
+    v6042 VecExtract { vec=v4638, off=8, kind=U8, bytes=16 } -> x0
     v6043 Imm(8)                                           -> x1
     v6044 BinopI { op=ne, lhs=v6042, rhs_imm=8 }           -> x0
     terminator Bz { cond=v6044, target=b243, fall=b234 }   (exit_acc=v6044)
@@ -7909,7 +7909,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6051 Imm(9)                                           -> x0
     v6052 Imm(9)                                           -> x0
     v6053 Imm(0)                                           -> x0
-    v6054 VecExtract { vec=v5927, off=9, kind=U8, bytes=16 } -> x0
+    v6054 VecExtract { vec=v4638, off=9, kind=U8, bytes=16 } -> x0
     v6055 Imm(9)                                           -> x1
     v6056 BinopI { op=ne, lhs=v6054, rhs_imm=9 }           -> x0
     terminator Bz { cond=v6056, target=b244, fall=b234 }   (exit_acc=v6056)
@@ -7923,7 +7923,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6063 Imm(10)                                          -> x0
     v6064 Imm(10)                                          -> x0
     v6065 Imm(0)                                           -> x0
-    v6066 VecExtract { vec=v5927, off=10, kind=U8, bytes=16 } -> x0
+    v6066 VecExtract { vec=v4638, off=10, kind=U8, bytes=16 } -> x0
     v6067 Imm(10)                                          -> x1
     v6068 BinopI { op=ne, lhs=v6066, rhs_imm=10 }          -> x0
     terminator Bz { cond=v6068, target=b245, fall=b234 }   (exit_acc=v6068)
@@ -7937,7 +7937,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6075 Imm(11)                                          -> x0
     v6076 Imm(11)                                          -> x0
     v6077 Imm(0)                                           -> x0
-    v6078 VecExtract { vec=v5927, off=11, kind=U8, bytes=16 } -> x0
+    v6078 VecExtract { vec=v4638, off=11, kind=U8, bytes=16 } -> x0
     v6079 Imm(11)                                          -> x1
     v6080 BinopI { op=ne, lhs=v6078, rhs_imm=11 }          -> x0
     terminator Bz { cond=v6080, target=b246, fall=b234 }   (exit_acc=v6080)
@@ -7951,7 +7951,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6087 Imm(12)                                          -> x0
     v6088 Imm(12)                                          -> x0
     v6089 Imm(0)                                           -> x0
-    v6090 VecExtract { vec=v5927, off=12, kind=U8, bytes=16 } -> x0
+    v6090 VecExtract { vec=v4638, off=12, kind=U8, bytes=16 } -> x0
     v6091 Imm(12)                                          -> x1
     v6092 BinopI { op=ne, lhs=v6090, rhs_imm=12 }          -> x0
     terminator Bz { cond=v6092, target=b247, fall=b234 }   (exit_acc=v6092)
@@ -7965,7 +7965,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6099 Imm(13)                                          -> x0
     v6100 Imm(13)                                          -> x0
     v6101 Imm(0)                                           -> x0
-    v6102 VecExtract { vec=v5927, off=13, kind=U8, bytes=16 } -> x0
+    v6102 VecExtract { vec=v4638, off=13, kind=U8, bytes=16 } -> x0
     v6103 Imm(13)                                          -> x1
     v6104 BinopI { op=ne, lhs=v6102, rhs_imm=13 }          -> x0
     terminator Bz { cond=v6104, target=b248, fall=b234 }   (exit_acc=v6104)
@@ -7979,7 +7979,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6111 Imm(14)                                          -> x0
     v6112 Imm(14)                                          -> x0
     v6113 Imm(0)                                           -> x0
-    v6114 VecExtract { vec=v5927, off=14, kind=U8, bytes=16 } -> x0
+    v6114 VecExtract { vec=v4638, off=14, kind=U8, bytes=16 } -> x0
     v6115 Imm(14)                                          -> x1
     v6116 BinopI { op=ne, lhs=v6114, rhs_imm=14 }          -> x0
     terminator Bz { cond=v6116, target=b249, fall=b234 }   (exit_acc=v6116)
@@ -7993,7 +7993,7 @@ fn ent_pc=1381 n_params=0 variadic=false locals=12
     v6123 Imm(15)                                          -> x0
     v6124 Imm(15)                                          -> x0
     v6125 Imm(0)                                           -> x0
-    v6126 VecExtract { vec=v5927, off=15, kind=U8, bytes=16 } -> x0
+    v6126 VecExtract { vec=v4638, off=15, kind=U8, bytes=16 } -> x0
     v6127 Imm(15)                                          -> x1
     v6128 BinopI { op=ne, lhs=v6126, rhs_imm=15 }          -> x0
     terminator Bz { cond=v6128, target=b250, fall=b234 }   (exit_acc=v6128)

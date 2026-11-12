@@ -37,10 +37,12 @@
 //!   - A signed sub-width load (`I8`/`I16`/`I32`) of a same-width store
 //!     becomes `Extend { value=s, kind }`; `narrow_store` writes the low
 //!     bytes and the load sign-extends them, which `Extend` reproduces.
-//!   - Unsigned sub-width loads and the floating kinds are not forwarded:
-//!     `Inst::Extend` does not zero-extend the unsigned widths (it
-//!     assumes a clean upper half), so reusing the stored value there
+//!   - Unsigned sub-width loads and the scalar floating kinds are not
+//!     forwarded: `Inst::Extend` does not zero-extend the unsigned widths
+//!     (it assumes a clean upper half), so reusing the stored value there
 //!     would be unsound.
+//!   - A whole vector load of a store of the same vector kind reuses the
+//!     stored register, unless the stored value is an immediate.
 //! A load forwards from an earlier load only when the load kinds match
 //! exactly, so the extension already applied is the one wanted.
 //!
@@ -98,6 +100,24 @@ fn is_int_store(kind: StoreKind) -> bool {
         kind,
         StoreKind::I64 | StoreKind::I32 | StoreKind::I16 | StoreKind::I8
     )
+}
+
+/// The origin an entry seeded by a store of `kind` carries: an integer
+/// store's value describes the loads [`reuse`] lists (`Some(None)`); a
+/// whole vector's register holds the bytes a load of that vector kind
+/// reads back, unless the value is an immediate, which a general register
+/// holds; `None` for a store that seeds nothing.
+fn store_origin(func: &FunctionSsa, kind: StoreKind, value: ValueId) -> Option<Option<LoadKind>> {
+    if is_int_store(kind) {
+        return Some(None);
+    }
+    let vector = match kind {
+        StoreKind::V128 => LoadKind::V128,
+        StoreKind::V256 => LoadKind::V256,
+        StoreKind::V512 => LoadKind::V512,
+        _ => return None,
+    };
+    (!matches!(func.insts.get(value as usize), Some(Inst::Imm(_)))).then_some(Some(vector))
 }
 
 /// Maximum instruction distance between the store or first load and the
@@ -378,14 +398,14 @@ fn run_one(func: &mut FunctionSsa) {
                     // A volatile store invalidates like any store but
                     // seeds no forward: a later load of the location
                     // must read memory (C99 6.7.3p6).
-                    if is_int_store(kind) && !volatile {
+                    if let Some(origin) = store_origin(func, kind, value).filter(|_| !volatile) {
                         table.push(Entry {
                             addr,
                             disp,
                             width: w,
                             value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
@@ -451,9 +471,8 @@ fn run_one(func: &mut FunctionSsa) {
                     let w = store_width(kind);
                     slot_table
                         .retain(|e| !overlaps64(e.off * 8 + i64::from(e.disp), e.width, at, w));
-                    if (slots.contains(&off) || exposed.contains(&off))
-                        && is_int_store(kind)
-                        && !volatile
+                    if let Some(origin) = store_origin(func, kind, value)
+                        .filter(|_| (slots.contains(&off) || exposed.contains(&off)) && !volatile)
                     {
                         slot_table.push(SlotEntry {
                             off,
@@ -461,7 +480,7 @@ fn run_one(func: &mut FunctionSsa) {
                             width: store_width(kind),
                             value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
@@ -560,7 +579,7 @@ fn run_one(func: &mut FunctionSsa) {
                     table.clear();
                     indexed.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
-                    if is_int_store(*kind) {
+                    if let Some(origin) = store_origin(func, *kind, *value) {
                         indexed.push(IndexedEntry {
                             base: *base,
                             index: *index,
@@ -569,7 +588,7 @@ fn run_one(func: &mut FunctionSsa) {
                             width: store_width(*kind),
                             value: *value,
                             src_idx: idx,
-                            load_kind: None,
+                            load_kind: origin,
                         });
                     }
                 }
@@ -1611,6 +1630,49 @@ mod tests {
             matches!(f.blocks[0].terminator, Terminator::Return(0)),
             "the slot reload should redirect to the stored value v0",
         );
+    }
+
+    /// A whole vector stored to a slot and reloaded as the same vector kind
+    /// is the stored register's value; an immediate vector, a pattern in a
+    /// general register, still reads memory.
+    #[test]
+    fn a_vector_slot_reload_redirects_to_the_stored_vector() {
+        for (value, forwards) in [
+            (
+                Inst::ParamPart {
+                    idx: 0,
+                    part: 0,
+                    kind: LoadKind::V128,
+                },
+                true,
+            ),
+            (Inst::Imm(0), false),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    value,
+                    Inst::StoreLocal {
+                        disp: 0,
+                        off: -2,
+                        value: 0,
+                        kind: StoreKind::V128,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    Inst::LoadLocal {
+                        disp: 0,
+                        off: -2,
+                        kind: LoadKind::V128,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(2),
+                2,
+            );
+            run_one(&mut f);
+            let redirected = matches!(f.blocks[0].terminator, Terminator::Return(0));
+            assert_eq!(redirected, forwards, "{:?}", f.insts[0]);
+        }
     }
 
     /// A call between the slot store and the reload blocks the forward:

@@ -543,7 +543,7 @@ Disassembly of section .text:
                	movups	%xmm1, 0x40(%rsp)
                	leaq	(%rsp), %rdx
                	movups	%xmm0, (%rsp)
-               	movups	(%rsp), %xmm1
+               	movapd	%xmm0, %xmm1
                	divpd	%xmm3, %xmm1
                	movups	%xmm1, (%rsp)
                	xorl	%eax, %eax

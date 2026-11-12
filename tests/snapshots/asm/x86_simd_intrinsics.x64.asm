@@ -102,7 +102,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm0
                	movups	%xmm0, -0xc0(%rbp)
-               	movups	-0xc0(%rbp), %xmm0
                	aeskeygenassist	$0x1, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -117,7 +116,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0xb0(%rbp)
-               	movups	-0xb0(%rbp), %xmm0
                	aeskeygenassist	$0x2, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -132,7 +130,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0xa0(%rbp)
-               	movups	-0xa0(%rbp), %xmm0
                	aeskeygenassist	$0x4, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -147,7 +144,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x90(%rbp)
-               	movups	-0x90(%rbp), %xmm0
                	aeskeygenassist	$0x8, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -162,7 +158,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x80(%rbp)
-               	movups	-0x80(%rbp), %xmm0
                	aeskeygenassist	$0x10, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -177,7 +172,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x70(%rbp)
-               	movups	-0x70(%rbp), %xmm0
                	aeskeygenassist	$0x20, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -192,7 +186,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x60(%rbp)
-               	movups	-0x60(%rbp), %xmm0
                	aeskeygenassist	$0x40, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -207,7 +200,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x50(%rbp)
-               	movups	-0x50(%rbp), %xmm0
                	aeskeygenassist	$0x80, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -222,7 +214,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x40(%rbp)
-               	movups	-0x40(%rbp), %xmm0
                	aeskeygenassist	$0x1b, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -237,7 +228,6 @@ Disassembly of section .text:
                	pxor	%xmm1, %xmm0
                	pxor	%xmm2, %xmm0
                	movups	%xmm0, -0x30(%rbp)
-               	movups	-0x30(%rbp), %xmm0
                	aeskeygenassist	$0x36, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
@@ -1347,7 +1337,6 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movups	%xmm0, (%rax)
-               	movups	(%rax), %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	testq	%rax, %rax
                	je	<addr>

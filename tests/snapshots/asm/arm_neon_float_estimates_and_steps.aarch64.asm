@@ -822,16 +822,14 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0xa0]
                	frecpe	v0.4s, v0.4s
                	stur	q0, [x29, #-0x90]
-               	ldur	q0, [x29, #-0xa0]
-               	ldur	q1, [x29, #-0x90]
-               	frecps	v0.4s, v0.4s, v1.4s
+               	ldur	q1, [x29, #-0xa0]
+               	frecps	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x90]
                	fmul	v0.4s, v1.4s, v0.4s
                	stur	q0, [x29, #-0x90]
                	sub	x3, x29, #0x90
-               	ldur	q0, [x29, #-0xa0]
-               	ldur	q1, [x29, #-0x90]
-               	frecps	v0.4s, v0.4s, v1.4s
+               	ldur	q1, [x29, #-0xa0]
+               	frecps	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x90]
                	fmul	v0.4s, v1.4s, v0.4s
                	stur	q0, [x29, #-0x90]
@@ -839,7 +837,6 @@ Disassembly of section .text:
                	frsqrte	v0.4s, v0.4s
                	stur	q0, [x29, #-0x80]
                	ldur	q1, [x29, #-0xa0]
-               	ldur	q0, [x29, #-0x80]
                	fmul	v1.4s, v1.4s, v0.4s
                	frsqrts	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x80]
@@ -848,7 +845,6 @@ Disassembly of section .text:
                	sub	x4, x29, #0x80
                	sub	x5, x29, #0xa0
                	ldur	q1, [x29, #-0xa0]
-               	ldur	q0, [x29, #-0x80]
                	fmul	v1.4s, v1.4s, v0.4s
                	frsqrts	v0.4s, v1.4s, v0.4s
                	ldur	q1, [x29, #-0x80]

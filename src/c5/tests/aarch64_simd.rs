@@ -472,6 +472,38 @@ fn the_halves_and_their_combination_are_lane_moves() {
     assert!(words.len() <= 3, "mix: {words:08x?}");
 }
 
+/// The lane writes, lane loads and stores and 64-bit lane broadcasts are
+/// subscripts of the vector in its register: `ins` of the lane, `ld1` /
+/// `st1` of one lane through the pointer, `str` of lane 0 and
+/// `mov d, v.d[1]`, with nothing for lane 0 of a 64-bit broadcast.
+#[cfg(feature = "full")]
+#[test]
+fn the_lane_writes_stores_and_broadcasts_are_register_moves() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        float32x4_t setf(float32x4_t v, float x) { return vsetq_lane_f32(x, v, 3); }\n\
+        uint16x8_t ld16(const uint16_t *p, uint16x8_t v) { return vld1q_lane_u16(p, v, 6); }\n\
+        float32x4_t ldf(const float *p, float32x4_t v) { return vld1q_lane_f32(p, v, 2); }\n\
+        void st32(uint32_t *p, uint32x4_t v) { vst1q_lane_u32(p, v, 3); }\n\
+        void stf0(float *p, float32x4_t v) { vst1q_lane_f32(p, v, 0); }\n\
+        void std1(double *p, float64x2_t v) { vst1q_lane_f64(p, v, 1); }\n\
+        int64x1_t dup64(int64x2_t v) { return vdup_laneq_s64(v, 1); }\n\
+        float64x1_t dupf(float64x2_t v) { return vdup_laneq_f64(v, 0); }\n";
+    const RET: u32 = 0xD65F_03C0;
+    for (name, want) in [
+        ("setf", &[0x6E1C_0420u32, RET][..]),
+        ("ld16", &[0x4D40_5000, RET]),
+        ("ldf", &[0x4D40_8000, RET]),
+        ("st32", &[0x4D00_9000, RET]),
+        ("stf0", &[0xBD00_0000, RET]),
+        ("std1", &[0x4D00_8400, RET]),
+        ("dup64", &[0x5E18_0400, RET]),
+        ("dupf", &[RET]),
+    ] {
+        let words = super::perf_codegen::a64_at(SRC, name, true);
+        assert_eq!(words, want, "{name}: {words:08x?}");
+    }
+}
+
 /// A lane of an 8-byte vector is read and written in its register, as a
 /// 16-byte vector's is: `smov` and `ins` on the D register.
 #[cfg(feature = "full")]

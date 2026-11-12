@@ -714,8 +714,7 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_lane_s64>:
-               	ldr	d0, [x1]
-               	ld1	{ v0.d }[0], [x2]
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -723,7 +722,7 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	str	d1, [x0]
-               	st1	{ v0.d }[0], [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vld1q_s64>:
@@ -771,8 +770,7 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_lane_u64>:
-               	ldr	d0, [x1]
-               	ld1	{ v0.d }[0], [x2]
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -780,7 +778,7 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	str	d1, [x0]
-               	st1	{ v0.d }[0], [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vld1q_u64>:
@@ -828,8 +826,7 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_lane_p64>:
-               	ldr	d0, [x1]
-               	ld1	{ v0.d }[0], [x2]
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -837,7 +834,7 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	str	d1, [x0]
-               	st1	{ v0.d }[0], [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vld1q_p64>:
@@ -885,8 +882,7 @@ Disassembly of section .text:
                	ret
 
 <w_vld1_lane_f64>:
-               	ldr	d0, [x1]
-               	ld1	{ v0.d }[0], [x2]
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -894,7 +890,7 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	str	d1, [x0]
-               	st1	{ v0.d }[0], [x0]
+               	str	d0, [x0]
                	ret
 
 <w_vld1q_f64>:
@@ -1301,7 +1297,6 @@ Disassembly of section .text:
 
 <w_vdup_lane_s64>:
                	ldr	d0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1313,8 +1308,7 @@ Disassembly of section .text:
 
 <w_vdup_laneq_s64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[1]
-               	str	d0, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vdupq_laneq_s64>:
@@ -1346,7 +1340,6 @@ Disassembly of section .text:
 
 <w_vdup_lane_u64>:
                	ldr	d0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1358,8 +1351,7 @@ Disassembly of section .text:
 
 <w_vdup_laneq_u64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[1]
-               	str	d0, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vdupq_laneq_u64>:
@@ -1391,7 +1383,6 @@ Disassembly of section .text:
 
 <w_vdup_lane_p64>:
                	ldr	d0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1403,8 +1394,7 @@ Disassembly of section .text:
 
 <w_vdup_laneq_p64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[1]
-               	str	d0, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vdupq_laneq_p64>:
@@ -1426,7 +1416,6 @@ Disassembly of section .text:
 
 <w_vdup_lane_f64>:
                	ldr	d0, [x1]
-               	mov	d0, v0.d[0]
                	str	d0, [x0]
                	ret
 
@@ -1438,8 +1427,7 @@ Disassembly of section .text:
 
 <w_vdup_laneq_f64>:
                	ldr	q0, [x1]
-               	mov	d0, v0.d[1]
-               	str	d0, [x0]
+               	st1	{ v0.d }[1], [x0]
                	ret
 
 <w_vdupq_laneq_f64>:
@@ -1480,7 +1468,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smov	x1, v1.b[0]
-               	sxtb	x1, w1
                	mov	v0.b[0], w1
                	str	d0, [x0]
                	ret
@@ -1489,7 +1476,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	smov	x1, v1.b[0]
-               	sxtb	x1, w1
                	mov	v0.b[15], w1
                	str	q0, [x0]
                	ret
@@ -1530,7 +1516,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umov	w1, v1.b[0]
-               	and	x1, x1, #0xff
                	mov	v0.b[0], w1
                	str	d0, [x0]
                	ret
@@ -1539,7 +1524,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	umov	w1, v1.b[0]
-               	and	x1, x1, #0xff
                	mov	v0.b[15], w1
                	str	q0, [x0]
                	ret
@@ -1580,7 +1564,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umov	w1, v1.b[0]
-               	and	x1, x1, #0xff
                	mov	v0.b[0], w1
                	str	d0, [x0]
                	ret
@@ -1589,7 +1572,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	umov	w1, v1.b[0]
-               	and	x1, x1, #0xff
                	mov	v0.b[15], w1
                	str	q0, [x0]
                	ret
@@ -1626,7 +1608,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smov	x1, v1.h[0]
-               	sxth	x1, w1
                	mov	v0.h[0], w1
                	str	d0, [x0]
                	ret
@@ -1635,7 +1616,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	smov	x1, v1.h[0]
-               	sxth	x1, w1
                	mov	v0.h[7], w1
                	str	q0, [x0]
                	ret
@@ -1676,7 +1656,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umov	w1, v1.h[0]
-               	and	x1, x1, #0xffff
                	mov	v0.h[0], w1
                	str	d0, [x0]
                	ret
@@ -1685,7 +1664,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	umov	w1, v1.h[0]
-               	and	x1, x1, #0xffff
                	mov	v0.h[7], w1
                	str	q0, [x0]
                	ret
@@ -1726,7 +1704,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	umov	w1, v1.h[0]
-               	and	x1, x1, #0xffff
                	mov	v0.h[0], w1
                	str	d0, [x0]
                	ret
@@ -1735,7 +1712,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	umov	w1, v1.h[0]
-               	and	x1, x1, #0xffff
                	mov	v0.h[7], w1
                	str	q0, [x0]
                	ret
@@ -1772,7 +1748,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	smov	x1, v1.s[0]
-               	sxtw	x1, w1
                	mov	v0.s[0], w1
                	str	d0, [x0]
                	ret
@@ -1781,7 +1756,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	smov	x1, v1.s[0]
-               	sxtw	x1, w1
                	mov	v0.s[3], w1
                	str	q0, [x0]
                	ret
@@ -1818,7 +1792,6 @@ Disassembly of section .text:
                	ldr	d0, [x1]
                	ldr	d1, [x2]
                	mov	w1, v1.s[0]
-               	mov	w1, w1
                	mov	v0.s[0], w1
                	str	d0, [x0]
                	ret
@@ -1827,7 +1800,6 @@ Disassembly of section .text:
                	ldr	q0, [x1]
                	ldr	q1, [x2]
                	mov	w1, v1.s[0]
-               	mov	w1, w1
                	mov	v0.s[3], w1
                	str	q0, [x0]
                	ret
@@ -1903,10 +1875,7 @@ Disassembly of section .text:
                	ret
 
 <w_vset_lane_s64>:
-               	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	mov	x1, v1.d[0]
-               	mov	v0.d[0], x1
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -1947,10 +1916,7 @@ Disassembly of section .text:
                	ret
 
 <w_vset_lane_u64>:
-               	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	mov	x1, v1.d[0]
-               	mov	v0.d[0], x1
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -1991,10 +1957,7 @@ Disassembly of section .text:
                	ret
 
 <w_vset_lane_p64>:
-               	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	mov	x1, v1.d[0]
-               	mov	v0.d[0], x1
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 
@@ -2035,9 +1998,7 @@ Disassembly of section .text:
                	ret
 
 <w_vset_lane_f64>:
-               	ldr	d0, [x1]
-               	ldr	d1, [x2]
-               	mov	v0.d[0], v1.d[0]
+               	ldr	d0, [x2]
                	str	d0, [x0]
                	ret
 

@@ -582,7 +582,21 @@ fn run_one(func: &mut FunctionSsa) {
                         .then(|| half(disp).zip(half(disp + 8)))
                         .flatten();
                     if let Some(e) = hit {
-                        any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        let direct =
+                            take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
+                        any |= direct;
+                        // A load rewritten to an extension or a cast serves the
+                        // next load of its kind.
+                        if !direct {
+                            slot_table.push(SlotEntry {
+                                off,
+                                disp,
+                                width: w,
+                                value: i as ValueId,
+                                src_idx: idx,
+                                load_kind: Some(kind),
+                            });
+                        }
                     } else if let Some((lo, hi)) = pair {
                         rewrites.push((
                             i,
@@ -2878,6 +2892,57 @@ mod tests {
                 ),
                 None => assert_eq!(ret, 0, "{stored:?} -> {loaded:?} reuses the double"),
             }
+        }
+    }
+
+    /// A reload rewritten to the cast or the extension of the stored value
+    /// serves the next reload of its kind.
+    #[test]
+    fn a_rewritten_reload_serves_the_next_one() {
+        for (param, stored, loaded) in [
+            (LoadKind::F64, StoreKind::F64, LoadKind::I64),
+            (LoadKind::I64, StoreKind::I32, LoadKind::I32),
+        ] {
+            let load = Inst::LoadLocal {
+                off: -2,
+                disp: 0,
+                kind: loaded,
+                volatile: false,
+            };
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: param
+                    },
+                    Inst::StoreLocal {
+                        off: -2,
+                        disp: 0,
+                        value: 0,
+                        kind: stored,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    load.clone(),
+                    load,
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            assert!(
+                matches!(
+                    f.insts[2],
+                    Inst::FpCast { value: 0, .. } | Inst::Extend { value: 0, .. }
+                ),
+                "{loaded:?}: {:?}",
+                f.insts[2]
+            );
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                "{loaded:?}: {:?}",
+                f.blocks[0].terminator
+            );
         }
     }
 }

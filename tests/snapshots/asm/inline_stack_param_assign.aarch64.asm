@@ -21,28 +21,28 @@ Disassembly of section .text:
                	sxtb	x6, w6
                	sturb	w6, [x29, #-0x20]
                	sub	x1, x4, x1
-               	sxth	x4, w1
-               	and	x1, x5, #0xff
-               	add	x1, x1, #0x3
-               	and	x5, x1, #0xff
-               	and	x1, x7, #0xffff
-               	lsl	x1, x1, #1
-               	and	x6, x1, #0xffff
-               	ldrsw	x1, [x29, #0x10]
-               	add	x0, x1, x0
+               	sxth	x1, w1
+               	and	x4, x5, #0xff
+               	add	x4, x4, #0x3
+               	and	x4, x4, #0xff
+               	and	x5, x7, #0xffff
+               	lsl	x5, x5, #1
+               	and	x5, x5, #0xffff
+               	ldrsw	x6, [x29, #0x10]
+               	add	x0, x6, x0
                	str	w0, [x29, #0x10]
-               	ldr	x1, [x29, #0x18]
-               	sub	x1, x1, x2
-               	str	x1, [x29, #0x18]
+               	sxtw	x6, w0
+               	ldr	x0, [x29, #0x18]
+               	sub	x0, x0, x2
+               	str	x0, [x29, #0x18]
                	ldursb	x2, [x29, #-0x20]
-               	add	x1, x1, x2
-               	str	x1, [x29, #0x18]
+               	add	x0, x0, x2
+               	str	x0, [x29, #0x18]
                	ldr	w2, [x29, #0x20]
-               	add	x4, x4, x5
-               	add	x4, x4, x6
-               	sxtw	x0, w0
-               	add	x0, x4, x0
-               	add	x0, x0, x1
+               	add	x1, x1, x4
+               	add	x1, x1, x5
+               	add	x1, x1, x6
+               	add	x0, x1, x0
                	add	x0, x0, x2
                	mov	w1, w3
                	add	x0, x0, x1

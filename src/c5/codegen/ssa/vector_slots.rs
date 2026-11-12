@@ -432,6 +432,114 @@ pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
     }
 }
 
+/// Each chain of lane inserts writing every lane of a vector with the lane
+/// of one wider source vector at a common shift, as that source's part at
+/// the shift: its 128-bit part of a 32- or 64-byte one, or its 8-byte part
+/// of a 16-byte one. An insert of the chain nothing else reads becomes
+/// `Undef`.
+pub(crate) fn form_parts(func: &mut FunctionSsa) {
+    let mut uses = alloc::vec![0u32; func.insts.len()];
+    let mut count = |a: ValueId| {
+        if let Some(u) = uses.get_mut(a as usize) {
+            *u += 1;
+        }
+    };
+    func.insts
+        .iter()
+        .for_each(|inst| inst.for_each_operand(&mut count));
+    for b in &func.blocks {
+        b.terminator.for_each_operand(&mut count);
+        if b.exit_acc != NO_VALUE {
+            count(b.exit_acc);
+        }
+    }
+    // The source vector, its width and the shift of the lane `value` reads,
+    // for a lane extract of `width` bytes at `off` in the inserted vector.
+    let lane =
+        |func: &FunctionSsa, value: ValueId, off: u8, width: u8| match func.insts[value as usize] {
+            Inst::VecExtract {
+                vec,
+                off: at,
+                kind,
+                bytes,
+            } if lane_load_bytes(kind) == Some(width) && at >= off => Some((vec, bytes, at - off)),
+            _ => None,
+        };
+    for i in 0..func.insts.len() {
+        let Inst::VecInsert {
+            value,
+            off,
+            kind,
+            bytes,
+            ..
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let Some(width) = lane_store_bytes(kind).filter(|&w| w <= bytes) else {
+            continue;
+        };
+        let Some(source) = lane(func, value, off, width) else {
+            continue;
+        };
+        let lanes = u32::from(bytes / width);
+        let all = u64::MAX >> (64 - lanes);
+        let (mut seen, mut at) = (0u64, i as ValueId);
+        for _ in 0..lanes {
+            match func.insts[at as usize] {
+                Inst::VecInsert {
+                    vec,
+                    value: v,
+                    off,
+                    kind: k,
+                    bytes: b,
+                } if k == kind && b == bytes && lane(func, v, off, width) == Some(source) => {
+                    seen |= 1 << (off / width);
+                    at = vec;
+                }
+                _ => break,
+            }
+        }
+        if seen != all {
+            continue;
+        }
+        let (src, src_bytes, shift) = source;
+        let part = match (bytes, src_bytes) {
+            (16, 32 | 64) if shift % 16 == 0 => Inst::VecExtract {
+                vec: src,
+                off: shift,
+                kind: LoadKind::V128,
+                bytes: src_bytes,
+            },
+            (8, 16) if shift % 8 == 0 => Inst::VecExtract {
+                vec: src,
+                off: shift,
+                kind: LoadKind::F64,
+                bytes: 16,
+            },
+            _ => continue,
+        };
+        let Inst::VecInsert { mut vec, .. } = func.insts[i] else {
+            continue;
+        };
+        func.insts[i] = part;
+        if let Some(u) = uses.get_mut(src as usize) {
+            *u += 1;
+        }
+        while let Some(u) = uses.get_mut(vec as usize) {
+            *u -= 1;
+            let Inst::VecInsert { vec: next, .. } = func.insts[vec as usize] else {
+                break;
+            };
+            if *u != 0 {
+                break;
+            }
+            func.insts[vec as usize] = Inst::Undef;
+            vec = next;
+        }
+    }
+}
+
 /// The reads half of [`split_wide_lanes`].
 fn split_wide_reads(func: &mut FunctionSsa) {
     let sites: Vec<ValueId> = func

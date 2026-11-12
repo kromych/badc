@@ -4139,15 +4139,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v108 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v96] } -> d1
     v109 LifetimeEnd(0)                                   -> -
     v110 VecExtract { vec=v108, off=0, kind=I32, bytes=16 } -> x0
-    v111 Imm(0)                                           -> x2
-    v112 Undef                                            -> x2
-    v113 VecInsert { vec=v112, value=v110, off=0, kind=I32, bytes=8 } -> d2
+    v111 Imm(0)                                           -> x0
+    v112 Undef                                            -> x0
+    v113 Undef                                            -> x0
     v114 Imm(0)                                           -> x0
     v115 VecExtract { vec=v108, off=4, kind=I32, bytes=16 } -> x0
-    v116 Imm(0)                                           -> x2
-    v117 Imm(4)                                           -> x2
-    v118 Imm(0)                                           -> x2
-    v119 VecInsert { vec=v113, value=v115, off=4, kind=I32, bytes=8 } -> d1
+    v116 Imm(0)                                           -> x0
+    v117 Imm(4)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 VecExtract { vec=v108, off=0, kind=F64, bytes=16 } -> d1
     v120 Imm(0)                                           -> x0
     v121 Imm(0)                                           -> x0
     v122 LifetimeEnd(0)                                   -> -
@@ -4223,15 +4223,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v182 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v170] } -> d0
     v183 LifetimeEnd(0)                                   -> -
     v184 VecExtract { vec=v182, off=0, kind=I32, bytes=16 } -> x0
-    v185 Imm(0)                                           -> x2
-    v186 Undef                                            -> x2
-    v187 VecInsert { vec=v186, value=v184, off=0, kind=I32, bytes=8 } -> d1
+    v185 Imm(0)                                           -> x0
+    v186 Undef                                            -> x0
+    v187 Undef                                            -> x0
     v188 Imm(0)                                           -> x0
     v189 VecExtract { vec=v182, off=4, kind=I32, bytes=16 } -> x0
-    v190 Imm(0)                                           -> x2
-    v191 Imm(4)                                           -> x2
-    v192 Imm(0)                                           -> x2
-    v193 VecInsert { vec=v187, value=v189, off=4, kind=I32, bytes=8 } -> d0
+    v190 Imm(0)                                           -> x0
+    v191 Imm(4)                                           -> x0
+    v192 Imm(0)                                           -> x0
+    v193 VecExtract { vec=v182, off=0, kind=F64, bytes=16 } -> d0
     v194 Imm(0)                                           -> x0
     v195 Imm(0)                                           -> x0
     v196 LifetimeEnd(0)                                   -> -
@@ -4357,15 +4357,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v312 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v300] } -> d0
     v313 LifetimeEnd(0)                                   -> -
     v314 VecExtract { vec=v312, off=0, kind=I32, bytes=16 } -> x2
-    v315 Imm(0)                                           -> x6
-    v316 Undef                                            -> x6
-    v317 VecInsert { vec=v316, value=v314, off=0, kind=I32, bytes=8 } -> d1
+    v315 Imm(0)                                           -> x2
+    v316 Undef                                            -> x2
+    v317 Undef                                            -> x2
     v318 Imm(0)                                           -> x2
     v319 VecExtract { vec=v312, off=4, kind=I32, bytes=16 } -> x2
-    v320 Imm(0)                                           -> x6
-    v321 Imm(4)                                           -> x6
-    v322 Imm(0)                                           -> x6
-    v323 VecInsert { vec=v317, value=v319, off=4, kind=I32, bytes=8 } -> d0
+    v320 Imm(0)                                           -> x2
+    v321 Imm(4)                                           -> x2
+    v322 Imm(0)                                           -> x2
+    v323 VecExtract { vec=v312, off=0, kind=F64, bytes=16 } -> d0
     v324 Imm(0)                                           -> x2
     v325 Imm(0)                                           -> x2
     v326 LifetimeEnd(0)                                   -> -
@@ -4491,15 +4491,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v442 SimdVal { op=__builtin_ia32_cvttps2dq, imm=None, args=[v430] } -> d0
     v443 LifetimeEnd(0)                                   -> -
     v444 VecExtract { vec=v442, off=0, kind=I32, bytes=16 } -> x0
-    v445 Imm(0)                                           -> x2
-    v446 Undef                                            -> x2
-    v447 VecInsert { vec=v446, value=v444, off=0, kind=I32, bytes=8 } -> d1
+    v445 Imm(0)                                           -> x0
+    v446 Undef                                            -> x0
+    v447 Undef                                            -> x0
     v448 Imm(0)                                           -> x0
     v449 VecExtract { vec=v442, off=4, kind=I32, bytes=16 } -> x0
-    v450 Imm(0)                                           -> x2
-    v451 Imm(4)                                           -> x2
-    v452 Imm(0)                                           -> x2
-    v453 VecInsert { vec=v447, value=v449, off=4, kind=I32, bytes=8 } -> d0
+    v450 Imm(0)                                           -> x0
+    v451 Imm(4)                                           -> x0
+    v452 Imm(0)                                           -> x0
+    v453 VecExtract { vec=v442, off=0, kind=F64, bytes=16 } -> d0
     v454 Imm(0)                                           -> x0
     v455 Imm(0)                                           -> x0
     v456 LifetimeEnd(0)                                   -> -
@@ -4625,15 +4625,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v572 SimdVal { op=__builtin_ia32_cvttps2dq, imm=None, args=[v560] } -> d0
     v573 LifetimeEnd(0)                                   -> -
     v574 VecExtract { vec=v572, off=0, kind=I32, bytes=16 } -> x0
-    v575 Imm(0)                                           -> x2
-    v576 Undef                                            -> x2
-    v577 VecInsert { vec=v576, value=v574, off=0, kind=I32, bytes=8 } -> d1
+    v575 Imm(0)                                           -> x0
+    v576 Undef                                            -> x0
+    v577 Undef                                            -> x0
     v578 Imm(0)                                           -> x0
     v579 VecExtract { vec=v572, off=4, kind=I32, bytes=16 } -> x0
-    v580 Imm(0)                                           -> x2
-    v581 Imm(4)                                           -> x2
-    v582 Imm(0)                                           -> x2
-    v583 VecInsert { vec=v577, value=v579, off=4, kind=I32, bytes=8 } -> d0
+    v580 Imm(0)                                           -> x0
+    v581 Imm(4)                                           -> x0
+    v582 Imm(0)                                           -> x0
+    v583 VecExtract { vec=v572, off=0, kind=F64, bytes=16 } -> d0
     v584 Imm(0)                                           -> x0
     v585 Imm(0)                                           -> x0
     v586 LifetimeEnd(0)                                   -> -
@@ -4769,15 +4769,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v712 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v700] } -> d0
     v713 LifetimeEnd(0)                                   -> -
     v714 VecExtract { vec=v712, off=0, kind=I32, bytes=16 } -> x0
-    v715 Imm(0)                                           -> x2
-    v716 Undef                                            -> x2
-    v717 VecInsert { vec=v716, value=v714, off=0, kind=I32, bytes=8 } -> d1
+    v715 Imm(0)                                           -> x0
+    v716 Undef                                            -> x0
+    v717 Undef                                            -> x0
     v718 Imm(0)                                           -> x0
     v719 VecExtract { vec=v712, off=4, kind=I32, bytes=16 } -> x0
-    v720 Imm(0)                                           -> x2
-    v721 Imm(4)                                           -> x2
-    v722 Imm(0)                                           -> x2
-    v723 VecInsert { vec=v717, value=v719, off=4, kind=I32, bytes=8 } -> d0
+    v720 Imm(0)                                           -> x0
+    v721 Imm(4)                                           -> x0
+    v722 Imm(0)                                           -> x0
+    v723 VecExtract { vec=v712, off=0, kind=F64, bytes=16 } -> d0
     v724 Imm(0)                                           -> x0
     v725 Imm(0)                                           -> x0
     v726 LifetimeEnd(0)                                   -> -
@@ -4913,15 +4913,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v852 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v840] } -> d0
     v853 LifetimeEnd(0)                                   -> -
     v854 VecExtract { vec=v852, off=0, kind=I32, bytes=16 } -> x0
-    v855 Imm(0)                                           -> x2
-    v856 Undef                                            -> x2
-    v857 VecInsert { vec=v856, value=v854, off=0, kind=I32, bytes=8 } -> d1
+    v855 Imm(0)                                           -> x0
+    v856 Undef                                            -> x0
+    v857 Undef                                            -> x0
     v858 Imm(0)                                           -> x0
     v859 VecExtract { vec=v852, off=4, kind=I32, bytes=16 } -> x0
-    v860 Imm(0)                                           -> x2
-    v861 Imm(4)                                           -> x2
-    v862 Imm(0)                                           -> x2
-    v863 VecInsert { vec=v857, value=v859, off=4, kind=I32, bytes=8 } -> d0
+    v860 Imm(0)                                           -> x0
+    v861 Imm(4)                                           -> x0
+    v862 Imm(0)                                           -> x0
+    v863 VecExtract { vec=v852, off=0, kind=F64, bytes=16 } -> d0
     v864 Imm(0)                                           -> x0
     v865 Imm(0)                                           -> x0
     v866 LifetimeEnd(0)                                   -> -
@@ -5251,15 +5251,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1074 SimdVal { op=__builtin_ia32_cvtps2dq, imm=None, args=[v1062] } -> d0
     v1075 LifetimeEnd(0)                                   -> -
     v1076 VecExtract { vec=v1074, off=0, kind=I32, bytes=16 } -> x0
-    v1077 Imm(0)                                           -> x2
-    v1078 Undef                                            -> x2
-    v1079 VecInsert { vec=v1078, value=v1076, off=0, kind=I32, bytes=8 } -> d2
+    v1077 Imm(0)                                           -> x0
+    v1078 Undef                                            -> x0
+    v1079 Undef                                            -> x0
     v1080 Imm(0)                                           -> x0
     v1081 VecExtract { vec=v1074, off=4, kind=I32, bytes=16 } -> x0
-    v1082 Imm(0)                                           -> x2
-    v1083 Imm(4)                                           -> x2
-    v1084 Imm(0)                                           -> x2
-    v1085 VecInsert { vec=v1079, value=v1081, off=4, kind=I32, bytes=8 } -> d0
+    v1082 Imm(0)                                           -> x0
+    v1083 Imm(4)                                           -> x0
+    v1084 Imm(0)                                           -> x0
+    v1085 VecExtract { vec=v1074, off=0, kind=F64, bytes=16 } -> d0
     v1086 Imm(0)                                           -> x0
     v1087 Imm(0)                                           -> x0
     v1088 LifetimeEnd(0)                                   -> -
@@ -5385,15 +5385,15 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v1204 SimdVal { op=__builtin_ia32_cvttps2dq, imm=None, args=[v1192] } -> d0
     v1205 LifetimeEnd(0)                                   -> -
     v1206 VecExtract { vec=v1204, off=0, kind=I32, bytes=16 } -> x0
-    v1207 Imm(0)                                           -> x2
-    v1208 Undef                                            -> x2
-    v1209 VecInsert { vec=v1208, value=v1206, off=0, kind=I32, bytes=8 } -> d2
+    v1207 Imm(0)                                           -> x0
+    v1208 Undef                                            -> x0
+    v1209 Undef                                            -> x0
     v1210 Imm(0)                                           -> x0
     v1211 VecExtract { vec=v1204, off=4, kind=I32, bytes=16 } -> x0
-    v1212 Imm(0)                                           -> x2
-    v1213 Imm(4)                                           -> x2
-    v1214 Imm(0)                                           -> x2
-    v1215 VecInsert { vec=v1209, value=v1211, off=4, kind=I32, bytes=8 } -> d0
+    v1212 Imm(0)                                           -> x0
+    v1213 Imm(4)                                           -> x0
+    v1214 Imm(0)                                           -> x0
+    v1215 VecExtract { vec=v1204, off=0, kind=F64, bytes=16 } -> d0
     v1216 Imm(0)                                           -> x0
     v1217 Imm(0)                                           -> x0
     v1218 LifetimeEnd(0)                                   -> -
@@ -6885,12 +6885,12 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2347 Imm(0)                                           -> x2
     v2348 VecExtract { vec=v2339, off=8, kind=F32, bytes=16 } -> d1 [f32]
     v2349 Undef                                            -> x2
-    v2350 VecInsert { vec=v2349, value=v2348, off=0, kind=F32, bytes=8 } -> d1
+    v2350 Undef                                            -> x2
     v2351 Imm(0)                                           -> x2
     v2352 Imm(12)                                          -> x2
     v2353 Imm(0)                                           -> x2
-    v2354 VecExtract { vec=v2339, off=12, kind=F32, bytes=16 } -> d0 [f32]
-    v2355 VecInsert { vec=v2350, value=v2354, off=4, kind=F32, bytes=8 } -> d0
+    v2354 VecExtract { vec=v2339, off=12, kind=F32, bytes=16 } -> d1 [f32]
+    v2355 VecExtract { vec=v2339, off=8, kind=F64, bytes=16 } -> d0
     v2356 StoreLocal { off=-6, disp=1, value=v2355, kind=F64 } -> -
     v2357 LifetimeEnd(0)                                   -> -
     v2358 LocalAddr(-6)                                    -> x2
@@ -6907,12 +6907,12 @@ fn ent_pc=446 n_params=0 variadic=false locals=8
     v2369 Imm(0)                                           -> x2
     v2370 VecExtract { vec=v2362, off=0, kind=F32, bytes=16 } -> d1 [f32]
     v2371 Undef                                            -> x2
-    v2372 VecInsert { vec=v2371, value=v2370, off=0, kind=F32, bytes=8 } -> d1
+    v2372 Undef                                            -> x2
     v2373 Imm(0)                                           -> x2
     v2374 Imm(4)                                           -> x2
     v2375 Imm(0)                                           -> x2
-    v2376 VecExtract { vec=v2362, off=4, kind=F32, bytes=16 } -> d0 [f32]
-    v2377 VecInsert { vec=v2372, value=v2376, off=4, kind=F32, bytes=8 } -> d0
+    v2376 VecExtract { vec=v2362, off=4, kind=F32, bytes=16 } -> d1 [f32]
+    v2377 VecExtract { vec=v2362, off=0, kind=F64, bytes=16 } -> d0
     v2378 StoreLocal { off=-6, disp=9, value=v2377, kind=F64 } -> -
     v2379 LifetimeEnd(0)                                   -> -
     v2380 LocalAddr(-8)                                    -> x2
@@ -7476,15 +7476,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v344 Imm(0)                                           -> x0
     v345 SimdVal { op=__builtin_ia32_cvtpd2dq, imm=None, args=[v332] } -> d0
     v346 VecExtract { vec=v345, off=0, kind=I32, bytes=16 } -> x0
-    v347 Imm(0)                                           -> x1
-    v348 Undef                                            -> x1
-    v349 VecInsert { vec=v348, value=v346, off=0, kind=I32, bytes=8 } -> d1
+    v347 Imm(0)                                           -> x0
+    v348 Undef                                            -> x0
+    v349 Undef                                            -> x0
     v350 Imm(0)                                           -> x0
     v351 VecExtract { vec=v345, off=4, kind=I32, bytes=16 } -> x0
-    v352 Imm(0)                                           -> x1
-    v353 Imm(4)                                           -> x1
-    v354 Imm(0)                                           -> x1
-    v355 VecInsert { vec=v349, value=v351, off=4, kind=I32, bytes=8 } -> d0
+    v352 Imm(0)                                           -> x0
+    v353 Imm(4)                                           -> x0
+    v354 Imm(0)                                           -> x0
+    v355 VecExtract { vec=v345, off=0, kind=F64, bytes=16 } -> d0
     v356 Imm(0)                                           -> x0
     v357 Imm(0)                                           -> x0
     v358 LifetimeEnd(0)                                   -> -
@@ -7541,15 +7541,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v401 Imm(0)                                           -> x0
     v402 SimdVal { op=__builtin_ia32_cvtpd2dq, imm=None, args=[v389] } -> d0
     v403 VecExtract { vec=v402, off=0, kind=I32, bytes=16 } -> x0
-    v404 Imm(0)                                           -> x1
-    v405 Undef                                            -> x1
-    v406 VecInsert { vec=v405, value=v403, off=0, kind=I32, bytes=8 } -> d1
+    v404 Imm(0)                                           -> x0
+    v405 Undef                                            -> x0
+    v406 Undef                                            -> x0
     v407 Imm(0)                                           -> x0
     v408 VecExtract { vec=v402, off=4, kind=I32, bytes=16 } -> x0
-    v409 Imm(0)                                           -> x1
-    v410 Imm(4)                                           -> x1
-    v411 Imm(0)                                           -> x1
-    v412 VecInsert { vec=v406, value=v408, off=4, kind=I32, bytes=8 } -> d0
+    v409 Imm(0)                                           -> x0
+    v410 Imm(4)                                           -> x0
+    v411 Imm(0)                                           -> x0
+    v412 VecExtract { vec=v402, off=0, kind=F64, bytes=16 } -> d0
     v413 Imm(0)                                           -> x0
     v414 Imm(0)                                           -> x0
     v415 LifetimeEnd(0)                                   -> -
@@ -7606,15 +7606,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v462 Imm(0)                                           -> x0
     v463 SimdVal { op=__builtin_ia32_cvtpd2dq, imm=None, args=[v450] } -> d0
     v464 VecExtract { vec=v463, off=0, kind=I32, bytes=16 } -> x0
-    v465 Imm(0)                                           -> x1
-    v466 Undef                                            -> x1
-    v467 VecInsert { vec=v466, value=v464, off=0, kind=I32, bytes=8 } -> d1
+    v465 Imm(0)                                           -> x0
+    v466 Undef                                            -> x0
+    v467 Undef                                            -> x0
     v468 Imm(0)                                           -> x0
     v469 VecExtract { vec=v463, off=4, kind=I32, bytes=16 } -> x0
-    v470 Imm(0)                                           -> x1
-    v471 Imm(4)                                           -> x1
-    v472 Imm(0)                                           -> x1
-    v473 VecInsert { vec=v467, value=v469, off=4, kind=I32, bytes=8 } -> d0
+    v470 Imm(0)                                           -> x0
+    v471 Imm(4)                                           -> x0
+    v472 Imm(0)                                           -> x0
+    v473 VecExtract { vec=v463, off=0, kind=F64, bytes=16 } -> d0
     v474 Imm(0)                                           -> x0
     v475 Imm(0)                                           -> x0
     v476 LifetimeEnd(0)                                   -> -
@@ -7680,15 +7680,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v532 Imm(0)                                           -> x0
     v533 SimdVal { op=__builtin_ia32_cvtpd2dq, imm=None, args=[v520] } -> d0
     v534 VecExtract { vec=v533, off=0, kind=I32, bytes=16 } -> x0
-    v535 Imm(0)                                           -> x1
-    v536 Undef                                            -> x1
-    v537 VecInsert { vec=v536, value=v534, off=0, kind=I32, bytes=8 } -> d1
+    v535 Imm(0)                                           -> x0
+    v536 Undef                                            -> x0
+    v537 Undef                                            -> x0
     v538 Imm(0)                                           -> x0
     v539 VecExtract { vec=v533, off=4, kind=I32, bytes=16 } -> x0
-    v540 Imm(0)                                           -> x1
-    v541 Imm(4)                                           -> x1
-    v542 Imm(0)                                           -> x1
-    v543 VecInsert { vec=v537, value=v539, off=4, kind=I32, bytes=8 } -> d0
+    v540 Imm(0)                                           -> x0
+    v541 Imm(4)                                           -> x0
+    v542 Imm(0)                                           -> x0
+    v543 VecExtract { vec=v533, off=0, kind=F64, bytes=16 } -> d0
     v544 Imm(0)                                           -> x0
     v545 Imm(0)                                           -> x0
     v546 LifetimeEnd(0)                                   -> -
@@ -7755,15 +7755,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v603 Imm(0)                                           -> x0
     v604 SimdVal { op=__builtin_ia32_cvttpd2dq, imm=None, args=[v591] } -> d0
     v605 VecExtract { vec=v604, off=0, kind=I32, bytes=16 } -> x0
-    v606 Imm(0)                                           -> x1
-    v607 Undef                                            -> x1
-    v608 VecInsert { vec=v607, value=v605, off=0, kind=I32, bytes=8 } -> d1
+    v606 Imm(0)                                           -> x0
+    v607 Undef                                            -> x0
+    v608 Undef                                            -> x0
     v609 Imm(0)                                           -> x0
     v610 VecExtract { vec=v604, off=4, kind=I32, bytes=16 } -> x0
-    v611 Imm(0)                                           -> x1
-    v612 Imm(4)                                           -> x1
-    v613 Imm(0)                                           -> x1
-    v614 VecInsert { vec=v608, value=v610, off=4, kind=I32, bytes=8 } -> d0
+    v611 Imm(0)                                           -> x0
+    v612 Imm(4)                                           -> x0
+    v613 Imm(0)                                           -> x0
+    v614 VecExtract { vec=v604, off=0, kind=F64, bytes=16 } -> d0
     v615 Imm(0)                                           -> x0
     v616 Imm(0)                                           -> x0
     v617 LifetimeEnd(0)                                   -> -
@@ -7821,15 +7821,15 @@ fn ent_pc=447 n_params=0 variadic=false locals=3
     v665 Imm(0)                                           -> x0
     v666 SimdVal { op=__builtin_ia32_cvttpd2dq, imm=None, args=[v653] } -> d0
     v667 VecExtract { vec=v666, off=0, kind=I32, bytes=16 } -> x0
-    v668 Imm(0)                                           -> x1
-    v669 Undef                                            -> x1
-    v670 VecInsert { vec=v669, value=v667, off=0, kind=I32, bytes=8 } -> d1
+    v668 Imm(0)                                           -> x0
+    v669 Undef                                            -> x0
+    v670 Undef                                            -> x0
     v671 Imm(0)                                           -> x0
     v672 VecExtract { vec=v666, off=4, kind=I32, bytes=16 } -> x0
-    v673 Imm(0)                                           -> x1
-    v674 Imm(4)                                           -> x1
-    v675 Imm(0)                                           -> x1
-    v676 VecInsert { vec=v670, value=v672, off=4, kind=I32, bytes=8 } -> d0
+    v673 Imm(0)                                           -> x0
+    v674 Imm(4)                                           -> x0
+    v675 Imm(0)                                           -> x0
+    v676 VecExtract { vec=v666, off=0, kind=F64, bytes=16 } -> d0
     v677 Imm(0)                                           -> x0
     v678 Imm(0)                                           -> x0
     v679 LifetimeEnd(0)                                   -> -

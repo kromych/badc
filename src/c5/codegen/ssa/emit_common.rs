@@ -2877,6 +2877,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let max = if target.is_x86_64() { 32 } else { 16 };
             for f in funcs.iter_mut() {
                 super::vector_slots::form_splats(f, max);
+                super::vector_slots::form_parts(f);
             }
         });
         // Lane accesses of ymm / zmm values become part accesses once the

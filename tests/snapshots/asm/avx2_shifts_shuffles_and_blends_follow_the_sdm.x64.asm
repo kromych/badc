@@ -4730,31 +4730,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0x0, %xmm3, %xmm2, %xmm2 # xmm2 = xmm2[0,1,2,3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0x0, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2,3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -4891,31 +4872,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0xf, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0,1,2,3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0xf, %xmm1, %xmm0, %xmm0 # xmm0 = xmm1[0,1,2,3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -5052,31 +5014,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0x5, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0],xmm2[1],xmm3[2],xmm2[3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0xa, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[1],xmm0[2],xmm1[3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -5213,31 +5156,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0xa, %xmm3, %xmm2, %xmm2 # xmm2 = xmm2[0],xmm3[1],xmm2[2],xmm3[3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0x5, %xmm1, %xmm0, %xmm0 # xmm0 = xmm1[0],xmm0[1],xmm1[2],xmm0[3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -5374,31 +5298,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0x1, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0],xmm2[1,2,3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0x8, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2],xmm1[3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -5535,31 +5440,12 @@ Disassembly of section .text:
                	cmpl	$0x8, %edx
                	jl	<addr>
                	vmovups	0x90(%rsp), %ymm0
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm1
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm1, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
+               	vmovdqa	%xmm0, %xmm2
                	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovdqa	%xmm1, %xmm3
                	vblendps	$0xf, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0,1,2,3]
-               	vextracti128	$0x1, %ymm0, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm3, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	vextracti128	$0x1, %ymm1, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
                	vextracti128	$0x1, %ymm1, %xmm1
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
                	vblendps	$0x0, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2,3]
                	vmovq	%xmm2, %rax
                	vmovq	%rax, %xmm1
@@ -5618,25 +5504,15 @@ Disassembly of section .text:
                	cmpl	$0x20, %eax
                	jl	<addr>
                	vmovups	(%r13), %ymm0
-               	vmovups	0x90(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm2
-               	vpextrq	$0x1, %xmm1, %rax
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
-               	vmovups	0x70(%rsp), %ymm1
-               	vmovq	%xmm1, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm1, %rax
-               	movapd	%xmm3, %xmm1
-               	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	vmovq	%xmm0, %rax
-               	vmovq	%rax, %xmm3
-               	vpextrq	$0x1, %xmm0, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
+               	vmovups	0x90(%rsp), %ymm14
+               	vmovdqa	%xmm14, %xmm1
+               	vmovups	0x70(%rsp), %ymm14
+               	vmovdqa	%xmm14, %xmm2
+               	vmovdqa	%xmm0, %xmm3
                	leaq	-0xd0(%rbp), %rcx
-               	movups	%xmm2, -0xd0(%rbp)
+               	movups	%xmm1, -0xd0(%rbp)
                	leaq	-0xc0(%rbp), %rdx
-               	movups	%xmm1, -0xc0(%rbp)
+               	movups	%xmm2, -0xc0(%rbp)
                	leaq	-0xb0(%rbp), %rsi
                	movups	%xmm3, -0xb0(%rbp)
                	xorl	%eax, %eax
@@ -5650,31 +5526,14 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0xd0(%rbp), %rcx
                	movups	-0xd0(%rbp), %xmm1
-               	vmovups	0x90(%rsp), %ymm2
-               	vextracti128	$0x1, %ymm2, %xmm3
-               	vmovq	%xmm3, %rax
-               	vmovq	%rax, %xmm3
-               	vextracti128	$0x1, %ymm2, %xmm2
-               	vpextrq	$0x1, %xmm2, %rax
-               	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	vmovups	0x70(%rsp), %ymm2
-               	vextracti128	$0x1, %ymm2, %xmm4
-               	vmovq	%xmm4, %rax
-               	vmovq	%rax, %xmm4
-               	vextracti128	$0x1, %ymm2, %xmm2
-               	vpextrq	$0x1, %xmm2, %rax
-               	movapd	%xmm4, %xmm2
-               	vpinsrq	$0x1, %rax, %xmm2, %xmm2
-               	vextracti128	$0x1, %ymm0, %xmm4
-               	vmovq	%xmm4, %rax
-               	vmovq	%rax, %xmm4
+               	vmovups	0x90(%rsp), %ymm14
+               	vextracti128	$0x1, %ymm14, %xmm2
+               	vmovups	0x70(%rsp), %ymm14
+               	vextracti128	$0x1, %ymm14, %xmm3
                	vextracti128	$0x1, %ymm0, %xmm0
-               	vpextrq	$0x1, %xmm0, %rax
-               	movapd	%xmm4, %xmm0
-               	vpinsrq	$0x1, %rax, %xmm0, %xmm0
-               	movups	%xmm3, -0xd0(%rbp)
+               	movups	%xmm2, -0xd0(%rbp)
                	leaq	-0xc0(%rbp), %rdx
-               	movups	%xmm2, -0xc0(%rbp)
+               	movups	%xmm3, -0xc0(%rbp)
                	leaq	-0xb0(%rbp), %rsi
                	movups	%xmm0, -0xb0(%rbp)
                	xorl	%eax, %eax

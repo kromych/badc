@@ -3265,6 +3265,33 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     m.finish();
 }
 
+/// A vector whose every lane is the lane at one shift of a wider vector is
+/// that vector's part: a 128-bit half of a 256-bit one is its low register
+/// or one `vextracti128`, an 8-byte half of a 16-byte one one lane move.
+#[test]
+fn a_vector_of_another_vectors_lanes_is_its_part() {
+    const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
+typedef long long v2l __attribute__((vector_size(16)));\n\
+typedef int i4 __attribute__((vector_size(16)));\n\
+typedef int i2 __attribute__((vector_size(8)));\n\
+static inline __attribute__((always_inline)) v2l lo(v4l a) { return (v2l){a[0], a[1]}; }\n\
+static inline __attribute__((always_inline)) v2l hi(v4l a) { return (v2l){a[2], a[3]}; }\n\
+v2l f(v4l a, v4l b) { return lo(a) + lo(b) + hi(a); }\n\
+static inline __attribute__((always_inline)) i2 top(i4 a) { return (i2){a[2], a[3]}; }\n\
+i2 g(i4 a, i2 b) { return top(a) + b; }\n";
+    let mut m = Misses::default();
+    // Two low-half moves folded into the adds, one extract, two adds,
+    // vzeroupper, ret.
+    let insns = x64(SRC, "f");
+    m.expect(insns.len() <= 7, || format!("x86-64 f: {insns:x?}"));
+    // The high lane moved down, the add, ret.
+    let words = a64(SRC, "g");
+    m.expect(words.len() == 3, || format!("aarch64 g: {words:08x?}"));
+    let insns = x64(SRC, "g");
+    m.expect(insns.len() == 3, || format!("x86-64 g: {insns:x?}"));
+    m.finish();
+}
+
 /// A vector written lane by lane over every byte reads nothing under its
 /// first lane: that lane loads into the result's register, which holds no
 /// value yet, with no zero or copy ahead of it.

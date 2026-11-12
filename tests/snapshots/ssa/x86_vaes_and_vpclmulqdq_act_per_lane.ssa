@@ -145,15 +145,15 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
     v43  Imm(0)                                           -> x0
-    v44  Copy { value=v3, fp=true }                       -> d2
-    v45  SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v44] } -> d0
+    v44  Copy { value=v3, fp=true }                       -> d0
+    v45  SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v44] } -> d2
     v46  Imm(0)                                           -> x0
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x0
     v50  Imm(0)                                           -> x0
     v51  Imm(0)                                           -> x0
-    v52  Copy { value=v11, fp=true }                      -> d3
+    v52  Copy { value=v11, fp=true }                      -> d1
     v53  SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v45, v52] } -> [spill 0]
     v54  Imm(0)                                           -> x0
     v55  LifetimeEnd(0)                                   -> -
@@ -177,15 +177,15 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
-    v76  Copy { value=v19, fp=true }                      -> d4
-    v77  SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v76] } -> d0
+    v76  Copy { value=v19, fp=true }                      -> d2
+    v77  SimdVal { op=__builtin_ia32_si256_si, imm=None, args=[v76] } -> d4
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
-    v84  Copy { value=v27, fp=true }                      -> d5
+    v84  Copy { value=v27, fp=true }                      -> d3
     v85  SimdVal { op=__builtin_ia32_insert128i256, imm=Some(1), args=[v77, v84] } -> [spill 4]
     v86  Imm(0)                                           -> x0
     v87  LifetimeEnd(0)                                   -> -
@@ -212,20 +212,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v108 Imm(0)                                           -> x0
     v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
-    v111 Copy { value=v53, fp=true }                      -> d0
-    v112 VecExtract { vec=v111, off=0, kind=I64, bytes=32 } -> x0
-    v113 Imm(0)                                           -> x1
-    v114 Undef                                            -> x1
-    v115 VecInsert { vec=v114, value=v112, off=0, kind=I64, bytes=16 } -> d1
+    v111 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v112 Imm(0)                                           -> x0
+    v113 Undef                                            -> x0
+    v114 Undef                                            -> x0
+    v115 Imm(0)                                           -> x0
     v116 Imm(0)                                           -> x0
-    v117 Imm(0)                                           -> x0
-    v118 Imm(8)                                           -> x0
-    v119 Imm(0)                                           -> x0
-    v120 VecExtract { vec=v111, off=8, kind=I64, bytes=32 } -> x0
-    v121 Imm(0)                                           -> x1
-    v122 Imm(8)                                           -> x1
-    v123 Imm(0)                                           -> x1
-    v124 VecInsert { vec=v115, value=v120, off=8, kind=I64, bytes=16 } -> d6
+    v117 Imm(8)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v120 Imm(0)                                           -> x0
+    v121 Imm(8)                                           -> x0
+    v122 Imm(0)                                           -> x0
+    v123 Copy { value=v53, fp=true }                      -> d4
+    v124 VecExtract { vec=v123, off=0, kind=V128, bytes=32 } -> d6
     v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
     v127 LifetimeEnd(0)                                   -> -
@@ -239,20 +239,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v135 Imm(0)                                           -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
-    v138 Copy { value=v85, fp=true }                      -> d1
-    v139 VecExtract { vec=v138, off=0, kind=I64, bytes=32 } -> x0
-    v140 Imm(0)                                           -> x1
-    v141 Undef                                            -> x1
-    v142 VecInsert { vec=v141, value=v139, off=0, kind=I64, bytes=16 } -> d7
+    v138 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v139 Imm(0)                                           -> x0
+    v140 Undef                                            -> x0
+    v141 Undef                                            -> x0
+    v142 Imm(0)                                           -> x0
     v143 Imm(0)                                           -> x0
-    v144 Imm(0)                                           -> x0
-    v145 Imm(8)                                           -> x0
-    v146 Imm(0)                                           -> x0
-    v147 VecExtract { vec=v138, off=8, kind=I64, bytes=32 } -> x0
-    v148 Imm(0)                                           -> x1
-    v149 Imm(8)                                           -> x1
-    v150 Imm(0)                                           -> x1
-    v151 VecInsert { vec=v142, value=v147, off=8, kind=I64, bytes=16 } -> d7
+    v144 Imm(8)                                           -> x0
+    v145 Imm(0)                                           -> x0
+    v146 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v147 Imm(0)                                           -> x0
+    v148 Imm(8)                                           -> x0
+    v149 Imm(0)                                           -> x0
+    v150 Copy { value=v85, fp=true }                      -> d5
+    v151 VecExtract { vec=v150, off=0, kind=V128, bytes=32 } -> d7
     v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
     v154 LifetimeEnd(0)                                   -> -
@@ -273,21 +273,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v169 Imm(0)                                           -> x0
     v170 Imm(16)                                          -> x0
     v171 Imm(0)                                           -> x0
-    v172 VecExtract { vec=v111, off=16, kind=V128, bytes=32 } -> d7
+    v172 VecExtract { vec=v123, off=16, kind=V128, bytes=32 } -> d7
     v173 VecExtract { vec=v172, off=0, kind=I64, bytes=16 } -> x0
-    v174 Imm(0)                                           -> x1
-    v175 Undef                                            -> x1
-    v176 VecInsert { vec=v175, value=v173, off=0, kind=I64, bytes=16 } -> d7
+    v174 Imm(0)                                           -> x0
+    v175 Undef                                            -> x0
+    v176 Undef                                            -> x0
     v177 Imm(0)                                           -> x0
     v178 Imm(0)                                           -> x0
     v179 Imm(24)                                          -> x0
     v180 Imm(0)                                           -> x0
-    v181 VecExtract { vec=v111, off=16, kind=V128, bytes=32 } -> d0
+    v181 VecExtract { vec=v123, off=16, kind=V128, bytes=32 } -> d7
     v182 VecExtract { vec=v181, off=8, kind=I64, bytes=16 } -> x0
-    v183 Imm(0)                                           -> x1
-    v184 Imm(8)                                           -> x1
-    v185 Imm(0)                                           -> x1
-    v186 VecInsert { vec=v176, value=v182, off=8, kind=I64, bytes=16 } -> d0
+    v183 Imm(0)                                           -> x0
+    v184 Imm(8)                                           -> x0
+    v185 Imm(0)                                           -> x0
+    v186 VecExtract { vec=v123, off=16, kind=V128, bytes=32 } -> d4
     v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
     v189 LifetimeEnd(0)                                   -> -
@@ -302,21 +302,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v198 Imm(0)                                           -> x0
     v199 Imm(16)                                          -> x0
     v200 Imm(0)                                           -> x0
-    v201 VecExtract { vec=v138, off=16, kind=V128, bytes=32 } -> d7
+    v201 VecExtract { vec=v150, off=16, kind=V128, bytes=32 } -> d7
     v202 VecExtract { vec=v201, off=0, kind=I64, bytes=16 } -> x0
-    v203 Imm(0)                                           -> x1
-    v204 Undef                                            -> x1
-    v205 VecInsert { vec=v204, value=v202, off=0, kind=I64, bytes=16 } -> d7
+    v203 Imm(0)                                           -> x0
+    v204 Undef                                            -> x0
+    v205 Undef                                            -> x0
     v206 Imm(0)                                           -> x0
     v207 Imm(0)                                           -> x0
     v208 Imm(24)                                          -> x0
     v209 Imm(0)                                           -> x0
-    v210 VecExtract { vec=v138, off=16, kind=V128, bytes=32 } -> d1
+    v210 VecExtract { vec=v150, off=16, kind=V128, bytes=32 } -> d7
     v211 VecExtract { vec=v210, off=8, kind=I64, bytes=16 } -> x0
-    v212 Imm(0)                                           -> x1
-    v213 Imm(8)                                           -> x1
-    v214 Imm(0)                                           -> x1
-    v215 VecInsert { vec=v205, value=v211, off=8, kind=I64, bytes=16 } -> d1
+    v212 Imm(0)                                           -> x0
+    v213 Imm(8)                                           -> x0
+    v214 Imm(0)                                           -> x0
+    v215 VecExtract { vec=v150, off=16, kind=V128, bytes=32 } -> d5
     v216 Imm(0)                                           -> x0
     v217 Imm(0)                                           -> x0
     v218 LifetimeEnd(0)                                   -> -
@@ -327,7 +327,7 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v223 Imm(0)                                           -> x0
     v224 Imm(0)                                           -> x0
     v225 Imm(0)                                           -> x0
-    v226 SimdVal { op=__builtin_ia32_aesenc128, imm=None, args=[v186, v215] } -> d0
+    v226 SimdVal { op=__builtin_ia32_aesenc128, imm=None, args=[v186, v215] } -> d4
     v227 Imm(0)                                           -> x0
     v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
@@ -342,7 +342,7 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v238 Imm(0)                                           -> x1
     v239 Imm(0)                                           -> x1
     v240 Imm(0)                                           -> x2
-    v241 VecInsert { vec=v240, value=v237, off=0, kind=I64, bytes=16 } -> d1
+    v241 VecInsert { vec=v240, value=v237, off=0, kind=I64, bytes=16 } -> d5
     v242 VecInsert { vec=v239, value=v241, off=0, kind=V128, bytes=32 } -> d7
     v243 Imm(0)                                           -> x0
     v244 Imm(0)                                           -> x0
@@ -352,9 +352,9 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v248 Imm(0)                                           -> x2
     v249 Imm(8)                                           -> x2
     v250 Imm(0)                                           -> x2
-    v251 Copy { value=v241, fp=true }                     -> d1
-    v252 VecInsert { vec=v251, value=v247, off=8, kind=I64, bytes=16 } -> d1
-    v253 VecInsert { vec=v239, value=v252, off=0, kind=V128, bytes=32 } -> d1
+    v251 Copy { value=v241, fp=true }                     -> d5
+    v252 VecInsert { vec=v251, value=v247, off=8, kind=I64, bytes=16 } -> d5
+    v253 VecInsert { vec=v239, value=v252, off=0, kind=V128, bytes=32 } -> d5
     v254 Imm(0)                                           -> x0
     v255 Imm(0)                                           -> x0
     v256 Imm(0)                                           -> x0
@@ -373,9 +373,9 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v269 Imm(0)                                           -> x1
     v270 Imm(24)                                          -> x1
     v271 Imm(0)                                           -> x1
-    v272 Copy { value=v262, fp=true }                     -> d0
-    v273 VecInsert { vec=v272, value=v268, off=8, kind=I64, bytes=16 } -> d0
-    v274 VecInsert { vec=v253, value=v273, off=16, kind=V128, bytes=32 } -> d0
+    v272 Copy { value=v262, fp=true }                     -> d4
+    v273 VecInsert { vec=v272, value=v268, off=8, kind=I64, bytes=16 } -> d4
+    v274 VecInsert { vec=v253, value=v273, off=16, kind=V128, bytes=32 } -> d4
     v275 Imm(0)                                           -> x0
     v276 Imm(0)                                           -> x0
     v277 LifetimeEnd(0)                                   -> -
@@ -435,20 +435,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v327 Imm(0)                                           -> x0
     v328 Imm(0)                                           -> x0
     v329 Imm(0)                                           -> x0
-    v330 Copy { value=v53, fp=true }                      -> d0
-    v331 VecExtract { vec=v330, off=0, kind=I64, bytes=32 } -> x0
-    v332 Imm(0)                                           -> x1
-    v333 Undef                                            -> x1
-    v334 VecInsert { vec=v333, value=v331, off=0, kind=I64, bytes=16 } -> d1
+    v330 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v331 Imm(0)                                           -> x0
+    v332 Undef                                            -> x0
+    v333 Undef                                            -> x0
+    v334 Imm(0)                                           -> x0
     v335 Imm(0)                                           -> x0
-    v336 Imm(0)                                           -> x0
-    v337 Imm(8)                                           -> x0
-    v338 Imm(0)                                           -> x0
-    v339 VecExtract { vec=v330, off=8, kind=I64, bytes=32 } -> x0
-    v340 Imm(0)                                           -> x1
-    v341 Imm(8)                                           -> x1
-    v342 Imm(0)                                           -> x1
-    v343 VecInsert { vec=v334, value=v339, off=8, kind=I64, bytes=16 } -> d2
+    v336 Imm(8)                                           -> x0
+    v337 Imm(0)                                           -> x0
+    v338 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v339 Imm(0)                                           -> x0
+    v340 Imm(8)                                           -> x0
+    v341 Imm(0)                                           -> x0
+    v342 Copy { value=v53, fp=true }                      -> d0
+    v343 VecExtract { vec=v342, off=0, kind=V128, bytes=32 } -> d2
     v344 Imm(0)                                           -> x0
     v345 Imm(0)                                           -> x0
     v346 LifetimeEnd(0)                                   -> -
@@ -462,20 +462,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v354 Imm(0)                                           -> x0
     v355 Imm(0)                                           -> x0
     v356 Imm(0)                                           -> x0
-    v357 Copy { value=v85, fp=true }                      -> d1
-    v358 VecExtract { vec=v357, off=0, kind=I64, bytes=32 } -> x0
-    v359 Imm(0)                                           -> x1
-    v360 Undef                                            -> x1
-    v361 VecInsert { vec=v360, value=v358, off=0, kind=I64, bytes=16 } -> d3
+    v357 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v358 Imm(0)                                           -> x0
+    v359 Undef                                            -> x0
+    v360 Undef                                            -> x0
+    v361 Imm(0)                                           -> x0
     v362 Imm(0)                                           -> x0
-    v363 Imm(0)                                           -> x0
-    v364 Imm(8)                                           -> x0
-    v365 Imm(0)                                           -> x0
-    v366 VecExtract { vec=v357, off=8, kind=I64, bytes=32 } -> x0
-    v367 Imm(0)                                           -> x1
-    v368 Imm(8)                                           -> x1
-    v369 Imm(0)                                           -> x1
-    v370 VecInsert { vec=v361, value=v366, off=8, kind=I64, bytes=16 } -> d3
+    v363 Imm(8)                                           -> x0
+    v364 Imm(0)                                           -> x0
+    v365 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v366 Imm(0)                                           -> x0
+    v367 Imm(8)                                           -> x0
+    v368 Imm(0)                                           -> x0
+    v369 Copy { value=v85, fp=true }                      -> d1
+    v370 VecExtract { vec=v369, off=0, kind=V128, bytes=32 } -> d3
     v371 Imm(0)                                           -> x0
     v372 Imm(0)                                           -> x0
     v373 LifetimeEnd(0)                                   -> -
@@ -496,21 +496,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v388 Imm(0)                                           -> x0
     v389 Imm(16)                                          -> x0
     v390 Imm(0)                                           -> x0
-    v391 VecExtract { vec=v330, off=16, kind=V128, bytes=32 } -> d3
+    v391 VecExtract { vec=v342, off=16, kind=V128, bytes=32 } -> d3
     v392 VecExtract { vec=v391, off=0, kind=I64, bytes=16 } -> x0
-    v393 Imm(0)                                           -> x1
-    v394 Undef                                            -> x1
-    v395 VecInsert { vec=v394, value=v392, off=0, kind=I64, bytes=16 } -> d3
+    v393 Imm(0)                                           -> x0
+    v394 Undef                                            -> x0
+    v395 Undef                                            -> x0
     v396 Imm(0)                                           -> x0
     v397 Imm(0)                                           -> x0
     v398 Imm(24)                                          -> x0
     v399 Imm(0)                                           -> x0
-    v400 VecExtract { vec=v330, off=16, kind=V128, bytes=32 } -> d0
+    v400 VecExtract { vec=v342, off=16, kind=V128, bytes=32 } -> d3
     v401 VecExtract { vec=v400, off=8, kind=I64, bytes=16 } -> x0
-    v402 Imm(0)                                           -> x1
-    v403 Imm(8)                                           -> x1
-    v404 Imm(0)                                           -> x1
-    v405 VecInsert { vec=v395, value=v401, off=8, kind=I64, bytes=16 } -> d0
+    v402 Imm(0)                                           -> x0
+    v403 Imm(8)                                           -> x0
+    v404 Imm(0)                                           -> x0
+    v405 VecExtract { vec=v342, off=16, kind=V128, bytes=32 } -> d0
     v406 Imm(0)                                           -> x0
     v407 Imm(0)                                           -> x0
     v408 LifetimeEnd(0)                                   -> -
@@ -525,21 +525,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v417 Imm(0)                                           -> x0
     v418 Imm(16)                                          -> x0
     v419 Imm(0)                                           -> x0
-    v420 VecExtract { vec=v357, off=16, kind=V128, bytes=32 } -> d3
+    v420 VecExtract { vec=v369, off=16, kind=V128, bytes=32 } -> d3
     v421 VecExtract { vec=v420, off=0, kind=I64, bytes=16 } -> x0
-    v422 Imm(0)                                           -> x1
-    v423 Undef                                            -> x1
-    v424 VecInsert { vec=v423, value=v421, off=0, kind=I64, bytes=16 } -> d3
+    v422 Imm(0)                                           -> x0
+    v423 Undef                                            -> x0
+    v424 Undef                                            -> x0
     v425 Imm(0)                                           -> x0
     v426 Imm(0)                                           -> x0
     v427 Imm(24)                                          -> x0
     v428 Imm(0)                                           -> x0
-    v429 VecExtract { vec=v357, off=16, kind=V128, bytes=32 } -> d1
+    v429 VecExtract { vec=v369, off=16, kind=V128, bytes=32 } -> d3
     v430 VecExtract { vec=v429, off=8, kind=I64, bytes=16 } -> x0
-    v431 Imm(0)                                           -> x1
-    v432 Imm(8)                                           -> x1
-    v433 Imm(0)                                           -> x1
-    v434 VecInsert { vec=v424, value=v430, off=8, kind=I64, bytes=16 } -> d1
+    v431 Imm(0)                                           -> x0
+    v432 Imm(8)                                           -> x0
+    v433 Imm(0)                                           -> x0
+    v434 VecExtract { vec=v369, off=16, kind=V128, bytes=32 } -> d1
     v435 Imm(0)                                           -> x0
     v436 Imm(0)                                           -> x0
     v437 LifetimeEnd(0)                                   -> -
@@ -658,20 +658,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v546 Imm(0)                                           -> x0
     v547 Imm(0)                                           -> x0
     v548 Imm(0)                                           -> x0
-    v549 Copy { value=v53, fp=true }                      -> d0
-    v550 VecExtract { vec=v549, off=0, kind=I64, bytes=32 } -> x0
-    v551 Imm(0)                                           -> x1
-    v552 Undef                                            -> x1
-    v553 VecInsert { vec=v552, value=v550, off=0, kind=I64, bytes=16 } -> d1
+    v549 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v550 Imm(0)                                           -> x0
+    v551 Undef                                            -> x0
+    v552 Undef                                            -> x0
+    v553 Imm(0)                                           -> x0
     v554 Imm(0)                                           -> x0
-    v555 Imm(0)                                           -> x0
-    v556 Imm(8)                                           -> x0
-    v557 Imm(0)                                           -> x0
-    v558 VecExtract { vec=v549, off=8, kind=I64, bytes=32 } -> x0
-    v559 Imm(0)                                           -> x1
-    v560 Imm(8)                                           -> x1
-    v561 Imm(0)                                           -> x1
-    v562 VecInsert { vec=v553, value=v558, off=8, kind=I64, bytes=16 } -> d2
+    v555 Imm(8)                                           -> x0
+    v556 Imm(0)                                           -> x0
+    v557 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v558 Imm(0)                                           -> x0
+    v559 Imm(8)                                           -> x0
+    v560 Imm(0)                                           -> x0
+    v561 Copy { value=v53, fp=true }                      -> d0
+    v562 VecExtract { vec=v561, off=0, kind=V128, bytes=32 } -> d2
     v563 Imm(0)                                           -> x0
     v564 Imm(0)                                           -> x0
     v565 LifetimeEnd(0)                                   -> -
@@ -685,20 +685,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v573 Imm(0)                                           -> x0
     v574 Imm(0)                                           -> x0
     v575 Imm(0)                                           -> x0
-    v576 Copy { value=v85, fp=true }                      -> d1
-    v577 VecExtract { vec=v576, off=0, kind=I64, bytes=32 } -> x0
-    v578 Imm(0)                                           -> x1
-    v579 Undef                                            -> x1
-    v580 VecInsert { vec=v579, value=v577, off=0, kind=I64, bytes=16 } -> d3
+    v576 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v577 Imm(0)                                           -> x0
+    v578 Undef                                            -> x0
+    v579 Undef                                            -> x0
+    v580 Imm(0)                                           -> x0
     v581 Imm(0)                                           -> x0
-    v582 Imm(0)                                           -> x0
-    v583 Imm(8)                                           -> x0
-    v584 Imm(0)                                           -> x0
-    v585 VecExtract { vec=v576, off=8, kind=I64, bytes=32 } -> x0
-    v586 Imm(0)                                           -> x1
-    v587 Imm(8)                                           -> x1
-    v588 Imm(0)                                           -> x1
-    v589 VecInsert { vec=v580, value=v585, off=8, kind=I64, bytes=16 } -> d3
+    v582 Imm(8)                                           -> x0
+    v583 Imm(0)                                           -> x0
+    v584 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v585 Imm(0)                                           -> x0
+    v586 Imm(8)                                           -> x0
+    v587 Imm(0)                                           -> x0
+    v588 Copy { value=v85, fp=true }                      -> d1
+    v589 VecExtract { vec=v588, off=0, kind=V128, bytes=32 } -> d3
     v590 Imm(0)                                           -> x0
     v591 Imm(0)                                           -> x0
     v592 LifetimeEnd(0)                                   -> -
@@ -719,21 +719,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v607 Imm(0)                                           -> x0
     v608 Imm(16)                                          -> x0
     v609 Imm(0)                                           -> x0
-    v610 VecExtract { vec=v549, off=16, kind=V128, bytes=32 } -> d3
+    v610 VecExtract { vec=v561, off=16, kind=V128, bytes=32 } -> d3
     v611 VecExtract { vec=v610, off=0, kind=I64, bytes=16 } -> x0
-    v612 Imm(0)                                           -> x1
-    v613 Undef                                            -> x1
-    v614 VecInsert { vec=v613, value=v611, off=0, kind=I64, bytes=16 } -> d3
+    v612 Imm(0)                                           -> x0
+    v613 Undef                                            -> x0
+    v614 Undef                                            -> x0
     v615 Imm(0)                                           -> x0
     v616 Imm(0)                                           -> x0
     v617 Imm(24)                                          -> x0
     v618 Imm(0)                                           -> x0
-    v619 VecExtract { vec=v549, off=16, kind=V128, bytes=32 } -> d0
+    v619 VecExtract { vec=v561, off=16, kind=V128, bytes=32 } -> d3
     v620 VecExtract { vec=v619, off=8, kind=I64, bytes=16 } -> x0
-    v621 Imm(0)                                           -> x1
-    v622 Imm(8)                                           -> x1
-    v623 Imm(0)                                           -> x1
-    v624 VecInsert { vec=v614, value=v620, off=8, kind=I64, bytes=16 } -> d0
+    v621 Imm(0)                                           -> x0
+    v622 Imm(8)                                           -> x0
+    v623 Imm(0)                                           -> x0
+    v624 VecExtract { vec=v561, off=16, kind=V128, bytes=32 } -> d0
     v625 Imm(0)                                           -> x0
     v626 Imm(0)                                           -> x0
     v627 LifetimeEnd(0)                                   -> -
@@ -748,21 +748,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v636 Imm(0)                                           -> x0
     v637 Imm(16)                                          -> x0
     v638 Imm(0)                                           -> x0
-    v639 VecExtract { vec=v576, off=16, kind=V128, bytes=32 } -> d3
+    v639 VecExtract { vec=v588, off=16, kind=V128, bytes=32 } -> d3
     v640 VecExtract { vec=v639, off=0, kind=I64, bytes=16 } -> x0
-    v641 Imm(0)                                           -> x1
-    v642 Undef                                            -> x1
-    v643 VecInsert { vec=v642, value=v640, off=0, kind=I64, bytes=16 } -> d3
+    v641 Imm(0)                                           -> x0
+    v642 Undef                                            -> x0
+    v643 Undef                                            -> x0
     v644 Imm(0)                                           -> x0
     v645 Imm(0)                                           -> x0
     v646 Imm(24)                                          -> x0
     v647 Imm(0)                                           -> x0
-    v648 VecExtract { vec=v576, off=16, kind=V128, bytes=32 } -> d1
+    v648 VecExtract { vec=v588, off=16, kind=V128, bytes=32 } -> d3
     v649 VecExtract { vec=v648, off=8, kind=I64, bytes=16 } -> x0
-    v650 Imm(0)                                           -> x1
-    v651 Imm(8)                                           -> x1
-    v652 Imm(0)                                           -> x1
-    v653 VecInsert { vec=v643, value=v649, off=8, kind=I64, bytes=16 } -> d1
+    v650 Imm(0)                                           -> x0
+    v651 Imm(8)                                           -> x0
+    v652 Imm(0)                                           -> x0
+    v653 VecExtract { vec=v588, off=16, kind=V128, bytes=32 } -> d1
     v654 Imm(0)                                           -> x0
     v655 Imm(0)                                           -> x0
     v656 LifetimeEnd(0)                                   -> -
@@ -881,20 +881,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v765 Imm(0)                                           -> x0
     v766 Imm(0)                                           -> x0
     v767 Imm(0)                                           -> x0
-    v768 Copy { value=v53, fp=true }                      -> d0
-    v769 VecExtract { vec=v768, off=0, kind=I64, bytes=32 } -> x0
-    v770 Imm(0)                                           -> x1
-    v771 Undef                                            -> x1
-    v772 VecInsert { vec=v771, value=v769, off=0, kind=I64, bytes=16 } -> d1
+    v768 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v769 Imm(0)                                           -> x0
+    v770 Undef                                            -> x0
+    v771 Undef                                            -> x0
+    v772 Imm(0)                                           -> x0
     v773 Imm(0)                                           -> x0
-    v774 Imm(0)                                           -> x0
-    v775 Imm(8)                                           -> x0
-    v776 Imm(0)                                           -> x0
-    v777 VecExtract { vec=v768, off=8, kind=I64, bytes=32 } -> x0
-    v778 Imm(0)                                           -> x1
-    v779 Imm(8)                                           -> x1
-    v780 Imm(0)                                           -> x1
-    v781 VecInsert { vec=v772, value=v777, off=8, kind=I64, bytes=16 } -> d2
+    v774 Imm(8)                                           -> x0
+    v775 Imm(0)                                           -> x0
+    v776 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v777 Imm(0)                                           -> x0
+    v778 Imm(8)                                           -> x0
+    v779 Imm(0)                                           -> x0
+    v780 Copy { value=v53, fp=true }                      -> d0
+    v781 VecExtract { vec=v780, off=0, kind=V128, bytes=32 } -> d2
     v782 Imm(0)                                           -> x0
     v783 Imm(0)                                           -> x0
     v784 LifetimeEnd(0)                                   -> -
@@ -908,20 +908,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v792 Imm(0)                                           -> x0
     v793 Imm(0)                                           -> x0
     v794 Imm(0)                                           -> x0
-    v795 Copy { value=v85, fp=true }                      -> d1
-    v796 VecExtract { vec=v795, off=0, kind=I64, bytes=32 } -> x0
-    v797 Imm(0)                                           -> x1
-    v798 Undef                                            -> x1
-    v799 VecInsert { vec=v798, value=v796, off=0, kind=I64, bytes=16 } -> d3
+    v795 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v796 Imm(0)                                           -> x0
+    v797 Undef                                            -> x0
+    v798 Undef                                            -> x0
+    v799 Imm(0)                                           -> x0
     v800 Imm(0)                                           -> x0
-    v801 Imm(0)                                           -> x0
-    v802 Imm(8)                                           -> x0
-    v803 Imm(0)                                           -> x0
-    v804 VecExtract { vec=v795, off=8, kind=I64, bytes=32 } -> x0
-    v805 Imm(0)                                           -> x1
-    v806 Imm(8)                                           -> x1
-    v807 Imm(0)                                           -> x1
-    v808 VecInsert { vec=v799, value=v804, off=8, kind=I64, bytes=16 } -> d3
+    v801 Imm(8)                                           -> x0
+    v802 Imm(0)                                           -> x0
+    v803 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v804 Imm(0)                                           -> x0
+    v805 Imm(8)                                           -> x0
+    v806 Imm(0)                                           -> x0
+    v807 Copy { value=v85, fp=true }                      -> d1
+    v808 VecExtract { vec=v807, off=0, kind=V128, bytes=32 } -> d3
     v809 Imm(0)                                           -> x0
     v810 Imm(0)                                           -> x0
     v811 LifetimeEnd(0)                                   -> -
@@ -942,21 +942,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v826 Imm(0)                                           -> x0
     v827 Imm(16)                                          -> x0
     v828 Imm(0)                                           -> x0
-    v829 VecExtract { vec=v768, off=16, kind=V128, bytes=32 } -> d3
+    v829 VecExtract { vec=v780, off=16, kind=V128, bytes=32 } -> d3
     v830 VecExtract { vec=v829, off=0, kind=I64, bytes=16 } -> x0
-    v831 Imm(0)                                           -> x1
-    v832 Undef                                            -> x1
-    v833 VecInsert { vec=v832, value=v830, off=0, kind=I64, bytes=16 } -> d3
+    v831 Imm(0)                                           -> x0
+    v832 Undef                                            -> x0
+    v833 Undef                                            -> x0
     v834 Imm(0)                                           -> x0
     v835 Imm(0)                                           -> x0
     v836 Imm(24)                                          -> x0
     v837 Imm(0)                                           -> x0
-    v838 VecExtract { vec=v768, off=16, kind=V128, bytes=32 } -> d0
+    v838 VecExtract { vec=v780, off=16, kind=V128, bytes=32 } -> d3
     v839 VecExtract { vec=v838, off=8, kind=I64, bytes=16 } -> x0
-    v840 Imm(0)                                           -> x1
-    v841 Imm(8)                                           -> x1
-    v842 Imm(0)                                           -> x1
-    v843 VecInsert { vec=v833, value=v839, off=8, kind=I64, bytes=16 } -> d0
+    v840 Imm(0)                                           -> x0
+    v841 Imm(8)                                           -> x0
+    v842 Imm(0)                                           -> x0
+    v843 VecExtract { vec=v780, off=16, kind=V128, bytes=32 } -> d0
     v844 Imm(0)                                           -> x0
     v845 Imm(0)                                           -> x0
     v846 LifetimeEnd(0)                                   -> -
@@ -971,21 +971,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v855 Imm(0)                                           -> x0
     v856 Imm(16)                                          -> x0
     v857 Imm(0)                                           -> x0
-    v858 VecExtract { vec=v795, off=16, kind=V128, bytes=32 } -> d3
+    v858 VecExtract { vec=v807, off=16, kind=V128, bytes=32 } -> d3
     v859 VecExtract { vec=v858, off=0, kind=I64, bytes=16 } -> x0
-    v860 Imm(0)                                           -> x1
-    v861 Undef                                            -> x1
-    v862 VecInsert { vec=v861, value=v859, off=0, kind=I64, bytes=16 } -> d3
+    v860 Imm(0)                                           -> x0
+    v861 Undef                                            -> x0
+    v862 Undef                                            -> x0
     v863 Imm(0)                                           -> x0
     v864 Imm(0)                                           -> x0
     v865 Imm(24)                                          -> x0
     v866 Imm(0)                                           -> x0
-    v867 VecExtract { vec=v795, off=16, kind=V128, bytes=32 } -> d1
+    v867 VecExtract { vec=v807, off=16, kind=V128, bytes=32 } -> d3
     v868 VecExtract { vec=v867, off=8, kind=I64, bytes=16 } -> x0
-    v869 Imm(0)                                           -> x1
-    v870 Imm(8)                                           -> x1
-    v871 Imm(0)                                           -> x1
-    v872 VecInsert { vec=v862, value=v868, off=8, kind=I64, bytes=16 } -> d1
+    v869 Imm(0)                                           -> x0
+    v870 Imm(8)                                           -> x0
+    v871 Imm(0)                                           -> x0
+    v872 VecExtract { vec=v807, off=16, kind=V128, bytes=32 } -> d1
     v873 Imm(0)                                           -> x0
     v874 Imm(0)                                           -> x0
     v875 LifetimeEnd(0)                                   -> -
@@ -1104,20 +1104,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v984 Imm(0)                                           -> x0
     v985 Imm(0)                                           -> x0
     v986 Imm(0)                                           -> x0
-    v987 Copy { value=v53, fp=true }                      -> d0
-    v988 VecExtract { vec=v987, off=0, kind=I64, bytes=32 } -> x0
-    v989 Imm(0)                                           -> x1
-    v990 Undef                                            -> x1
-    v991 VecInsert { vec=v990, value=v988, off=0, kind=I64, bytes=16 } -> d1
+    v987 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v988 Imm(0)                                           -> x0
+    v989 Undef                                            -> x0
+    v990 Undef                                            -> x0
+    v991 Imm(0)                                           -> x0
     v992 Imm(0)                                           -> x0
-    v993 Imm(0)                                           -> x0
-    v994 Imm(8)                                           -> x0
-    v995 Imm(0)                                           -> x0
-    v996 VecExtract { vec=v987, off=8, kind=I64, bytes=32 } -> x0
-    v997 Imm(0)                                           -> x1
-    v998 Imm(8)                                           -> x1
-    v999 Imm(0)                                           -> x1
-    v1000 VecInsert { vec=v991, value=v996, off=8, kind=I64, bytes=16 } -> d2
+    v993 Imm(8)                                           -> x0
+    v994 Imm(0)                                           -> x0
+    v995 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v996 Imm(0)                                           -> x0
+    v997 Imm(8)                                           -> x0
+    v998 Imm(0)                                           -> x0
+    v999 Copy { value=v53, fp=true }                      -> d0
+    v1000 VecExtract { vec=v999, off=0, kind=V128, bytes=32 } -> d2
     v1001 Imm(0)                                           -> x0
     v1002 Imm(0)                                           -> x0
     v1003 LifetimeEnd(0)                                   -> -
@@ -1131,20 +1131,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1011 Imm(0)                                           -> x0
     v1012 Imm(0)                                           -> x0
     v1013 Imm(0)                                           -> x0
-    v1014 Copy { value=v85, fp=true }                      -> d1
-    v1015 VecExtract { vec=v1014, off=0, kind=I64, bytes=32 } -> x0
-    v1016 Imm(0)                                           -> x1
-    v1017 Undef                                            -> x1
-    v1018 VecInsert { vec=v1017, value=v1015, off=0, kind=I64, bytes=16 } -> d3
+    v1014 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v1015 Imm(0)                                           -> x0
+    v1016 Undef                                            -> x0
+    v1017 Undef                                            -> x0
+    v1018 Imm(0)                                           -> x0
     v1019 Imm(0)                                           -> x0
-    v1020 Imm(0)                                           -> x0
-    v1021 Imm(8)                                           -> x0
-    v1022 Imm(0)                                           -> x0
-    v1023 VecExtract { vec=v1014, off=8, kind=I64, bytes=32 } -> x0
-    v1024 Imm(0)                                           -> x1
-    v1025 Imm(8)                                           -> x1
-    v1026 Imm(0)                                           -> x1
-    v1027 VecInsert { vec=v1018, value=v1023, off=8, kind=I64, bytes=16 } -> d3
+    v1020 Imm(8)                                           -> x0
+    v1021 Imm(0)                                           -> x0
+    v1022 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v1023 Imm(0)                                           -> x0
+    v1024 Imm(8)                                           -> x0
+    v1025 Imm(0)                                           -> x0
+    v1026 Copy { value=v85, fp=true }                      -> d1
+    v1027 VecExtract { vec=v1026, off=0, kind=V128, bytes=32 } -> d3
     v1028 Imm(0)                                           -> x0
     v1029 Imm(0)                                           -> x0
     v1030 LifetimeEnd(0)                                   -> -
@@ -1164,21 +1164,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1044 Imm(0)                                           -> x0
     v1045 Imm(16)                                          -> x0
     v1046 Imm(0)                                           -> x0
-    v1047 VecExtract { vec=v987, off=16, kind=V128, bytes=32 } -> d3
+    v1047 VecExtract { vec=v999, off=16, kind=V128, bytes=32 } -> d3
     v1048 VecExtract { vec=v1047, off=0, kind=I64, bytes=16 } -> x0
-    v1049 Imm(0)                                           -> x1
-    v1050 Undef                                            -> x1
-    v1051 VecInsert { vec=v1050, value=v1048, off=0, kind=I64, bytes=16 } -> d3
+    v1049 Imm(0)                                           -> x0
+    v1050 Undef                                            -> x0
+    v1051 Undef                                            -> x0
     v1052 Imm(0)                                           -> x0
     v1053 Imm(0)                                           -> x0
     v1054 Imm(24)                                          -> x0
     v1055 Imm(0)                                           -> x0
-    v1056 VecExtract { vec=v987, off=16, kind=V128, bytes=32 } -> d0
+    v1056 VecExtract { vec=v999, off=16, kind=V128, bytes=32 } -> d3
     v1057 VecExtract { vec=v1056, off=8, kind=I64, bytes=16 } -> x0
-    v1058 Imm(0)                                           -> x1
-    v1059 Imm(8)                                           -> x1
-    v1060 Imm(0)                                           -> x1
-    v1061 VecInsert { vec=v1051, value=v1057, off=8, kind=I64, bytes=16 } -> d0
+    v1058 Imm(0)                                           -> x0
+    v1059 Imm(8)                                           -> x0
+    v1060 Imm(0)                                           -> x0
+    v1061 VecExtract { vec=v999, off=16, kind=V128, bytes=32 } -> d0
     v1062 Imm(0)                                           -> x0
     v1063 Imm(0)                                           -> x0
     v1064 LifetimeEnd(0)                                   -> -
@@ -1193,21 +1193,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1073 Imm(0)                                           -> x0
     v1074 Imm(16)                                          -> x0
     v1075 Imm(0)                                           -> x0
-    v1076 VecExtract { vec=v1014, off=16, kind=V128, bytes=32 } -> d3
+    v1076 VecExtract { vec=v1026, off=16, kind=V128, bytes=32 } -> d3
     v1077 VecExtract { vec=v1076, off=0, kind=I64, bytes=16 } -> x0
-    v1078 Imm(0)                                           -> x1
-    v1079 Undef                                            -> x1
-    v1080 VecInsert { vec=v1079, value=v1077, off=0, kind=I64, bytes=16 } -> d3
+    v1078 Imm(0)                                           -> x0
+    v1079 Undef                                            -> x0
+    v1080 Undef                                            -> x0
     v1081 Imm(0)                                           -> x0
     v1082 Imm(0)                                           -> x0
     v1083 Imm(24)                                          -> x0
     v1084 Imm(0)                                           -> x0
-    v1085 VecExtract { vec=v1014, off=16, kind=V128, bytes=32 } -> d1
+    v1085 VecExtract { vec=v1026, off=16, kind=V128, bytes=32 } -> d3
     v1086 VecExtract { vec=v1085, off=8, kind=I64, bytes=16 } -> x0
-    v1087 Imm(0)                                           -> x1
-    v1088 Imm(8)                                           -> x1
-    v1089 Imm(0)                                           -> x1
-    v1090 VecInsert { vec=v1080, value=v1086, off=8, kind=I64, bytes=16 } -> d1
+    v1087 Imm(0)                                           -> x0
+    v1088 Imm(8)                                           -> x0
+    v1089 Imm(0)                                           -> x0
+    v1090 VecExtract { vec=v1026, off=16, kind=V128, bytes=32 } -> d1
     v1091 Imm(0)                                           -> x0
     v1092 Imm(0)                                           -> x0
     v1093 LifetimeEnd(0)                                   -> -
@@ -1317,20 +1317,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1193 Imm(0)                                           -> x0
     v1194 Imm(0)                                           -> x0
     v1195 Imm(0)                                           -> x0
-    v1196 Copy { value=v53, fp=true }                      -> d0
-    v1197 VecExtract { vec=v1196, off=0, kind=I64, bytes=32 } -> x0
-    v1198 Imm(0)                                           -> x1
-    v1199 Undef                                            -> x1
-    v1200 VecInsert { vec=v1199, value=v1197, off=0, kind=I64, bytes=16 } -> d1
+    v1196 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v1197 Imm(0)                                           -> x0
+    v1198 Undef                                            -> x0
+    v1199 Undef                                            -> x0
+    v1200 Imm(0)                                           -> x0
     v1201 Imm(0)                                           -> x0
-    v1202 Imm(0)                                           -> x0
-    v1203 Imm(8)                                           -> x0
-    v1204 Imm(0)                                           -> x0
-    v1205 VecExtract { vec=v1196, off=8, kind=I64, bytes=32 } -> x0
-    v1206 Imm(0)                                           -> x1
-    v1207 Imm(8)                                           -> x1
-    v1208 Imm(0)                                           -> x1
-    v1209 VecInsert { vec=v1200, value=v1205, off=8, kind=I64, bytes=16 } -> d2
+    v1202 Imm(8)                                           -> x0
+    v1203 Imm(0)                                           -> x0
+    v1204 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v1205 Imm(0)                                           -> x0
+    v1206 Imm(8)                                           -> x0
+    v1207 Imm(0)                                           -> x0
+    v1208 Copy { value=v53, fp=true }                      -> d0
+    v1209 VecExtract { vec=v1208, off=0, kind=V128, bytes=32 } -> d2
     v1210 Imm(0)                                           -> x0
     v1211 Imm(0)                                           -> x0
     v1212 LifetimeEnd(0)                                   -> -
@@ -1344,20 +1344,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1220 Imm(0)                                           -> x0
     v1221 Imm(0)                                           -> x0
     v1222 Imm(0)                                           -> x0
-    v1223 Copy { value=v85, fp=true }                      -> d1
-    v1224 VecExtract { vec=v1223, off=0, kind=I64, bytes=32 } -> x0
-    v1225 Imm(0)                                           -> x1
-    v1226 Undef                                            -> x1
-    v1227 VecInsert { vec=v1226, value=v1224, off=0, kind=I64, bytes=16 } -> d3
+    v1223 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v1224 Imm(0)                                           -> x0
+    v1225 Undef                                            -> x0
+    v1226 Undef                                            -> x0
+    v1227 Imm(0)                                           -> x0
     v1228 Imm(0)                                           -> x0
-    v1229 Imm(0)                                           -> x0
-    v1230 Imm(8)                                           -> x0
-    v1231 Imm(0)                                           -> x0
-    v1232 VecExtract { vec=v1223, off=8, kind=I64, bytes=32 } -> x0
-    v1233 Imm(0)                                           -> x1
-    v1234 Imm(8)                                           -> x1
-    v1235 Imm(0)                                           -> x1
-    v1236 VecInsert { vec=v1227, value=v1232, off=8, kind=I64, bytes=16 } -> d3
+    v1229 Imm(8)                                           -> x0
+    v1230 Imm(0)                                           -> x0
+    v1231 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v1232 Imm(0)                                           -> x0
+    v1233 Imm(8)                                           -> x0
+    v1234 Imm(0)                                           -> x0
+    v1235 Copy { value=v85, fp=true }                      -> d1
+    v1236 VecExtract { vec=v1235, off=0, kind=V128, bytes=32 } -> d3
     v1237 Imm(0)                                           -> x0
     v1238 Imm(0)                                           -> x0
     v1239 LifetimeEnd(0)                                   -> -
@@ -1377,21 +1377,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1253 Imm(0)                                           -> x0
     v1254 Imm(16)                                          -> x0
     v1255 Imm(0)                                           -> x0
-    v1256 VecExtract { vec=v1196, off=16, kind=V128, bytes=32 } -> d3
+    v1256 VecExtract { vec=v1208, off=16, kind=V128, bytes=32 } -> d3
     v1257 VecExtract { vec=v1256, off=0, kind=I64, bytes=16 } -> x0
-    v1258 Imm(0)                                           -> x1
-    v1259 Undef                                            -> x1
-    v1260 VecInsert { vec=v1259, value=v1257, off=0, kind=I64, bytes=16 } -> d3
+    v1258 Imm(0)                                           -> x0
+    v1259 Undef                                            -> x0
+    v1260 Undef                                            -> x0
     v1261 Imm(0)                                           -> x0
     v1262 Imm(0)                                           -> x0
     v1263 Imm(24)                                          -> x0
     v1264 Imm(0)                                           -> x0
-    v1265 VecExtract { vec=v1196, off=16, kind=V128, bytes=32 } -> d0
+    v1265 VecExtract { vec=v1208, off=16, kind=V128, bytes=32 } -> d3
     v1266 VecExtract { vec=v1265, off=8, kind=I64, bytes=16 } -> x0
-    v1267 Imm(0)                                           -> x1
-    v1268 Imm(8)                                           -> x1
-    v1269 Imm(0)                                           -> x1
-    v1270 VecInsert { vec=v1260, value=v1266, off=8, kind=I64, bytes=16 } -> d0
+    v1267 Imm(0)                                           -> x0
+    v1268 Imm(8)                                           -> x0
+    v1269 Imm(0)                                           -> x0
+    v1270 VecExtract { vec=v1208, off=16, kind=V128, bytes=32 } -> d0
     v1271 Imm(0)                                           -> x0
     v1272 Imm(0)                                           -> x0
     v1273 LifetimeEnd(0)                                   -> -
@@ -1406,21 +1406,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1282 Imm(0)                                           -> x0
     v1283 Imm(16)                                          -> x0
     v1284 Imm(0)                                           -> x0
-    v1285 VecExtract { vec=v1223, off=16, kind=V128, bytes=32 } -> d3
+    v1285 VecExtract { vec=v1235, off=16, kind=V128, bytes=32 } -> d3
     v1286 VecExtract { vec=v1285, off=0, kind=I64, bytes=16 } -> x0
-    v1287 Imm(0)                                           -> x1
-    v1288 Undef                                            -> x1
-    v1289 VecInsert { vec=v1288, value=v1286, off=0, kind=I64, bytes=16 } -> d3
+    v1287 Imm(0)                                           -> x0
+    v1288 Undef                                            -> x0
+    v1289 Undef                                            -> x0
     v1290 Imm(0)                                           -> x0
     v1291 Imm(0)                                           -> x0
     v1292 Imm(24)                                          -> x0
     v1293 Imm(0)                                           -> x0
-    v1294 VecExtract { vec=v1223, off=16, kind=V128, bytes=32 } -> d1
+    v1294 VecExtract { vec=v1235, off=16, kind=V128, bytes=32 } -> d3
     v1295 VecExtract { vec=v1294, off=8, kind=I64, bytes=16 } -> x0
-    v1296 Imm(0)                                           -> x1
-    v1297 Imm(8)                                           -> x1
-    v1298 Imm(0)                                           -> x1
-    v1299 VecInsert { vec=v1289, value=v1295, off=8, kind=I64, bytes=16 } -> d1
+    v1296 Imm(0)                                           -> x0
+    v1297 Imm(8)                                           -> x0
+    v1298 Imm(0)                                           -> x0
+    v1299 VecExtract { vec=v1235, off=16, kind=V128, bytes=32 } -> d1
     v1300 Imm(0)                                           -> x0
     v1301 Imm(0)                                           -> x0
     v1302 LifetimeEnd(0)                                   -> -
@@ -1538,20 +1538,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1410 Imm(0)                                           -> x0
     v1411 Imm(0)                                           -> x0
     v1412 Imm(0)                                           -> x0
-    v1413 Copy { value=v53, fp=true }                      -> d0
-    v1414 VecExtract { vec=v1413, off=0, kind=I64, bytes=32 } -> x0
-    v1415 Imm(0)                                           -> x1
-    v1416 Undef                                            -> x1
-    v1417 VecInsert { vec=v1416, value=v1414, off=0, kind=I64, bytes=16 } -> d1
+    v1413 VecExtract { vec=v53, off=0, kind=I64, bytes=32 } -> x0
+    v1414 Imm(0)                                           -> x0
+    v1415 Undef                                            -> x0
+    v1416 Undef                                            -> x0
+    v1417 Imm(0)                                           -> x0
     v1418 Imm(0)                                           -> x0
-    v1419 Imm(0)                                           -> x0
-    v1420 Imm(8)                                           -> x0
-    v1421 Imm(0)                                           -> x0
-    v1422 VecExtract { vec=v1413, off=8, kind=I64, bytes=32 } -> x0
-    v1423 Imm(0)                                           -> x1
-    v1424 Imm(8)                                           -> x1
-    v1425 Imm(0)                                           -> x1
-    v1426 VecInsert { vec=v1417, value=v1422, off=8, kind=I64, bytes=16 } -> d2
+    v1419 Imm(8)                                           -> x0
+    v1420 Imm(0)                                           -> x0
+    v1421 VecExtract { vec=v53, off=8, kind=I64, bytes=32 } -> x0
+    v1422 Imm(0)                                           -> x0
+    v1423 Imm(8)                                           -> x0
+    v1424 Imm(0)                                           -> x0
+    v1425 Copy { value=v53, fp=true }                      -> d0
+    v1426 VecExtract { vec=v1425, off=0, kind=V128, bytes=32 } -> d2
     v1427 Imm(0)                                           -> x0
     v1428 Imm(0)                                           -> x0
     v1429 LifetimeEnd(0)                                   -> -
@@ -1565,20 +1565,20 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1437 Imm(0)                                           -> x0
     v1438 Imm(0)                                           -> x0
     v1439 Imm(0)                                           -> x0
-    v1440 Copy { value=v85, fp=true }                      -> d1
-    v1441 VecExtract { vec=v1440, off=0, kind=I64, bytes=32 } -> x0
-    v1442 Imm(0)                                           -> x1
-    v1443 Undef                                            -> x1
-    v1444 VecInsert { vec=v1443, value=v1441, off=0, kind=I64, bytes=16 } -> d4
+    v1440 VecExtract { vec=v85, off=0, kind=I64, bytes=32 } -> x0
+    v1441 Imm(0)                                           -> x0
+    v1442 Undef                                            -> x0
+    v1443 Undef                                            -> x0
+    v1444 Imm(0)                                           -> x0
     v1445 Imm(0)                                           -> x0
-    v1446 Imm(0)                                           -> x0
-    v1447 Imm(8)                                           -> x0
-    v1448 Imm(0)                                           -> x0
-    v1449 VecExtract { vec=v1440, off=8, kind=I64, bytes=32 } -> x0
-    v1450 Imm(0)                                           -> x1
-    v1451 Imm(8)                                           -> x1
-    v1452 Imm(0)                                           -> x1
-    v1453 VecInsert { vec=v1444, value=v1449, off=8, kind=I64, bytes=16 } -> d4
+    v1446 Imm(8)                                           -> x0
+    v1447 Imm(0)                                           -> x0
+    v1448 VecExtract { vec=v85, off=8, kind=I64, bytes=32 } -> x0
+    v1449 Imm(0)                                           -> x0
+    v1450 Imm(8)                                           -> x0
+    v1451 Imm(0)                                           -> x0
+    v1452 Copy { value=v85, fp=true }                      -> d1
+    v1453 VecExtract { vec=v1452, off=0, kind=V128, bytes=32 } -> d4
     v1454 Imm(0)                                           -> x0
     v1455 Imm(0)                                           -> x0
     v1456 LifetimeEnd(0)                                   -> -
@@ -1599,21 +1599,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1471 Imm(0)                                           -> x0
     v1472 Imm(16)                                          -> x0
     v1473 Imm(0)                                           -> x0
-    v1474 VecExtract { vec=v1413, off=16, kind=V128, bytes=32 } -> d4
+    v1474 VecExtract { vec=v1425, off=16, kind=V128, bytes=32 } -> d4
     v1475 VecExtract { vec=v1474, off=0, kind=I64, bytes=16 } -> x0
-    v1476 Imm(0)                                           -> x1
-    v1477 Undef                                            -> x1
-    v1478 VecInsert { vec=v1477, value=v1475, off=0, kind=I64, bytes=16 } -> d4
+    v1476 Imm(0)                                           -> x0
+    v1477 Undef                                            -> x0
+    v1478 Undef                                            -> x0
     v1479 Imm(0)                                           -> x0
     v1480 Imm(0)                                           -> x0
     v1481 Imm(24)                                          -> x0
     v1482 Imm(0)                                           -> x0
-    v1483 VecExtract { vec=v1413, off=16, kind=V128, bytes=32 } -> d0
+    v1483 VecExtract { vec=v1425, off=16, kind=V128, bytes=32 } -> d4
     v1484 VecExtract { vec=v1483, off=8, kind=I64, bytes=16 } -> x0
-    v1485 Imm(0)                                           -> x1
-    v1486 Imm(8)                                           -> x1
-    v1487 Imm(0)                                           -> x1
-    v1488 VecInsert { vec=v1478, value=v1484, off=8, kind=I64, bytes=16 } -> d0
+    v1485 Imm(0)                                           -> x0
+    v1486 Imm(8)                                           -> x0
+    v1487 Imm(0)                                           -> x0
+    v1488 VecExtract { vec=v1425, off=16, kind=V128, bytes=32 } -> d0
     v1489 Imm(0)                                           -> x0
     v1490 Imm(0)                                           -> x0
     v1491 LifetimeEnd(0)                                   -> -
@@ -1628,21 +1628,21 @@ fn ent_pc=1359 n_params=0 variadic=false locals=0
     v1500 Imm(0)                                           -> x0
     v1501 Imm(16)                                          -> x0
     v1502 Imm(0)                                           -> x0
-    v1503 VecExtract { vec=v1440, off=16, kind=V128, bytes=32 } -> d4
+    v1503 VecExtract { vec=v1452, off=16, kind=V128, bytes=32 } -> d4
     v1504 VecExtract { vec=v1503, off=0, kind=I64, bytes=16 } -> x0
-    v1505 Imm(0)                                           -> x1
-    v1506 Undef                                            -> x1
-    v1507 VecInsert { vec=v1506, value=v1504, off=0, kind=I64, bytes=16 } -> d4
+    v1505 Imm(0)                                           -> x0
+    v1506 Undef                                            -> x0
+    v1507 Undef                                            -> x0
     v1508 Imm(0)                                           -> x0
     v1509 Imm(0)                                           -> x0
     v1510 Imm(24)                                          -> x0
     v1511 Imm(0)                                           -> x0
-    v1512 VecExtract { vec=v1440, off=16, kind=V128, bytes=32 } -> d1
+    v1512 VecExtract { vec=v1452, off=16, kind=V128, bytes=32 } -> d4
     v1513 VecExtract { vec=v1512, off=8, kind=I64, bytes=16 } -> x0
-    v1514 Imm(0)                                           -> x1
-    v1515 Imm(8)                                           -> x1
-    v1516 Imm(0)                                           -> x1
-    v1517 VecInsert { vec=v1507, value=v1513, off=8, kind=I64, bytes=16 } -> d1
+    v1514 Imm(0)                                           -> x0
+    v1515 Imm(8)                                           -> x0
+    v1516 Imm(0)                                           -> x0
+    v1517 VecExtract { vec=v1452, off=16, kind=V128, bytes=32 } -> d1
     v1518 Imm(0)                                           -> x0
     v1519 Imm(0)                                           -> x0
     v1520 LifetimeEnd(0)                                   -> -

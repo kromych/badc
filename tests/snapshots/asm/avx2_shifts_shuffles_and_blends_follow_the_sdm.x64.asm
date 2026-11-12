@@ -4753,7 +4753,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0x0, %xmm3, %xmm2      # xmm2 = xmm2[0,1,2,3]
+               	vblendps	$0x0, %xmm3, %xmm2, %xmm2 # xmm2 = xmm2[0,1,2,3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -4768,7 +4768,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0x0, %xmm1, %xmm0      # xmm0 = xmm0[0,1,2,3]
+               	vblendps	$0x0, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2,3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -4795,9 +4795,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x0, %xmm14, %xmm0     # xmm0 = xmm0[0,1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x0, %xmm15, %xmm14, %xmm0 # xmm0 = xmm14[0,1,2,3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -4914,7 +4914,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0xf, %xmm3, %xmm2      # xmm2 = xmm3[0,1,2,3]
+               	vblendps	$0xf, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0,1,2,3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -4929,7 +4929,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0xf, %xmm1, %xmm0      # xmm0 = xmm1[0,1,2,3]
+               	vblendps	$0xf, %xmm1, %xmm0, %xmm0 # xmm0 = xmm1[0,1,2,3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -4956,9 +4956,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0xf, %xmm14, %xmm0     # xmm0 = xmm14[0,1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0xf, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0,1,2,3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -5075,7 +5075,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0x5, %xmm3, %xmm2      # xmm2 = xmm3[0],xmm2[1],xmm3[2],xmm2[3]
+               	vblendps	$0x5, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0],xmm2[1],xmm3[2],xmm2[3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -5090,7 +5090,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0xa, %xmm1, %xmm0      # xmm0 = xmm0[0],xmm1[1],xmm0[2],xmm1[3]
+               	vblendps	$0xa, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[1],xmm0[2],xmm1[3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -5117,9 +5117,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x5, %xmm14, %xmm0     # xmm0 = xmm14[0],xmm0[1],xmm14[2],xmm0[3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x5, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0],xmm14[1],xmm15[2],xmm14[3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -5236,7 +5236,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0xa, %xmm3, %xmm2      # xmm2 = xmm2[0],xmm3[1],xmm2[2],xmm3[3]
+               	vblendps	$0xa, %xmm3, %xmm2, %xmm2 # xmm2 = xmm2[0],xmm3[1],xmm2[2],xmm3[3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -5251,7 +5251,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0x5, %xmm1, %xmm0      # xmm0 = xmm1[0],xmm0[1],xmm1[2],xmm0[3]
+               	vblendps	$0x5, %xmm1, %xmm0, %xmm0 # xmm0 = xmm1[0],xmm0[1],xmm1[2],xmm0[3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -5278,9 +5278,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0xa, %xmm14, %xmm0     # xmm0 = xmm0[0],xmm14[1],xmm0[2],xmm14[3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0xa, %xmm15, %xmm14, %xmm0 # xmm0 = xmm14[0],xmm15[1],xmm14[2],xmm15[3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -5397,7 +5397,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0x1, %xmm3, %xmm2      # xmm2 = xmm3[0],xmm2[1,2,3]
+               	vblendps	$0x1, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0],xmm2[1,2,3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -5412,7 +5412,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0x8, %xmm1, %xmm0      # xmm0 = xmm0[0,1,2],xmm1[3]
+               	vblendps	$0x8, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2],xmm1[3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -5439,9 +5439,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x1, %xmm14, %xmm0     # xmm0 = xmm14[0],xmm0[1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x1, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0],xmm14[1,2,3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -5558,7 +5558,7 @@ Disassembly of section .text:
                	vmovq	%rcx, %xmm3
                	vpextrq	$0x1, %xmm1, %rax
                	vpinsrq	$0x1, %rax, %xmm3, %xmm3
-               	blendps	$0xf, %xmm3, %xmm2      # xmm2 = xmm3[0,1,2,3]
+               	vblendps	$0xf, %xmm3, %xmm2, %xmm2 # xmm2 = xmm3[0,1,2,3]
                	vextracti128	$0x1, %ymm0, %xmm3
                	vmovq	%xmm3, %rcx
                	vmovq	%rcx, %xmm3
@@ -5573,7 +5573,7 @@ Disassembly of section .text:
                	vpextrq	$0x1, %xmm1, %rax
                	movapd	%xmm3, %xmm1
                	vpinsrq	$0x1, %rax, %xmm1, %xmm1
-               	blendps	$0x0, %xmm1, %xmm0      # xmm0 = xmm0[0,1,2,3]
+               	vblendps	$0x0, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0,1,2,3]
                	vmovq	%xmm2, %rcx
                	vmovq	%rcx, %xmm1
                	vpextrq	$0x1, %xmm2, %rcx
@@ -5600,9 +5600,9 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	orq	%rax, %r14
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0xf, %xmm14, %xmm0     # xmm0 = xmm14[0,1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0xf, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0,1,2,3]
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)

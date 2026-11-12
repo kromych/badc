@@ -389,9 +389,11 @@ pub(super) fn emit_vec_binop(
     if w >= VecWidth::V256 {
         return wide_binary(code, vmnem, None, w, dst, (place(lhs), place(rhs)), frame);
     }
+    let encode = |code: &mut Vec<u8>, ops: &[super::asm::Concrete]| encode_wide(code, vmnem, ops);
     vex_binary(
         code,
-        vmnem,
+        &encode,
+        None,
         bytes == 16,
         dst,
         (place(lhs), place(rhs)),
@@ -399,14 +401,15 @@ pub(super) fn emit_vec_binop(
     )
 }
 
-/// The VEX three-operand form `mnem` over xmm registers, `dst = a op b`,
-/// for a 16-byte vector (`wide`) or an 8-byte one in the low half: no
-/// source is copied into the destination first. A spilled source is
-/// loaded into an FP scratch, and a spilled result is formed in one and
-/// stored.
+/// A VEX three-operand form over xmm registers, `dst = a op b`, which
+/// `encode` writes for its operands (an immediate first when `imm`), for a
+/// 16-byte vector (`wide`) or an 8-byte one in the low half: no source is
+/// copied into the destination first. A spilled source is loaded into an
+/// FP scratch, and a spilled result is formed in one and stored.
 pub(super) fn vex_binary(
     code: &mut Vec<u8>,
-    mnem: &'static str,
+    encode: &dyn Fn(&mut Vec<u8>, &[super::asm::Concrete]) -> Emit,
+    imm: Option<u8>,
     wide: bool,
     dst: Place,
     (a, b): (Place, Place),
@@ -424,11 +427,14 @@ pub(super) fn vex_binary(
         Place::FpReg(r) => Reg(r),
         _ => sa,
     };
-    encode_wide(
-        code,
-        mnem,
-        &[wide_reg(16, rb.0), wide_reg(16, ra.0), wide_reg(16, rd.0)],
-    )?;
+    let regs = [wide_reg(16, rb.0), wide_reg(16, ra.0), wide_reg(16, rd.0)];
+    match imm {
+        Some(i) => {
+            let [b, a, d] = regs;
+            encode(code, &[super::asm::Concrete::Imm(i64::from(i)), b, a, d])?
+        }
+        None => encode(code, &regs)?,
+    }
     match wide {
         true => mirror_v128_dst(code, dst, rd, frame),
         false => fp_spill_dst_to_slot(code, dst, rd, frame),
@@ -579,6 +585,20 @@ pub(super) fn emit_x86_simd_val(
         Form::Vv | Form::VvI => {
             let commutes = row.form == Form::Vv && row.sem.commutes();
             let imm = (row.form == Form::VvI).then(|| imm.unwrap_or(0));
+            // The VEX three-operand form where the instruction has one, which
+            // copies no source into the destination.
+            if let Some(m) = super::asm::vex_mnemonic(row.mnem) {
+                let encode = |code: &mut Vec<u8>, ops: &[Concrete]| {
+                    super::asm::encode(code, 8, m, None, ops)
+                        .or_else(|e| fail(alloc::format!("x86 simd: {e}")))
+                };
+                let mut probe = Vec::new();
+                let pair = (place(0), place(1));
+                if vex_binary(&mut probe, &encode, imm, row.bytes == 16, dst, pair, frame).is_ok() {
+                    code.extend_from_slice(&probe);
+                    return Ok(());
+                }
+            }
             return sse_binary(
                 code,
                 row.mnem,

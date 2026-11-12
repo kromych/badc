@@ -38,8 +38,7 @@ Disassembly of section .text:
                	movabsq	$-0x3737373737373738, %r11 # imm = 0xC8C8C8C8C8C8C8C8
                	cmpq	%r11, %rax
                	jne	<addr>
-               	movapd	%xmm0, %xmm1
-               	paddsb	%xmm0, %xmm1
+               	vpaddsb	%xmm0, %xmm0, %xmm1
                	vmovq	%xmm1, %rax
                	movabsq	$0x7f7f7f7f7f7f7f7f, %r11 # imm = 0x7F7F7F7F7F7F7F7F
                	cmpq	%r11, %rax
@@ -48,7 +47,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm1
                	vpbroadcastb	%xmm1, %xmm1
                	vmovq	%xmm1, %xmm1            # xmm1 = xmm1[0],zero
-               	paddusb	%xmm0, %xmm1
+               	vpaddusb	%xmm0, %xmm1, %xmm1
                	vmovq	%xmm1, %rax
                	cmpq	$-0x1, %rax
                	je	<addr>
@@ -63,7 +62,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm2
                	vpbroadcastw	%xmm2, %xmm2
                	vmovq	%xmm2, %xmm2            # xmm2 = xmm2[0],zero
-               	psubusw	%xmm2, %xmm1
+               	vpsubusw	%xmm2, %xmm1, %xmm1
                	vmovq	%xmm1, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -75,7 +74,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm2
                	vpbroadcastw	%xmm2, %xmm2
                	vmovq	%xmm2, %xmm2            # xmm2 = xmm2[0],zero
-               	psubsw	%xmm2, %xmm1
+               	vpsubsw	%xmm2, %xmm1, %xmm1
                	vmovq	%xmm1, %rax
                	movabsq	$-0x7fff7fff7fff8000, %r11 # imm = 0x8000800080008000
                	cmpq	%r11, %rax
@@ -86,7 +85,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
                	vmovq	%xmm1, %xmm1            # xmm1 = xmm1[0],zero
-               	paddusw	%xmm1, %xmm2
+               	vpaddusw	%xmm1, %xmm2, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	$-0x1, %rax
                	jne	<addr>
@@ -94,9 +93,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm2
                	vpbroadcastb	%xmm2, %xmm2
                	vmovq	%xmm2, %xmm2            # xmm2 = xmm2[0],zero
-               	movapd	%xmm2, %xmm15
-               	psubsb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpsubsb	%xmm0, %xmm2, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$-0x7f7f7f7f7f7f7f80, %r11 # imm = 0x8080808080808080
                	cmpq	%r11, %rax
@@ -106,7 +103,7 @@ Disassembly of section .text:
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
-               	pmaddwd	%xmm2, %xmm0
+               	vpmaddwd	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$0x3500000011, %r11     # imm = 0x3500000011
                	cmpq	%r11, %rax
@@ -115,9 +112,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
                	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
-               	movapd	%xmm0, %xmm15
-               	pmaddwd	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpmaddwd	%xmm0, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$-0x7fffffff80000000, %r11 # imm = 0x8000000080000000
                	cmpq	%r11, %rax
@@ -133,7 +128,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm2
                	vpbroadcastw	%xmm2, %xmm2
                	vmovq	%xmm2, %xmm2            # xmm2 = xmm2[0],zero
-               	pmulhw	%xmm2, %xmm0
+               	vpmulhw	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	cmpq	$-0x1, %rax
                	jne	<addr>
@@ -141,9 +136,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
                	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
-               	movapd	%xmm0, %xmm15
-               	pmullw	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpmullw	%xmm0, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$0x5f905f905f905f90, %r11 # imm = 0x5F905F905F905F90
                	cmpq	%r11, %rax
@@ -182,14 +175,14 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
-               	pcmpeqw	%xmm2, %xmm0
+               	vpcmpeqw	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movabsq	$0xffff0000ffff, %r11   # imm = 0xFFFF0000FFFF
                	cmpq	%r11, %rax
                	jne	<addr>
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
-               	pcmpgtd	%xmm2, %xmm0
+               	vpcmpgtd	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
@@ -198,7 +191,7 @@ Disassembly of section .text:
                	vmovq	%xmm0, %xmm0            # xmm0 = xmm0[0],zero
                	vpxor	%xmm2, %xmm2, %xmm2
                	vmovq	%xmm2, %xmm2            # xmm2 = xmm2[0],zero
-               	pcmpgtb	%xmm2, %xmm0
+               	vpcmpgtb	%xmm2, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	testq	%rax, %rax
                	je	<addr>

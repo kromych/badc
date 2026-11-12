@@ -5260,9 +5260,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x0, %xmm14, %xmm0     # xmm0 = xmm0[0,1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x0, %xmm15, %xmm14, %xmm0 # xmm0 = xmm14[0,1,2,3]
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
                	leaq	-0x20(%rbp), %rsi
@@ -5290,9 +5290,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x5, %xmm14, %xmm0     # xmm0 = xmm14[0],xmm0[1],xmm14[2],xmm0[3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x5, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0],xmm14[1],xmm15[2],xmm14[3]
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
                	leaq	-0x20(%rbp), %rsi
@@ -5318,9 +5318,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0xa, %xmm14, %xmm0     # xmm0 = xmm0[0],xmm14[1],xmm0[2],xmm14[3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0xa, %xmm15, %xmm14, %xmm0 # xmm0 = xmm14[0],xmm15[1],xmm14[2],xmm15[3]
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
                	leaq	-0x20(%rbp), %rsi
@@ -5346,9 +5346,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0xf, %xmm14, %xmm0     # xmm0 = xmm14[0,1,2,3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0xf, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0,1,2,3]
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
                	leaq	-0x20(%rbp), %rsi
@@ -5374,9 +5374,9 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendps	$0x9, %xmm14, %xmm0     # xmm0 = xmm14[0],xmm0[1,2],xmm14[3]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendps	$0x9, %xmm15, %xmm14, %xmm0 # xmm0 = xmm15[0],xmm14[1,2],xmm15[3]
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
                	leaq	-0x20(%rbp), %rsi
@@ -5432,9 +5432,9 @@ Disassembly of section .text:
                	movl	$0x40, %ecx
                	testq	%rax, %rax
                	cmoveq	%rbx, %rcx
-               	movups	0x50(%rsp), %xmm14
-               	movups	0x60(%rsp), %xmm0
-               	blendpd	$0x2, %xmm14, %xmm0     # xmm0 = xmm0[0],xmm14[1]
+               	movups	0x60(%rsp), %xmm14
+               	movups	0x50(%rsp), %xmm15
+               	vblendpd	$0x2, %xmm15, %xmm14, %xmm0 # xmm0 = xmm14[0],xmm15[1]
                	movups	%xmm0, -0x10(%rbp)
                	vmovd	%xmm0, %eax
                	leaq	-0x50(%rbp), %rsi

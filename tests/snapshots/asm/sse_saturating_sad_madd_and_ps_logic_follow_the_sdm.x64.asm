@@ -33,9 +33,8 @@ Disassembly of section .text:
                	pushq	%rbx
                	movups	(%rdi), %xmm0
                	movups	(%rsi), %xmm1
-               	movapd	%xmm0, %xmm2
-               	psadbw	%xmm1, %xmm2
-               	pmaddubsw	%xmm1, %xmm0
+               	vpsadbw	%xmm1, %xmm0, %xmm2
+               	vpmaddubsw	%xmm1, %xmm0, %xmm0
                	movups	%xmm2, -0x20(%rbp)
                	movups	%xmm0, -0x10(%rbp)
                	xorl	%r12d, %r12d
@@ -134,16 +133,13 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	%xmm14, 0x20(%rax)
                	movups	%xmm14, 0x30(%rax)
-               	movapd	%xmm1, %xmm2
-               	andps	%xmm0, %xmm2
+               	vandps	%xmm0, %xmm1, %xmm2
                	movups	%xmm2, -0x50(%rbp)
-               	movapd	%xmm1, %xmm2
-               	andnps	%xmm0, %xmm2
+               	vandnps	%xmm0, %xmm1, %xmm2
                	movups	%xmm2, -0x40(%rbp)
-               	movapd	%xmm1, %xmm2
-               	orps	%xmm0, %xmm2
+               	vorps	%xmm0, %xmm1, %xmm2
                	movups	%xmm2, -0x30(%rbp)
-               	xorps	%xmm1, %xmm0
+               	vxorps	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x20(%rbp)
                	xorl	%edx, %edx
                	leaq	-0x10(%rbp), %r8
@@ -295,28 +291,21 @@ Disassembly of section .text:
                	movups	%xmm14, 0x50(%rax)
                	movups	%xmm14, 0x60(%rax)
                	movups	%xmm14, 0x70(%rax)
-               	movapd	%xmm0, %xmm2
-               	paddsb	%xmm1, %xmm2
+               	vpaddsb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0xc0(%rbp)
-               	movapd	%xmm0, %xmm2
-               	paddsw	%xmm1, %xmm2
+               	vpaddsw	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0xb0(%rbp)
-               	movapd	%xmm0, %xmm2
-               	paddusb	%xmm1, %xmm2
+               	vpaddusb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0xa0(%rbp)
-               	movapd	%xmm0, %xmm2
-               	paddusw	%xmm1, %xmm2
+               	vpaddusw	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0x90(%rbp)
-               	movapd	%xmm0, %xmm2
-               	psubsb	%xmm1, %xmm2
+               	vpsubsb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0x80(%rbp)
-               	movapd	%xmm0, %xmm2
-               	psubsw	%xmm1, %xmm2
+               	vpsubsw	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0x70(%rbp)
-               	movapd	%xmm0, %xmm2
-               	psubusb	%xmm1, %xmm2
+               	vpsubusb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0x60(%rbp)
-               	psubusw	%xmm1, %xmm0
+               	vpsubusw	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	xorl	%r15d, %r15d
                	movl	$0x2, %eax

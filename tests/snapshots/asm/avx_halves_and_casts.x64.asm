@@ -63,12 +63,11 @@ Disassembly of section .text:
 <sum>:
                	vmovdqa	%xmm0, %xmm1
                	vextracti128	$0x1, %ymm0, %xmm0
-               	paddd	%xmm1, %xmm0
-               	movapd	%xmm0, %xmm1
-               	punpckhqdq	%xmm0, %xmm1    # xmm1 = xmm1[1],xmm0[1]
-               	paddd	%xmm1, %xmm0
+               	vpaddd	%xmm0, %xmm1, %xmm0
+               	vpunpckhqdq	%xmm0, %xmm0, %xmm1 # xmm1 = xmm0[1,1]
+               	vpaddd	%xmm1, %xmm0, %xmm0
                	pshufd	$0xb1, %xmm0, %xmm1     # xmm1 = xmm0[1,0,3,2]
-               	paddd	%xmm1, %xmm0
+               	vpaddd	%xmm1, %xmm0, %xmm0
                	vmovd	%xmm0, %eax
                	movslq	%eax, %rax
                	vzeroupper
@@ -387,10 +386,10 @@ Disassembly of section .text:
                	vmovups	-0x120(%rbp), %ymm0
                	vmovdqa	%xmm0, %xmm1
                	vmovdqa	%xmm0, %xmm2
-               	addps	%xmm2, %xmm1
+               	vaddps	%xmm2, %xmm1, %xmm1
                	vextracti128	$0x1, %ymm0, %xmm2
                	vextracti128	$0x1, %ymm0, %xmm3
-               	addps	%xmm3, %xmm2
+               	vaddps	%xmm3, %xmm2, %xmm2
                	vmovdqa	%xmm1, %xmm1
                	vinserti128	$0x1, %xmm2, %ymm1, %ymm1
                	vmovups	%ymm1, -0x90(%rbp)

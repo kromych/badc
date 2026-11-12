@@ -43,7 +43,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %esi, %xmm1, %xmm1
                	movl	$0x72c4a902, %ecx       # imm = 0x72C4A902
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %esi, %xmm1, %xmm1
                	movq	$-0x5551e47c, %rcx      # imm = 0xAAAE1B84
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	movq	$-0x7e90cd4b, %rcx      # imm = 0x816F32B5
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movq	$-0x10007c93, %rax      # imm = 0xEFFF836D
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
@@ -197,7 +197,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x1927c1b5, %eax       # imm = 0x1927C1B5
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
@@ -256,7 +256,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0x2347af9e, %eax       # imm = 0x2347AF9E
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
@@ -310,7 +310,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %eax, %xmm1, %xmm1
                	movl	$0xf2332cf, %eax        # imm = 0xF2332CF
                	vpinsrd	$0x3, %eax, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>
@@ -331,7 +331,7 @@ Disassembly of section .text:
                	vpinsrd	$0x1, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x2, %edx, %xmm1, %xmm1
                	vpinsrd	$0x3, %esi, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
@@ -354,7 +354,7 @@ Disassembly of section .text:
                	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	movq	$-0x2df2afb9, %rcx      # imm = 0xD20D5047
                	vpinsrd	$0x3, %ecx, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
@@ -377,7 +377,7 @@ Disassembly of section .text:
                	vpinsrd	$0x1, %esi, %xmm1, %xmm1
                	vpinsrd	$0x2, %ecx, %xmm1, %xmm1
                	vpinsrd	$0x3, %edx, %xmm1, %xmm1
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm1, %xmm0, %xmm0
                	pmovmskb	%xmm0, %ecx
                	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>

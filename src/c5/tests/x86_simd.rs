@@ -2457,8 +2457,9 @@ int main(void) {\n\
     }
 }
 
-/// A GNU vector comparison and a shift by a constant count are one SSE
-/// instruction on the whole vector (`simd::find`).
+/// A GNU vector comparison and a shift by a constant count are one
+/// instruction on the whole vector (`simd::find`): the comparison the VEX
+/// three-operand form into the result's register.
 #[cfg(feature = "full")]
 #[test]
 fn the_vector_operators_take_the_rows() {
@@ -2477,8 +2478,8 @@ fn the_vector_operators_take_the_rows() {
     .expect("emit_native for linux-x64");
     for (needle, what) in [
         (
-            &[0x66u8, 0x44, 0x0f, 0x66, 0xf8][..],
-            "pcmpgtd %xmm0, %xmm15",
+            &[0xc5u8, 0xf1, 0x66, 0xc0][..],
+            "vpcmpgtd %xmm0, %xmm1, %xmm0",
         ),
         (&[0x66, 0x0f, 0x71, 0xd0, 0x03][..], "psrlw $3, %xmm0"),
     ] {

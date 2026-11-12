@@ -94,35 +94,35 @@ Disassembly of section .text:
                	movups	-0x330(%rbp), %xmm3
                	movups	-0x320(%rbp), %xmm2
                	movups	-0x310(%rbp), %xmm0
-               	movups	0x170(%rsp), %xmm15
-               	paddd	%xmm0, %xmm15
-               	movups	%xmm15, 0x170(%rsp)
                	movups	0x170(%rsp), %xmm14
-               	movups	0x180(%rsp), %xmm15
-               	pxor	%xmm14, %xmm15
-               	movups	%xmm15, 0x180(%rsp)
+               	vpaddd	%xmm0, %xmm14, %xmm14
+               	movups	%xmm14, 0x170(%rsp)
                	movups	0x180(%rsp), %xmm14
-               	movups	0x190(%rsp), %xmm15
-               	psubd	%xmm14, %xmm15
-               	movups	%xmm15, 0x190(%rsp)
+               	movups	0x170(%rsp), %xmm15
+               	vpxor	%xmm15, %xmm14, %xmm14
+               	movups	%xmm14, 0x180(%rsp)
+               	movups	0x190(%rsp), %xmm14
+               	movups	0x180(%rsp), %xmm15
+               	vpsubd	%xmm15, %xmm14, %xmm14
+               	movups	%xmm14, 0x190(%rsp)
                	movups	0x1a0(%rsp), %xmm15
                	pslld	$0x7, %xmm15
                	movups	%xmm15, 0x1a0(%rsp)
                	movups	0x190(%rsp), %xmm15
                	psrld	$0x19, %xmm15
                	movups	%xmm15, 0x140(%rsp)
-               	movups	0x140(%rsp), %xmm14
-               	movups	0x1a0(%rsp), %xmm15
-               	por	%xmm14, %xmm15
-               	movups	%xmm15, 0x1a0(%rsp)
                	movups	0x1a0(%rsp), %xmm14
-               	movups	0x1b0(%rsp), %xmm15
-               	pand	%xmm14, %xmm15
-               	movups	%xmm15, 0x1b0(%rsp)
-               	movups	0x150(%rsp), %xmm14
-               	movups	0x1b0(%rsp), %xmm15
-               	paddd	%xmm14, %xmm15
-               	movups	%xmm15, 0x150(%rsp)
+               	movups	0x140(%rsp), %xmm15
+               	vpor	%xmm15, %xmm14, %xmm14
+               	movups	%xmm14, 0x1a0(%rsp)
+               	movups	0x1b0(%rsp), %xmm14
+               	movups	0x1a0(%rsp), %xmm15
+               	vpand	%xmm15, %xmm14, %xmm14
+               	movups	%xmm14, 0x1b0(%rsp)
+               	movups	0x1b0(%rsp), %xmm14
+               	movups	0x150(%rsp), %xmm15
+               	vpaddd	%xmm15, %xmm14, %xmm14
+               	movups	%xmm14, 0x150(%rsp)
                	movl	$0x3, %edx
                	xorl	%ecx, %ecx
                	vmovd	%edx, %xmm14
@@ -140,22 +140,20 @@ Disassembly of section .text:
                	pslld	%xmm14, %xmm15
                	movups	%xmm15, 0x160(%rsp)
                	pshufd	$0x1b, %xmm12, %xmm12   # xmm12 = xmm12[3,2,1,0]
-               	pmulld	%xmm12, %xmm11
+               	vpmulld	%xmm12, %xmm11, %xmm11
                	pextrd	$0x2, %xmm11, %ecx
                	movslq	%ecx, %rcx
                	pinsrd	$0x1, %ecx, %xmm10
-               	pmaxud	%xmm10, %xmm9
-               	pminsd	%xmm9, %xmm8
-               	punpckldq	%xmm8, %xmm7    # xmm7 = xmm7[0],xmm8[0],xmm7[1],xmm8[1]
-               	paddd	%xmm7, %xmm6
-               	pxor	%xmm6, %xmm5
-               	movapd	%xmm1, %xmm15
-               	pcmpeqd	%xmm1, %xmm15
-               	movapd	%xmm15, %xmm1
-               	psubd	%xmm5, %xmm4
-               	paddd	%xmm4, %xmm3
-               	pxor	%xmm3, %xmm2
-               	paddd	%xmm2, %xmm0
+               	vpmaxud	%xmm10, %xmm9, %xmm9
+               	vpminsd	%xmm9, %xmm8, %xmm8
+               	vpunpckldq	%xmm8, %xmm7, %xmm7 # xmm7 = xmm7[0],xmm8[0],xmm7[1],xmm8[1]
+               	vpaddd	%xmm7, %xmm6, %xmm6
+               	vpxor	%xmm5, %xmm6, %xmm5
+               	vpcmpeqd	%xmm1, %xmm1, %xmm1
+               	vpsubd	%xmm5, %xmm4, %xmm4
+               	vpaddd	%xmm4, %xmm3, %xmm3
+               	vpxor	%xmm3, %xmm2, %xmm2
+               	vpaddd	%xmm2, %xmm0, %xmm0
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
@@ -597,7 +595,7 @@ Disassembly of section .text:
                	cmpl	$0x14, %r8d
                	jl	<addr>
                	vpcmpeqd	%xmm0, %xmm0, %xmm0
-               	pcmpeqd	%xmm1, %xmm0
+               	vpcmpeqd	%xmm0, %xmm1, %xmm0
                	pmovmskb	%xmm0, %eax
                	cmpl	$0xffff, %eax           # imm = 0xFFFF
                	je	<addr>

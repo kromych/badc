@@ -2331,6 +2331,15 @@ fn movq_mmx(
 /// The catalog mnemonic matching `name`, as a `'static` string, or `None`.
 /// Lets a mnemonic the table encodes but that has no bespoke [`Mnemonic`]
 /// variant still be parsed and routed through the table.
+/// The VEX form of SSE mnemonic `sse`, its name with a `v` before it, when
+/// the encoder has one.
+pub(crate) fn vex_mnemonic(sse: &str) -> Option<Mnemonic> {
+    let mut name = alloc::string::String::with_capacity(sse.len() + 1);
+    name.push('v');
+    name.push_str(sse);
+    mnemonic_by_name(&name)
+}
+
 fn table_mnemonic(name: &str) -> Option<&'static str> {
     // The catalog is sorted by mnemonic; binary-search rather than scan.
     let forms = super::isa_x86_table::FORMS;

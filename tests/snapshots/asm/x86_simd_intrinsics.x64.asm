@@ -106,146 +106,126 @@ Disassembly of section .text:
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0xb0(%rbp)
                	aeskeygenassist	$0x2, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0xa0(%rbp)
                	aeskeygenassist	$0x4, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x90(%rbp)
                	aeskeygenassist	$0x8, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x80(%rbp)
                	aeskeygenassist	$0x10, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x70(%rbp)
                	aeskeygenassist	$0x20, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x60(%rbp)
                	aeskeygenassist	$0x40, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	aeskeygenassist	$0x80, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x40(%rbp)
                	aeskeygenassist	$0x1b, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x30(%rbp)
                	aeskeygenassist	$0x36, %xmm0, %xmm1
                	pshufd	$0xff, %xmm1, %xmm2     # xmm2 = xmm1[3,3,3,3]
                	movapd	%xmm0, %xmm1
                	pslldq	$0x4, %xmm1             # xmm1 = zero,zero,zero,zero,xmm1[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm0, %xmm3
-               	pxor	%xmm1, %xmm3
+               	vpxor	%xmm1, %xmm0, %xmm3
                	movapd	%xmm1, %xmm0
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	movapd	%xmm3, %xmm1
-               	pxor	%xmm0, %xmm1
+               	vpxor	%xmm0, %xmm3, %xmm1
                	pslldq	$0x4, %xmm0             # xmm0 = zero,zero,zero,zero,xmm0[0,1,2,3,4,5,6,7,8,9,10,11]
-               	pxor	%xmm1, %xmm0
-               	pxor	%xmm2, %xmm0
+               	vpxor	%xmm0, %xmm1, %xmm0
+               	vpxor	%xmm2, %xmm0, %xmm0
                	movups	%xmm0, -0x20(%rbp)
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm0
                	movups	-0xc0(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	movl	$0x1, %eax
                	leaq	-0xc0(%rbp), %rcx
@@ -254,7 +234,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movups	-0x10(%rbp), %xmm0
                	movups	(%rcx), %xmm1
-               	aesenc	%xmm1, %xmm0
+               	vaesenc	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	incq	%rax
                	cmpl	$0xa, %eax
@@ -262,7 +242,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r9
                	movups	-0x10(%rbp), %xmm0
                	movups	-0x20(%rbp), %xmm1
-               	aesenclast	%xmm1, %xmm0
+               	vaesenclast	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
@@ -277,7 +257,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	-0xc0(%rbp), %rcx
                	movups	-0x20(%rbp), %xmm1
-               	pxor	%xmm1, %xmm0
+               	vpxor	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	movl	$0x9, %eax
                	movq	%rax, %rdx
@@ -286,9 +266,7 @@ Disassembly of section .text:
                	movups	(%rdx), %xmm0
                	aesimc	%xmm0, %xmm0
                	movups	-0x10(%rbp), %xmm1
-               	movapd	%xmm1, %xmm15
-               	aesdec	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vaesdec	%xmm0, %xmm1, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	decq	%rax
                	testl	%eax, %eax
@@ -296,7 +274,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r9
                	movups	-0x10(%rbp), %xmm0
                	movups	-0xc0(%rbp), %xmm1
-               	aesdeclast	%xmm1, %xmm0
+               	vaesdeclast	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x10(%rbp)
                	leaq	<rip>, %rdi # <addr>
                	movq	%r9, %r10
@@ -313,8 +291,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm1
-               	movapd	%xmm0, %xmm2
-               	paddd	%xmm1, %xmm2
+               	vpaddd	%xmm1, %xmm0, %xmm2
                	vmovd	%xmm2, %eax
                	cmpl	$0x65, %eax
                	jne	<addr>
@@ -330,8 +307,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	movapd	%xmm0, %xmm2
-               	pxor	%xmm1, %xmm2
+               	vpxor	%xmm1, %xmm0, %xmm2
                	vmovd	%xmm2, %eax
                	cmpq	$0x65, %rax
                	jne	<addr>
@@ -341,15 +317,14 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movapd	%xmm0, %xmm2
-               	por	%xmm1, %xmm2
+               	vpor	%xmm1, %xmm0, %xmm2
                	vpextrd	$0x1, %xmm2, %eax
                	cmpq	$0xca, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	pand	%xmm1, %xmm0
+               	vpand	%xmm1, %xmm0, %xmm0
                	vpextrd	$0x2, %xmm0, %eax
                	testq	%rax, %rax
                	je	<addr>
@@ -360,8 +335,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm0
-               	movapd	%xmm1, %xmm2
-               	paddd	%xmm0, %xmm2
+               	vpaddd	%xmm0, %xmm1, %xmm2
                	vmovd	%xmm2, %eax
                	testq	%rax, %rax
                	jne	<addr>
@@ -371,8 +345,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movapd	%xmm1, %xmm2
-               	paddq	%xmm0, %xmm2
+               	vpaddq	%xmm0, %xmm1, %xmm2
                	vmovd	%xmm2, %eax
                	testq	%rax, %rax
                	jne	<addr>
@@ -382,10 +355,8 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	paddq	%xmm0, %xmm1
-               	movapd	%xmm1, %xmm15
-               	psubq	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpaddq	%xmm0, %xmm1, %xmm1
+               	vpsubq	%xmm0, %xmm1, %xmm0
                	vmovd	%xmm0, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
@@ -564,7 +535,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm1
-               	pshufb	%xmm1, %xmm0
+               	vpshufb	%xmm1, %xmm0, %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0xf, %eax
                	jne	<addr>
@@ -581,8 +552,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm2
-               	movapd	%xmm0, %xmm1
-               	punpcklqdq	%xmm2, %xmm1    # xmm1 = xmm1[0],xmm2[0]
+               	vpunpcklqdq	%xmm2, %xmm0, %xmm1 # xmm1 = xmm0[0],xmm2[0]
                	vmovd	%xmm1, %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
@@ -598,8 +568,7 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	leave
                	retq
-               	movapd	%xmm0, %xmm1
-               	pcmpeqq	%xmm0, %xmm1
+               	vpcmpeqq	%xmm0, %xmm0, %xmm1
                	vmovd	%xmm1, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
@@ -611,7 +580,7 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	pcmpeqq	%xmm2, %xmm0
+               	vpcmpeqq	%xmm2, %xmm0, %xmm0
                	vmovd	%xmm0, %eax
                	testq	%rax, %rax
                	jne	<addr>
@@ -653,8 +622,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm2
-               	movapd	%xmm0, %xmm1
-               	pclmulqdq	$0x0, %xmm0, %xmm1
+               	vpclmulqdq	$0x0, %xmm0, %xmm0, %xmm1
                	vmovd	%xmm1, %eax
                	cmpl	$0x5, %eax
                	jne	<addr>
@@ -664,7 +632,7 @@ Disassembly of section .text:
                	movl	$0x1b, %eax
                	leave
                	retq
-               	pclmulqdq	$0x10, %xmm2, %xmm0
+               	vpclmulqdq	$0x10, %xmm2, %xmm0, %xmm0
                	vmovd	%xmm0, %eax
                	cmpl	$0x5, %eax
                	je	<addr>
@@ -675,7 +643,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm0
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm1
-               	shufpd	$0x1, %xmm1, %xmm0      # xmm0 = xmm0[1],xmm1[0]
+               	vshufpd	$0x1, %xmm1, %xmm0, %xmm0 # xmm0 = xmm0[1],xmm1[0]
                	vmovd	%xmm0, %eax
                	cmpl	$0x3, %eax
                	jne	<addr>
@@ -771,7 +739,7 @@ Disassembly of section .text:
                	movl	$0x1, %r11d
                	vmovd	%r11d, %xmm1
                	vpbroadcastb	%xmm1, %xmm1
-               	paddb	%xmm1, %xmm2
+               	vpaddb	%xmm1, %xmm2, %xmm2
                	vmovd	%xmm2, %eax
                	testq	%rax, %rax
                	jne	<addr>
@@ -782,9 +750,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	psubb	%xmm1, %xmm15
-               	movapd	%xmm15, %xmm1
+               	movq	%rax, %xmm14
+               	vpsubb	%xmm1, %xmm14, %xmm1
                	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
@@ -796,16 +763,15 @@ Disassembly of section .text:
                	movl	$0x1, %r11d
                	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	paddw	%xmm1, %xmm2
+               	vpaddw	%xmm1, %xmm2, %xmm2
                	vmovd	%xmm2, %ecx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2c, %eax
                	leave
                	retq
-               	movq	%rax, %xmm15
-               	psubw	%xmm1, %xmm15
-               	movapd	%xmm15, %xmm1
+               	movq	%rax, %xmm14
+               	vpsubw	%xmm1, %xmm14, %xmm1
                	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
@@ -819,7 +785,7 @@ Disassembly of section .text:
                	movl	$0x7, %r11d
                	vmovd	%r11d, %xmm2
                	vpbroadcastd	%xmm2, %xmm2
-               	psubd	%xmm2, %xmm1
+               	vpsubd	%xmm2, %xmm1, %xmm1
                	vmovd	%xmm1, %ecx
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
                	cmpq	%r11, %rcx
@@ -830,7 +796,7 @@ Disassembly of section .text:
                	movl	$0x3, %r11d
                	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	pmullw	%xmm1, %xmm0
+               	vpmullw	%xmm1, %xmm0, %xmm0
                	vmovd	%xmm0, %ecx
                	cmpq	$0x369c369c, %rcx       # imm = 0x369C369C
                	je	<addr>
@@ -843,7 +809,7 @@ Disassembly of section .text:
                	movl	$0x10, %r11d
                	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
-               	pmulhw	%xmm0, %xmm1
+               	vpmulhw	%xmm0, %xmm1, %xmm1
                	vmovd	%xmm1, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
@@ -854,7 +820,7 @@ Disassembly of section .text:
                	movl	$0x1000, %r11d          # imm = 0x1000
                	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	pmulhw	%xmm1, %xmm0
+               	vpmulhw	%xmm0, %xmm1, %xmm0
                	vmovd	%xmm0, %ecx
                	cmpq	$0x10001, %rcx          # imm = 0x10001
                	je	<addr>
@@ -866,7 +832,7 @@ Disassembly of section .text:
                	movl	$0xfffe, %r11d          # imm = 0xFFFE
                	vmovd	%r11d, %xmm1
                	vpbroadcastw	%xmm1, %xmm1
-               	pmaddwd	%xmm1, %xmm0
+               	vpmaddwd	%xmm1, %xmm0, %xmm0
                	vmovd	%xmm0, %ecx
                	movl	$0xfffffffa, %r11d      # imm = 0xFFFFFFFA
                	cmpq	%r11, %rcx
@@ -884,9 +850,7 @@ Disassembly of section .text:
                	movl	$0xfed4, %r11d          # imm = 0xFED4
                	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
-               	movapd	%xmm1, %xmm15
-               	packsswb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpacksswb	%xmm0, %xmm1, %xmm0
                	vpextrb	$0x0, %xmm0, %ecx
                	cmpl	$0x7f, %ecx
                	jne	<addr>
@@ -905,9 +869,7 @@ Disassembly of section .text:
                	movl	$0xfffb, %r11d          # imm = 0xFFFB
                	vmovd	%r11d, %xmm0
                	vpbroadcastw	%xmm0, %xmm0
-               	movapd	%xmm1, %xmm15
-               	packuswb	%xmm0, %xmm15
-               	movapd	%xmm15, %xmm0
+               	vpackuswb	%xmm0, %xmm1, %xmm0
                	vpextrb	$0x0, %xmm0, %ecx
                	cmpl	$0xff, %ecx
                	jne	<addr>
@@ -929,7 +891,7 @@ Disassembly of section .text:
                	movl	$0xfffeee90, %r11d      # imm = 0xFFFEEE90
                	vmovd	%r11d, %xmm1
                	vpbroadcastd	%xmm1, %xmm1
-               	packssdw	%xmm1, %xmm0
+               	vpackssdw	%xmm1, %xmm0, %xmm0
                	vpextrb	$0x0, %xmm0, %ecx
                	cmpl	$0xff, %ecx
                	jne	<addr>
@@ -947,9 +909,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm1
-               	movq	%rax, %xmm14
-               	movapd	%xmm1, %xmm0
-               	punpcklbw	%xmm14, %xmm0   # xmm0 = xmm0[0],xmm14[0],xmm0[1],xmm14[1],xmm0[2],xmm14[2],xmm0[3],xmm14[3],xmm0[4],xmm14[4],xmm0[5],xmm14[5],xmm0[6],xmm14[6],xmm0[7],xmm14[7]
+               	movq	%rax, %xmm15
+               	vpunpcklbw	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm15[0],xmm1[1],xmm15[1],xmm1[2],xmm15[2],xmm1[3],xmm15[3],xmm1[4],xmm15[4],xmm1[5],xmm15[5],xmm1[6],xmm15[6],xmm1[7],xmm15[7]
                	vpextrb	$0x0, %xmm0, %eax
                	testq	%rax, %rax
                	jne	<addr>
@@ -969,9 +930,8 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movq	%rax, %xmm14
-               	movapd	%xmm1, %xmm0
-               	punpckhbw	%xmm14, %xmm0   # xmm0 = xmm0[8],xmm14[8],xmm0[9],xmm14[9],xmm0[10],xmm14[10],xmm0[11],xmm14[11],xmm0[12],xmm14[12],xmm0[13],xmm14[13],xmm0[14],xmm14[14],xmm0[15],xmm14[15]
+               	movq	%rax, %xmm15
+               	vpunpckhbw	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[8],xmm15[8],xmm1[9],xmm15[9],xmm1[10],xmm15[10],xmm1[11],xmm15[11],xmm1[12],xmm15[12],xmm1[13],xmm15[13],xmm1[14],xmm15[14],xmm1[15],xmm15[15]
                	vpextrb	$0x0, %xmm0, %ecx
                	cmpl	$0x8, %ecx
                	jne	<addr>
@@ -987,9 +947,8 @@ Disassembly of section .text:
                	movl	$0x37, %eax
                	leave
                	retq
-               	movq	%rax, %xmm14
-               	movapd	%xmm1, %xmm0
-               	punpcklwd	%xmm14, %xmm0   # xmm0 = xmm0[0],xmm14[0],xmm0[1],xmm14[1],xmm0[2],xmm14[2],xmm0[3],xmm14[3]
+               	movq	%rax, %xmm15
+               	vpunpcklwd	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm15[0],xmm1[1],xmm15[1],xmm1[2],xmm15[2],xmm1[3],xmm15[3]
                	vpextrb	$0x0, %xmm0, %ecx
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -1008,9 +967,8 @@ Disassembly of section .text:
                	movl	$0x38, %eax
                	leave
                	retq
-               	movq	%rax, %xmm14
-               	movapd	%xmm1, %xmm0
-               	punpckhwd	%xmm14, %xmm0   # xmm0 = xmm0[4],xmm14[4],xmm0[5],xmm14[5],xmm0[6],xmm14[6],xmm0[7],xmm14[7]
+               	movq	%rax, %xmm15
+               	vpunpckhwd	%xmm15, %xmm1, %xmm0 # xmm0 = xmm1[4],xmm15[4],xmm1[5],xmm15[5],xmm1[6],xmm15[6],xmm1[7],xmm15[7]
                	vpextrb	$0x0, %xmm0, %eax
                	cmpl	$0x8, %eax
                	jne	<addr>
@@ -1030,8 +988,7 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	leaq	<rip>, %rax # <addr>
                	movups	(%rax), %xmm2
-               	movapd	%xmm1, %xmm0
-               	punpckldq	%xmm2, %xmm0    # xmm0 = xmm0[0],xmm2[0],xmm0[1],xmm2[1]
+               	vpunpckldq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0],xmm2[0],xmm1[1],xmm2[1]
                	vmovd	%xmm0, %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
@@ -1047,8 +1004,7 @@ Disassembly of section .text:
                	movl	$0x3a, %eax
                	leave
                	retq
-               	movapd	%xmm1, %xmm0
-               	punpckhdq	%xmm2, %xmm0    # xmm0 = xmm0[2],xmm2[2],xmm0[3],xmm2[3]
+               	vpunpckhdq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[2],xmm2[2],xmm1[3],xmm2[3]
                	vmovd	%xmm0, %eax
                	cmpl	$0x3, %eax
                	jne	<addr>
@@ -1064,8 +1020,7 @@ Disassembly of section .text:
                	movl	$0x3b, %eax
                	leave
                	retq
-               	movapd	%xmm1, %xmm0
-               	punpckhqdq	%xmm2, %xmm0    # xmm0 = xmm0[1],xmm2[1]
+               	vpunpckhqdq	%xmm2, %xmm1, %xmm0 # xmm0 = xmm1[1],xmm2[1]
                	vmovd	%xmm0, %eax
                	cmpl	$0x3, %eax
                	jne	<addr>
@@ -1190,15 +1145,14 @@ Disassembly of section .text:
                	movl	$0x33, %r11d
                	vmovd	%r11d, %xmm3
                	vpbroadcastb	%xmm3, %xmm3
-               	pandn	%xmm3, %xmm2
+               	vpandn	%xmm3, %xmm2, %xmm2
                	vmovd	%xmm2, %edx
                	cmpq	$0x30303030, %rdx       # imm = 0x30303030
                	je	<addr>
                	movl	$0x46, %eax
                	leave
                	retq
-               	movapd	%xmm0, %xmm2
-               	pcmpeqb	%xmm0, %xmm2
+               	vpcmpeqb	%xmm0, %xmm0, %xmm2
                	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx
@@ -1216,7 +1170,7 @@ Disassembly of section .text:
                	movl	$0x8, %r11d
                	vmovd	%r11d, %xmm3
                	vpbroadcastw	%xmm3, %xmm3
-               	pcmpeqw	%xmm3, %xmm2
+               	vpcmpeqw	%xmm3, %xmm2, %xmm2
                	vmovd	%xmm2, %edx
                	testq	%rdx, %rdx
                	je	<addr>
@@ -1226,9 +1180,7 @@ Disassembly of section .text:
                	movl	$0x7, %r11d
                	vmovd	%r11d, %xmm2
                	vpbroadcastd	%xmm2, %xmm2
-               	movapd	%xmm2, %xmm15
-               	pcmpeqd	%xmm2, %xmm15
-               	movapd	%xmm15, %xmm2
+               	vpcmpeqd	%xmm2, %xmm2, %xmm2
                	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx
@@ -1240,7 +1192,7 @@ Disassembly of section .text:
                	movl	$0xfffe, %r11d          # imm = 0xFFFE
                	vmovd	%r11d, %xmm3
                	vpbroadcastw	%xmm3, %xmm3
-               	pcmpgtw	%xmm3, %xmm2
+               	vpcmpgtw	%xmm3, %xmm2, %xmm2
                	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx
@@ -1252,9 +1204,7 @@ Disassembly of section .text:
                	vmovd	%r11d, %xmm2
                	vpbroadcastd	%xmm2, %xmm2
                	vpcmpeqd	%xmm3, %xmm3, %xmm3
-               	movapd	%xmm3, %xmm15
-               	pcmpgtd	%xmm2, %xmm15
-               	movapd	%xmm15, %xmm2
+               	vpcmpgtd	%xmm2, %xmm3, %xmm2
                	vmovd	%xmm2, %edx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx

@@ -496,7 +496,7 @@ Disassembly of section .text:
                	movb	%al, -0x21(%rbp)
                	movups	(%rbx), %xmm0
                	movups	(%r12), %xmm1
-               	pmulhuw	%xmm1, %xmm0
+               	vpmulhuw	%xmm1, %xmm0, %xmm0
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -511,7 +511,7 @@ Disassembly of section .text:
                	cmovneq	%rcx, %r13
                	movups	(%rbx), %xmm0
                	movups	(%r12), %xmm1
-               	pavgb	%xmm1, %xmm0
+               	vpavgb	%xmm1, %xmm0, %xmm0
                	leaq	-0x30(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -523,7 +523,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movups	(%rbx), %xmm0
                	movups	(%r12), %xmm1
-               	pavgw	%xmm1, %xmm0
+               	vpavgw	%xmm1, %xmm0, %xmm0
                	leaq	-0x20(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -1520,9 +1520,9 @@ Disassembly of section .text:
                	movups	%xmm14, 0x50(%rsp)
                	movups	-0x60(%rbp), %xmm14
                	movups	%xmm14, 0x40(%rsp)
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x50(%rsp), %xmm0
-               	pminsw	%xmm14, %xmm0
+               	movups	0x50(%rsp), %xmm14
+               	movups	0x40(%rsp), %xmm15
+               	vpminsw	%xmm15, %xmm14, %xmm0
                	leaq	-0x50(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -1532,9 +1532,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x50(%rsp), %xmm0
-               	pmaxsw	%xmm14, %xmm0
+               	movups	0x50(%rsp), %xmm14
+               	movups	0x40(%rsp), %xmm15
+               	vpmaxsw	%xmm15, %xmm14, %xmm0
                	leaq	-0x40(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -1544,9 +1544,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x50(%rsp), %xmm0
-               	pminub	%xmm14, %xmm0
+               	movups	0x50(%rsp), %xmm14
+               	movups	0x40(%rsp), %xmm15
+               	vpminub	%xmm15, %xmm14, %xmm0
                	leaq	-0x30(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)
@@ -1556,9 +1556,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movups	0x40(%rsp), %xmm14
-               	movups	0x50(%rsp), %xmm0
-               	pmaxub	%xmm14, %xmm0
+               	movups	0x50(%rsp), %xmm14
+               	movups	0x40(%rsp), %xmm15
+               	vpmaxub	%xmm15, %xmm14, %xmm0
                	leaq	-0x20(%rbp), %rsi
                	leaq	-0x10(%rbp), %rdi
                	movups	%xmm0, -0x10(%rbp)

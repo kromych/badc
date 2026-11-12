@@ -217,14 +217,13 @@ Disassembly of section .text:
                	orq	%r8, %rdi
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	pavgb	%xmm1, %xmm0
+               	vpavgb	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %r8
                	cmpq	%rdi, %r8
                	jne	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	movapd	%xmm0, %xmm2
-               	pavgb	%xmm1, %xmm2
+               	vpavgb	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %r8
                	cmpq	%rdi, %r8
                	jne	<addr>
@@ -258,12 +257,11 @@ Disassembly of section .text:
                	shrq	%rcx
                	shlq	$0x30, %rcx
                	orq	%rcx, %rax
-               	movapd	%xmm0, %xmm2
-               	pavgw	%xmm1, %xmm2
+               	vpavgw	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
-               	pavgw	%xmm1, %xmm0
+               	vpavgw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
@@ -308,23 +306,21 @@ Disassembly of section .text:
                	jl	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	movapd	%xmm0, %xmm2
-               	pmaxsw	%xmm1, %xmm2
+               	vpmaxsw	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	movapd	%xmm0, %xmm2
-               	pmaxsw	%xmm1, %xmm2
+               	vpmaxsw	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	pminsw	%xmm1, %xmm0
+               	vpminsw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	cmpq	%rsi, %rax
                	jne	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	pminsw	%xmm1, %xmm0
+               	vpminsw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	cmpq	%rsi, %rax
                	jne	<addr>
@@ -356,23 +352,21 @@ Disassembly of section .text:
                	jl	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	movapd	%xmm0, %xmm2
-               	pmaxub	%xmm1, %xmm2
+               	vpmaxub	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	movapd	%xmm0, %xmm2
-               	pmaxub	%xmm1, %xmm2
+               	vpmaxub	%xmm1, %xmm0, %xmm2
                	vmovq	%xmm2, %rax
                	cmpq	%rdi, %rax
                	jne	<addr>
-               	pminub	%xmm1, %xmm0
+               	vpminub	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	cmpq	%rsi, %rax
                	jne	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	pminub	%xmm1, %xmm0
+               	vpminub	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rax
                	cmpq	%rsi, %rax
                	jne	<addr>
@@ -507,13 +501,13 @@ Disassembly of section .text:
                	shlq	$0x30, %rcx
                	orq	%rcx, %rax
                	movsd	-0xf8(%rbp), %xmm1
-               	pmulhuw	%xmm1, %xmm0
+               	vpmulhuw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	pmulhuw	%xmm1, %xmm0
+               	vpmulhuw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
@@ -554,13 +548,13 @@ Disassembly of section .text:
                	jl	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	psadbw	%xmm1, %xmm0
+               	vpsadbw	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
                	movsd	-0x100(%rbp), %xmm0
                	movsd	-0xf8(%rbp), %xmm1
-               	psadbw	%xmm0, %xmm1
+               	vpsadbw	%xmm1, %xmm0, %xmm1
                	vmovq	%xmm1, %rcx
                	cmpq	%rax, %rcx
                	jne	<addr>
@@ -2168,7 +2162,7 @@ Disassembly of section .text:
                	movq	%rax, -0x50(%rbp)
                	movsd	-0x58(%rbp), %xmm0
                	movsd	-0x50(%rbp), %xmm1
-               	pmuludq	%xmm1, %xmm0
+               	vpmuludq	%xmm1, %xmm0, %xmm0
                	vmovq	%xmm0, %rcx
                	movl	%r12d, %edx
                	movl	%eax, %eax

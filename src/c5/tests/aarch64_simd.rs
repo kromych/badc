@@ -43,7 +43,8 @@ fn the_intrinsics_emit_their_instruction() {
 
 /// Each lane permute is its one instruction on the argument registers
 /// under `-O`, a floating one the integer form of its lane width, and
-/// `vext` the byte form at its lane's byte offset.
+/// `vext` the byte form at its lane's byte offset; so is each conversion
+/// between the float and double lanes.
 #[cfg(feature = "full")]
 #[test]
 fn the_permutes_emit_their_instruction() {
@@ -55,6 +56,8 @@ fn the_permutes_emit_their_instruction() {
         float32x2_t k(float32x2_t a, float32x2_t b) { return vtrn2_f32(a, b); }\n\
         uint8x16_t m(uint8x16_t a, uint8x16_t b) { return vextq_u8(a, b, 5); }\n\
         int16x4_t n(int16x4_t a, int16x4_t b) { return vext_s16(a, b, 3); }\n\
+        float64x2_t wide(float32x2_t a) { return vcvt_f64_f32(a); }\n\
+        float32x2_t narrow(float64x2_t a) { return vcvt_f32_f64(a); }\n\
         int main(void) { return 0; }";
     let program = crate::Compiler::with_target(src.to_string(), Target::LinuxAarch64)
         .compile()
@@ -72,6 +75,8 @@ fn the_permutes_emit_their_instruction() {
         (0x0e81_6800, "trn2 v0.2s, v0.2s, v1.2s"),
         (0x6e01_2800, "ext v0.16b, v0.16b, v1.16b, #5"),
         (0x2e01_3000, "ext v0.8b, v0.8b, v1.8b, #6"),
+        (0x0e61_7800, "fcvtl v0.2d, v0.2s"),
+        (0x0e61_6800, "fcvtn v0.2s, v0.2d"),
     ] {
         let needle = word.to_le_bytes();
         assert!(

@@ -699,6 +699,8 @@ impl SimdOp {
             Sem::Wide(_, w, ..) | Sem::LongAcc(_, w, ..) if i > 1 => w,
             Sem::Narrow(w, _) => w,
             Sem::Extend(from, ..) => from,
+            Sem::Convert(Cvt::SingleToDouble) => 4,
+            Sem::Convert(Cvt::DoubleToSingle) => 8,
             _ => lane,
         };
         (src, self.arg_bytes(i - 1))

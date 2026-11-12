@@ -1276,9 +1276,7 @@ static inline uint64x1_t vcvt_u64_f64(float64x1_t __a) { return (uint64x1_t){(ui
 
 /* Single <-> double: the lower lanes, or with _high the upper ones. */
 static inline float64x2_t vcvt_f64_f32(float32x2_t __a) {
-    float64x2_t __r;
-    __asm__("fcvtl %0.2d, %1.2s" : "=w"(__r) : "w"(__a));
-    return __r;
+    return (float64x2_t)__builtin_neon_fcvtl_2s(__a);
 }
 static inline float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
     float64x2_t __r;
@@ -1286,9 +1284,7 @@ static inline float64x2_t vcvt_high_f64_f32(float32x4_t __a) {
     return __r;
 }
 static inline float32x2_t vcvt_f32_f64(float64x2_t __a) {
-    float32x2_t __r;
-    __asm__("fcvtn %0.2s, %1.2d" : "=w"(__r) : "w"(__a));
-    return __r;
+    return (float32x2_t)__builtin_neon_fcvtn_2d(__a);
 }
 static inline float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
     float32x4_t __r = {__lo[0], __lo[1], 0, 0};

@@ -6,7 +6,7 @@
 //! the lanes' signedness has one row per arrangement, and the header casts
 //! between the vector types of one width, which reinterprets the bits.
 
-use super::simd::{AcrossOp, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, SimdOp};
+use super::simd::{AcrossOp, Cvt, FOp, Form, LongOp, NarrowKind, PermOp, Ret, Sem, SimdOp};
 
 /// The row of `mnem` over `bytes`-byte vectors of `ret`'s lanes.
 const fn row(
@@ -442,6 +442,8 @@ const fn unary(name: &'static str, mnem: &'static str, ret: Ret, sem: Sem, bytes
 const NARROW: &[SimdOp] = &[
     row("__builtin_neon_ext_8b", "ext", Form::VvI, Ret::V8qi, Sem::Ext(8), 8),
     row("__builtin_neon_ext_16b", "ext", Form::VvI, Ret::V16qi, Sem::Ext(16), 16),
+    row("__builtin_neon_fcvtl_2s", "fcvtl", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 8),
+    row("__builtin_neon_fcvtn_2d", "fcvtn", Form::V, Ret::V2sf, Sem::Convert(Cvt::DoubleToSingle), 16),
     narrow("__builtin_neon_xtn_8h", "xtn", Ret::V8qi, 2, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_4s", "xtn", Ret::V4hi, 4, NarrowKind::Trunc),
     narrow("__builtin_neon_xtn_2d", "xtn", Ret::V2si, 8, NarrowKind::Trunc),

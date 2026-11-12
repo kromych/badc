@@ -93,11 +93,10 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	addq	%rdi, %rax
                	addq	%r8, %rax
-               	movl	$0x1, %ecx
-               	xorl	%edx, %edx
+               	movl	$0x1, %ebx
+               	xorl	%ecx, %ecx
                	cmpq	$0x38, %rax
-               	movq	%rdx, %rbx
-               	cmovneq	%rcx, %rbx
+               	cmoveq	%rcx, %rbx
                	xorl	%edi, %edi
                	callq	<addr>
                	movq	%rax, %r12
@@ -169,13 +168,12 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	orq	$0x40, %rcx
                	cmpq	$0xd, %rax
+               	cmovneq	%rcx, %rbx
                	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
-               	movq	%rax, %rcx
-               	orq	$0x80, %rcx
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0xa, %edx
-               	cmovneq	%rcx, %rax
+               	orq	$0x80, %rax
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0xa, %ecx
+               	cmoveq	%rbx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

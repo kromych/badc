@@ -401,11 +401,10 @@ Disassembly of section .text:
                	movq	%rdi, %r9
                	movb	$0x0, %al
                	callq	<addr>
-               	movl	$0x1, %ecx
-               	xorl	%edx, %edx
+               	movl	$0x1, %ebx
+               	xorl	%ecx, %ecx
                	cmpl	$0xf, %eax
-               	movq	%rdx, %rbx
-               	cmovneq	%rcx, %rbx
+               	cmoveq	%rcx, %rbx
                	movl	$0xc, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -525,8 +524,8 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	orq	$0x40, %rcx
                	cmpl	$0x28f, %eax            # imm = 0x28F
-               	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rbx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

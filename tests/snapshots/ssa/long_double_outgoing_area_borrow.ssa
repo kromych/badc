@@ -206,11 +206,11 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v144 Imm(0)                                           -> x7
     v145 Load { addr=v127, disp=32, kind=F80 }            -> d0
     v146 Binop { op=fgt, lhs=v145, rhs=v141 }             -> x1
-    v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x1
+    v147 Select { cond=v146, a=v143, b=v144, kind=I64 }   -> x6
     terminator Jmp(b1)
   block 1  start_pc=0
-    v152 Copy { value=v147, fp=false }                    -> x2
-    v153 Imm(0)                                           -> x2
+    v152 Copy { value=v147, fp=false }                    -> x1
+    v153 Imm(0)                                           -> x1
     v154 Binop { op=add, lhs=v139, rhs=v147 }             -> x0
     terminator Return(v154)   (exit_acc=v154)
 ; --- SSA dump (ok=true) ent_pc=3 ---

@@ -5748,11 +5748,11 @@ fn ent_pc=514 n_params=0 variadic=false locals=5
     v626 Imm(0)                                           -> x2
     v627 Binop { op=ne, lhs=v575, rhs=v83 }               -> x2
     v628 Binop { op=ne, lhs=v606, rhs=v620 }              -> x0
-    v629 Select { cond=v628, a=v625, b=v627, kind=I64 }   -> x0
+    v629 Select { cond=v628, a=v625, b=v627, kind=I64 }   -> x1
     terminator Jmp(b8)
   block 8  start_pc=0
-    v635 Copy { value=v629, fp=false }                    -> x1
-    v636 Imm(0)                                           -> x1
+    v635 Copy { value=v629, fp=false }                    -> x0
+    v636 Imm(0)                                           -> x0
     v637 Binop { op=or, lhs=v449, rhs=v629 }              -> x14
     v638 Imm(0)                                           -> x0
     v639 Extend { value=v637, kind=I32 }                  -> x0
@@ -5933,11 +5933,11 @@ fn ent_pc=514 n_params=0 variadic=false locals=5
     v814 Imm(0)                                           -> x2
     v815 BinopI { op=ne, lhs=v763, rhs_imm=0 }            -> x2
     v816 Binop { op=ne, lhs=v794, rhs=v808 }              -> x0
-    v817 Select { cond=v816, a=v813, b=v815, kind=I64 }   -> x0
+    v817 Select { cond=v816, a=v813, b=v815, kind=I64 }   -> x1
     terminator Jmp(b9)
   block 9  start_pc=0
-    v822 Copy { value=v817, fp=false }                    -> x1
-    v823 Imm(0)                                           -> x1
+    v822 Copy { value=v817, fp=false }                    -> x0
+    v823 Imm(0)                                           -> x0
     v824 Binop { op=or, lhs=v637, rhs=v817 }              -> x14
     v825 Imm(0)                                           -> x0
     v826 Extend { value=v824, kind=I32 }                  -> x0
@@ -6100,11 +6100,11 @@ fn ent_pc=514 n_params=0 variadic=false locals=5
     v983 Imm(0)                                           -> x6
     v984 BinopI { op=ne, lhs=v937, rhs_imm=0 }            -> x6
     v985 Binop { op=ne, lhs=v967, rhs=v979 }              -> x1
-    v986 Select { cond=v985, a=v982, b=v984, kind=I64 }   -> x1
+    v986 Select { cond=v985, a=v982, b=v984, kind=I64 }   -> x2
     terminator Jmp(b10)
   block 10  start_pc=0
-    v991 Copy { value=v986, fp=false }                    -> x2
-    v992 Imm(0)                                           -> x2
+    v991 Copy { value=v986, fp=false }                    -> x1
+    v992 Imm(0)                                           -> x1
     v993 Binop { op=or, lhs=v824, rhs=v986 }              -> x14
     v994 Imm(0)                                           -> x1
     v995 Extend { value=v993, kind=I32 }                  -> x1

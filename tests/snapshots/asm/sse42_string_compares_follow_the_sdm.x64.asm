@@ -178,13 +178,12 @@ Disassembly of section .text:
                	movsbq	(%rsi,%rax), %rsi
                	andq	$0xff, %rsi
                	jmp	<addr>
-               	xorl	%esi, %esi
+               	xorl	%r8d, %r8d
                	cmpl	%ebx, %eax
-               	setge	%dil
-               	movzbq	%dil, %rdi
+               	setge	%sil
+               	movzbq	%sil, %rsi
                	cmpl	%r12d, %eax
-               	movq	%rsi, %r8
-               	cmovgeq	%rdi, %r8
+               	cmovgeq	%rsi, %r8
                	jmp	<addr>
                	xorl	%r9d, %r9d
                	leaq	0x1(%r9), %rsi
@@ -459,41 +458,39 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%rbx, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
                	movl	$0x10, %edx
                	testq	%rax, %rax
                	cmoveq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	negq	%rdx
-               	testl	%esi, %esi
-               	cmovlq	%rdx, %rsi
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rsi
+               	cmpq	%rcx, %rdi
                	jle	<addr>
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	cmovneq	%rdx, %rsi
+               	cmoveq	%rcx, %rdi
+               	movq	%rsi, %rcx
+               	negq	%rcx
+               	testl	%esi, %esi
+               	cmovlq	%rcx, %rsi
+               	movl	$0x8, %ecx
+               	movl	$0x10, %edx
+               	testq	%rax, %rax
+               	cmoveq	%rdx, %rcx
+               	cmpq	%rcx, %rsi
+               	jle	<addr>
+               	movl	$0x8, %esi
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rsi
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
                	movq	%rbx, %rdx
                	callq	<addr>
                	movslq	%eax, %rcx
@@ -629,8 +626,8 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testl	%eax, %eax
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -650,45 +647,41 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%r12, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
                	movl	$0x10, %edx
                	testq	%rax, %rax
                	cmoveq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	negq	%rdx
-               	testl	%esi, %esi
-               	movq	%rsi, %rbx
-               	cmovlq	%rdx, %rbx
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
-               	testq	%rax, %rax
-               	cmoveq	%rsi, %rdx
-               	cmpq	%rdx, %rbx
+               	cmpq	%rcx, %rdi
                	jle	<addr>
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
+               	cmoveq	%rcx, %rdi
                	movq	%rsi, %rbx
-               	cmovneq	%rdx, %rbx
+               	negq	%rbx
+               	testl	%esi, %esi
+               	cmovgeq	%rsi, %rbx
+               	movl	$0x8, %ecx
+               	movl	$0x10, %edx
+               	testq	%rax, %rax
+               	cmoveq	%rdx, %rcx
+               	cmpq	%rcx, %rbx
+               	jle	<addr>
+               	movl	$0x8, %ebx
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rbx
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
-               	movq	%r12, %rdx
                	movq	%rbx, %rsi
+               	movq	%r12, %rdx
                	callq	<addr>
                	movl	$0x8, %ecx
                	movl	$0x10, %edx
@@ -699,8 +692,8 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	testl	%eax, %eax
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -812,41 +805,39 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%rdx, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edi
-               	movl	$0x10, %r8d
-               	testq	%rax, %rax
-               	cmoveq	%r8, %rdi
-               	cmpq	%rdi, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rcx
-               	movq	%rsi, %rdi
-               	negq	%rdi
-               	testl	%esi, %esi
-               	cmovlq	%rdi, %rsi
-               	movl	$0x8, %edi
                	movl	$0x10, %r8d
                	testq	%rax, %rax
-               	cmoveq	%r8, %rdi
-               	cmpq	%rdi, %rsi
+               	cmoveq	%r8, %rcx
+               	cmpq	%rcx, %rdi
+               	jle	<addr>
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rdi
+               	movq	%rsi, %rcx
+               	negq	%rcx
+               	testl	%esi, %esi
+               	cmovlq	%rcx, %rsi
+               	movl	$0x8, %ecx
+               	movl	$0x10, %r8d
+               	testq	%rax, %rax
+               	cmoveq	%r8, %rcx
+               	cmpq	%rcx, %rsi
                	jle	<addr>
                	movl	$0x8, %esi
-               	movl	$0x10, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	cmoveq	%rdi, %rsi
+               	cmoveq	%rcx, %rsi
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	setne	%al
@@ -958,41 +949,39 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%rdx, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edi
-               	movl	$0x10, %r8d
-               	testq	%rax, %rax
-               	cmoveq	%r8, %rdi
-               	cmpq	%rdi, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rcx
-               	movq	%rsi, %rdi
-               	negq	%rdi
-               	testl	%esi, %esi
-               	cmovlq	%rdi, %rsi
-               	movl	$0x8, %edi
                	movl	$0x10, %r8d
                	testq	%rax, %rax
-               	cmoveq	%r8, %rdi
-               	cmpq	%rdi, %rsi
+               	cmoveq	%r8, %rcx
+               	cmpq	%rcx, %rdi
+               	jle	<addr>
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rdi
+               	movq	%rsi, %rcx
+               	negq	%rcx
+               	testl	%esi, %esi
+               	cmovlq	%rcx, %rsi
+               	movl	$0x8, %ecx
+               	movl	$0x10, %r8d
+               	testq	%rax, %rax
+               	cmoveq	%r8, %rcx
+               	cmpq	%rcx, %rsi
                	jle	<addr>
                	movl	$0x8, %esi
-               	movl	$0x10, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	cmoveq	%rdi, %rsi
+               	cmoveq	%rcx, %rsi
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
                	callq	<addr>
                	andq	$0x1, %rax
                	leave
@@ -1110,11 +1099,10 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	movups	%xmm0, -0x20(%rbp)
                	movups	%xmm1, -0x10(%rbp)
-               	movq	%rdi, %rax
-               	negq	%rax
-               	testl	%edi, %edi
                	movq	%rdi, %rbx
-               	cmovlq	%rax, %rbx
+               	negq	%rbx
+               	testl	%edi, %edi
+               	cmovgeq	%rdi, %rbx
                	movq	%r12, %rax
                	andq	$0x1, %rax
                	movl	$0x8, %ecx
@@ -1123,11 +1111,10 @@ Disassembly of section .text:
                	cmoveq	%rdx, %rcx
                	cmpq	%rcx, %rbx
                	jle	<addr>
-               	movl	$0x8, %ecx
-               	movl	$0x10, %edx
+               	movl	$0x8, %ebx
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	movq	%rdx, %rbx
-               	cmovneq	%rcx, %rbx
+               	cmoveq	%rcx, %rbx
                	movq	%rsi, %rcx
                	negq	%rcx
                	testl	%esi, %esi
@@ -1138,11 +1125,10 @@ Disassembly of section .text:
                	cmoveq	%rdx, %rcx
                	cmpq	%rcx, %rsi
                	jle	<addr>
-               	movl	$0x8, %ecx
-               	movl	$0x10, %edx
+               	movl	$0x8, %esi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	movq	%rdx, %rsi
-               	cmovneq	%rcx, %rsi
+               	cmoveq	%rcx, %rsi
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
@@ -1279,45 +1265,41 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%r12, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
                	movl	$0x10, %edx
                	testq	%rax, %rax
                	cmoveq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	negq	%rdx
-               	testl	%esi, %esi
-               	movq	%rsi, %rbx
-               	cmovlq	%rdx, %rbx
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
-               	testq	%rax, %rax
-               	cmoveq	%rsi, %rdx
-               	cmpq	%rdx, %rbx
+               	cmpq	%rcx, %rdi
                	jle	<addr>
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
+               	cmoveq	%rcx, %rdi
                	movq	%rsi, %rbx
-               	cmovneq	%rdx, %rbx
+               	negq	%rbx
+               	testl	%esi, %esi
+               	cmovgeq	%rsi, %rbx
+               	movl	$0x8, %ecx
+               	movl	$0x10, %edx
+               	testq	%rax, %rax
+               	cmoveq	%rdx, %rcx
+               	cmpq	%rcx, %rbx
+               	jle	<addr>
+               	movl	$0x8, %ebx
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rbx
                	leaq	-0x20(%rbp), %r9
                	leaq	-0x10(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
-               	movq	%r12, %rdx
                	movq	%rbx, %rsi
+               	movq	%r12, %rdx
                	callq	<addr>
                	movl	$0x8, %eax
                	movl	$0x10, %ecx
@@ -1439,9 +1421,8 @@ Disassembly of section .text:
                	sarxq	%rax, %rcx, %r8
                	movq	$-0x1, %r9
                	testb	$0x1, %r8b
-               	movq	%rdx, %r8
-               	cmovneq	%r9, %r8
-               	movb	%r8b, (%rsi,%rax)
+               	cmoveq	%rdx, %r9
+               	movb	%r9b, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1451,9 +1432,8 @@ Disassembly of section .text:
                	sarxq	%rax, %rcx, %r8
                	movq	$-0x1, %r9
                	testb	$0x1, %r8b
-               	movq	%rdx, %r8
-               	cmovneq	%r9, %r8
-               	movw	%r8w, (%rsi,%rax,2)
+               	cmoveq	%rdx, %r9
+               	movw	%r9w, (%rsi,%rax,2)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
@@ -1477,41 +1457,39 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	testl	%edi, %edi
-               	movq	%rdi, %rcx
-               	cmovlq	%rax, %rcx
+               	cmovlq	%rax, %rdi
                	movq	%rbx, %rax
                	andq	$0x1, %rax
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rcx
-               	jle	<addr>
                	movl	$0x8, %ecx
                	movl	$0x10, %edx
                	testq	%rax, %rax
                	cmoveq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	negq	%rdx
-               	testl	%esi, %esi
-               	cmovlq	%rdx, %rsi
-               	movl	$0x8, %edx
-               	movl	$0x10, %edi
-               	testq	%rax, %rax
-               	cmoveq	%rdi, %rdx
-               	cmpq	%rdx, %rsi
+               	cmpq	%rcx, %rdi
                	jle	<addr>
-               	movl	$0x8, %edx
-               	movl	$0x10, %esi
+               	movl	$0x8, %edi
+               	movl	$0x10, %ecx
                	testq	%rax, %rax
-               	cmovneq	%rdx, %rsi
+               	cmoveq	%rcx, %rdi
+               	movq	%rsi, %rcx
+               	negq	%rcx
+               	testl	%esi, %esi
+               	cmovlq	%rcx, %rsi
+               	movl	$0x8, %ecx
+               	movl	$0x10, %edx
+               	testq	%rax, %rax
+               	cmoveq	%rdx, %rcx
+               	cmpq	%rcx, %rsi
+               	jle	<addr>
+               	movl	$0x8, %esi
+               	movl	$0x10, %ecx
+               	testq	%rax, %rax
+               	cmoveq	%rcx, %rsi
                	leaq	-0x30(%rbp), %r9
                	leaq	-0x20(%rbp), %rax
                	movq	%r9, %r10
                	movups	(%r10), %xmm0
                	movq	%rax, %r10
                	movups	(%r10), %xmm1
-               	movq	%rcx, %rdi
                	movq	%rbx, %rdx
                	callq	<addr>
                	movslq	%eax, %rcx
@@ -1534,9 +1512,8 @@ Disassembly of section .text:
                	sarxq	%rax, %rcx, %r8
                	movq	$-0x1, %r9
                	testb	$0x1, %r8b
-               	movq	%rsi, %r8
-               	cmovneq	%r9, %r8
-               	movb	%r8b, (%rdi,%rax)
+               	cmoveq	%rsi, %r9
+               	movb	%r9b, (%rdi,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -1546,9 +1523,8 @@ Disassembly of section .text:
                	sarxq	%rax, %rcx, %r8
                	movq	$-0x1, %r9
                	testb	$0x1, %r8b
-               	movq	%rsi, %r8
-               	cmovneq	%r9, %r8
-               	movw	%r8w, (%rdi,%rax,2)
+               	cmoveq	%rsi, %r9
+               	movw	%r9w, (%rdi,%rax,2)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
@@ -1574,12 +1550,11 @@ Disassembly of section .text:
                	movq	%r11, 0x38(%rsp)
                	movq	%r8, 0x58(%rsp)
                	movq	%rcx, %rdx
-               	movl	$0x8, %eax
-               	movl	$0x10, %ecx
-               	movq	0x38(%rsp), %rdi
-               	testb	$0x1, %dil
-               	movq	%rcx, %rbx
-               	cmovneq	%rax, %rbx
+               	movl	$0x8, %ebx
+               	movl	$0x10, %eax
+               	movq	0x38(%rsp), %rcx
+               	testb	$0x1, %cl
+               	cmoveq	%rax, %rbx
                	movq	0x38(%rsp), %r8
                	movq	%r8, %r9
                	sarq	$0x2, %r9
@@ -1934,11 +1909,10 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <implicit_length>:
-               	movl	$0x8, %eax
-               	movl	$0x10, %ecx
+               	movl	$0x8, %edx
+               	movl	$0x10, %eax
                	testb	$0x1, %sil
-               	movq	%rcx, %rdx
-               	cmovneq	%rax, %rdx
+               	cmoveq	%rax, %rdx
                	xorl	%eax, %eax
                	andq	$0x3, %rsi
                	cmpl	%edx, %eax
@@ -1992,9 +1966,9 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	negq	%rcx
                	testl	%edi, %edi
-               	cmovgeq	%rdi, %rcx
-               	cmpq	%rax, %rcx
-               	cmovleq	%rcx, %rax
+               	cmovlq	%rcx, %rdi
+               	cmpq	%rax, %rdi
+               	cmovleq	%rdi, %rax
                	retq
 
 <compare>:
@@ -2280,22 +2254,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	xorl	%r9d, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -2584,22 +2557,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x4, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -2888,22 +2860,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x8, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -3192,22 +3163,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0xc, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -3496,22 +3466,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x10, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -3800,22 +3769,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x14, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -4104,22 +4072,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x18, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -4408,22 +4375,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x1c, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -4712,22 +4678,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x20, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -4888,22 +4853,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x20, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -5023,22 +4986,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x24, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -5080,22 +5042,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x24, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -5120,22 +5080,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x24, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -5156,22 +5114,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x24, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -5195,18 +5151,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -5228,22 +5182,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x24, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -5363,22 +5315,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x28, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -5420,22 +5371,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x28, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -5460,22 +5409,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x28, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -5496,22 +5443,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x28, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -5535,18 +5480,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -5568,22 +5511,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x28, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -5703,22 +5644,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x2c, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -5760,22 +5700,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -5800,22 +5738,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -5836,22 +5772,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -5875,18 +5809,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -5908,22 +5840,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -6043,22 +5973,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x30, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -6100,22 +6029,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x30, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -6140,22 +6067,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x30, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -6176,22 +6101,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x30, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -6215,18 +6138,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -6248,22 +6169,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x30, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -6383,22 +6302,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x34, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -6440,22 +6358,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x34, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -6480,22 +6396,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x34, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -6516,22 +6430,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x34, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -6555,18 +6467,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -6588,22 +6498,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x34, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -6723,22 +6631,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x38, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -6780,22 +6687,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x38, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -6820,22 +6725,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x38, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -6856,22 +6759,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x38, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -6895,18 +6796,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -6928,22 +6827,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x38, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -7063,22 +6960,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x3c, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -7120,22 +7016,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -7160,22 +7054,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -7196,22 +7088,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -7235,18 +7125,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -7268,22 +7156,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -7403,22 +7289,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x40, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -7460,22 +7345,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x40, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -7500,22 +7383,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x40, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -7536,22 +7417,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x40, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -7575,18 +7454,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -7608,22 +7485,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x40, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -7743,22 +7618,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	leaq	-0x3bb0(%rbp), %rdi
                	leaq	-0x3bf8(%rbp), %rsi
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdx
+               	negq	%rdx
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdx
-               	cmovgq	%rcx, %rdx
+               	cmovgeq	%rbx, %rdx
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdx
+               	cmovgq	%rax, %rdx
                	leaq	-0x3be8(%rbp), %rcx
-               	movq	%r12, %rax
-               	negq	%rax
+               	movq	%r12, %r8
+               	negq	%r8
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %r8d
-               	cmpq	$0x10, %rax
-               	cmovleq	%rax, %r8
+               	cmovgeq	%r12, %r8
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %r8
+               	cmovgq	%rax, %r8
                	movl	$0x44, %r9d
                	callq	<addr>
                	leaq	-0x3bb0(%rbp), %rax
@@ -7800,22 +7674,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x44, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -7840,22 +7712,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x44, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -7876,22 +7746,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x44, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -7915,18 +7783,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -7948,22 +7814,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x44, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -8134,22 +7998,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x48, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -8174,22 +8036,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x48, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -8210,22 +8070,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x48, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -8249,18 +8107,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -8282,22 +8138,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x48, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -8468,22 +8322,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -8508,22 +8360,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -8544,22 +8394,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -8583,18 +8431,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -8616,22 +8462,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -8802,22 +8646,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x50, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -8842,22 +8684,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x50, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -8878,22 +8718,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x50, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -8917,18 +8755,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -8950,22 +8786,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x50, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -9136,22 +8970,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x54, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -9176,22 +9008,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x54, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -9212,22 +9042,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x54, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -9251,18 +9079,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -9284,22 +9110,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x54, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -9470,22 +9294,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x58, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -9510,22 +9332,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x58, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -9546,22 +9366,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x58, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -9585,18 +9403,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -9618,22 +9434,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x58, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -9804,22 +9618,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -9844,22 +9656,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -9880,22 +9690,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -9919,18 +9727,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -9952,22 +9758,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -10138,22 +9942,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x60, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -10178,22 +9980,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x60, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -10214,22 +10014,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x60, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -10253,18 +10051,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -10286,22 +10082,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x60, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -10472,22 +10266,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x64, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -10512,22 +10304,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x64, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -10548,22 +10338,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x64, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -10587,18 +10375,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -10620,22 +10406,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x64, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -10806,22 +10590,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x68, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -10846,22 +10628,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x68, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -10882,22 +10662,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x68, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -10921,18 +10699,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -10954,22 +10730,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x68, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -11140,22 +10914,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -11180,22 +10952,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -11216,22 +10986,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -11255,18 +11023,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -11288,22 +11054,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -11474,22 +11238,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x70, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -11514,22 +11276,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x70, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -11550,22 +11310,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x70, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -11589,18 +11347,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -11622,22 +11378,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x70, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -11808,22 +11562,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x74, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -11848,22 +11600,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x74, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -11884,22 +11634,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x74, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -11923,18 +11671,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -11956,22 +11702,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x74, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -12142,22 +11886,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x78, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -12182,22 +11924,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x78, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -12218,22 +11958,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x78, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -12257,18 +11995,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -12290,22 +12026,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x78, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -12476,22 +12210,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -12516,22 +12248,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -12552,22 +12282,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -12591,18 +12319,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -12624,22 +12350,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7c, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -12810,22 +12534,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -12850,22 +12572,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -12886,22 +12606,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -12925,18 +12643,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -12958,22 +12674,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -13144,22 +12858,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -13184,22 +12896,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -13220,22 +12930,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -13259,18 +12967,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -13292,22 +12998,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -13478,22 +13182,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x9, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -13518,22 +13220,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x9, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -13554,22 +13254,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x9, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -13593,18 +13291,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -13626,22 +13322,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x9, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -13812,22 +13506,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xd, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -13852,22 +13544,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xd, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -13888,22 +13578,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xd, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -13927,18 +13615,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -13960,22 +13646,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xd, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -14146,22 +13830,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x11, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -14186,22 +13868,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x11, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -14222,22 +13902,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x11, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -14261,18 +13939,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -14294,22 +13970,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x11, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -14480,22 +14154,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x15, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -14520,22 +14192,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x15, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -14556,22 +14226,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x15, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -14595,18 +14263,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -14628,22 +14294,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x15, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -14814,22 +14478,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x19, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -14854,22 +14516,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x19, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -14890,22 +14550,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x19, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -14929,18 +14587,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -14962,22 +14618,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x19, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -15148,22 +14802,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -15188,22 +14840,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -15224,22 +14874,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -15263,18 +14911,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -15296,22 +14942,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -15482,22 +15126,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x21, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -15522,22 +15164,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x21, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -15558,22 +15198,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x21, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -15597,18 +15235,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -15630,22 +15266,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x21, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -15816,22 +15450,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x25, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -15856,22 +15488,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x25, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -15892,22 +15522,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x25, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -15931,18 +15559,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -15964,22 +15590,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x25, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -16150,22 +15774,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x29, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -16190,22 +15812,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x29, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -16226,22 +15846,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x29, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -16265,18 +15883,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -16298,22 +15914,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x29, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -16484,22 +16098,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -16524,22 +16136,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -16560,22 +16170,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -16599,18 +16207,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -16632,22 +16238,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -16818,22 +16422,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x31, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -16858,22 +16460,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x31, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -16894,22 +16494,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x31, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -16933,18 +16531,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -16966,22 +16562,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x31, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -17152,22 +16746,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x35, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -17192,22 +16784,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x35, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -17228,22 +16818,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x35, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -17267,18 +16855,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -17300,22 +16886,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x35, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -17486,22 +17070,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x39, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -17526,22 +17108,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x39, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -17562,22 +17142,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x39, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -17601,18 +17179,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -17634,22 +17210,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x39, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -17820,22 +17394,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -17860,22 +17432,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -17896,22 +17466,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -17935,18 +17503,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -17968,22 +17534,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -18154,22 +17718,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x41, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -18194,22 +17756,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x41, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -18230,22 +17790,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x41, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -18269,18 +17827,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -18302,22 +17858,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x41, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -18488,22 +18042,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x45, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -18528,22 +18080,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x45, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -18564,22 +18114,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x45, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -18603,18 +18151,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -18636,22 +18182,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x45, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -18822,22 +18366,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x49, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -18862,22 +18404,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x49, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -18898,22 +18438,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x49, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -18937,18 +18475,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -18970,22 +18506,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x49, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -19156,22 +18690,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -19196,22 +18728,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -19232,22 +18762,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -19271,18 +18799,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -19304,22 +18830,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -19490,22 +19014,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x51, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -19530,22 +19052,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x51, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -19566,22 +19086,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x51, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -19605,18 +19123,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -19638,22 +19154,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x51, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -19824,22 +19338,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x55, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -19864,22 +19376,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x55, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -19900,22 +19410,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x55, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -19939,18 +19447,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -19972,22 +19478,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x55, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -20158,22 +19662,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x59, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -20198,22 +19700,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x59, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -20234,22 +19734,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x59, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -20273,18 +19771,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -20306,22 +19802,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x59, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -20492,22 +19986,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -20532,22 +20024,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -20568,22 +20058,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -20607,18 +20095,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -20640,22 +20126,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -20826,22 +20310,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x61, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -20866,22 +20348,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x61, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -20902,22 +20382,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x61, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -20941,18 +20419,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -20974,22 +20450,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x61, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -21160,22 +20634,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x65, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -21200,22 +20672,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x65, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -21236,22 +20706,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x65, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -21275,18 +20743,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -21308,22 +20774,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x65, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -21494,22 +20958,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x69, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -21534,22 +20996,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x69, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -21570,22 +21030,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x69, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -21609,18 +21067,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -21642,22 +21098,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x69, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -21828,22 +21282,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -21868,22 +21320,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -21904,22 +21354,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -21943,18 +21391,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -21976,22 +21422,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -22162,22 +21606,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x71, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -22202,22 +21644,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x71, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -22238,22 +21678,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x71, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -22277,18 +21715,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -22310,22 +21746,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x71, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -22496,22 +21930,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x75, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -22536,22 +21968,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x75, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -22572,22 +22002,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x75, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -22611,18 +22039,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -22644,22 +22070,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x75, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -22830,22 +22254,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x79, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -22870,22 +22292,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x79, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -22906,22 +22326,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x79, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -22945,18 +22363,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -22978,22 +22394,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x79, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -23164,22 +22578,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -23204,22 +22616,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -23240,22 +22650,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -23279,18 +22687,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -23312,22 +22718,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7d, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x8, %ecx
-               	cmpq	$0x8, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x8, %eax
+               	cmpq	$0x8, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x8, %ecx
+               	movl	$0x8, %r13d
                	cmpq	$0x8, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -23498,22 +22902,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -23538,22 +22940,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -23574,22 +22974,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -23613,18 +23011,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -23646,22 +23042,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -23832,22 +23226,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -23872,22 +23264,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -23908,22 +23298,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -23947,18 +23335,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -23980,22 +23366,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -24166,22 +23550,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xa, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -24206,22 +23588,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xa, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -24242,22 +23622,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xa, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -24281,18 +23659,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -24314,22 +23690,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xa, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -24500,22 +23874,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xe, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -24540,22 +23912,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xe, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -24576,22 +23946,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xe, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -24615,18 +23983,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -24648,22 +24014,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0xe, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -24834,22 +24198,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x12, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -24874,22 +24236,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x12, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -24910,22 +24270,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x12, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -24949,18 +24307,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -24982,22 +24338,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x12, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -25168,22 +24522,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x16, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -25208,22 +24560,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x16, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -25244,22 +24594,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x16, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -25283,18 +24631,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -25316,22 +24662,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x16, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -25502,22 +24846,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -25542,22 +24884,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -25578,22 +24918,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -25617,18 +24955,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -25650,22 +24986,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -25836,22 +25170,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -25876,22 +25208,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -25912,22 +25242,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -25951,18 +25279,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -25984,22 +25310,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x1e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -26170,22 +25494,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x22, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -26210,22 +25532,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x22, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -26246,22 +25566,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x22, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -26285,18 +25603,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -26318,22 +25634,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x22, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -26504,22 +25818,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x26, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -26544,22 +25856,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x26, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -26580,22 +25890,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x26, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -26619,18 +25927,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -26652,22 +25958,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x26, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -26838,22 +26142,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -26878,22 +26180,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -26914,22 +26214,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -26953,18 +26251,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -26986,22 +26282,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -27172,22 +26466,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -27212,22 +26504,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -27248,22 +26538,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -27287,18 +26575,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -27320,22 +26606,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x2e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -27506,22 +26790,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x32, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -27546,22 +26828,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x32, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -27582,22 +26862,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x32, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -27621,18 +26899,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -27654,22 +26930,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x32, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -27840,22 +27114,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x36, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -27880,22 +27152,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x36, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -27916,22 +27186,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x36, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -27955,18 +27223,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -27988,22 +27254,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x36, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -28174,22 +27438,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -28214,22 +27476,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -28250,22 +27510,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -28289,18 +27547,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -28322,22 +27578,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -28508,22 +27762,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -28548,22 +27800,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -28584,22 +27834,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -28623,18 +27871,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -28656,22 +27902,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x3e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -28842,22 +28086,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x42, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -28882,22 +28124,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x42, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -28918,22 +28158,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x42, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -28957,18 +28195,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -28990,22 +28226,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x42, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -29176,22 +28410,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x46, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -29216,22 +28448,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x46, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -29252,22 +28482,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x46, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -29291,18 +28519,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -29324,22 +28550,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x46, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -29510,22 +28734,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -29550,22 +28772,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -29586,22 +28806,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -29625,18 +28843,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -29658,22 +28874,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -29844,22 +29058,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -29884,22 +29096,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -29920,22 +29130,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -29959,18 +29167,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -29992,22 +29198,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x4e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -30178,22 +29382,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x52, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -30218,22 +29420,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x52, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -30254,22 +29454,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x52, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -30293,18 +29491,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -30326,22 +29522,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x52, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -30512,22 +29706,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x56, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -30552,22 +29744,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x56, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -30588,22 +29778,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x56, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -30627,18 +29815,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -30660,22 +29846,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x56, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -30846,22 +30030,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -30886,22 +30068,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -30922,22 +30102,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -30961,18 +30139,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -30994,22 +30170,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -31180,22 +30354,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -31220,22 +30392,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -31256,22 +30426,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -31295,18 +30463,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -31328,22 +30494,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x5e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -31514,22 +30678,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x62, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -31554,22 +30716,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x62, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -31590,22 +30750,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x62, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -31629,18 +30787,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -31662,22 +30818,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x62, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -31848,22 +31002,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x66, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -31888,22 +31040,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x66, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -31924,22 +31074,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x66, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -31963,18 +31111,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -31996,22 +31142,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x66, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -32182,22 +31326,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -32222,22 +31364,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -32258,22 +31398,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -32297,18 +31435,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -32330,22 +31466,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -32516,22 +31650,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -32556,22 +31688,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -32592,22 +31722,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -32631,18 +31759,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -32664,22 +31790,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x6e, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -32850,22 +31974,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x72, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -32890,22 +32012,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x72, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -32926,22 +32046,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x72, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -32965,18 +32083,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -32998,22 +32114,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x72, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -33184,22 +32298,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x76, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -33224,22 +32336,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x76, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -33260,22 +32370,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x76, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -33299,18 +32407,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10
@@ -33332,22 +32438,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x76, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3c30(%rbp), %r9
                	leaq	-0x3cb0(%rbp), %rax
                	movq	%r9, %r10
@@ -33518,22 +32622,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
                	movq	%r12, %rax
                	negq	%rax
                	testl	%r12d, %r12d
                	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
+               	cmovleq	%rax, %r13
                	leaq	-0x3ca0(%rbp), %r9
                	leaq	-0x3c90(%rbp), %rax
                	movq	%r9, %r10
@@ -33558,22 +32660,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c80(%rbp), %r9
                	leaq	-0x3c70(%rbp), %rax
                	movq	%r9, %r10
@@ -33594,22 +32694,20 @@ Disassembly of section .text:
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	$0x7a, %edx
-               	movq	%rbx, %rax
-               	negq	%rax
+               	movq	%rbx, %rdi
+               	negq	%rdi
                	testl	%ebx, %ebx
-               	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rdi
-               	cmovgq	%rcx, %rdi
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovgeq	%rbx, %rdi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rdi
+               	cmovgq	%rax, %rdi
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c60(%rbp), %r9
                	leaq	-0x3c50(%rbp), %rax
                	movq	%r9, %r10
@@ -33633,18 +32731,16 @@ Disassembly of section .text:
                	negq	%rax
                	testl	%ebx, %ebx
                	cmovgeq	%rbx, %rax
-               	movl	$0x10, %ecx
+               	movl	$0x10, %r13d
                	cmpq	$0x10, %rax
-               	movq	%rax, %r13
-               	cmovgq	%rcx, %r13
-               	movq	%r12, %rax
-               	negq	%rax
+               	cmovleq	%rax, %r13
+               	movq	%r12, %rsi
+               	negq	%rsi
                	testl	%r12d, %r12d
-               	cmovgeq	%r12, %rax
-               	movl	$0x10, %ecx
-               	cmpq	$0x10, %rax
-               	movq	%rax, %rsi
-               	cmovgq	%rcx, %rsi
+               	cmovgeq	%r12, %rsi
+               	movl	$0x10, %eax
+               	cmpq	$0x10, %rsi
+               	cmovgq	%rax, %rsi
                	leaq	-0x3c40(%rbp), %r9
                	leaq	-0x3cd0(%rbp), %rax
                	movq	%r9, %r10

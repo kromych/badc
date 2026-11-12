@@ -52,7 +52,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x2, %edx
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq

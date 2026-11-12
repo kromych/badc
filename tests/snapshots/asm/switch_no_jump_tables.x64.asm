@@ -129,8 +129,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	cmpl	$0x1, %edi
-               	cmovlq	%rcx, %rax
-               	addq	$0x2, %rax
+               	cmovgeq	%rax, %rcx
+               	leaq	0x2(%rcx), %rax
                	jmp	<addr>
 
 <main>:

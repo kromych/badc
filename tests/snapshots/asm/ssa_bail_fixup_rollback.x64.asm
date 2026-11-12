@@ -110,7 +110,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x1, %edx
                	cmpl	$0x4d, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq

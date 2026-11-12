@@ -129,8 +129,8 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	xorl	%edx, %edx
                	cmpq	$0x2e, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave

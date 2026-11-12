@@ -404,7 +404,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v583 BinopI { op=add, lhs=v581, rhs_imm=11 }          -> x1
     v584 Extend { value=v583, kind=I32, nsw }             -> x2
     v585 Binop { op=ne, lhs=v108, rhs=v583 }              -> x2
-    v586 BinopI { op=or, lhs=v569, rhs_imm=2048 }         -> x2
+    v586 BinopI { op=or, lhs=v569, rhs_imm=2048 }         -> x6
     v587 Binop { op=ne, lhs=v108, rhs=v583 }              -> x1
     v588 Select { cond=v587, a=v586, b=v569, kind=I64 }   -> x6
     terminator Jmp(b18)

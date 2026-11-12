@@ -80,12 +80,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v52  Imm(0)                                           -> x1
     v53  Imm(5)                                           -> x2
     v54  BinopI { op=eq, lhs=v50, rhs_imm=0 }             -> x6
-    v55  Select { cond=v50, a=v53, b=v52, kind=I64 }      -> x0
+    v55  Select { cond=v50, a=v53, b=v52, kind=I64 }      -> x1
     terminator Jmp(b12)
   block 12  start_pc=0
-    v60  Copy { value=v55, fp=false }                     -> x1
-    v61  Imm(0)                                           -> x1
-    v62  Extend { value=v55, kind=I32 }                   -> x1
+    v60  Copy { value=v55, fp=false }                     -> x0
+    v61  Imm(0)                                           -> x0
+    v62  Extend { value=v55, kind=I32 }                   -> x0
     terminator Return(v55)   (exit_acc=v55)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

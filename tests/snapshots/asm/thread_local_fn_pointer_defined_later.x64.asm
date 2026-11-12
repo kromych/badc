@@ -102,9 +102,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	movq	%rax, %rcx
-               	cmovneq	%rdx, %rcx
-               	testq	%rcx, %rcx
+               	cmoveq	%rax, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movq	%fs:0x0, %rcx
                	addq	$-0x20, %rcx

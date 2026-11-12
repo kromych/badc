@@ -252,10 +252,9 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
                	movq	%r15, %rdx
-               	orq	%rax, %rdx
+               	orq	%rcx, %rdx
                	leaq	0x3(%r12), %rax
                	decq	%rax
                	movsbq	(%r14,%rax), %rax

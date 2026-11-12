@@ -90,11 +90,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v52  Imm(0)                                           -> x2
     v53  Imm(0)                                           -> x2
     v54  Imm(1)                                           -> x2
-    v55  Select { cond=v50, a=v54, b=v6, kind=I64 }       -> x0
+    v55  Select { cond=v50, a=v54, b=v6, kind=I64 }       -> x2
     terminator Jmp(b9)
   block 9  start_pc=0
-    v62  Copy { value=v55, fp=false }                     -> x1
-    v63  Imm(0)                                           -> x1
+    v62  Copy { value=v55, fp=false }                     -> x0
+    v63  Imm(0)                                           -> x0
     v64  BinopI { op=eq, lhs=v55, rhs_imm=0 }             -> x0
     v65  Extend { value=v64, kind=I32 }                   -> x1
     terminator Return(v64)   (exit_acc=v64)

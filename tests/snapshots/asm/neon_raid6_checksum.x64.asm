@@ -93,9 +93,8 @@ Disassembly of section .text:
                	movl	$0x1d, %r9d
                	xorl	%ebx, %ebx
                	testb	$-0x80, %dil
-               	movq	%rbx, %rdi
-               	cmovneq	%r9, %rdi
-               	xorq	%rdi, %rsi
+               	cmoveq	%rbx, %r9
+               	xorq	%r9, %rsi
                	andq	$0xff, %rsi
                	addq	$0x200, %rdx            # imm = 0x200
                	movzbq	(%rdx,%rax), %rdx
@@ -106,9 +105,8 @@ Disassembly of section .text:
                	movl	$0x1d, %edi
                	xorl	%r9d, %r9d
                	testb	$-0x80, %sil
-               	movq	%r9, %rsi
-               	cmovneq	%rdi, %rsi
-               	xorq	%rsi, %rdx
+               	cmoveq	%r9, %rdi
+               	xorq	%rdi, %rdx
                	movq	%rdx, %rsi
                	andq	$0xff, %rsi
                	leaq	<rip>, %rdx # <addr>

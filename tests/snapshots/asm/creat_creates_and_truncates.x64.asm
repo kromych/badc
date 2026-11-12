@@ -151,8 +151,8 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	xorl	%edx, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

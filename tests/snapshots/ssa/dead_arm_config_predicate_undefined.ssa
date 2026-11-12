@@ -33,11 +33,11 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v27  Imm(1)                                           -> x2
     v28  Imm(0)                                           -> x6
     v29  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x7
-    v30  Select { cond=v23, a=v27, b=v28, kind=I64 }      -> x0
+    v30  Select { cond=v23, a=v27, b=v28, kind=I64 }      -> x2
     terminator Jmp(b1)
   block 1  start_pc=0
-    v35  Copy { value=v30, fp=false }                     -> x2
-    v36  Imm(0)                                           -> x2
+    v35  Copy { value=v30, fp=false }                     -> x0
+    v36  Imm(0)                                           -> x0
     v37  Binop { op=add, lhs=v13, rhs=v30 }               -> x0
     v38  Extend { value=v37, kind=I32, nsw }              -> x1
     v39  Extend { value=v37, kind=I32 }                   -> x1

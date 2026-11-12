@@ -12,8 +12,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v10  Extend { value=v5, kind=I32 }                    -> x1
     v11  BinopI { op=and, lhs=v5, rhs_imm=1 }             -> x8
-    v12  BinopI { op=mul, lhs=v5, rhs_imm=3 }             -> x1
-    v13  BinopI { op=add, lhs=v5, rhs_imm=7 }             -> x2
+    v12  BinopI { op=mul, lhs=v5, rhs_imm=3 }             -> x2
+    v13  BinopI { op=add, lhs=v5, rhs_imm=7 }             -> x1
     v14  Select { cond=v11, a=v12, b=v13, kind=I64 }      -> x2
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -81,8 +81,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v85  Extend { value=v83, kind=I32 }                   -> x1
     v86  Extend { value=v5, kind=I32 }                    -> x1
     v87  BinopI { op=and, lhs=v5, rhs_imm=1 }             -> x1
-    v88  BinopI { op=mul, lhs=v5, rhs_imm=3 }             -> x1
-    v89  BinopI { op=add, lhs=v5, rhs_imm=7 }             -> x2
+    v88  BinopI { op=mul, lhs=v5, rhs_imm=3 }             -> x2
+    v89  BinopI { op=add, lhs=v5, rhs_imm=7 }             -> x1
     v90  Select { cond=v11, a=v88, b=v89, kind=I64 }      -> x2
     terminator Jmp(b9)
   block 9  start_pc=0

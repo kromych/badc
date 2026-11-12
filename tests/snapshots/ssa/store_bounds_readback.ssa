@@ -198,7 +198,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=3
     v143 Extend { value=v140, kind=I32 }                  -> x2
     v144 Imm(3)                                           -> x2
     v145 BinopI { op=ne, lhs=v140, rhs_imm=3 }            -> x2
-    v146 BinopI { op=or, lhs=v114, rhs_imm=16 }           -> x2
+    v146 BinopI { op=or, lhs=v114, rhs_imm=16 }           -> x3
     v147 BinopI { op=ne, lhs=v140, rhs_imm=3 }            -> x1
     v148 Select { cond=v147, a=v146, b=v114, kind=I64 }   -> x3
     terminator Jmp(b4)
@@ -272,12 +272,12 @@ fn ent_pc=12 n_params=0 variadic=false locals=3
     v223 BinopI { op=ne, lhs=v220, rhs_imm=3 }            -> x1
     v224 BinopI { op=or, lhs=v214, rhs_imm=128 }          -> x1
     v225 BinopI { op=ne, lhs=v220, rhs_imm=3 }            -> x0
-    v226 Select { cond=v225, a=v224, b=v214, kind=I64 }   -> x0
+    v226 Select { cond=v225, a=v224, b=v214, kind=I64 }   -> x1
     terminator Jmp(b7)
   block 7  start_pc=0
-    v231 Copy { value=v226, fp=false }                    -> x1
-    v232 Extend { value=v226, kind=I32 }                  -> x1
-    v233 Extend { value=v226, kind=I32 }                  -> x1
+    v231 Copy { value=v226, fp=false }                    -> x0
+    v232 Extend { value=v226, kind=I32 }                  -> x0
+    v233 Extend { value=v226, kind=I32 }                  -> x0
     v234 LifetimeEnd(-2)                                  -> -
     terminator Return(v226)   (exit_acc=v226)
 ; --- SSA dump (ok=true) ent_pc=0 ---

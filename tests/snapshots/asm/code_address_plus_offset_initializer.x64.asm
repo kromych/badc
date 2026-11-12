@@ -72,8 +72,8 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	movl	$0x1, %edx
                	testq	%rcx, %rcx
-               	cmovneq	%rdx, %rax
-               	testl	%eax, %eax
+               	cmoveq	%rax, %rdx
+               	testl	%edx, %edx
                	sete	%al
                	movzbq	%al, %rax
                	retq

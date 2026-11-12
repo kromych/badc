@@ -176,9 +176,9 @@ Disassembly of section .text:
                	shlq	%r12
                	movl	$0x1d, %r13d
                	testb	$-0x80, %cl
-               	movq	%rsi, %rcx
-               	cmovneq	%r13, %rcx
-               	xorq	%r12, %rcx
+               	cmoveq	%rsi, %r13
+               	xorq	%r13, %r12
+               	movq	%r12, %rcx
                	andq	$0xff, %rcx
                	movzbq	(%rdi,%rax), %r12
                	xorq	%r12, %rcx
@@ -189,9 +189,9 @@ Disassembly of section .text:
                	movl	$0x1d, %r13d
                	xorl	%r14d, %r14d
                	testb	$-0x80, %cl
-               	movq	%r14, %rcx
-               	cmovneq	%r13, %rcx
-               	xorq	%r12, %rcx
+               	cmoveq	%r14, %r13
+               	xorq	%r13, %r12
+               	movq	%r12, %rcx
                	andq	$0xff, %rcx
                	movzbq	(%r8,%rax), %r12
                	xorq	%r12, %rcx
@@ -202,11 +202,10 @@ Disassembly of section .text:
                	movl	$0x1d, %r13d
                	xorl	%r14d, %r14d
                	testb	$-0x80, %cl
-               	movq	%r14, %rcx
-               	cmovneq	%r13, %rcx
-               	xorq	%r12, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%rdx,%rax), %r12
+               	cmoveq	%r14, %r13
+               	xorq	%r13, %r12
+               	andq	$0xff, %r12
+               	movzbq	(%rdx,%rax), %rcx
                	xorq	%r12, %rcx
                	leaq	-0x60(%rbp), %r12
                	movb	%bl, (%r12,%rax)

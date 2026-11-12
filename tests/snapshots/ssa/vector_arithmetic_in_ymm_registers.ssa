@@ -3174,12 +3174,12 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2796 Imm(0)                                           -> x1
     v2797 Imm(30)                                          -> x2
     v2798 BinopI { op=eq, lhs=v2794, rhs_imm=45 }          -> x0
-    v2799 Select { cond=v2798, a=v2796, b=v2797, kind=I64 } -> x0
+    v2799 Select { cond=v2798, a=v2796, b=v2797, kind=I64 } -> x1
     terminator Jmp(b68)
   block 68  start_pc=0
-    v3013 Copy { value=v2799, fp=false }                   -> x1
-    v3014 Imm(0)                                           -> x1
-    v3015 Extend { value=v2799, kind=I32 }                 -> x1
+    v3013 Copy { value=v2799, fp=false }                   -> x0
+    v3014 Imm(0)                                           -> x0
+    v3015 Extend { value=v2799, kind=I32 }                 -> x0
     v3016 LifetimeEnd(-550)                                -> -
     v3017 LifetimeEnd(-72)                                 -> -
     v3018 LifetimeEnd(0)                                   -> -

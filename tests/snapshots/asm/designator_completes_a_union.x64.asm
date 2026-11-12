@@ -61,10 +61,10 @@ Disassembly of section .text:
                	movsd	-0x10(%rbp), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	cmovpq	%rcx, %rax
-               	imulq	$0x14, %rax, %rax
+               	movq	%rdx, %r10
+               	cmovpq	%rcx, %r10
+               	cmoveq	%r10, %rcx
+               	imulq	$0x14, %rcx, %rax
                	leave
                	retq
                	movl	$0xb, %eax

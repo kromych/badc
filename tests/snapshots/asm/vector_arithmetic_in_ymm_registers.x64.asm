@@ -819,8 +819,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x1e, %edx
                	cmpl	$0x2d, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leaq	-0x490(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

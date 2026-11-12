@@ -78,10 +78,10 @@ Disassembly of section .text:
                	seta	%dil
                	movzbq	%dil, %rdi
                	cmpq	%rcx, %rax
-               	movq	%rdi, %rax
-               	cmovbq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	orq	%rdx, %rax
+               	cmovaeq	%rdi, %rsi
+               	shlq	$0x2, %rsi
+               	orq	%rsi, %rdx
+               	movq	%rdx, %rax
                	leaq	-0x40(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
@@ -137,10 +137,10 @@ Disassembly of section .text:
                	seta	%sil
                	movzbq	%sil, %rsi
                	cmpq	%rbx, %rax
-               	movq	%rsi, %rax
-               	cmovbq	%rdx, %rax
-               	shlq	$0x2, %rax
-               	orq	%rcx, %rax
+               	cmovaeq	%rsi, %rdx
+               	shlq	$0x2, %rdx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leaq	-0x40(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

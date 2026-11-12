@@ -449,9 +449,8 @@ Disassembly of section .text:
                	movl	$0x9, %edx
                	xorl	%esi, %esi
                	cmpq	$0x41, %rax
-               	movq	%rsi, %rax
-               	cmovgeq	%rdx, %rax
-               	addq	%rcx, %rax
+               	cmovlq	%rsi, %rdx
+               	leaq	(%rcx,%rdx), %rax
                	movq	%rax, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
                	incq	%rax
@@ -1145,13 +1144,12 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	movl	$0x9, %esi
                	testq	%rcx, %rcx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
+               	cmovneq	%rsi, %rdx
                	jmp	<addr>
                	cmpq	$0x2, %rbx
                	jge	<addr>
                	jmp	<addr>
-               	movq	%rcx, (%rax)
+               	movq	%rdx, (%rax)
                	movq	<rip>, %rax # <addr>
                	cmpq	%r13, %rax
                	jge	<addr>
@@ -1401,9 +1399,8 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	movl	$0x9, %esi
                	testq	%rcx, %rcx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
-               	movq	%rcx, (%rax)
+               	cmovneq	%rsi, %rdx
+               	movq	%rdx, (%rax)
                	jmp	<addr>
                	movq	0x18(%r12), %rax
                	cmpq	$0x83, %rax
@@ -1435,12 +1432,11 @@ Disassembly of section .text:
                	je	<addr>
                	cmpq	$0x86, %rax
                	jne	<addr>
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	$0x8a, %rdx
-               	movq	%rcx, %rbx
-               	cmoveq	%rax, %rbx
+               	movl	$0x1, %ebx
+               	xorl	%eax, %eax
+               	movq	<rip>, %rcx # <addr>
+               	cmpq	$0x8a, %rcx
+               	cmovneq	%rax, %rbx
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x9f, %rax
@@ -2294,12 +2290,11 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x86, %rax
                	jne	<addr>
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	movq	<rip>, %rdx # <addr>
-               	cmpq	$0x8a, %rdx
-               	movq	%rcx, %r12
-               	cmoveq	%rax, %r12
+               	movl	$0x1, %r12d
+               	xorl	%eax, %eax
+               	movq	<rip>, %rcx # <addr>
+               	cmpq	$0x8a, %rcx
+               	cmovneq	%rax, %r12
                	callq	<addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x3b, %rax

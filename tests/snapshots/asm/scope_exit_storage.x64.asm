@@ -123,8 +123,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x3, %edx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -199,8 +199,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0xc, %edx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -262,8 +262,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x17, %edx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -299,8 +299,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x20, %edx
                	testl	%eax, %eax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq
                	leaq	-0x220(%rbp), %rdi

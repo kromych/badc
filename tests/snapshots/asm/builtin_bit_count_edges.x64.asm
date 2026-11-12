@@ -127,9 +127,8 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	leaq	0x1(%rcx), %r9
                	cmpl	$0x20, %ecx
-               	movq	%r9, %rcx
-               	cmoveq	%rdx, %rcx
-               	cmpl	%ecx, %r8d
+               	cmovneq	%r9, %rdx
+               	cmpl	%edx, %r8d
                	je	<addr>
                	movl	$0x5, %eax
                	leave
@@ -403,9 +402,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	0x1(%rax), %r8
                	cmpl	$0x40, %eax
-               	movq	%r8, %rax
-               	cmoveq	%rcx, %rax
-               	cmpl	%eax, %esi
+               	cmovneq	%r8, %rcx
+               	cmpl	%ecx, %esi
                	je	<addr>
                	movl	$0xf, %eax
                	retq
@@ -612,9 +610,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	leaq	0x1(%rax), %r8
                	cmpl	$0x40, %eax
-               	movq	%r8, %rax
-               	cmoveq	%rcx, %rax
-               	cmpl	%eax, %edx
+               	cmovneq	%r8, %rcx
+               	cmpl	%ecx, %edx
                	je	<addr>
                	movl	$0x16, %eax
                	retq

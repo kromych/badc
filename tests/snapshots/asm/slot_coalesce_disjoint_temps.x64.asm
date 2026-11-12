@@ -35,10 +35,10 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	movq	%rax, %r8
                	andq	$0x1, %r8
-               	leaq	(%rax,%rax,2), %rcx
-               	leaq	0x7(%rax), %rdx
+               	leaq	(%rax,%rax,2), %rdx
+               	leaq	0x7(%rax), %rcx
                	testq	%r8, %r8
-               	cmovneq	%rcx, %rdx
+               	cmoveq	%rcx, %rdx
                	cmpl	$0xa, %edx
                	jle	<addr>
                	cmpl	$0x64, %edx
@@ -59,10 +59,10 @@ Disassembly of section .text:
                	addq	%r9, %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rdi
-               	leaq	(%rax,%rax,2), %rcx
-               	leaq	0x7(%rax), %rdx
+               	leaq	(%rax,%rax,2), %rdx
+               	leaq	0x7(%rax), %rcx
                	testq	%r8, %r8
-               	cmovneq	%rcx, %rdx
+               	cmoveq	%rcx, %rdx
                	cmpl	$0xa, %edx
                	jle	<addr>
                	cmpl	$0x64, %edx

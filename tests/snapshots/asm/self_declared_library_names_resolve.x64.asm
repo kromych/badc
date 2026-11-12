@@ -46,7 +46,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x2, %edx
                	cmpq	$0x3, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq

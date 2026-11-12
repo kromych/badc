@@ -53,8 +53,8 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rax, %rax
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	popq	%rbx
                	leave
                	retq
@@ -97,10 +97,9 @@ Disassembly of section .text:
                	testb	$0x1, %dl
                	movq	%rdi, %rax
                	cmovneq	%rsi, %rax
-               	movq	%rsi, %rcx
-               	cmovneq	%rdi, %rcx
+               	cmovneq	%rdi, %rsi
                	imulq	$0xa, %rax, %rax
-               	addq	%rcx, %rax
+               	addq	%rsi, %rax
                	retq
 
 <diamond>:

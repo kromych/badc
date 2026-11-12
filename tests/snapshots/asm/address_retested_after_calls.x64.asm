@@ -61,17 +61,15 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	callq	<addr>
-               	movl	$0x40, %eax
-               	xorl	%ecx, %ecx
-               	leaq	<rip>, %rdx # <addr>
-               	testq	%rdx, %rdx
-               	movq	%rcx, %rdi
-               	cmovneq	%rax, %rdi
-               	xorl	%ecx, %ecx
-               	leaq	<rip>, %rax # <addr>
-               	testq	%rax, %rax
-               	movq	%rcx, %rsi
-               	cmovneq	%rax, %rsi
+               	movl	$0x40, %edi
+               	xorl	%eax, %eax
+               	leaq	<rip>, %rcx # <addr>
+               	testq	%rcx, %rcx
+               	cmoveq	%rax, %rdi
+               	xorl	%eax, %eax
+               	leaq	<rip>, %rsi # <addr>
+               	testq	%rsi, %rsi
+               	cmoveq	%rax, %rsi
                	popq	%rbp
                	jmp	<addr>
                	movl	$0x2, %eax

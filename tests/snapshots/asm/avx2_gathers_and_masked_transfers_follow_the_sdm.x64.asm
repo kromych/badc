@@ -1418,9 +1418,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	movl	$0x1, %ecx
                	testl	%ebx, %ebx
-               	movq	%rcx, %r12
-               	cmovneq	%rax, %r12
-               	xorl	%eax, %eax
+               	cmoveq	%rcx, %rax
+               	xorl	%r12d, %r12d
                	orq	%rax, %r12
                	leaq	-0x80(%rbp), %rdi
                	movl	$0x8, %esi
@@ -8513,8 +8512,8 @@ Disassembly of section .text:
                	movl	$0x10, %ecx
                	xorl	%edx, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leaq	-0x80(%rbp), %rsp
                	popq	%rbx
                	vzeroupper
@@ -9238,10 +9237,9 @@ Disassembly of section .text:
                	setne	%sil
                	movzbq	%sil, %rsi
                	cmpl	%edx, %edi
-               	movq	%rsi, %rdi
-               	cmovneq	%r13, %rdi
+               	cmoveq	%rsi, %r13
                	movl	$0x1, %esi
-               	testq	%rdi, %rdi
+               	testq	%r13, %r13
                	jne	<addr>
                	xorl	%esi, %esi
                	testl	%ecx, %ecx
@@ -11134,8 +11132,8 @@ Disassembly of section .text:
                	movl	$0x80, %ecx
                	xorl	%edx, %edx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leaq	-0x260(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

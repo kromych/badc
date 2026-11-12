@@ -204,11 +204,10 @@ Disassembly of section .text:
                	sete	%r9b
                	movzbq	%r9b, %r9
                	cmpl	$0x1, %esi
-               	movq	%r9, %rsi
-               	cmoveq	%r8, %rsi
-               	movq	%rdi, %r9
-               	sarq	$0x4, %r9
-               	andq	$0x1, %r9
+               	cmoveq	%r8, %r9
+               	movq	%rdi, %rsi
+               	sarq	$0x4, %rsi
+               	andq	$0x1, %rsi
                	xorq	%r9, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
@@ -272,9 +271,8 @@ Disassembly of section .text:
                	movl	$0x1, %esi
                	movslq	%edx, %rdx
                	testl	%ecx, %ecx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
-               	testq	%rcx, %rcx
+               	cmovneq	%rsi, %rdx
+               	testq	%rdx, %rdx
                	cmovneq	%rsi, %rax
                	leave
                	retq
@@ -302,12 +300,11 @@ Disassembly of section .text:
                	sete	%dl
                	movzbq	%dl, %rdx
                	testl	%ecx, %ecx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
+               	cmovneq	%rsi, %rdx
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	cmoveq	%rsi, %rax
                	leave
                	retq

@@ -10001,7 +10001,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v1971 BinopI { op=shru, lhs=v1966, rhs_imm=31 }        -> x7
     v1972 Imm(0)                                           -> x9
     v1973 BinopI { op=sub, lhs=v1966, rhs_imm=4294967296 } -> x9
-    v1974 Select { cond=v1971, a=v1973, b=v1966, kind=I64 } -> x7
+    v1974 Select { cond=v1971, a=v1973, b=v1966, kind=I64 } -> x9
     terminator Jmp(b132)
   block 132  start_pc=0
     v1978 Copy { value=v1974, fp=false }                   -> x1
@@ -10016,21 +10016,21 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v1987 Imm(32)                                          -> x1
     v1988 Imm(32)                                          -> x1
     v1989 BinopI { op=shru, lhs=v11, rhs_imm=32 }          -> x1
-    v1990 Imm(1)                                           -> x9
-    v1991 Imm(4294967296)                                  -> x9
-    v1992 Imm(4294967295)                                  -> x9
-    v1993 BinopI { op=and, lhs=v1989, rhs_imm=4294967295 } -> x9
-    v1994 Imm(0)                                           -> x9
-    v1995 Imm(1)                                           -> x9
-    v1996 Imm(31)                                          -> x9
-    v1997 Imm(31)                                          -> x9
-    v1998 BinopI { op=shru, lhs=v1989, rhs_imm=31 }        -> x9
+    v1990 Imm(1)                                           -> x7
+    v1991 Imm(4294967296)                                  -> x7
+    v1992 Imm(4294967295)                                  -> x7
+    v1993 BinopI { op=and, lhs=v1989, rhs_imm=4294967295 } -> x7
+    v1994 Imm(0)                                           -> x7
+    v1995 Imm(1)                                           -> x7
+    v1996 Imm(31)                                          -> x7
+    v1997 Imm(31)                                          -> x7
+    v1998 BinopI { op=shru, lhs=v1989, rhs_imm=31 }        -> x7
     v1999 Imm(0)                                           -> x12
     v2000 BinopI { op=sub, lhs=v1989, rhs_imm=4294967296 } -> x12
     v2001 Select { cond=v1998, a=v2000, b=v1989, kind=I64 } -> x1
     terminator Jmp(b133)
   block 133  start_pc=0
-    v2005 Copy { value=v2001, fp=false }                   -> x9
+    v2005 Copy { value=v2001, fp=false }                   -> x7
     v2006 Binop { op=add, lhs=v1974, rhs=v2001 }           -> x1
     v2007 Imm(32)                                          -> x7
     v2008 Imm(1)                                           -> x7
@@ -10171,7 +10171,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2119 BinopI { op=shru, lhs=v2114, rhs_imm=31 }        -> x2
     v2120 Imm(0)                                           -> x7
     v2121 BinopI { op=sub, lhs=v2114, rhs_imm=4294967296 } -> x7
-    v2122 Select { cond=v2119, a=v2121, b=v2114, kind=I64 } -> x2
+    v2122 Select { cond=v2119, a=v2121, b=v2114, kind=I64 } -> x7
     terminator Jmp(b137)
   block 137  start_pc=0
     v2126 Copy { value=v2122, fp=false }                   -> x0
@@ -10186,22 +10186,22 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2135 Imm(32)                                          -> x0
     v2136 Imm(32)                                          -> x0
     v2137 BinopI { op=shru, lhs=v11, rhs_imm=32 }          -> x0
-    v2138 Imm(1)                                           -> x7
-    v2139 Imm(4294967296)                                  -> x7
-    v2140 Imm(4294967295)                                  -> x7
-    v2141 BinopI { op=and, lhs=v2137, rhs_imm=4294967295 } -> x7
-    v2142 Imm(0)                                           -> x7
-    v2143 Imm(1)                                           -> x7
-    v2144 Imm(31)                                          -> x7
-    v2145 Imm(31)                                          -> x7
-    v2146 BinopI { op=shru, lhs=v2137, rhs_imm=31 }        -> x7
+    v2138 Imm(1)                                           -> x2
+    v2139 Imm(4294967296)                                  -> x2
+    v2140 Imm(4294967295)                                  -> x2
+    v2141 BinopI { op=and, lhs=v2137, rhs_imm=4294967295 } -> x2
+    v2142 Imm(0)                                           -> x2
+    v2143 Imm(1)                                           -> x2
+    v2144 Imm(31)                                          -> x2
+    v2145 Imm(31)                                          -> x2
+    v2146 BinopI { op=shru, lhs=v2137, rhs_imm=31 }        -> x2
     v2147 Imm(0)                                           -> x9
     v2148 BinopI { op=sub, lhs=v2137, rhs_imm=4294967296 } -> x9
     v2149 Select { cond=v2146, a=v2148, b=v2137, kind=I64 } -> x0
     terminator Jmp(b138)
   block 138  start_pc=0
-    v2153 Copy { value=v2149, fp=false }                   -> x7
-    v2154 Binop { op=sub, lhs=v2122, rhs=v2149 }           -> x2
+    v2153 Copy { value=v2149, fp=false }                   -> x2
+    v2154 Binop { op=sub, lhs=v2122, rhs=v2149 }           -> x7
     v2155 Imm(32)                                          -> x0
     v2156 Imm(1)                                           -> x0
     v2157 Imm(1)                                           -> x0
@@ -10210,7 +10210,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2160 BinopI { op=and, lhs=v2154, rhs_imm=4294967295 } -> x0
     v2161 Imm(32)                                          -> x0
     v2162 Imm(32)                                          -> x0
-    v2163 BinopI { op=shl, lhs=v2154, rhs_imm=32 }         -> x2
+    v2163 BinopI { op=shl, lhs=v2154, rhs_imm=32 }         -> x7
     v2164 Binop { op=or, lhs=v2094, rhs=v2163 }            -> x1
     v2165 Imm(0)                                           -> x0
     v2166 Imm(0)                                           -> x0
@@ -11001,7 +11001,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v531 BinopI { op=shru, lhs=v526, rhs_imm=15 }         -> x6
     v532 Imm(0)                                           -> x7
     v533 BinopI { op=sub, lhs=v526, rhs_imm=65536 }       -> x7
-    v534 Select { cond=v531, a=v533, b=v526, kind=I64 }   -> x6
+    v534 Select { cond=v531, a=v533, b=v526, kind=I64 }   -> x7
     terminator Jmp(b166)
   block 166  start_pc=0
     v2746 Copy { value=v534, fp=false }                    -> x1
@@ -11009,29 +11009,29 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2748 Imm(16)                                          -> x1
     v2749 Imm(0)                                           -> x1
     v2750 VecExtract { vec=v504, off=0, kind=I32, bytes=8 } -> x1
-    v2751 Imm(16)                                          -> x7
-    v2752 Extend { value=v2750, kind=I32 }                 -> x7
-    v2753 Imm(16)                                          -> x7
-    v2754 Extend { value=v2750, kind=I32 }                 -> x7
-    v2755 Imm(0)                                           -> x7
+    v2751 Imm(16)                                          -> x6
+    v2752 Extend { value=v2750, kind=I32 }                 -> x6
+    v2753 Imm(16)                                          -> x6
+    v2754 Extend { value=v2750, kind=I32 }                 -> x6
+    v2755 Imm(0)                                           -> x6
     v2756 BinopI { op=mul, lhs=v2750, rhs_imm=16 }         -> x1
     v2757 Extend { value=v2756, kind=I32, nsw }            -> x1
     v2758 Binop { op=shru, lhs=v11, rhs=v2757 }            -> x1
-    v2759 Imm(1)                                           -> x7
-    v2760 Imm(65536)                                       -> x7
-    v2761 Imm(65535)                                       -> x7
+    v2759 Imm(1)                                           -> x6
+    v2760 Imm(65536)                                       -> x6
+    v2761 Imm(65535)                                       -> x6
     v2762 BinopI { op=and, lhs=v2758, rhs_imm=65535 }      -> x1
-    v2763 Imm(0)                                           -> x7
-    v2764 Imm(1)                                           -> x7
-    v2765 Imm(15)                                          -> x7
-    v2766 Imm(15)                                          -> x7
-    v2767 BinopI { op=shru, lhs=v2762, rhs_imm=15 }        -> x7
+    v2763 Imm(0)                                           -> x6
+    v2764 Imm(1)                                           -> x6
+    v2765 Imm(15)                                          -> x6
+    v2766 Imm(15)                                          -> x6
+    v2767 BinopI { op=shru, lhs=v2762, rhs_imm=15 }        -> x6
     v2768 Imm(0)                                           -> x9
     v2769 BinopI { op=sub, lhs=v2762, rhs_imm=65536 }      -> x9
     v2770 Select { cond=v2767, a=v2769, b=v2762, kind=I64 } -> x1
     terminator Jmp(b167)
   block 167  start_pc=0
-    v2774 Copy { value=v2770, fp=false }                   -> x7
+    v2774 Copy { value=v2770, fp=false }                   -> x6
     v2775 Binop { op=mul, lhs=v534, rhs=v2770 }            -> x1
     v2776 BinopI { op=shr, lhs=v2775, rhs_imm=14 }         -> x1
     v2777 BinopI { op=add, lhs=v2776, rhs_imm=1 }          -> x1

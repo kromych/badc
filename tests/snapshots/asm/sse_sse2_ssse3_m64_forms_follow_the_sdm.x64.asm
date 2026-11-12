@@ -3018,18 +3018,17 @@ Disassembly of section .text:
                	movq	%rcx, %r9
                	subq	%r11, %r9
                	testq	%rdi, %rdi
-               	movq	%rcx, %rdi
-               	cmovneq	%r9, %rdi
+               	cmoveq	%rcx, %r9
                	movq	%r8, %rcx
                	shrq	$0x20, %rcx
-               	movq	%rcx, %r9
-               	shrq	$0x1f, %r9
+               	movq	%rcx, %rdi
+               	shrq	$0x1f, %rdi
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	movq	%rcx, %r12
                	subq	%r11, %r12
-               	testq	%r9, %r9
+               	testq	%rdi, %rdi
                	cmovneq	%r12, %rcx
-               	addq	%rdi, %rcx
+               	addq	%r9, %rcx
                	shlq	$0x20, %rcx
                	orq	%rsi, %rcx
                	leaq	-0xe0(%rbp), %rsi
@@ -3075,20 +3074,19 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	subq	%r11, %rdi
                	testq	%rdx, %rdx
-               	movq	%rax, %rdx
-               	cmovneq	%rdi, %rdx
+               	cmoveq	%rax, %rdi
                	movq	%r8, %rax
                	shrq	$0x20, %rax
-               	movq	%rax, %rdi
-               	shrq	$0x1f, %rdi
+               	movq	%rax, %rdx
+               	shrq	$0x1f, %rdx
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	movq	%rax, %r9
                	subq	%r11, %r9
-               	testq	%rdi, %rdi
+               	testq	%rdx, %rdx
                	cmovneq	%r9, %rax
-               	subq	%rax, %rdx
-               	shlq	$0x20, %rdx
-               	orq	%rdx, %rcx
+               	subq	%rax, %rdi
+               	shlq	$0x20, %rdi
+               	orq	%rdi, %rcx
                	leaq	-0xe0(%rbp), %rax
                	movsd	-0xe8(%rbp), %xmm0
                	leaq	-0x20(%rbp), %rdx
@@ -3302,8 +3300,7 @@ Disassembly of section .text:
                	shrq	$0xf, %rsi
                	leaq	-0x10000(%rcx), %rdi
                	testq	%rsi, %rsi
-               	movq	%rcx, %rsi
-               	cmovneq	%rdi, %rsi
+               	cmoveq	%rcx, %rdi
                	movsd	0x40(%rsp), %xmm14
                	vmovd	%xmm14, %ecx
                	movslq	%ecx, %rcx
@@ -3311,12 +3308,12 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	shrxq	%rcx, %r8, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	movq	%rcx, %rdi
-               	shrq	$0xf, %rdi
+               	movq	%rcx, %rsi
+               	shrq	$0xf, %rsi
                	leaq	-0x10000(%rcx), %r9
-               	testq	%rdi, %rdi
+               	testq	%rsi, %rsi
                	cmovneq	%r9, %rcx
-               	imulq	%rsi, %rcx
+               	imulq	%rdi, %rcx
                	sarq	$0xe, %rcx
                	incq	%rcx
                	sarq	%rcx

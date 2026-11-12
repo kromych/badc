@@ -43,8 +43,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x2, %edx
                	cmpl	$0x19a, %eax            # imm = 0x19A
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

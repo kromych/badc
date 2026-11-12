@@ -165,13 +165,13 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x20, %rsp
                	movl	$0x41700000, %eax       # imm = 0x41700000
-               	movl	$0x1, %ecx
-               	xorl	%edx, %edx
+               	movl	$0x1, %ebx
+               	xorl	%ecx, %ecx
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	movq	%rdx, %rbx
-               	cmovneq	%rcx, %rbx
-               	cmovpq	%rcx, %rbx
+               	movq	%rcx, %r10
+               	cmovpq	%rbx, %r10
+               	cmoveq	%r10, %rbx
                	leaq	-0x48(%rbp), %r9
                	subq	$0x20, %rsp
                	movq	%r9, %r10
@@ -247,8 +247,8 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	0x1(%rbx), %rcx
                	cmpl	%eax, %r12d
-               	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rbx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave

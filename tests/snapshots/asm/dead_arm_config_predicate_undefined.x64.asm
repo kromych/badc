@@ -34,9 +34,8 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%esi, %esi
                	testl	%eax, %eax
-               	movq	%rsi, %rax
-               	cmovneq	%rdx, %rax
-               	addq	%rcx, %rax
+               	cmoveq	%rsi, %rdx
+               	leaq	(%rcx,%rdx), %rax
                	retq
 
 <main>:

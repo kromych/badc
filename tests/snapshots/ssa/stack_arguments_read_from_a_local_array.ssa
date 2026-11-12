@@ -53,8 +53,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=20
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x0
-    v8   Imm(20)                                          -> x0
-    v9   Imm(0)                                           -> x1
+    v8   Imm(20)                                          -> x1
+    v9   Imm(0)                                           -> x0
     v10  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x2
     v11  Select { cond=v10, a=v8, b=v9, kind=I64 }        -> x1
     terminator Jmp(b1)
@@ -215,12 +215,12 @@ fn ent_pc=1 n_params=2 variadic=false locals=20
     v157 Imm(0)                                           -> x2
     v158 Imm(1)                                           -> x6
     v159 Binop { op=eq, lhs=v125, rhs=v152 }              -> x0
-    v160 Select { cond=v159, a=v157, b=v158, kind=I64 }   -> x0
+    v160 Select { cond=v159, a=v157, b=v158, kind=I64 }   -> x2
     terminator Jmp(b8)
   block 8  start_pc=0
-    v165 Copy { value=v160, fp=false }                    -> x1
-    v166 Imm(0)                                           -> x1
-    v167 Extend { value=v160, kind=I32 }                  -> x1
+    v165 Copy { value=v160, fp=false }                    -> x0
+    v166 Imm(0)                                           -> x0
+    v167 Extend { value=v160, kind=I32 }                  -> x0
     v168 LifetimeEnd(-20)                                 -> -
     terminator Return(v160)   (exit_acc=v160)
 ; --- SSA dump (ok=true) ent_pc=0 ---

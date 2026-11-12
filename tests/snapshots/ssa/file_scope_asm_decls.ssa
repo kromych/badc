@@ -69,13 +69,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v38  Binop { op=sub, lhs=v12, rhs=v14 }               -> x2
     v39  Binop { op=sub, lhs=v14, rhs=v12 }               -> x6
     v40  Binop { op=ugt, lhs=v12, rhs=v14 }               -> x0
-    v41  Select { cond=v40, a=v38, b=v39, kind=I64 }      -> x0
+    v41  Select { cond=v40, a=v38, b=v39, kind=I64 }      -> x2
     terminator Jmp(b7)
   block 7  start_pc=0
-    v50  Copy { value=v41, fp=false }                     -> x1
-    v51  Imm(0)                                           -> x1
-    v52  Imm(0)                                           -> x1
-    v53  Imm(0)                                           -> x1
+    v50  Copy { value=v41, fp=false }                     -> x0
+    v51  Imm(0)                                           -> x0
+    v52  Imm(0)                                           -> x0
+    v53  Imm(0)                                           -> x0
     v54  BinopI { op=ugt, lhs=v41, rhs_imm=65536 }        -> x0
     terminator Bz { cond=v54, target=b9, fall=b8 }   (exit_acc=v54)
   block 8  start_pc=0

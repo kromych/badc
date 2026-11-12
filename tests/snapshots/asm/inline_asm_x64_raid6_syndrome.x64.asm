@@ -84,9 +84,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -104,9 +104,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -124,9 +124,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -144,9 +144,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -164,9 +164,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -184,9 +184,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -204,9 +204,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -224,9 +224,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -244,9 +244,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -264,9 +264,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -284,9 +284,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -304,9 +304,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -324,9 +324,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -344,9 +344,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -364,9 +364,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -384,9 +384,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -404,9 +404,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -424,9 +424,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -444,9 +444,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -464,9 +464,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -484,9 +484,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -504,9 +504,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -524,9 +524,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -544,9 +544,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -564,9 +564,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -584,9 +584,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -604,9 +604,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -624,9 +624,9 @@ Disassembly of section .text:
                	shlq	%r8
                	movl	$0x1d, %r9d
                	testb	$-0x80, %cl
-               	movq	%rdi, %rcx
-               	cmovneq	%r9, %rcx
-               	xorq	%r8, %rcx
+               	cmoveq	%rdi, %r9
+               	movq	%r8, %rcx
+               	xorq	%r9, %rcx
                	andq	$0xff, %rcx
                	shrq	%rax
                	testq	%rax, %rax
@@ -643,9 +643,9 @@ Disassembly of section .text:
                	shlq	%rdi
                	movl	$0x1d, %r8d
                	testb	$-0x80, %dl
-               	movq	%rsi, %rdx
-               	cmovneq	%r8, %rdx
-               	xorq	%rdi, %rdx
+               	cmoveq	%rsi, %r8
+               	movq	%rdi, %rdx
+               	xorq	%r8, %rdx
                	andq	$0xff, %rdx
                	shrq	%rax
                	testq	%rax, %rax
@@ -665,9 +665,9 @@ Disassembly of section .text:
                	shlq	%rbx
                	movl	$0x1d, %r12d
                	testb	$-0x80, %cl
-               	movq	%rdx, %rcx
-               	cmovneq	%r12, %rcx
-               	xorq	%rbx, %rcx
+               	cmoveq	%rdx, %r12
+               	xorq	%r12, %rbx
+               	movq	%rbx, %rcx
                	andq	$0xff, %rcx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rcx
@@ -680,9 +680,9 @@ Disassembly of section .text:
                	movl	$0x1d, %r12d
                	xorl	%r13d, %r13d
                	testb	$-0x80, %cl
-               	movq	%r13, %rcx
-               	cmovneq	%r12, %rcx
-               	xorq	%rbx, %rcx
+               	cmoveq	%r13, %r12
+               	xorq	%r12, %rbx
+               	movq	%rbx, %rcx
                	andq	$0xff, %rcx
                	movzbq	(%rsi,%rax), %rsi
                	xorq	%rsi, %rcx
@@ -694,12 +694,11 @@ Disassembly of section .text:
                	movl	$0x1d, %r12d
                	xorl	%r13d, %r13d
                	testb	$-0x80, %cl
-               	movq	%r13, %rcx
-               	cmovneq	%r12, %rcx
+               	cmoveq	%r13, %r12
+               	xorq	%r12, %rbx
+               	andq	$0xff, %rbx
+               	movzbq	(%rsi,%rax), %rcx
                	xorq	%rbx, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%rsi,%rax), %rsi
-               	xorq	%rsi, %rcx
                	movb	%r9b, (%rdi,%rax)
                	movb	%cl, (%r8,%rax)
                	incq	%rax
@@ -882,9 +881,9 @@ Disassembly of section .text:
                	shlq	%rdi
                	movl	$0x1d, %r8d
                	testb	$-0x80, %al
-               	movq	%rsi, %rax
-               	cmovneq	%r8, %rax
-               	xorq	%rdi, %rax
+               	cmoveq	%rsi, %r8
+               	movq	%rdi, %rax
+               	xorq	%r8, %rax
                	andq	$0xff, %rax
                	shrq	%rcx
                	testq	%rcx, %rcx
@@ -1118,9 +1117,9 @@ Disassembly of section .text:
                	shlq	%rdi
                	movl	$0x1d, %r8d
                	testb	$-0x80, %al
-               	movq	%rsi, %rax
-               	cmovneq	%r8, %rax
-               	xorq	%rdi, %rax
+               	cmoveq	%rsi, %r8
+               	movq	%rdi, %rax
+               	xorq	%r8, %rax
                	andq	$0xff, %rax
                	shrq	%rcx
                	testq	%rcx, %rcx

@@ -209,9 +209,8 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm0
                	movq	%rdx, %xmm15
                	comisd	%xmm15, %xmm0
-               	movq	%rdi, %rcx
-               	cmovaq	%rsi, %rcx
-               	addq	%rcx, %rax
+               	cmovbeq	%rdi, %rsi
+               	addq	%rsi, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

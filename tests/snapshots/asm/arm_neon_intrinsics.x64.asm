@@ -100,21 +100,20 @@ Disassembly of section .text:
                	movl	$0x1d, %r9d
                	xorl	%ebx, %ebx
                	testb	$-0x80, %sil
-               	movq	%rbx, %rsi
-               	cmovneq	%r9, %rsi
-               	xorq	%r8, %rsi
-               	andq	$0xff, %rsi
+               	cmoveq	%rbx, %r9
+               	xorq	%r9, %r8
+               	andq	$0xff, %r8
                	movzbq	(%rdx,%rax), %rdx
-               	movq	%rdx, %r8
-               	shlq	%r8
+               	movq	%rdx, %rsi
+               	shlq	%rsi
                	movl	$0x1d, %r9d
                	xorl	%ebx, %ebx
                	testb	$-0x80, %dl
-               	movq	%rbx, %rdx
-               	cmovneq	%r9, %rdx
-               	xorq	%r8, %rdx
+               	cmoveq	%rbx, %r9
+               	movq	%rsi, %rdx
+               	xorq	%r9, %rdx
                	andq	$0xff, %rdx
-               	cmpl	%edx, %esi
+               	cmpl	%edx, %r8d
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x10, %eax

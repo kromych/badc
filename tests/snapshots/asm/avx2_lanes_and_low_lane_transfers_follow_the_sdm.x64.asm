@@ -736,11 +736,10 @@ Disassembly of section .text:
                	movq	%rdx, %r14
                	subq	%rsi, %r14
                	jmp	<addr>
-               	movq	$-0x1, %rax
-               	xorl	%r9d, %r9d
+               	movq	$-0x1, %r14
+               	xorl	%eax, %eax
                	cmpq	%rsi, %rdx
-               	movq	%r9, %r14
-               	cmoveq	%rax, %r14
+               	cmovneq	%rax, %r14
                	jmp	<addr>
                	incq	%r13
                	movl	$0x20, %eax

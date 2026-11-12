@@ -161,7 +161,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x1, %edx
                	cmpq	$0x160, %rax            # imm = 0x160
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq

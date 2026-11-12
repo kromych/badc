@@ -31,9 +31,8 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movq	$-0x64, %rdx
                	cmpl	$-0x1, %eax
-               	movq	%rdx, %rax
-               	cmovgeq	%rcx, %rax
-               	incq	%rax
+               	cmovlq	%rdx, %rcx
+               	leaq	0x1(%rcx), %rax
                	incq	%rax
                	retq
 

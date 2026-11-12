@@ -124,11 +124,10 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	shlq	%rcx
                	addq	%rdx, %rcx
-               	movq	%rax, %rdx
-               	orq	$0x10, %rdx
-               	cmpl	$0x3, %ecx
                	movq	%rax, %rbx
-               	cmovneq	%rdx, %rbx
+               	orq	$0x10, %rbx
+               	cmpl	$0x3, %ecx
+               	cmoveq	%rax, %rbx
                	leaq	-0x18(%rbp), %rdi
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
@@ -176,8 +175,8 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	orq	$0x80, %rcx
                	cmpl	$0x3, %eax
-               	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
+               	cmoveq	%rbx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

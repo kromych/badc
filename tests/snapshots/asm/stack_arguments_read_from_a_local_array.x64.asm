@@ -86,10 +86,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp
-               	movl	$0x14, %eax
-               	xorl	%ecx, %ecx
+               	movl	$0x14, %ecx
+               	xorl	%eax, %eax
                	testl	%edi, %edi
-               	cmovgq	%rax, %rcx
+               	cmovleq	%rax, %rcx
                	xorl	%eax, %eax
                	cmpl	%ecx, %eax
                	jge	<addr>
@@ -158,7 +158,7 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x1, %esi
                	cmpq	%rcx, %rax
-               	movq	%rsi, %rax
-               	cmoveq	%rdx, %rax
+               	cmovneq	%rsi, %rdx
+               	movq	%rdx, %rax
                	leave
                	retq

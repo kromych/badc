@@ -29,17 +29,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	xorl	%eax, %eax
+               	xorl	%edi, %edi
                	movl	$0x5, -0x10(%rbp)
                	leaq	-0x10(%rbp), %r10
                	clflushopt	(%r10)
                	leaq	-0x10(%rbp), %r10
                	prefetchw	(%r10)
-               	movl	-0x10(%rbp), %ecx
-               	movl	$0x1, %edx
-               	cmpl	$0x5, %ecx
-               	movq	%rax, %rdi
-               	cmovneq	%rdx, %rdi
+               	movl	-0x10(%rbp), %eax
+               	movl	$0x1, %ecx
+               	cmpl	$0x5, %eax
+               	cmovneq	%rcx, %rdi
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, %r10
                	fxsave	(%r10)

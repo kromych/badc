@@ -142,12 +142,12 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v67  Imm(7)                                           -> x1
     v68  Imm(0)                                           -> x2
     v69  BinopI { op=ne, lhs=v65, rhs_imm=46 }            -> x0
-    v70  Select { cond=v69, a=v67, b=v68, kind=I64 }      -> x0
+    v70  Select { cond=v69, a=v67, b=v68, kind=I64 }      -> x1
     terminator Jmp(b13)
   block 13  start_pc=0
-    v75  Copy { value=v70, fp=false }                     -> x1
-    v76  Imm(0)                                           -> x1
-    v77  Extend { value=v70, kind=I32 }                   -> x1
+    v75  Copy { value=v70, fp=false }                     -> x0
+    v76  Imm(0)                                           -> x0
+    v77  Extend { value=v70, kind=I32 }                   -> x0
     terminator Return(v70)   (exit_acc=v70)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=shadow_global

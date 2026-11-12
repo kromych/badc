@@ -89,7 +89,7 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x5, %edx
                	testq	%rax, %rax
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	leave
                	retq

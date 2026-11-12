@@ -4,18 +4,18 @@ fn ent_pc=1358 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Imm(5)                                           -> x1
+    v1   Imm(0)                                           -> x7
+    v2   Imm(0)                                           -> x0
+    v3   Imm(5)                                           -> x0
     v4   StoreLocal { off=-2, value=v3, kind=I32, volatile } -> -
-    v5   LocalAddr(-2)                                    -> x1
+    v5   LocalAddr(-2)                                    -> x0
     v6   InlineAsm { template="clflushopt (%0)", ops=1, args=[v5] } -> -
-    v7   LocalAddr(-2)                                    -> x1
+    v7   LocalAddr(-2)                                    -> x0
     v8   InlineAsm { template="prefetchw (%0)", ops=1, args=[v7] } -> -
-    v9   LoadLocal { off=-2, kind=I32, volatile }         -> x1
-    v10  BinopI { op=ne, lhs=v9, rhs_imm=5 }              -> x2
-    v11  Imm(1)                                           -> x2
-    v12  BinopI { op=ne, lhs=v9, rhs_imm=5 }              -> x1
+    v9   LoadLocal { off=-2, kind=I32, volatile }         -> x0
+    v10  BinopI { op=ne, lhs=v9, rhs_imm=5 }              -> x1
+    v11  Imm(1)                                           -> x1
+    v12  BinopI { op=ne, lhs=v9, rhs_imm=5 }              -> x0
     v13  Select { cond=v12, a=v11, b=v1, kind=I64 }       -> x7
     terminator Jmp(b1)
   block 1  start_pc=0

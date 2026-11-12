@@ -54,16 +54,16 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v26  Binop { op=sub, lhs=v14, rhs=v15 }               -> x7
     v27  BinopI { op=ugt, lhs=v26, rhs_imm=4096 }         -> x7
     v28  Binop { op=ult, lhs=v14, rhs=v15 }               -> x0
-    v29  Select { cond=v28, a=v25, b=v27, kind=I64 }      -> x0
+    v29  Select { cond=v28, a=v25, b=v27, kind=I64 }      -> x6
     terminator Jmp(b1)
   block 1  start_pc=0
-    v32  Copy { value=v29, fp=false }                     -> x1
-    v33  BinopI { op=shl, lhs=v29, rhs_imm=2 }            -> x0
-    v34  Extend { value=v33, kind=I32 }                   -> x1
-    v35  Binop { op=or, lhs=v23, rhs=v33 }                -> x0
-    v36  Extend { value=v35, kind=I32 }                   -> x1
-    v37  Extend { value=v35, kind=I32 }                   -> x1
-    v38  Extend { value=v35, kind=I32 }                   -> x1
+    v32  Copy { value=v29, fp=false }                     -> x0
+    v33  BinopI { op=shl, lhs=v29, rhs_imm=2 }            -> x6
+    v34  Extend { value=v33, kind=I32 }                   -> x0
+    v35  Binop { op=or, lhs=v23, rhs=v33 }                -> x2
+    v36  Extend { value=v35, kind=I32 }                   -> x0
+    v37  Extend { value=v35, kind=I32 }                   -> x0
+    v38  Extend { value=v35, kind=I32 }                   -> x0
     v39  LifetimeEnd(-14)                                 -> -
     terminator Return(v35)   (exit_acc=v35)
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -102,16 +102,16 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v28  Binop { op=sub, lhs=v16, rhs=v10 }               -> x6
     v29  BinopI { op=ugt, lhs=v28, rhs_imm=4096 }         -> x6
     v30  Binop { op=ult, lhs=v16, rhs=v10 }               -> x0
-    v31  Select { cond=v30, a=v27, b=v29, kind=I64 }      -> x0
+    v31  Select { cond=v30, a=v27, b=v29, kind=I64 }      -> x2
     terminator Jmp(b1)
   block 1  start_pc=0
-    v34  Copy { value=v31, fp=false }                     -> x2
-    v35  BinopI { op=shl, lhs=v31, rhs_imm=2 }            -> x0
-    v36  Extend { value=v35, kind=I32 }                   -> x2
-    v37  Binop { op=or, lhs=v25, rhs=v35 }                -> x0
-    v38  Extend { value=v37, kind=I32 }                   -> x1
-    v39  Extend { value=v37, kind=I32 }                   -> x1
-    v40  Extend { value=v37, kind=I32 }                   -> x1
+    v34  Copy { value=v31, fp=false }                     -> x0
+    v35  BinopI { op=shl, lhs=v31, rhs_imm=2 }            -> x2
+    v36  Extend { value=v35, kind=I32 }                   -> x0
+    v37  Binop { op=or, lhs=v25, rhs=v35 }                -> x1
+    v38  Extend { value=v37, kind=I32 }                   -> x0
+    v39  Extend { value=v37, kind=I32 }                   -> x0
+    v40  Extend { value=v37, kind=I32 }                   -> x0
     v41  LifetimeEnd(-15)                                 -> -
     terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=5 ---

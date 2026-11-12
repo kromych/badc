@@ -258,11 +258,11 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v49  BinopI { op=add, lhs=v7, rhs_imm=3 }             -> x2
     v50  Binop { op=ne, lhs=v27, rhs=v49 }                -> x2
     v51  BinopI { op=ne, lhs=v45, rhs_imm=0 }             -> x6
-    v52  Select { cond=v45, a=v47, b=v50, kind=I64 }      -> x0
+    v52  Select { cond=v45, a=v47, b=v50, kind=I64 }      -> x1
     terminator Jmp(b2)
   block 2  start_pc=0
-    v63  Copy { value=v52, fp=false }                     -> x1
-    v64  Imm(0)                                           -> x1
+    v63  Copy { value=v52, fp=false }                     -> x0
+    v64  Imm(0)                                           -> x0
     v65  Binop { op=or, lhs=v8, rhs=v52 }                 -> x2
     v66  Imm(0)                                           -> x0
     v67  Extend { value=v65, kind=I32 }                   -> x0

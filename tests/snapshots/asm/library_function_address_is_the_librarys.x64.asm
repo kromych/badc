@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movl	$0x3, %edx
                	movq	<rip>, %rsi # <addr>
                	cmpq	%rax, %rsi
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq

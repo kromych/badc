@@ -46,9 +46,8 @@ Disassembly of section .text:
                	movl	$0x3e8, %ecx            # imm = 0x3E8
                	xorl	%edx, %edx
                	testb	$0x1f, %al
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	movl	0x4(%rsp), %ecx
+               	cmoveq	%rdx, %rcx
+               	movl	0x4(%rsp), %eax
                	addq	%rcx, %rax
                	movl	0x8(%rsp), %ecx
                	addq	%rcx, %rax
@@ -87,9 +86,8 @@ Disassembly of section .text:
                	movl	$0x3e8, %ecx            # imm = 0x3E8
                	xorl	%edx, %edx
                	testb	$0x1f, %al
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	movl	(%rsp), %ecx
+               	cmoveq	%rdx, %rcx
+               	movl	(%rsp), %eax
                	addq	%rcx, %rax
                	movl	0x4(%rsp), %ecx
                	addq	%rcx, %rax
@@ -112,9 +110,8 @@ Disassembly of section .text:
                	movl	$0x3e8, %edi            # imm = 0x3E8
                	xorl	%r8d, %r8d
                	testb	$0x3f, %dl
-               	movq	%r8, %rdx
-               	cmovneq	%rdi, %rdx
-               	movsbq	(%rsp), %rdi
+               	cmoveq	%r8, %rdi
+               	movsbq	(%rsp), %rdx
                	addq	%rdi, %rdx
                	movsbq	0x1(%rsp), %rdi
                	addq	%rdi, %rdx
@@ -134,9 +131,8 @@ Disassembly of section .text:
                	movl	$0x3e8, %edx            # imm = 0x3E8
                	xorl	%esi, %esi
                	testb	$0x1f, %al
-               	movq	%rsi, %rax
-               	cmovneq	%rdx, %rax
-               	movl	(%rsp), %edx
+               	cmoveq	%rsi, %rdx
+               	movl	(%rsp), %eax
                	addq	%rdx, %rax
                	movl	0x4(%rsp), %edx
                	addq	%rdx, %rax

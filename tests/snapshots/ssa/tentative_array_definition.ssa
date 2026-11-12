@@ -17,10 +17,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v3   ImmData(1)                                       -> x1
     v4   Load { addr=v3, disp=0, kind=I8 pc_rel }         -> x1
     v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x1
-    v6   Imm(1)                                           -> x1
-    v7   Load { addr=v3, disp=0, kind=I8 pc_rel }         -> x2
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x6
-    v9   Select { cond=v7, a=v6, b=v1, kind=I64 }         -> x2
+    v6   Imm(1)                                           -> x6
+    v7   Load { addr=v3, disp=0, kind=I8 pc_rel }         -> x1
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x2
+    v9   Select { cond=v7, a=v6, b=v1, kind=I64 }         -> x6
     terminator Jmp(b1)
   block 1  start_pc=0
     v14  Copy { value=v9, fp=false }                      -> x1
@@ -29,10 +29,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v17  Imm(0)                                           -> x1
     v18  Imm(0)                                           -> x1
     v19  ImmData(48)                                      -> x1
-    v20  Imm(0)                                           -> x6
-    v21  Load { addr=v19, disp=0, kind=I8 pc_rel }        -> x6
-    v22  BinopI { op=ne, lhs=v21, rhs_imm=104 }           -> x6
-    v23  BinopI { op=or, lhs=v9, rhs_imm=4 }              -> x6
+    v20  Imm(0)                                           -> x2
+    v21  Load { addr=v19, disp=0, kind=I8 pc_rel }        -> x2
+    v22  BinopI { op=ne, lhs=v21, rhs_imm=104 }           -> x2
+    v23  BinopI { op=or, lhs=v9, rhs_imm=4 }              -> x2
     v24  Load { addr=v19, disp=0, kind=I8 pc_rel }        -> x7
     v25  BinopI { op=ne, lhs=v24, rhs_imm=104 }           -> x7
     v26  Select { cond=v25, a=v23, b=v9, kind=I64 }       -> x6

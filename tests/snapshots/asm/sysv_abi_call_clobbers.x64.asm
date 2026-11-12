@@ -256,13 +256,13 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	callq	<addr>
                	movabsq	$0x4026000000000000, %rax # imm = 0x4026000000000000
-               	movl	$0x1, %ecx
-               	xorl	%edx, %edx
+               	movl	$0x1, %ebx
+               	xorl	%ecx, %ecx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	movq	%rdx, %rbx
-               	cmovneq	%rcx, %rbx
-               	cmovpq	%rcx, %rbx
+               	movq	%rcx, %r10
+               	cmovpq	%rbx, %r10
+               	cmoveq	%r10, %rbx
                	movq	<rip>, %rdi # <addr>
                	movq	<rip>, %rsi # <addr>
                	movq	<rip>, %rdx # <addr>
@@ -300,60 +300,60 @@ Disassembly of section .text:
                	orq	$0x10, %rcx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	movq	%rbx, %rax
-               	cmovneq	%rcx, %rax
-               	cmovpq	%rcx, %rax
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	cmovneq	%rcx, %rbx
+               	cmovpq	%rcx, %rbx
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movsd	0x80(%rsp), %xmm0
-               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm14
                	vfmadd213sd	0x88(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * xmm0) + mem
-               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x78(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x70(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x68(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4018000000000000, %rcx # imm = 0x4018000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x60(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x401c000000000000, %rcx # imm = 0x401C000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x58(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4020000000000000, %rcx # imm = 0x4020000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x50(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4022000000000000, %rcx # imm = 0x4022000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x48(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4024000000000000, %rcx # imm = 0x4024000000000000
-               	movq	%rcx, %xmm14
+               	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
+               	movq	%rax, %xmm14
                	vfmadd231sd	0x40(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movabsq	$0x4078100000000000, %rcx # imm = 0x4078100000000000
-               	movq	%rax, %rdx
-               	orq	$0x20, %rdx
-               	movq	%rcx, %xmm15
+               	movabsq	$0x4078100000000000, %rax # imm = 0x4078100000000000
+               	movq	%rbx, %rcx
+               	orq	$0x20, %rcx
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	cmovneq	%rdx, %rax
-               	cmovpq	%rdx, %rax
+               	cmovneq	%rcx, %rbx
+               	cmovpq	%rcx, %rbx
                	shlq	%r13
-               	leaq	(%r12,%r13), %rcx
-               	leaq	(%r14,%r14,2), %rdx
-               	addq	%rdx, %rcx
+               	leaq	(%r12,%r13), %rax
+               	leaq	(%r14,%r14,2), %rcx
+               	addq	%rcx, %rax
                	shlq	$0x2, %r15
-               	addq	%r15, %rcx
-               	movq	0x38(%rsp), %rdx
-               	leaq	(%rdx,%rdx,4), %rdx
-               	addq	%rdx, %rcx
-               	movq	0x30(%rsp), %rdx
-               	imulq	$0x6, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	movq	%rax, %rdx
-               	orq	$0x40, %rdx
-               	cmpq	$0x12d, %rcx            # imm = 0x12D
-               	cmovneq	%rdx, %rax
+               	addq	%r15, %rax
+               	movq	0x38(%rsp), %rcx
+               	leaq	(%rcx,%rcx,4), %rcx
+               	addq	%rcx, %rax
+               	movq	0x30(%rsp), %rcx
+               	imulq	$0x6, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movq	%rbx, %rcx
+               	orq	$0x40, %rcx
+               	cmpq	$0x12d, %rax            # imm = 0x12D
+               	cmoveq	%rbx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

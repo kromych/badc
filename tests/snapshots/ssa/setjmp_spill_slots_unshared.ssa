@@ -214,7 +214,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v445 BinopI { op=add, lhs=v443, rhs_imm=7 }           -> x1
     v446 Extend { value=v445, kind=I32, nsw }             -> x2
     v447 Binop { op=ne, lhs=v76, rhs=v445 }               -> x2
-    v448 BinopI { op=or, lhs=v431, rhs_imm=128 }          -> x2
+    v448 BinopI { op=or, lhs=v431, rhs_imm=128 }          -> x6
     v449 Binop { op=ne, lhs=v76, rhs=v445 }               -> x1
     v450 Select { cond=v449, a=v448, b=v431, kind=I64 }   -> x6
     terminator Jmp(b12)

@@ -108,8 +108,8 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
+               	cmovneq	%rdx, %rcx
+               	cmovpq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
-               	cmovpq	%rdx, %rax
                	leave
                	retq

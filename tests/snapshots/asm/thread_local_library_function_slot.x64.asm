@@ -38,9 +38,8 @@ Disassembly of section .text:
                	sete	%sil
                	movzbq	%sil, %rsi
                	cmpq	%rdi, %rdx
-               	movq	%rax, %rdx
-               	cmoveq	%rsi, %rdx
-               	testq	%rdx, %rdx
+               	cmovneq	%rax, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
                	movq	(%rcx), %rax

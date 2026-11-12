@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movl	$0x2a, %ecx
                	movl	$0x1, %edx
                	cmpq	$0x20f, %rax            # imm = 0x20F
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq

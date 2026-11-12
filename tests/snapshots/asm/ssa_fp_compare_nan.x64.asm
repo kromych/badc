@@ -68,18 +68,16 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	orq	$0x20, %rdx
                	testq	%rax, %rax
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	movq	%rax, %rcx
-               	orq	$0x40, %rcx
+               	cmoveq	%rdx, %rcx
+               	movq	%rcx, %rax
+               	orq	$0x40, %rax
                	comisd	%xmm0, %xmm0
-               	cmovaq	%rcx, %rax
-               	movq	%rax, %rcx
-               	orq	$0x80, %rcx
-               	ucomisd	%xmm0, %xmm0
+               	cmovaq	%rax, %rcx
                	movq	%rcx, %rsi
-               	cmovneq	%rax, %rsi
-               	cmovpq	%rax, %rsi
+               	orq	$0x80, %rsi
+               	ucomisd	%xmm0, %xmm0
+               	cmovneq	%rcx, %rsi
+               	cmovpq	%rcx, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi

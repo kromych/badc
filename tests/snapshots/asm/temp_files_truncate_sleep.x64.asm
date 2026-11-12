@@ -297,8 +297,8 @@ Disassembly of section .text:
                	movl	$0xe, %ecx
                	xorl	%edx, %edx
                	cmpq	$0x1e8480, %rax         # imm = 0x1E8480
-               	movq	%rdx, %rax
-               	cmovlq	%rcx, %rax
+               	cmovgeq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

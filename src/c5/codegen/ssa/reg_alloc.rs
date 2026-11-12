@@ -654,6 +654,11 @@ fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
     let (op, lhs, rhs) = match *inst {
         Inst::Binop { op, lhs, rhs } => (op, lhs, Ok(rhs)),
         Inst::BinopI { op, lhs, rhs_imm } => (op, lhs, Err(rhs_imm)),
+        // `cmov` overwrites its destination, which may hold either arm:
+        // the lowering inverts the condition for the other.
+        Inst::Select { a, b, kind, .. } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+            return [Some(a), Some(b)];
+        }
         _ => return [None; 2],
     };
     let fits = |k: i64| i32::try_from(k).is_ok();

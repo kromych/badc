@@ -48,8 +48,8 @@ Disassembly of section .text:
                	movl	$0x14, %edx
                	movl	(%rax), %eax
                	cmpl	$0x61, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave
@@ -80,8 +80,8 @@ Disassembly of section .text:
                	movl	$0x15, %edx
                	movl	(%rax), %eax
                	cmpl	$0x63, %eax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	popq	%r12
                	leave

@@ -33,16 +33,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	movl	$0x1, %ecx
+               	movl	$0x1, %esi
                	cmpb	$0x0, <rip> # <addr>
-               	movq	%rax, %rdx
-               	cmovneq	%rcx, %rdx
+               	cmoveq	%rax, %rsi
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rdx, %rsi
-               	orq	$0x4, %rsi
+               	movq	%rsi, %rdx
+               	orq	$0x4, %rdx
                	movsbq	<rip>, %rdi # <addr>
                	cmpl	$0x68, %edi
-               	cmoveq	%rdx, %rsi
+               	cmovneq	%rdx, %rsi
                	jmp	<addr>
                	leaq	<rip>, %rdx # <addr>
                	movsbq	(%rdx,%rax), %rdx

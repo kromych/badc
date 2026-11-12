@@ -57,8 +57,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=26
     v41  BinopI { op=xor, lhs=v40, rhs_imm=384 }          -> x1
     v42  BinopI { op=and, lhs=v41, rhs_imm=4294967295 }   -> x1
     v43  BinopI { op=ne, lhs=v40, rhs_imm=384 }           -> x1
-    v44  Imm(3)                                           -> x1
-    v45  Imm(0)                                           -> x2
+    v44  Imm(3)                                           -> x12
+    v45  Imm(0)                                           -> x1
     v46  BinopI { op=ne, lhs=v40, rhs_imm=384 }           -> x0
     v47  Select { cond=v46, a=v44, b=v45, kind=I64 }      -> x12
     terminator Jmp(b6)

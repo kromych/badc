@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movl	$0x4, %ecx
                	movl	$0x5, %edx
                	testl	%eax, %eax
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	popq	%rbp
                	retq

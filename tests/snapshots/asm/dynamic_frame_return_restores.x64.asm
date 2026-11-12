@@ -73,8 +73,8 @@ Disassembly of section .text:
                	testb	$0x3f, %al
                	movl	$0x3, %ecx
                	movl	$0x64, %edx
+               	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	cmovneq	%rdx, %rax
                	leave
                	retq
 
@@ -148,9 +148,8 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	testl	%ecx, %ecx
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
-               	addq	%rcx, %rax
+               	cmovneq	%rsi, %rdx
+               	addq	%rdx, %rax
                	leaq	-0x10(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
@@ -457,8 +456,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	$0x3, %edx
                	cmpq	$0xed11, %rax           # imm = 0xED11
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

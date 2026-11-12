@@ -75,9 +75,8 @@ Disassembly of section .text:
                	retq
                	movl	-0x78(%rbp), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	movl	$0x3, %ecx
-               	xorl	%edx, %edx
+               	movl	$0x3, %r12d
+               	xorl	%ecx, %ecx
                	cmpl	$0x180, %eax            # imm = 0x180
-               	movq	%rdx, %r12
-               	cmovneq	%rcx, %r12
+               	cmoveq	%rcx, %r12
                	jmp	<addr>

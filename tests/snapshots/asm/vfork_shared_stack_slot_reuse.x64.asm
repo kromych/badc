@@ -237,13 +237,12 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	leaq	(%rcx,%rcx,2), %rcx
                	addq	$0xb, %rcx
-               	movq	%rax, %rdx
-               	orq	$0x800, %rdx            # imm = 0x800
+               	movq	%rax, %rsi
+               	orq	$0x800, %rsi            # imm = 0x800
                	movq	%rcx, %r10
                	movq	0xf8(%rsp), %rcx
                	cmpl	%r10d, %ecx
-               	movq	%rax, %rsi
-               	cmovneq	%rdx, %rsi
+               	cmoveq	%rax, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi

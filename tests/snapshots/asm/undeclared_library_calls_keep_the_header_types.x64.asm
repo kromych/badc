@@ -44,14 +44,13 @@ Disassembly of section .text:
                	movsd	0x8(%rsp), %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	movq	%rdx, %rcx
-               	cmovneq	%rsi, %rcx
-               	cmovpq	%rsi, %rcx
-               	xorl	%edx, %edx
+               	cmovneq	%rsi, %rdx
+               	cmovpq	%rsi, %rdx
+               	xorl	%ecx, %ecx
                	movl	$0x2, %esi
                	cmpl	$0x5, %eax
-               	movq	%rsi, %rax
-               	cmoveq	%rdx, %rax
-               	orq	%rcx, %rax
+               	cmovneq	%rsi, %rcx
+               	orq	%rdx, %rcx
+               	movq	%rcx, %rax
                	leave
                	retq

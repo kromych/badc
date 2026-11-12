@@ -832,11 +832,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v334 Imm(9)                                           -> x2
     v335 Imm(0)                                           -> x6
     v336 BinopI { op=ge, lhs=v329, rhs_imm=65 }           -> x0
-    v337 Select { cond=v336, a=v334, b=v335, kind=I64 }   -> x0
+    v337 Select { cond=v336, a=v334, b=v335, kind=I64 }   -> x2
     terminator Jmp(b120)
   block 120  start_pc=0
-    v393 Copy { value=v337, fp=false }                    -> x2
-    v394 Imm(0)                                           -> x2
+    v393 Copy { value=v337, fp=false }                    -> x0
+    v394 Imm(0)                                           -> x0
     v395 Binop { op=add, lhs=v331, rhs=v337 }             -> x0
     v396 Store { addr=v325, disp=0, value=v395, kind=I64 pc_rel } -> -
     terminator Jmp(b121)   (exit_acc=v396)
@@ -1975,15 +1975,15 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v1476 Imm(10)                                          -> x2
     v1477 Imm(9)                                           -> x6
     v1478 BinopI { op=eq, lhs=v1473, rhs_imm=0 }           -> x7
-    v1479 Select { cond=v1473, a=v1477, b=v1476, kind=I64 } -> x1
+    v1479 Select { cond=v1473, a=v1477, b=v1476, kind=I64 } -> x2
     terminator Jmp(b73)
   block 72  start_pc=0
     v1480 Imm(0)                                           -> x0
     v1481 BinopI { op=lt, lhs=v682, rhs_imm=2 }            -> x0
     terminator Bz { cond=v1481, target=b71, fall=b76 }   (exit_acc=v1481)
   block 73  start_pc=0
-    v1492 Copy { value=v1479, fp=false }                   -> x2
-    v1493 Imm(0)                                           -> x2
+    v1492 Copy { value=v1479, fp=false }                   -> x1
+    v1493 Imm(0)                                           -> x1
     v1494 Store { addr=v1469, disp=0, value=v1479, kind=I64 } -> -
     terminator Jmp(b74)
   block 74  start_pc=0
@@ -2364,11 +2364,11 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v280 Imm(10)                                          -> x2
     v281 Imm(9)                                           -> x6
     v282 BinopI { op=eq, lhs=v277, rhs_imm=0 }            -> x7
-    v283 Select { cond=v277, a=v281, b=v280, kind=I64 }   -> x1
+    v283 Select { cond=v277, a=v281, b=v280, kind=I64 }   -> x2
     terminator Jmp(b120)
   block 120  start_pc=0
-    v313 Copy { value=v283, fp=false }                    -> x2
-    v314 Imm(0)                                           -> x2
+    v313 Copy { value=v283, fp=false }                    -> x1
+    v314 Imm(0)                                           -> x1
     v315 Store { addr=v271, disp=0, value=v283, kind=I64 } -> -
     terminator Jmp(b74)   (exit_acc=v315)
   block 121  start_pc=0
@@ -2426,10 +2426,10 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v330 ImmData(1800)                                    -> x0
     v331 Load { addr=v317, disp=0, kind=I64 pc_rel }      -> x0
     v332 BinopI { op=eq, lhs=v331, rhs_imm=138 }          -> x0
-    v333 Imm(1)                                           -> x0
-    v334 Imm(0)                                           -> x1
-    v335 Load { addr=v317, disp=0, kind=I64 pc_rel }      -> x2
-    v336 BinopI { op=eq, lhs=v335, rhs_imm=138 }          -> x2
+    v333 Imm(1)                                           -> x3
+    v334 Imm(0)                                           -> x0
+    v335 Load { addr=v317, disp=0, kind=I64 pc_rel }      -> x1
+    v336 BinopI { op=eq, lhs=v335, rhs_imm=138 }          -> x1
     v337 Select { cond=v336, a=v333, b=v334, kind=I64 }   -> x3
     terminator Jmp(b128)
   block 128  start_pc=0
@@ -3862,10 +3862,10 @@ fn ent_pc=9 n_params=2 variadic=false locals=0
     v793 ImmData(1800)                                    -> x0
     v794 Load { addr=v793, disp=0, kind=I64 pc_rel }      -> x0
     v795 BinopI { op=eq, lhs=v794, rhs_imm=138 }          -> x0
-    v796 Imm(1)                                           -> x0
-    v797 Imm(0)                                           -> x1
-    v798 Load { addr=v793, disp=0, kind=I64 pc_rel }      -> x2
-    v799 BinopI { op=eq, lhs=v798, rhs_imm=138 }          -> x2
+    v796 Imm(1)                                           -> x12
+    v797 Imm(0)                                           -> x0
+    v798 Load { addr=v793, disp=0, kind=I64 pc_rel }      -> x1
+    v799 BinopI { op=eq, lhs=v798, rhs_imm=138 }          -> x1
     v800 Select { cond=v799, a=v796, b=v797, kind=I64 }   -> x12
     terminator Jmp(b56)
   block 56  start_pc=0

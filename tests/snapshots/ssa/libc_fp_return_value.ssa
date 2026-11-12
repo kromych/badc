@@ -63,67 +63,67 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v57  Binop { op=fne, lhs=v53, rhs=v56 }               -> x1
     v58  Imm(0)                                           -> x1
     v59  Binop { op=fne, lhs=v53, rhs=v56 }               -> x0
-    v60  Select { cond=v59, a=v58, b=v47, kind=I64 }      -> x0
+    v60  Select { cond=v59, a=v58, b=v47, kind=I64 }      -> x1
     terminator Jmp(b5)
   block 5  start_pc=0
-    v63  Copy { value=v60, fp=false }                     -> x1
-    v64  Imm(1082130432)                                  -> x1 [f32]
+    v63  Copy { value=v60, fp=false }                     -> x0
+    v64  Imm(1082130432)                                  -> x0 [f32]
     v65  Intrinsic { kind=Sqrtf, args=[v64] }             -> d0 [f32]
-    v66  Imm(0)                                           -> x1
-    v67  Imm(0)                                           -> x1 [f32]
-    v68  Imm(1073741824)                                  -> x1 [f32]
+    v66  Imm(0)                                           -> x0
+    v67  Imm(0)                                           -> x0 [f32]
+    v68  Imm(1073741824)                                  -> x0 [f32]
     v69  Binop { op=fne, lhs=v65, rhs=v68 }               -> x2
     v70  Imm(0)                                           -> x2
-    v71  Binop { op=fne, lhs=v65, rhs=v68 }               -> x1
-    v72  Select { cond=v71, a=v70, b=v60, kind=I64 }      -> x0
+    v71  Binop { op=fne, lhs=v65, rhs=v68 }               -> x0
+    v72  Select { cond=v71, a=v70, b=v60, kind=I64 }      -> x1
     terminator Jmp(b6)
   block 6  start_pc=0
-    v75  Copy { value=v72, fp=false }                     -> x1
-    v76  Imm(1080033280)                                  -> x1 [f32]
+    v75  Copy { value=v72, fp=false }                     -> x0
+    v76  Imm(1080033280)                                  -> x0 [f32]
     v77  Imm(3227516928)                                  -> x2 [f32]
     v78  Intrinsic { kind=Fabsf, args=[v77] }             -> d0 [f32]
     v79  Imm(0)                                           -> x2
     v80  Imm(0)                                           -> x2 [f32]
     v81  Binop { op=fne, lhs=v78, rhs=v76 }               -> x2
     v82  Imm(0)                                           -> x2
-    v83  Binop { op=fne, lhs=v78, rhs=v76 }               -> x1
-    v84  Select { cond=v83, a=v82, b=v72, kind=I64 }      -> x0
+    v83  Binop { op=fne, lhs=v78, rhs=v76 }               -> x0
+    v84  Select { cond=v83, a=v82, b=v72, kind=I64 }      -> x1
     terminator Jmp(b7)
   block 7  start_pc=0
-    v87  Copy { value=v84, fp=false }                     -> x1
-    v88  Imm(1098907648)                                  -> x1 [f32]
+    v87  Copy { value=v84, fp=false }                     -> x0
+    v88  Imm(1098907648)                                  -> x0 [f32]
     v89  Intrinsic { kind=Sqrtf, args=[v88] }             -> d0 [f32]
     v90  FpCast { kind=F32ToF64, value=v89 }              -> d0
-    v91  Imm(0)                                           -> x1
-    v92  Imm(0)                                           -> x1
-    v93  Imm(4616189618054758400)                         -> x1
+    v91  Imm(0)                                           -> x0
+    v92  Imm(0)                                           -> x0
+    v93  Imm(4616189618054758400)                         -> x0
     v94  Binop { op=fne, lhs=v90, rhs=v93 }               -> x2
     v95  Imm(0)                                           -> x2
-    v96  Binop { op=fne, lhs=v90, rhs=v93 }               -> x1
-    v97  Select { cond=v96, a=v95, b=v84, kind=I64 }      -> x0
+    v96  Binop { op=fne, lhs=v90, rhs=v93 }               -> x0
+    v97  Select { cond=v96, a=v95, b=v84, kind=I64 }      -> x1
     terminator Jmp(b8)
   block 8  start_pc=0
-    v100 Copy { value=v97, fp=false }                     -> x1
-    v101 Imm(1076677837)                                  -> x1 [f32]
+    v100 Copy { value=v97, fp=false }                     -> x0
+    v101 Imm(1076677837)                                  -> x0 [f32]
     v102 Intrinsic { kind=Floorf, args=[v101] }           -> d0 [f32]
-    v103 Imm(0)                                           -> x1
-    v104 Imm(0)                                           -> x1 [f32]
-    v105 Imm(1073741824)                                  -> x1 [f32]
+    v103 Imm(0)                                           -> x0
+    v104 Imm(0)                                           -> x0 [f32]
+    v105 Imm(1073741824)                                  -> x0 [f32]
     v106 Binop { op=fne, lhs=v102, rhs=v105 }             -> x2
     v107 Imm(0)                                           -> x2
-    v108 Binop { op=fne, lhs=v102, rhs=v105 }             -> x1
-    v109 Select { cond=v108, a=v107, b=v97, kind=I64 }    -> x0
+    v108 Binop { op=fne, lhs=v102, rhs=v105 }             -> x0
+    v109 Select { cond=v108, a=v107, b=v97, kind=I64 }    -> x1
     terminator Jmp(b9)
   block 9  start_pc=0
-    v112 Copy { value=v109, fp=false }                    -> x1
-    v113 Imm(1075000115)                                  -> x1 [f32]
+    v112 Copy { value=v109, fp=false }                    -> x0
+    v113 Imm(1075000115)                                  -> x0 [f32]
     v114 Intrinsic { kind=Ceilf, args=[v113] }            -> d0 [f32]
-    v115 Imm(0)                                           -> x1
-    v116 Imm(0)                                           -> x1 [f32]
-    v117 Imm(1077936128)                                  -> x1 [f32]
+    v115 Imm(0)                                           -> x0
+    v116 Imm(0)                                           -> x0 [f32]
+    v117 Imm(1077936128)                                  -> x0 [f32]
     v118 Binop { op=fne, lhs=v114, rhs=v117 }             -> x2
     v119 Imm(0)                                           -> x2
-    v120 Binop { op=fne, lhs=v114, rhs=v117 }             -> x1
+    v120 Binop { op=fne, lhs=v114, rhs=v117 }             -> x0
     v121 Select { cond=v120, a=v119, b=v109, kind=I64 }   -> x3
     terminator Jmp(b10)
   block 10  start_pc=0

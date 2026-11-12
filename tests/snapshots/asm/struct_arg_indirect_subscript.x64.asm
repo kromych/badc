@@ -74,9 +74,8 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	xorl	%esi, %esi
                	testq	%rcx, %rcx
-               	movq	%rsi, %rcx
-               	cmovneq	%rdx, %rcx
-               	addq	%rcx, %rax
+               	cmoveq	%rsi, %rdx
+               	addq	%rdx, %rax
                	cmpq	$0xfc2, %rax            # imm = 0xFC2
                	je	<addr>
                	movl	$0x3, %eax

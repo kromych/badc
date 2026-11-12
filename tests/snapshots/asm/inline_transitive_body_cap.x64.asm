@@ -150,8 +150,8 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movabsq	$0x1ac628adc, %r11      # imm = 0x1AC628ADC
                	cmpq	%r11, %rax
-               	movq	%rdx, %rax
-               	cmoveq	%rcx, %rax
+               	cmovneq	%rdx, %rcx
+               	movq	%rcx, %rax
                	popq	%rbx
                	leave
                	retq

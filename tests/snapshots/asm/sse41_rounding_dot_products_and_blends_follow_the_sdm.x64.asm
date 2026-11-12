@@ -2834,9 +2834,8 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	cmpl	%eax, %r15d
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	orq	%rax, %r14
+               	cmoveq	%rdx, %rcx
+               	orq	%rcx, %r14
                	movups	0x140(%rsp), %xmm0
                	vmovq	%xmm0, %rax
                	movq	%rax, -0x140(%rbp)
@@ -2938,9 +2937,8 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	cmpl	%eax, %r15d
-               	movq	%rdx, %rax
-               	cmovneq	%rcx, %rax
-               	orq	%rax, %r14
+               	cmoveq	%rdx, %rcx
+               	orq	%rcx, %r14
                	movups	0x100(%rsp), %xmm0
                	vmovq	%xmm0, %rax
                	movq	%rax, -0x110(%rbp)
@@ -3027,9 +3025,8 @@ Disassembly of section .text:
                	setne	%sil
                	movzbq	%sil, %rsi
                	cmpq	%rcx, %r15
-               	movq	%rsi, %rcx
-               	cmovneq	%rdx, %rcx
-               	orq	%rcx, %r14
+               	cmoveq	%rsi, %rdx
+               	orq	%rdx, %r14
                	movups	0x150(%rsp), %xmm14
                	vpermilpd	$0x1, %xmm14, %xmm0 # xmm0 = xmm14[1,0]
                	movsd	%xmm0, -0x20(%rbp)

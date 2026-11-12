@@ -1916,8 +1916,8 @@ fn ent_pc=1364 n_params=0 variadic=false locals=22
     terminator Jmp(b25)   (exit_acc=v479)
   block 35  start_pc=0
     v474 Binop { op=eq, lhs=v645, rhs=v663 }              -> x0
-    v475 Imm(-1)                                          -> x0
-    v476 Imm(0)                                           -> x9
+    v475 Imm(-1)                                          -> x14
+    v476 Imm(0)                                           -> x0
     v477 Binop { op=eq, lhs=v645, rhs=v663 }              -> x2
     v478 Select { cond=v477, a=v475, b=v476, kind=I64 }   -> x14
     terminator Jmp(b36)

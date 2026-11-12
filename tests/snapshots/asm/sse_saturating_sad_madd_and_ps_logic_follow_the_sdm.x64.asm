@@ -308,11 +308,10 @@ Disassembly of section .text:
                	vpsubusw	%xmm1, %xmm0, %xmm0
                	movups	%xmm0, -0x50(%rbp)
                	xorl	%r15d, %r15d
-               	movl	$0x2, %eax
-               	movl	$0x1, %ecx
+               	movl	$0x2, %esi
+               	movl	$0x1, %eax
                	testb	$0x1, %r15b
-               	movq	%rcx, %rsi
-               	cmovneq	%rax, %rsi
+               	cmoveq	%rax, %rsi
                	movq	%r15, %r9
                	andq	$0x2, %r9
                	testl	%r9d, %r9d

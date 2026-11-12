@@ -357,12 +357,12 @@ fn ent_pc=7 n_params=0 variadic=false locals=207
     v257 Imm(14)                                          -> x1
     v258 Imm(0)                                           -> x2
     v259 BinopI { op=lt, lhs=v253, rhs_imm=2000000 }      -> x0
-    v260 Select { cond=v259, a=v257, b=v258, kind=I64 }   -> x0
+    v260 Select { cond=v259, a=v257, b=v258, kind=I64 }   -> x1
     terminator Jmp(b42)
   block 42  start_pc=0
-    v265 Copy { value=v260, fp=false }                    -> x1
-    v266 Imm(0)                                           -> x1
-    v267 Extend { value=v260, kind=I32 }                  -> x1
+    v265 Copy { value=v260, fp=false }                    -> x0
+    v266 Imm(0)                                           -> x0
+    v267 Extend { value=v260, kind=I32 }                  -> x0
     v268 LifetimeEnd(-205)                                -> -
     v269 LifetimeEnd(-207)                                -> -
     v270 LifetimeEnd(-75)                                 -> -

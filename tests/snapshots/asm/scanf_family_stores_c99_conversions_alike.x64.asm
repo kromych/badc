@@ -223,12 +223,11 @@ Disassembly of section .text:
                	leaq	-0x118(%rbp), %rax
                	movq	(%rdi), %r10
                	movq	%r10, (%rax)
-               	movslq	0x14(%r13), %rax
-               	movq	%rax, %rcx
-               	negq	%rcx
-               	testl	%eax, %eax
-               	movq	%rax, %r12
-               	cmovlq	%rcx, %r12
+               	movslq	0x14(%r13), %r12
+               	movq	%r12, %rax
+               	negq	%rax
+               	testl	%r12d, %r12d
+               	cmovlq	%rax, %r12
                	movl	0x14(%r13), %eax
                	cmpl	$-0x4, %eax
                	jne	<addr>

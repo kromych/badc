@@ -34,12 +34,12 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v32  Imm(0)                                           -> x6
     v33  Imm(1)                                           -> x6
     v34  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x7
-    v35  Select { cond=v30, a=v4, b=v33, kind=I64 }       -> x2
+    v35  Select { cond=v30, a=v4, b=v33, kind=I64 }       -> x6
     terminator Jmp(b3)
   block 3  start_pc=0
-    v39  Copy { value=v35, fp=false }                     -> x6
-    v40  Extend { value=v35, kind=I32 }                   -> x6
-    v41  Extend { value=v35, kind=I32 }                   -> x6
+    v39  Copy { value=v35, fp=false }                     -> x2
+    v40  Extend { value=v35, kind=I32 }                   -> x2
+    v41  Extend { value=v35, kind=I32 }                   -> x2
     v42  Binop { op=add, lhs=v22, rhs=v35 }               -> x1
     v43  Extend { value=v42, kind=I32, nsw }              -> x2
     v44  Imm(1)                                           -> x2
@@ -53,14 +53,14 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v52  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x6
     v53  Imm(1)                                           -> x6
     v54  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x7
-    v55  Select { cond=v51, a=v4, b=v53, kind=I64 }       -> x2
+    v55  Select { cond=v51, a=v4, b=v53, kind=I64 }       -> x6
     terminator Jmp(b4)
   block 4  start_pc=0
-    v60  Copy { value=v55, fp=false }                     -> x6
-    v61  Extend { value=v55, kind=I32 }                   -> x6
+    v60  Copy { value=v55, fp=false }                     -> x2
+    v61  Extend { value=v55, kind=I32 }                   -> x2
     v62  LifetimeEnd(-16)                                 -> -
-    v63  Imm(0)                                           -> x6
-    v64  Extend { value=v55, kind=I32 }                   -> x6
+    v63  Imm(0)                                           -> x2
+    v64  Extend { value=v55, kind=I32 }                   -> x2
     v65  Binop { op=add, lhs=v42, rhs=v55 }               -> x1
     v66  Extend { value=v65, kind=I32, nsw }              -> x2
     v67  Imm(1)                                           -> x2

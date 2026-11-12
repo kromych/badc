@@ -3222,6 +3222,19 @@ d2 pair(d2 a, d2 b) { return (d2){b[0], a[0]}; }\n";
     m.finish();
 }
 
+/// An x86-64 select writes its result over an arm that dies at it: `cmov`
+/// overwrites its destination, and the lowering inverts the condition when
+/// the destination holds the other arm.
+#[test]
+fn a_select_writes_over_an_arm_it_consumes() {
+    const SRC: &str = "long swap_if(long a, long b, int c) {\n\
+        if (c & 1) { long t = a; a = b; b = t; }\n\
+        return a * 10 + b;\n}\n";
+    let insns = x64(SRC, "swap_if");
+    // test, mov, cmov, cmov, imul, add, ret
+    assert_eq!(insns.len(), 7, "{insns:x?}");
+}
+
 /// A pair of 8-byte vectors returned in a structure and copied out stores
 /// each vector from its register: the copy's 64-bit reloads of the
 /// doubles just stored read those registers.

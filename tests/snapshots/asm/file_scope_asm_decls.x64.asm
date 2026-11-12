@@ -55,9 +55,8 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	subq	%rax, %rsi
                	cmpq	%rcx, %rax
-               	movq	%rsi, %rax
-               	cmovaq	%rdx, %rax
-               	cmpq	$0x10000, %rax          # imm = 0x10000
+               	cmovbeq	%rsi, %rdx
+               	cmpq	$0x10000, %rdx          # imm = 0x10000
                	jbe	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

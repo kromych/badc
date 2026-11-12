@@ -439,20 +439,18 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x30(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	leaq	-0x18(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
+               	leaq	-0x30(%rbp), %rcx
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
                	xorl	%ecx, %ecx
+               	leaq	-0x18(%rbp), %rdx
                	movq	%rcx, -0x18(%rbp)
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, -0x10(%rbp)
                	movq	%rcx, -0x38(%rbp)
-               	leaq	-0x40(%rbp), %rdx
-               	movq	%rdx, (%rax)
-               	leaq	0x8(%rdx), %rax
+               	movq	%rax, (%rdx)
+               	leaq	-0x40(%rbp), %rax
+               	addq	$0x8, %rax
                	movq	%rax, -0x10(%rbp)
                	leaq	-0x30(%rbp), %rax
                	movq	-0x18(%rbp), %rdx

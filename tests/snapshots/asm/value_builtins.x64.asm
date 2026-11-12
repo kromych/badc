@@ -78,23 +78,21 @@ Disassembly of section .text:
                	leave
                	retq
                	movss	<rip>, %xmm0 # <addr>
-               	xorl	%eax, %eax
-               	movl	%eax, -0x18(%rbp)
                	movss	%xmm0, -0x18(%rbp)
-               	movl	-0x18(%rbp), %ecx
-               	cmpl	$0x7fc00007, %ecx       # imm = 0x7FC00007
+               	movl	-0x18(%rbp), %eax
+               	cmpl	$0x7fc00007, %eax       # imm = 0x7FC00007
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movl	%eax, -0x18(%rbp)
                	movl	$0x7fc00001, -0x18(%rbp) # imm = 0x7FC00001
-               	movl	-0x18(%rbp), %ecx
-               	cmpl	$0x7fc00001, %ecx       # imm = 0x7FC00001
+               	movl	-0x18(%rbp), %eax
+               	cmpl	$0x7fc00001, %eax       # imm = 0x7FC00001
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
+               	xorl	%eax, %eax
                	movl	$0xfffffed4, -0x10(%rbp) # imm = 0xFFFFFED4
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rcx

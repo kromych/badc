@@ -627,8 +627,6 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x1]
-               	sub	x2, x29, #0x40
-               	stp	xzr, xzr, [x2]
                	stur	x1, [x29, #-0x40]
                	mov	x1, #0x4                // =4
                	stur	x1, [x29, #-0x38]

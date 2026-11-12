@@ -30,15 +30,14 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	xorl	%eax, %eax
-               	movq	$-0x3de0216b, %rcx      # imm = 0xC21FDE95
-               	vmovd	%ecx, %xmm0
-               	movl	$0x3ead5c56, %ecx       # imm = 0x3EAD5C56
-               	vpinsrd	$0x1, %ecx, %xmm0, %xmm0
-               	movq	$-0x32e2fdfb, %rdx      # imm = 0xCD1D0205
-               	vpinsrd	$0x2, %edx, %xmm0, %xmm0
-               	movabsq	$0x172c4a902, %rdx      # imm = 0x172C4A902
-               	vpinsrd	$0x3, %edx, %xmm0, %xmm0
+               	movq	$-0x3de0216b, %rax      # imm = 0xC21FDE95
+               	vmovd	%eax, %xmm0
+               	movl	$0x3ead5c56, %eax       # imm = 0x3EAD5C56
+               	vpinsrd	$0x1, %eax, %xmm0, %xmm0
+               	movq	$-0x32e2fdfb, %rcx      # imm = 0xCD1D0205
+               	vpinsrd	$0x2, %ecx, %xmm0, %xmm0
+               	movabsq	$0x172c4a902, %rcx      # imm = 0x172C4A902
+               	vpinsrd	$0x3, %ecx, %xmm0, %xmm0
                	movabsq	$0x3ead5c56c21fde95, %r11 # imm = 0x3EAD5C56C21FDE95
                	vmovq	%r11, %xmm1
                	vpbroadcastq	%xmm1, %xmm1
@@ -46,8 +45,8 @@ Disassembly of section .text:
                	vmovq	%r11, %xmm2
                	vunpcklpd	%xmm2, %xmm1, %xmm1 # xmm1 = xmm1[0],xmm2[0]
                	vpcmpeqd	%xmm1, %xmm0, %xmm0
-               	pmovmskb	%xmm0, %edx
-               	cmpl	$0xffff, %edx           # imm = 0xFFFF
+               	pmovmskb	%xmm0, %ecx
+               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -61,8 +60,8 @@ Disassembly of section .text:
                	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
                	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %edx
-               	cmpl	$0xffff, %edx           # imm = 0xFFFF
+               	pmovmskb	%xmm0, %ecx
+               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -76,19 +75,17 @@ Disassembly of section .text:
                	vunpcklpd	%xmm1, %xmm0, %xmm2 # xmm2 = xmm0[0],xmm1[0]
                	vunpcklpd	%xmm1, %xmm0, %xmm0 # xmm0 = xmm0[0],xmm1[0]
                	vpcmpeqd	%xmm0, %xmm2, %xmm0
-               	pmovmskb	%xmm0, %edx
-               	cmpl	$0xffff, %edx           # imm = 0xFFFF
+               	pmovmskb	%xmm0, %ecx
+               	cmpl	$0xffff, %ecx           # imm = 0xFFFF
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rdx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdx)
                	movl	$0xaf5a022b, -0x10(%rbp) # imm = 0xAF5A022B
                	movl	$0xcd1d0205, -0xc(%rbp) # imm = 0xCD1D0205
-               	movl	%ecx, -0x8(%rbp)
+               	movl	%eax, -0x8(%rbp)
+               	xorl	%eax, %eax
                	movl	$0xc21fde95, -0x4(%rbp) # imm = 0xC21FDE95
                	movl	$0xdaa9b5f, %edi        # imm = 0xDAA9B5F
                	movl	$0xd665ca49, %ecx       # imm = 0xD665CA49
@@ -136,9 +133,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	movl	$0xaf5a022b, -0x10(%rbp) # imm = 0xAF5A022B
                	movl	$0xcd1d0205, -0xc(%rbp) # imm = 0xCD1D0205
                	movl	$0x3ead5c56, -0x8(%rbp) # imm = 0x3EAD5C56
@@ -187,9 +181,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	movl	$0xaf5a022b, -0x10(%rbp) # imm = 0xAF5A022B
                	movl	$0xcd1d0205, -0xc(%rbp) # imm = 0xCD1D0205
                	movl	$0x3ead5c56, -0x8(%rbp) # imm = 0x3EAD5C56
@@ -244,9 +235,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	movl	$0xaf5a022b, -0x10(%rbp) # imm = 0xAF5A022B
                	movl	$0xcd1d0205, -0xc(%rbp) # imm = 0xCD1D0205
                	movl	$0x3ead5c56, -0x8(%rbp) # imm = 0x3EAD5C56

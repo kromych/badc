@@ -71,8 +71,6 @@ Disassembly of section .text:
                	mov	x2, #0x61               // =97
                	mov	x3, #0x62               // =98
                	mov	x0, #0x0                // =0
-               	sub	x4, x29, #0x40
-               	stp	xzr, xzr, [x4]
                	stur	w2, [x29, #-0x40]
                	stur	w3, [x29, #-0x3c]
                	stur	w0, [x29, #-0x38]

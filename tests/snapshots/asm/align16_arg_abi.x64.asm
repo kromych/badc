@@ -464,10 +464,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %edi
-               	leaq	-0x20(%rbp), %rsi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
                	leaq	-0x40(%rbp), %rax
+               	leaq	-0x20(%rbp), %rsi
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rsi)
                	movl	$0x3, %ecx
@@ -480,10 +478,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x2, %edi
-               	leaq	-0x20(%rbp), %rsi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
                	leaq	-0x30(%rbp), %rax
+               	leaq	-0x20(%rbp), %rsi
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rsi)
                	movl	$0x4, %ecx

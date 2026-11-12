@@ -70,14 +70,12 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rax
-               	movq	$0x0, (%rax)
+               	leaq	-0x28(%rbp), %rdi
                	movb	$0x9, -0x28(%rbp)
                	movb	$0x8, -0x27(%rbp)
                	movb	$0x7, -0x26(%rbp)
                	movb	$0x6, -0x25(%rbp)
                	movl	%ebx, -0x24(%rbp)
-               	leaq	-0x28(%rbp), %rdi
                	callq	<addr>
                	movzbq	(%rax), %rcx
                	cmpl	$0x9, %ecx

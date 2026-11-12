@@ -5602,8 +5602,6 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	umov	w2, v0.b[0]
                	mul	x2, x2, x0
-               	mov	x3, #0x0                // =0
-               	fmov	d1, x3
                	mov	v1.b[0], w2
                	umov	w2, v0.b[1]
                	mul	x2, x2, x0
@@ -5745,8 +5743,6 @@ Disassembly of section .text:
                	mov	x0, #0x1b               // =27
                	smov	x2, v0.b[0]
                	and	x2, x2, x0
-               	mov	x3, #0x0                // =0
-               	fmov	d2, x3
                	mov	v2.b[0], w2
                	smov	x2, v0.b[1]
                	and	x2, x2, x0

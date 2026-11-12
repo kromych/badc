@@ -30,8 +30,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x13               // =19
                	mov	x1, #0x17               // =23
-               	sub	x2, x29, #0x8
-               	str	xzr, [x2]
                	stur	w0, [x29, #-0x8]
                	stur	w1, [x29, #-0x4]
                	sub	x16, x29, #0x8

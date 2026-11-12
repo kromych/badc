@@ -105,11 +105,6 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rdi, -0x20(%rbp)
                	movq	-0x20(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
                	movl	%esi, (%rax)
                	movl	%esi, 0x4(%rax)
                	movl	%esi, 0x8(%rax)
@@ -135,11 +130,6 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movq	%rdi, -0x20(%rbp)
                	movq	-0x20(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
                	movq	%rsi, (%rax)
                	movq	%rsi, 0x8(%rax)
                	movq	%rsi, 0x10(%rax)

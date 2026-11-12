@@ -379,7 +379,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	fmov	x0, d0
                	fmov	x1, d0
-               	cmp	x1, x0
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x80]

@@ -369,11 +369,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w2, [x1, #0x4]
+               	sub	x0, x29, #0x10
                	stur	x2, [x29, #-0x10]
                	ldr	w1, [x1, #0x8]
                	stur	x1, [x29, #-0x8]

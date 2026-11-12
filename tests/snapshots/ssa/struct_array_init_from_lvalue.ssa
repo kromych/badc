@@ -25,12 +25,12 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  Imm(0)                                           -> x0
+    v22  Imm(4369)                                        -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
-    v27  Imm(4369)                                        -> x0
+    v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
@@ -42,10 +42,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0
     v38  Imm(0)                                           -> x0
-    v39  Imm(0)                                           -> x0
-    v40  Imm(0)                                           -> x0
+    v39  Imm(7)                                           -> x0
+    v40  Imm(7)                                           -> x0
     v41  Imm(0)                                           -> x0
-    v42  Imm(0)                                           -> x0
+    v42  Imm(8738)                                        -> x0
     v43  Imm(0)                                           -> x0
     v44  Imm(0)                                           -> x0
     v45  Imm(0)                                           -> x0
@@ -60,16 +60,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v54  Imm(0)                                           -> x0
     v55  Imm(0)                                           -> x0
     v56  Imm(0)                                           -> x0
-    v57  Imm(7)                                           -> x0
-    v58  Imm(7)                                           -> x0
+    v57  Imm(0)                                           -> x0
+    v58  Imm(0)                                           -> x0
     v59  Imm(0)                                           -> x0
-    v60  Imm(8738)                                        -> x0
+    v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
-    v62  Imm(0)                                           -> x0
+    v62  LifetimeEnd(0)                                   -> -
     v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
     v65  Imm(0)                                           -> x0
-    v66  Imm(0)                                           -> x0
+    v66  Imm(4369)                                        -> x0
     v67  Imm(0)                                           -> x0
     v68  Imm(0)                                           -> x0
     v69  Imm(0)                                           -> x0
@@ -81,14 +81,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x0
-    v78  Imm(0)                                           -> x0
+    v78  Imm(16)                                          -> x0
     v79  Imm(0)                                           -> x0
-    v80  LifetimeEnd(0)                                   -> -
-    v81  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(8738)                                        -> x0
     v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
-    v84  Imm(4369)                                        -> x0
-    v85  Imm(0)                                           -> x0
+    v84  Imm(0)                                           -> x0
+    v85  Imm(16)                                          -> x0
     v86  Imm(0)                                           -> x0
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
@@ -97,16 +97,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v91  Imm(0)                                           -> x0
     v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
-    v94  Imm(0)                                           -> x0
+    v94  Imm(32)                                          -> x0
     v95  Imm(0)                                           -> x0
-    v96  Imm(16)                                          -> x0
-    v97  Imm(0)                                           -> x0
+    v96  Imm(0)                                           -> x0
+    v97  Imm(13107)                                       -> x0
     v98  Imm(0)                                           -> x0
-    v99  Imm(8738)                                        -> x0
+    v99  Imm(0)                                           -> x0
     v100 Imm(0)                                           -> x0
-    v101 Imm(0)                                           -> x0
+    v101 Imm(32)                                          -> x0
     v102 Imm(0)                                           -> x0
-    v103 Imm(16)                                          -> x0
+    v103 Imm(0)                                           -> x0
     v104 Imm(0)                                           -> x0
     v105 Imm(0)                                           -> x0
     v106 Imm(0)                                           -> x0
@@ -115,17 +115,17 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
     v111 Imm(0)                                           -> x0
-    v112 Imm(32)                                          -> x0
+    v112 Imm(0)                                           -> x0
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
-    v115 Imm(13107)                                       -> x0
+    v115 Imm(16)                                          -> x0
     v116 Imm(0)                                           -> x0
     v117 Imm(0)                                           -> x0
     v118 Imm(0)                                           -> x0
-    v119 Imm(32)                                          -> x0
+    v119 Imm(0)                                           -> x0
     v120 Imm(0)                                           -> x0
     v121 Imm(0)                                           -> x0
-    v122 Imm(0)                                           -> x0
+    v122 Imm(16)                                          -> x0
     v123 Imm(0)                                           -> x0
     v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
@@ -133,290 +133,266 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v127 Imm(0)                                           -> x0
     v128 Imm(0)                                           -> x0
     v129 Imm(0)                                           -> x0
-    v130 Imm(0)                                           -> x0
+    v130 Imm(10)                                          -> x0
     v131 Imm(0)                                           -> x0
     v132 Imm(0)                                           -> x0
-    v133 Imm(16)                                          -> x0
+    v133 Imm(0)                                           -> x0
     v134 Imm(0)                                           -> x0
-    v135 Imm(0)                                           -> x0
+    v135 Imm(2)                                           -> x0
     v136 Imm(0)                                           -> x0
     v137 Imm(0)                                           -> x0
     v138 Imm(0)                                           -> x0
-    v139 Imm(0)                                           -> x0
-    v140 Imm(16)                                          -> x0
+    v139 Imm(3)                                           -> x0
+    v140 Imm(0)                                           -> x0
     v141 Imm(0)                                           -> x0
     v142 Imm(0)                                           -> x0
-    v143 Imm(0)                                           -> x0
+    v143 Imm(4)                                           -> x0
     v144 Imm(0)                                           -> x0
     v145 Imm(0)                                           -> x0
     v146 Imm(0)                                           -> x0
     v147 Imm(0)                                           -> x0
-    v148 Imm(10)                                          -> x0
-    v149 Imm(0)                                           -> x0
+    v148 Imm(0)                                           -> x0
+    v149 Imm(10)                                          -> x0
     v150 Imm(0)                                           -> x0
-    v151 Imm(0)                                           -> x0
+    v151 Imm(1)                                           -> x0
     v152 Imm(0)                                           -> x0
     v153 Imm(0)                                           -> x0
     v154 Imm(0)                                           -> x0
-    v155 Imm(2)                                           -> x0
-    v156 Imm(0)                                           -> x0
+    v155 Imm(0)                                           -> x0
+    v156 Imm(2)                                           -> x0
     v157 Imm(0)                                           -> x0
     v158 Imm(0)                                           -> x0
-    v159 Imm(3)                                           -> x0
+    v159 Imm(0)                                           -> x0
     v160 Imm(0)                                           -> x0
     v161 Imm(0)                                           -> x0
-    v162 Imm(0)                                           -> x0
-    v163 Imm(4)                                           -> x0
+    v162 Imm(1)                                           -> x0
+    v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
-    v165 Imm(0)                                           -> x0
+    v165 Imm(8)                                           -> x0
     v166 Imm(0)                                           -> x0
-    v167 Imm(0)                                           -> x0
+    v167 Imm(3)                                           -> x0
     v168 Imm(0)                                           -> x0
-    v169 Imm(10)                                          -> x0
+    v169 Imm(0)                                           -> x0
     v170 Imm(0)                                           -> x0
-    v171 Imm(1)                                           -> x0
+    v171 Imm(0)                                           -> x0
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 Imm(0)                                           -> x0
-    v175 Imm(0)                                           -> x0
-    v176 Imm(2)                                           -> x0
+    v175 Imm(8)                                           -> x0
+    v176 Imm(0)                                           -> x0
     v177 Imm(0)                                           -> x0
-    v178 Imm(0)                                           -> x0
+    v178 Imm(4)                                           -> x0
     v179 Imm(0)                                           -> x0
     v180 Imm(0)                                           -> x0
     v181 Imm(0)                                           -> x0
-    v182 Imm(1)                                           -> x0
-    v183 Imm(0)                                           -> x0
-    v184 Imm(0)                                           -> x0
-    v185 Imm(8)                                           -> x0
+    v182 Imm(0)                                           -> x0
+    v183 Imm(3)                                           -> x0
+    v184 Imm(3)                                           -> x1
+    v185 Imm(0)                                           -> x0
     v186 Imm(0)                                           -> x0
-    v187 Imm(3)                                           -> x0
+    v187 Imm(0)                                           -> x0
     v188 Imm(0)                                           -> x0
     v189 Imm(0)                                           -> x0
     v190 Imm(0)                                           -> x0
-    v191 Imm(0)                                           -> x0
-    v192 Imm(0)                                           -> x0
-    v193 Imm(0)                                           -> x0
-    v194 Imm(0)                                           -> x0
-    v195 Imm(8)                                           -> x0
-    v196 Imm(0)                                           -> x0
-    v197 Imm(0)                                           -> x0
-    v198 Imm(4)                                           -> x0
-    v199 Imm(0)                                           -> x0
-    v200 Imm(0)                                           -> x0
-    v201 Imm(0)                                           -> x0
-    v202 Imm(0)                                           -> x0
-    v203 Imm(3)                                           -> x0
-    v204 Imm(3)                                           -> x1
-    v205 Imm(0)                                           -> x0
-    v206 Imm(0)                                           -> x0
-    v207 Imm(0)                                           -> x0
-    v208 Imm(0)                                           -> x0
-    v209 Imm(0)                                           -> x0
-    v210 Imm(0)                                           -> x0
-    v211 Imm(0)                                           -> x2
-    v212 Imm(1)                                           -> x2
-    v213 Imm(8)                                           -> x2
-    v214 Imm(0)                                           -> x6
-    v215 Imm(0)                                           -> x6
-    v216 Imm(0)                                           -> x6
-    v217 Imm(0)                                           -> x6
-    v218 Imm(0)                                           -> x6
-    v219 Imm(0)                                           -> x6
-    v220 Imm(0)                                           -> x6
-    v221 LocalAddr(-6)                                    -> x6
-    v222 Imm(0)                                           -> x7
-    v223 StoreLocal { off=-6, value=v213, kind=I64 }      -> -
-    v224 Imm(0)                                           -> x2
-    v225 StoreLocal { off=-6, disp=8, value=v204, kind=I32 } -> -
+    v191 Imm(0)                                           -> x2
+    v192 Imm(1)                                           -> x2
+    v193 Imm(8)                                           -> x2
+    v194 Imm(0)                                           -> x6
+    v195 Imm(0)                                           -> x6
+    v196 Imm(0)                                           -> x6
+    v197 Imm(0)                                           -> x6
+    v198 Imm(0)                                           -> x6
+    v199 Imm(0)                                           -> x6
+    v200 Imm(0)                                           -> x6
+    v201 LocalAddr(-6)                                    -> x6
+    v202 Imm(0)                                           -> x7
+    v203 StoreLocal { off=-6, value=v193, kind=I64 }      -> -
+    v204 Imm(0)                                           -> x2
+    v205 StoreLocal { off=-6, disp=8, value=v184, kind=I32 } -> -
+    v206 Imm(0)                                           -> x1
+    v207 StoreLocal { off=-6, disp=12, value=v190, kind=I32 } -> -
+    v208 LifetimeEnd(0)                                   -> -
+    v209 LocalAddr(-6)                                    -> x1
+    v210 Imm(0)                                           -> x1
+    v211 Imm(0)                                           -> x1
+    v212 Imm(5)                                           -> x1
+    v213 Imm(5)                                           -> x1
+    v214 Imm(0)                                           -> x1
+    v215 Imm(0)                                           -> x1
+    v216 Imm(1)                                           -> x1
+    v217 Imm(32)                                          -> x1
+    v218 Imm(0)                                           -> x1
+    v219 Imm(0)                                           -> x1
+    v220 Imm(0)                                           -> x1
+    v221 Imm(0)                                           -> x1
+    v222 Imm(0)                                           -> x1
+    v223 Imm(0)                                           -> x1
+    v224 Imm(0)                                           -> x1
+    v225 Imm(0)                                           -> x1
     v226 Imm(0)                                           -> x1
-    v227 StoreLocal { off=-6, disp=12, value=v210, kind=I32 } -> -
+    v227 Imm(0)                                           -> x1
     v228 LifetimeEnd(0)                                   -> -
     v229 Imm(0)                                           -> x1
     v230 Imm(0)                                           -> x1
-    v231 LocalAddr(-6)                                    -> x1
+    v231 Imm(0)                                           -> x1
     v232 Imm(0)                                           -> x1
-    v233 Imm(0)                                           -> x1
-    v234 Imm(5)                                           -> x1
-    v235 Imm(5)                                           -> x1
+    v233 Imm(1)                                           -> x1
+    v234 Imm(0)                                           -> x1
+    v235 Imm(0)                                           -> x1
     v236 Imm(0)                                           -> x1
     v237 Imm(0)                                           -> x1
-    v238 Imm(1)                                           -> x1
-    v239 Imm(32)                                          -> x1
+    v238 Imm(3)                                           -> x1
+    v239 Imm(0)                                           -> x1
     v240 Imm(0)                                           -> x1
     v241 Imm(0)                                           -> x1
     v242 Imm(0)                                           -> x1
     v243 Imm(0)                                           -> x1
-    v244 Imm(0)                                           -> x1
+    v244 Imm(1)                                           -> x1
     v245 Imm(0)                                           -> x1
     v246 Imm(0)                                           -> x1
-    v247 Imm(0)                                           -> x1
+    v247 Imm(16)                                          -> x1
     v248 Imm(0)                                           -> x1
     v249 Imm(0)                                           -> x1
-    v250 LifetimeEnd(0)                                   -> -
+    v250 Imm(0)                                           -> x1
     v251 Imm(0)                                           -> x1
     v252 Imm(0)                                           -> x1
     v253 Imm(0)                                           -> x1
     v254 Imm(0)                                           -> x1
-    v255 Imm(1)                                           -> x1
+    v255 Imm(0)                                           -> x1
     v256 Imm(0)                                           -> x1
     v257 Imm(0)                                           -> x1
-    v258 Imm(0)                                           -> x1
+    v258 Imm(16)                                          -> x1
     v259 Imm(0)                                           -> x1
-    v260 Imm(3)                                           -> x1
-    v261 Imm(0)                                           -> x1
+    v260 Imm(0)                                           -> x1
+    v261 Imm(5)                                           -> x1
     v262 Imm(0)                                           -> x1
     v263 Imm(0)                                           -> x1
     v264 Imm(0)                                           -> x1
     v265 Imm(0)                                           -> x1
-    v266 Imm(1)                                           -> x1
-    v267 Imm(0)                                           -> x1
-    v268 Imm(0)                                           -> x1
-    v269 Imm(16)                                          -> x1
-    v270 Imm(0)                                           -> x1
-    v271 Imm(0)                                           -> x1
-    v272 Imm(0)                                           -> x1
-    v273 Imm(0)                                           -> x1
-    v274 Imm(0)                                           -> x1
-    v275 Imm(0)                                           -> x1
-    v276 Imm(0)                                           -> x1
-    v277 Imm(0)                                           -> x1
-    v278 Imm(0)                                           -> x1
-    v279 Imm(0)                                           -> x1
-    v280 Imm(16)                                          -> x1
-    v281 Imm(0)                                           -> x1
-    v282 Imm(0)                                           -> x1
-    v283 Imm(5)                                           -> x1
-    v284 Imm(0)                                           -> x1
-    v285 Imm(0)                                           -> x1
-    v286 Imm(0)                                           -> x1
-    v287 Imm(0)                                           -> x1
-    v288 Imm(2)                                           -> x1
-    v289 LocalAddr(-4)                                    -> x2
-    v290 Mzero { dst=v289, size=32, align=8 }             -> -
-    v291 Imm(1)                                           -> x1
-    v292 Imm(1)                                           -> x1
-    v293 Imm(0)                                           -> x7
-    v294 Imm(0)                                           -> x7
-    v295 Imm(0)                                           -> x7
-    v296 Imm(0)                                           -> x7
-    v297 Imm(0)                                           -> x7
-    v298 Imm(0)                                           -> x7
-    v299 Imm(0)                                           -> x7
-    v300 Imm(1)                                           -> x7
-    v301 Imm(2)                                           -> x7
-    v302 Imm(0)                                           -> x8
-    v303 Imm(0)                                           -> x8
-    v304 Imm(0)                                           -> x8
-    v305 Imm(0)                                           -> x8
-    v306 Imm(0)                                           -> x8
-    v307 Imm(0)                                           -> x8
-    v308 Imm(0)                                           -> x8
-    v309 LocalAddr(-4)                                    -> x8
-    v310 Imm(0)                                           -> x8
-    v311 StoreLocal { off=-4, value=v301, kind=I64 }      -> -
-    v312 Imm(0)                                           -> x7
-    v313 StoreLocal { off=-4, disp=8, value=v292, kind=I32 } -> -
-    v314 Imm(0)                                           -> x1
-    v315 StoreLocal { off=-4, disp=12, value=v210, kind=I32 } -> -
-    v316 LocalAddr(-6)                                    -> x0
-    v317 LocalAddr(-4)                                    -> x0
-    v318 BinopI { op=add, lhs=v289, rhs_imm=16 }          -> x0
-    v319 Mcpy { dst=v318, src=v221, size=16, align=8 }    -> -
-    v320 LocalAddr(-4)                                    -> x0
-    v321 Imm(2)                                           -> x0
-    v322 Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v322)
+    v266 Imm(2)                                           -> x1
+    v267 Imm(1)                                           -> x1
+    v268 Imm(1)                                           -> x1
+    v269 Imm(0)                                           -> x2
+    v270 Imm(0)                                           -> x2
+    v271 Imm(0)                                           -> x2
+    v272 Imm(0)                                           -> x2
+    v273 Imm(0)                                           -> x2
+    v274 Imm(0)                                           -> x2
+    v275 Imm(0)                                           -> x2
+    v276 Imm(1)                                           -> x2
+    v277 Imm(2)                                           -> x7
+    v278 Imm(0)                                           -> x2
+    v279 Imm(0)                                           -> x2
+    v280 Imm(0)                                           -> x2
+    v281 Imm(0)                                           -> x2
+    v282 Imm(0)                                           -> x2
+    v283 Imm(0)                                           -> x2
+    v284 Imm(0)                                           -> x2
+    v285 LocalAddr(-4)                                    -> x2
+    v286 Imm(0)                                           -> x8
+    v287 StoreLocal { off=-4, value=v277, kind=I64 }      -> -
+    v288 Imm(0)                                           -> x7
+    v289 StoreLocal { off=-4, disp=8, value=v268, kind=I32 } -> -
+    v290 Imm(0)                                           -> x1
+    v291 StoreLocal { off=-4, disp=12, value=v190, kind=I32 } -> -
+    v292 LocalAddr(-6)                                    -> x1
+    v293 LocalAddr(-4)                                    -> x1
+    v294 BinopI { op=add, lhs=v285, rhs_imm=16 }          -> x1
+    v295 Mcpy { dst=v294, src=v201, size=16, align=8 }    -> -
+    v296 LocalAddr(-4)                                    -> x1
+    v297 Imm(2)                                           -> x1
+    v298 Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v190)
   block 1  start_pc=0
-    v476 BinopI { op=and, lhs=v471, rhs_imm=4294967295 }  -> x6
-    v477 BinopI { op=shl, lhs=v471, rhs_imm=4 }           -> x6
-    v478 Binop { op=add, lhs=v289, rhs=v477 }             -> x6
-    v479 Load { addr=v478, disp=0, kind=I64 }             -> x6
-    v480 Binop { op=or, lhs=v472, rhs=v479 }              -> x1
-    v481 BinopI { op=and, lhs=v471, rhs_imm=4294967295 }  -> x6
-    v482 BinopI { op=add, lhs=v471, rhs_imm=1 }           -> x0
-    terminator Jmp(b2)   (exit_acc=v482)
+    v452 BinopI { op=and, lhs=v447, rhs_imm=4294967295 }  -> x6
+    v453 BinopI { op=shl, lhs=v447, rhs_imm=4 }           -> x6
+    v454 Binop { op=add, lhs=v285, rhs=v453 }             -> x6
+    v455 Load { addr=v454, disp=0, kind=I64 }             -> x6
+    v456 Binop { op=or, lhs=v448, rhs=v455 }              -> x1
+    v457 BinopI { op=and, lhs=v447, rhs_imm=4294967295 }  -> x6
+    v458 BinopI { op=add, lhs=v447, rhs_imm=1 }           -> x0
+    terminator Jmp(b2)   (exit_acc=v458)
   block 2  start_pc=0
-    v471 Phi { incoming=[b0:v322, b1:v482], kind=I64 }    -> x0
-    v472 Phi { incoming=[b0:v322, b1:v480], kind=I64 }    -> x1
-    v473 BinopI { op=and, lhs=v471, rhs_imm=4294967295 }  -> x6
-    v474 Imm(2)                                           -> x6
-    v475 BinopI { op=ult, lhs=v471, rhs_imm=2 }           -> x6
-    terminator Bz { cond=v475, target=b3, fall=b1 }   (exit_acc=v475)
+    v447 Phi { incoming=[b0:v190, b1:v458], kind=I64 }    -> x0
+    v448 Phi { incoming=[b0:v190, b1:v456], kind=I64 }    -> x1
+    v449 BinopI { op=and, lhs=v447, rhs_imm=4294967295 }  -> x6
+    v450 Imm(2)                                           -> x6
+    v451 BinopI { op=ult, lhs=v447, rhs_imm=2 }           -> x6
+    terminator Bz { cond=v451, target=b3, fall=b1 }   (exit_acc=v451)
   block 3  start_pc=0
-    v393 BinopI { op=ne, lhs=v472, rhs_imm=10 }           -> x0
-    terminator Bz { cond=v393, target=b5, fall=b4 }   (exit_acc=v393)
+    v369 BinopI { op=ne, lhs=v448, rhs_imm=10 }           -> x0
+    terminator Bz { cond=v369, target=b5, fall=b4 }   (exit_acc=v369)
   block 4  start_pc=0
-    v394 Imm(8)                                           -> x0
-    v395 LifetimeEnd(0)                                   -> -
-    v396 LifetimeEnd(0)                                   -> -
-    v397 LifetimeEnd(-6)                                  -> -
-    v398 LifetimeEnd(0)                                   -> -
-    v399 LifetimeEnd(0)                                   -> -
-    v400 LifetimeEnd(0)                                   -> -
-    v401 LifetimeEnd(0)                                   -> -
-    v402 LifetimeEnd(0)                                   -> -
-    v403 LifetimeEnd(0)                                   -> -
-    terminator Return(v394)   (exit_acc=v394)
+    v370 Imm(8)                                           -> x0
+    v371 LifetimeEnd(0)                                   -> -
+    v372 LifetimeEnd(0)                                   -> -
+    v373 LifetimeEnd(-6)                                  -> -
+    v374 LifetimeEnd(0)                                   -> -
+    v375 LifetimeEnd(0)                                   -> -
+    v376 LifetimeEnd(0)                                   -> -
+    v377 LifetimeEnd(0)                                   -> -
+    v378 LifetimeEnd(0)                                   -> -
+    v379 LifetimeEnd(0)                                   -> -
+    terminator Return(v370)   (exit_acc=v370)
   block 5  start_pc=0
+    v380 Imm(0)                                           -> x0
+    v381 Imm(0)                                           -> x0
+    v382 Imm(4)                                           -> x0
+    v383 Imm(0)                                           -> x0
+    v384 Imm(5)                                           -> x0
+    v385 Imm(0)                                           -> x0
+    v386 Imm(6)                                           -> x0
+    v387 Imm(0)                                           -> x0
+    v388 Imm(7)                                           -> x0
+    v389 Imm(0)                                           -> x0
+    v390 Imm(0)                                           -> x0
+    v391 Imm(0)                                           -> x0
+    v392 Imm(0)                                           -> x0
+    v393 Imm(0)                                           -> x0
+    v394 Imm(1)                                           -> x0
+    v395 Imm(0)                                           -> x0
+    v396 Imm(0)                                           -> x0
+    v397 Imm(0)                                           -> x0
+    v398 Imm(0)                                           -> x0
+    v399 Imm(5)                                           -> x0
+    v400 Imm(0)                                           -> x0
+    v401 Imm(0)                                           -> x0
+    v402 Imm(0)                                           -> x0
+    v403 Imm(0)                                           -> x0
     v404 Imm(0)                                           -> x0
-    v405 Imm(0)                                           -> x0
-    v406 Imm(4)                                           -> x0
+    v405 Imm(1)                                           -> x0
+    v406 Imm(0)                                           -> x0
     v407 Imm(0)                                           -> x0
-    v408 Imm(5)                                           -> x0
+    v408 Imm(16)                                          -> x0
     v409 Imm(0)                                           -> x0
-    v410 Imm(6)                                           -> x0
+    v410 Imm(0)                                           -> x0
     v411 Imm(0)                                           -> x0
-    v412 Imm(7)                                           -> x0
+    v412 Imm(0)                                           -> x0
     v413 Imm(0)                                           -> x0
     v414 Imm(0)                                           -> x0
     v415 Imm(0)                                           -> x0
     v416 Imm(0)                                           -> x0
     v417 Imm(0)                                           -> x0
-    v418 Imm(1)                                           -> x0
-    v419 Imm(0)                                           -> x0
+    v418 Imm(0)                                           -> x0
+    v419 Imm(16)                                          -> x0
     v420 Imm(0)                                           -> x0
     v421 Imm(0)                                           -> x0
-    v422 Imm(0)                                           -> x0
-    v423 Imm(5)                                           -> x0
+    v422 Imm(7)                                           -> x0
+    v423 Imm(0)                                           -> x0
     v424 Imm(0)                                           -> x0
     v425 Imm(0)                                           -> x0
     v426 Imm(0)                                           -> x0
     v427 Imm(0)                                           -> x0
-    v428 Imm(0)                                           -> x0
-    v429 Imm(1)                                           -> x0
-    v430 Imm(0)                                           -> x0
-    v431 Imm(0)                                           -> x0
-    v432 Imm(16)                                          -> x0
-    v433 Imm(0)                                           -> x0
-    v434 Imm(0)                                           -> x0
-    v435 Imm(0)                                           -> x0
-    v436 Imm(0)                                           -> x0
-    v437 Imm(0)                                           -> x0
-    v438 Imm(0)                                           -> x0
-    v439 Imm(0)                                           -> x0
-    v440 Imm(0)                                           -> x0
-    v441 Imm(0)                                           -> x0
-    v442 Imm(0)                                           -> x0
-    v443 Imm(16)                                          -> x0
-    v444 Imm(0)                                           -> x0
-    v445 Imm(0)                                           -> x0
-    v446 Imm(7)                                           -> x0
-    v447 Imm(0)                                           -> x0
-    v448 Imm(0)                                           -> x0
-    v449 Imm(0)                                           -> x0
-    v450 Imm(0)                                           -> x0
-    v451 Imm(0)                                           -> x0
-    v452 LifetimeEnd(0)                                   -> -
-    v453 LifetimeEnd(0)                                   -> -
-    v454 LifetimeEnd(-6)                                  -> -
-    v455 LifetimeEnd(0)                                   -> -
-    v456 LifetimeEnd(0)                                   -> -
-    v457 LifetimeEnd(0)                                   -> -
-    v458 LifetimeEnd(0)                                   -> -
-    v459 LifetimeEnd(0)                                   -> -
-    v460 LifetimeEnd(0)                                   -> -
-    terminator Return(v451)   (exit_acc=v451)
+    v428 LifetimeEnd(0)                                   -> -
+    v429 LifetimeEnd(0)                                   -> -
+    v430 LifetimeEnd(-6)                                  -> -
+    v431 LifetimeEnd(0)                                   -> -
+    v432 LifetimeEnd(0)                                   -> -
+    v433 LifetimeEnd(0)                                   -> -
+    v434 LifetimeEnd(0)                                   -> -
+    v435 LifetimeEnd(0)                                   -> -
+    v436 LifetimeEnd(0)                                   -> -
+    terminator Return(v427)   (exit_acc=v427)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

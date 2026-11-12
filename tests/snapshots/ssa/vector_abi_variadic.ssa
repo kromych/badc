@@ -249,7 +249,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v11  BinopI { op=add, lhs=v10, rhs_imm=0 }            -> x1
     v12  Extend { value=v10, kind=I32, nsw }              -> x1
     v13  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
-    v14  Imm(0)                                           -> x1
+    v14  Undef                                            -> x1
     v15  VecInsert { vec=v14, value=v10, off=0, kind=I8, bytes=16 } -> d0
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1
@@ -1099,8 +1099,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v588 Imm(2)                                           -> x2
     v589 Imm(2)                                           -> x2
     v590 Imm(2)                                           -> x2
-    v591 Imm(0)                                           -> x2
-    v592 VecConst { imm=578437695752307202, kind=I64, bytes=8 } -> d0
+    v591 Undef                                            -> x2
+    v592 VecConst { imm=2, kind=I64, bytes=8 }            -> d0
     v593 Imm(0)                                           -> x2
     v594 Imm(0)                                           -> x2
     v595 Imm(1)                                           -> x2
@@ -1109,7 +1109,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v598 Imm(3)                                           -> x2
     v599 Imm(3)                                           -> x2
     v600 Imm(0)                                           -> x2
-    v601 VecConst { imm=578437695752307458, kind=I64, bytes=8 } -> d0
+    v601 VecConst { imm=770, kind=I64, bytes=8 }          -> d0
     v602 Imm(0)                                           -> x2
     v603 Imm(0)                                           -> x2
     v604 Imm(2)                                           -> x2
@@ -1118,7 +1118,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v607 Imm(4)                                           -> x2
     v608 Imm(4)                                           -> x2
     v609 Imm(0)                                           -> x2
-    v610 VecConst { imm=578437695752372994, kind=I64, bytes=8 } -> d0
+    v610 VecConst { imm=262914, kind=I64, bytes=8 }       -> d0
     v611 Imm(0)                                           -> x2
     v612 Imm(0)                                           -> x2
     v613 Imm(3)                                           -> x2
@@ -1127,7 +1127,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v616 Imm(5)                                           -> x2
     v617 Imm(5)                                           -> x2
     v618 Imm(0)                                           -> x2
-    v619 VecConst { imm=578437695769150210, kind=I64, bytes=8 } -> d0
+    v619 VecConst { imm=84148994, kind=I64, bytes=8 }     -> d0
     v620 Imm(0)                                           -> x2
     v621 Imm(0)                                           -> x2
     v622 Imm(4)                                           -> x2
@@ -1136,7 +1136,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v625 Imm(6)                                           -> x2
     v626 Imm(6)                                           -> x2
     v627 Imm(0)                                           -> x2
-    v628 VecConst { imm=578437700064117506, kind=I64, bytes=8 } -> d0
+    v628 VecConst { imm=25853952770, kind=I64, bytes=8 }  -> d0
     v629 Imm(0)                                           -> x2
     v630 Imm(0)                                           -> x2
     v631 Imm(5)                                           -> x2
@@ -1145,7 +1145,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v634 Imm(7)                                           -> x2
     v635 Imm(7)                                           -> x2
     v636 Imm(0)                                           -> x2
-    v637 VecConst { imm=578438799575745282, kind=I64, bytes=8 } -> d0
+    v637 VecConst { imm=7722435347202, kind=I64, bytes=8 } -> d0
     v638 Imm(0)                                           -> x2
     v639 Imm(0)                                           -> x2
     v640 Imm(6)                                           -> x2
@@ -1154,7 +1154,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v643 Imm(8)                                           -> x2
     v644 Imm(8)                                           -> x2
     v645 Imm(0)                                           -> x2
-    v646 VecConst { imm=578720274552455938, kind=I64, bytes=8 } -> d0
+    v646 VecConst { imm=2259522249032450, kind=I64, bytes=8 } -> d0
     v647 Imm(0)                                           -> x2
     v648 Imm(0)                                           -> x2
     v649 Imm(7)                                           -> x2
@@ -1180,8 +1180,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v669 Imm(3)                                           -> x8
     v670 Imm(3)                                           -> x8
     v671 Imm(3)                                           -> x8
-    v672 Imm(0)                                           -> x8
-    v673 VecConst { imm=650777868590383875, kind=I64, bytes=8 } -> d0
+    v672 Undef                                            -> x8
+    v673 VecConst { imm=3, kind=I64, bytes=8 }            -> d0
     v674 Imm(0)                                           -> x8
     v675 Imm(0)                                           -> x8
     v676 Imm(1)                                           -> x8
@@ -1190,7 +1190,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v679 Imm(4)                                           -> x8
     v680 Imm(4)                                           -> x8
     v681 Imm(0)                                           -> x8
-    v682 VecConst { imm=650777868590384131, kind=I64, bytes=8 } -> d0
+    v682 VecConst { imm=1027, kind=I64, bytes=8 }         -> d0
     v683 Imm(0)                                           -> x8
     v684 Imm(0)                                           -> x8
     v685 Imm(2)                                           -> x8
@@ -1199,7 +1199,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v688 Imm(5)                                           -> x8
     v689 Imm(5)                                           -> x8
     v690 Imm(0)                                           -> x8
-    v691 VecConst { imm=650777868590449667, kind=I64, bytes=8 } -> d0
+    v691 VecConst { imm=328707, kind=I64, bytes=8 }       -> d0
     v692 Imm(0)                                           -> x8
     v693 Imm(0)                                           -> x8
     v694 Imm(3)                                           -> x8
@@ -1208,7 +1208,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v697 Imm(6)                                           -> x8
     v698 Imm(6)                                           -> x8
     v699 Imm(0)                                           -> x8
-    v700 VecConst { imm=650777868607226883, kind=I64, bytes=8 } -> d0
+    v700 VecConst { imm=100992003, kind=I64, bytes=8 }    -> d0
     v701 Imm(0)                                           -> x8
     v702 Imm(0)                                           -> x8
     v703 Imm(4)                                           -> x8
@@ -1217,7 +1217,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v706 Imm(7)                                           -> x8
     v707 Imm(7)                                           -> x8
     v708 Imm(0)                                           -> x8
-    v709 VecConst { imm=650777872902194179, kind=I64, bytes=8 } -> d0
+    v709 VecConst { imm=30165763075, kind=I64, bytes=8 }  -> d0
     v710 Imm(0)                                           -> x8
     v711 Imm(0)                                           -> x8
     v712 Imm(5)                                           -> x8
@@ -1226,7 +1226,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v715 Imm(8)                                           -> x8
     v716 Imm(8)                                           -> x8
     v717 Imm(0)                                           -> x8
-    v718 VecConst { imm=650778972413821955, kind=I64, bytes=8 } -> d0
+    v718 VecConst { imm=8826258785283, kind=I64, bytes=8 } -> d0
     v719 Imm(0)                                           -> x8
     v720 Imm(0)                                           -> x8
     v721 Imm(6)                                           -> x8
@@ -1235,7 +1235,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v724 Imm(9)                                           -> x8
     v725 Imm(9)                                           -> x8
     v726 Imm(0)                                           -> x8
-    v727 VecConst { imm=651060447390532611, kind=I64, bytes=8 } -> d0
+    v727 VecConst { imm=2542101049181187, kind=I64, bytes=8 } -> d0
     v728 Imm(0)                                           -> x8
     v729 Imm(0)                                           -> x8
     v730 Imm(7)                                           -> x8
@@ -1261,8 +1261,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v750 Imm(4)                                           -> [spill 1]
     v751 Imm(4)                                           -> [spill 1]
     v752 Imm(4)                                           -> [spill 1]
-    v753 Imm(0)                                           -> [spill 1]
-    v754 VecConst { imm=723118041428460548, kind=I64, bytes=8 } -> d0
+    v753 Undef                                            -> [spill 1]
+    v754 VecConst { imm=4, kind=I64, bytes=8 }            -> d0
     v755 Imm(0)                                           -> [spill 1]
     v756 Imm(0)                                           -> [spill 1]
     v757 Imm(1)                                           -> [spill 1]
@@ -1271,7 +1271,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v760 Imm(5)                                           -> [spill 1]
     v761 Imm(5)                                           -> [spill 1]
     v762 Imm(0)                                           -> [spill 1]
-    v763 VecConst { imm=723118041428460804, kind=I64, bytes=8 } -> d0
+    v763 VecConst { imm=1284, kind=I64, bytes=8 }         -> d0
     v764 Imm(0)                                           -> [spill 1]
     v765 Imm(0)                                           -> [spill 1]
     v766 Imm(2)                                           -> [spill 1]
@@ -1280,7 +1280,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v769 Imm(6)                                           -> [spill 1]
     v770 Imm(6)                                           -> [spill 1]
     v771 Imm(0)                                           -> [spill 1]
-    v772 VecConst { imm=723118041428526340, kind=I64, bytes=8 } -> d0
+    v772 VecConst { imm=394500, kind=I64, bytes=8 }       -> d0
     v773 Imm(0)                                           -> [spill 1]
     v774 Imm(0)                                           -> [spill 1]
     v775 Imm(3)                                           -> [spill 1]
@@ -1289,7 +1289,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v778 Imm(7)                                           -> [spill 1]
     v779 Imm(7)                                           -> [spill 1]
     v780 Imm(0)                                           -> [spill 1]
-    v781 VecConst { imm=723118041445303556, kind=I64, bytes=8 } -> d0
+    v781 VecConst { imm=117835012, kind=I64, bytes=8 }    -> d0
     v782 Imm(0)                                           -> [spill 1]
     v783 Imm(0)                                           -> [spill 1]
     v784 Imm(4)                                           -> [spill 1]
@@ -1298,7 +1298,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v787 Imm(8)                                           -> [spill 1]
     v788 Imm(8)                                           -> [spill 1]
     v789 Imm(0)                                           -> [spill 1]
-    v790 VecConst { imm=723118045740270852, kind=I64, bytes=8 } -> d0
+    v790 VecConst { imm=34477573380, kind=I64, bytes=8 }  -> d0
     v791 Imm(0)                                           -> [spill 1]
     v792 Imm(0)                                           -> [spill 1]
     v793 Imm(5)                                           -> [spill 1]
@@ -1307,7 +1307,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v796 Imm(9)                                           -> [spill 1]
     v797 Imm(9)                                           -> [spill 1]
     v798 Imm(0)                                           -> [spill 1]
-    v799 VecConst { imm=723119145251898628, kind=I64, bytes=8 } -> d0
+    v799 VecConst { imm=9930082223364, kind=I64, bytes=8 } -> d0
     v800 Imm(0)                                           -> [spill 1]
     v801 Imm(0)                                           -> [spill 1]
     v802 Imm(6)                                           -> [spill 1]
@@ -1316,7 +1316,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v805 Imm(10)                                          -> [spill 1]
     v806 Imm(10)                                          -> [spill 1]
     v807 Imm(0)                                           -> [spill 1]
-    v808 VecConst { imm=723400620228609284, kind=I64, bytes=8 } -> d0
+    v808 VecConst { imm=2824679849329924, kind=I64, bytes=8 } -> d0
     v809 Imm(0)                                           -> [spill 1]
     v810 Imm(0)                                           -> [spill 1]
     v811 Imm(7)                                           -> [spill 1]
@@ -1342,8 +1342,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v831 Imm(5)                                           -> [spill 3]
     v832 Imm(5)                                           -> [spill 3]
     v833 Imm(5)                                           -> [spill 3]
-    v834 Imm(0)                                           -> [spill 3]
-    v835 VecConst { imm=795458214266537221, kind=I64, bytes=8 } -> d0
+    v834 Undef                                            -> [spill 3]
+    v835 VecConst { imm=5, kind=I64, bytes=8 }            -> d0
     v836 Imm(0)                                           -> [spill 3]
     v837 Imm(0)                                           -> [spill 3]
     v838 Imm(1)                                           -> [spill 3]
@@ -1352,7 +1352,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v841 Imm(6)                                           -> [spill 3]
     v842 Imm(6)                                           -> [spill 3]
     v843 Imm(0)                                           -> [spill 3]
-    v844 VecConst { imm=795458214266537477, kind=I64, bytes=8 } -> d0
+    v844 VecConst { imm=1541, kind=I64, bytes=8 }         -> d0
     v845 Imm(0)                                           -> [spill 3]
     v846 Imm(0)                                           -> [spill 3]
     v847 Imm(2)                                           -> [spill 3]
@@ -1361,7 +1361,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v850 Imm(7)                                           -> [spill 3]
     v851 Imm(7)                                           -> [spill 3]
     v852 Imm(0)                                           -> [spill 3]
-    v853 VecConst { imm=795458214266603013, kind=I64, bytes=8 } -> d0
+    v853 VecConst { imm=460293, kind=I64, bytes=8 }       -> d0
     v854 Imm(0)                                           -> [spill 3]
     v855 Imm(0)                                           -> [spill 3]
     v856 Imm(3)                                           -> [spill 3]
@@ -1370,7 +1370,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v859 Imm(8)                                           -> [spill 3]
     v860 Imm(8)                                           -> [spill 3]
     v861 Imm(0)                                           -> [spill 3]
-    v862 VecConst { imm=795458214283380229, kind=I64, bytes=8 } -> d0
+    v862 VecConst { imm=134678021, kind=I64, bytes=8 }    -> d0
     v863 Imm(0)                                           -> [spill 3]
     v864 Imm(0)                                           -> [spill 3]
     v865 Imm(4)                                           -> [spill 3]
@@ -1379,7 +1379,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v868 Imm(9)                                           -> [spill 3]
     v869 Imm(9)                                           -> [spill 3]
     v870 Imm(0)                                           -> [spill 3]
-    v871 VecConst { imm=795458218578347525, kind=I64, bytes=8 } -> d0
+    v871 VecConst { imm=38789383685, kind=I64, bytes=8 }  -> d0
     v872 Imm(0)                                           -> [spill 3]
     v873 Imm(0)                                           -> [spill 3]
     v874 Imm(5)                                           -> [spill 3]
@@ -1388,7 +1388,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v877 Imm(10)                                          -> [spill 3]
     v878 Imm(10)                                          -> [spill 3]
     v879 Imm(0)                                           -> [spill 3]
-    v880 VecConst { imm=795459318089975301, kind=I64, bytes=8 } -> d0
+    v880 VecConst { imm=11033905661445, kind=I64, bytes=8 } -> d0
     v881 Imm(0)                                           -> [spill 3]
     v882 Imm(0)                                           -> [spill 3]
     v883 Imm(6)                                           -> [spill 3]
@@ -1397,7 +1397,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v886 Imm(11)                                          -> [spill 3]
     v887 Imm(11)                                          -> [spill 3]
     v888 Imm(0)                                           -> [spill 3]
-    v889 VecConst { imm=795740793066685957, kind=I64, bytes=8 } -> d0
+    v889 VecConst { imm=3107258649478661, kind=I64, bytes=8 } -> d0
     v890 Imm(0)                                           -> [spill 3]
     v891 Imm(0)                                           -> [spill 3]
     v892 Imm(7)                                           -> [spill 3]
@@ -1423,8 +1423,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v912 Imm(6)                                           -> [spill 5]
     v913 Imm(6)                                           -> [spill 5]
     v914 Imm(6)                                           -> [spill 5]
-    v915 Imm(0)                                           -> [spill 5]
-    v916 VecConst { imm=867798387104613894, kind=I64, bytes=8 } -> d0
+    v915 Undef                                            -> [spill 5]
+    v916 VecConst { imm=6, kind=I64, bytes=8 }            -> d0
     v917 Imm(0)                                           -> [spill 5]
     v918 Imm(0)                                           -> [spill 5]
     v919 Imm(1)                                           -> [spill 5]
@@ -1433,7 +1433,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v922 Imm(7)                                           -> [spill 5]
     v923 Imm(7)                                           -> [spill 5]
     v924 Imm(0)                                           -> [spill 5]
-    v925 VecConst { imm=867798387104614150, kind=I64, bytes=8 } -> d0
+    v925 VecConst { imm=1798, kind=I64, bytes=8 }         -> d0
     v926 Imm(0)                                           -> [spill 5]
     v927 Imm(0)                                           -> [spill 5]
     v928 Imm(2)                                           -> [spill 5]
@@ -1442,7 +1442,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v931 Imm(8)                                           -> [spill 5]
     v932 Imm(8)                                           -> [spill 5]
     v933 Imm(0)                                           -> [spill 5]
-    v934 VecConst { imm=867798387104679686, kind=I64, bytes=8 } -> d0
+    v934 VecConst { imm=526086, kind=I64, bytes=8 }       -> d0
     v935 Imm(0)                                           -> [spill 5]
     v936 Imm(0)                                           -> [spill 5]
     v937 Imm(3)                                           -> [spill 5]
@@ -1451,7 +1451,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v940 Imm(9)                                           -> [spill 5]
     v941 Imm(9)                                           -> [spill 5]
     v942 Imm(0)                                           -> [spill 5]
-    v943 VecConst { imm=867798387121456902, kind=I64, bytes=8 } -> d0
+    v943 VecConst { imm=151521030, kind=I64, bytes=8 }    -> d0
     v944 Imm(0)                                           -> [spill 5]
     v945 Imm(0)                                           -> [spill 5]
     v946 Imm(4)                                           -> [spill 5]
@@ -1460,7 +1460,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v949 Imm(10)                                          -> [spill 5]
     v950 Imm(10)                                          -> [spill 5]
     v951 Imm(0)                                           -> [spill 5]
-    v952 VecConst { imm=867798391416424198, kind=I64, bytes=8 } -> d0
+    v952 VecConst { imm=43101193990, kind=I64, bytes=8 }  -> d0
     v953 Imm(0)                                           -> [spill 5]
     v954 Imm(0)                                           -> [spill 5]
     v955 Imm(5)                                           -> [spill 5]
@@ -1469,7 +1469,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v958 Imm(11)                                          -> [spill 5]
     v959 Imm(11)                                          -> [spill 5]
     v960 Imm(0)                                           -> [spill 5]
-    v961 VecConst { imm=867799490928051974, kind=I64, bytes=8 } -> d0
+    v961 VecConst { imm=12137729099526, kind=I64, bytes=8 } -> d0
     v962 Imm(0)                                           -> [spill 5]
     v963 Imm(0)                                           -> [spill 5]
     v964 Imm(6)                                           -> [spill 5]
@@ -1478,7 +1478,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
     v967 Imm(12)                                          -> [spill 5]
     v968 Imm(12)                                          -> [spill 5]
     v969 Imm(0)                                           -> [spill 5]
-    v970 VecConst { imm=868080965904762630, kind=I64, bytes=8 } -> d0
+    v970 VecConst { imm=3389837449627398, kind=I64, bytes=8 } -> d0
     v971 Imm(0)                                           -> [spill 5]
     v972 Imm(0)                                           -> [spill 5]
     v973 Imm(7)                                           -> [spill 5]

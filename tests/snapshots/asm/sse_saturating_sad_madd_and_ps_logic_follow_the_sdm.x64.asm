@@ -127,12 +127,6 @@ Disassembly of section .text:
                	subq	$0x50, %rsp
                	movups	(%rdi), %xmm1
                	movups	(%rsi), %xmm0
-               	leaq	-0x50(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
                	vandps	%xmm0, %xmm1, %xmm2
                	movups	%xmm2, -0x50(%rbp)
                	vandnps	%xmm0, %xmm1, %xmm2
@@ -281,16 +275,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %r8
                	movups	-0x30(%rbp), %xmm0
                	movups	-0x20(%rbp), %xmm1
-               	leaq	-0xc0(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
                	vpaddsb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0xc0(%rbp)
                	vpaddsw	%xmm1, %xmm0, %xmm2

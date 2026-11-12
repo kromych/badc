@@ -2102,7 +2102,8 @@ pub(crate) fn calls_ending_paths(func: &super::super::ir::FunctionSsa) -> alloc:
 }
 
 /// Whether `inst` lowers to no machine code and records nothing: a phi,
-/// whose value the predecessors' exit moves place, or a dead pure value.
+/// whose value the predecessors' exit moves place, an undefined value, or
+/// a dead pure value.
 /// The one definition both emitters skip by and the block plan reads, so a
 /// block the plan leaves out is one neither emitter would have written.
 pub(crate) fn inst_emits_nothing(
@@ -2110,7 +2111,10 @@ pub(crate) fn inst_emits_nothing(
     v: super::super::ir::ValueId,
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
-    matches!(inst, super::super::ir::Inst::Phi { .. }) || is_dead_pure(inst, v, alloc)
+    matches!(
+        inst,
+        super::super::ir::Inst::Phi { .. } | super::super::ir::Inst::Undef
+    ) || is_dead_pure(inst, v, alloc)
 }
 
 /// [`is_dead_pure`] over a bare use-count slice. The allocator applies

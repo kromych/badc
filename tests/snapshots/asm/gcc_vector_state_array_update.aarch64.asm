@@ -19,8 +19,6 @@ Disassembly of section .text:
                	mov	x0, #0x1b               // =27
                	umov	w1, v0.b[0]
                	mul	x1, x1, x0
-               	mov	x2, #0x0                // =0
-               	fmov	d2, x2
                	mov	v2.b[0], w1
                	umov	w1, v0.b[1]
                	mul	x1, x1, x0
@@ -72,8 +70,6 @@ Disassembly of section .text:
                	mov	x0, #0x63               // =99
                	umov	w1, v0.b[0]
                	eor	x1, x1, x0
-               	mov	x2, #0x0                // =0
-               	fmov	d1, x2
                	mov	v1.b[0], w1
                	umov	w1, v0.b[1]
                	eor	x1, x1, x0
@@ -744,24 +740,15 @@ Disassembly of section .text:
                	ret
 
 <run_chunk>:
-               	stp	x20, x21, [sp, #-0x1a0]!
+               	stp	x20, x21, [sp, #-0x190]!
                	stp	x22, x23, [sp, #0x10]
                	str	x24, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x190]
-               	add	x29, sp, #0x190
+               	stp	x29, x30, [sp, #0x180]
+               	add	x29, sp, #0x180
                	mov	x22, x0
                	mov	x24, x2
                	mov	x23, x1
-               	sub	x0, x29, #0xc0
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	ldrb	w0, [x22]
-               	mov	x1, #0x0                // =0
-               	fmov	d0, x1
-               	mov	v0.b[0], w0
+               	ld1	{ v0.b }[0], [x22]
                	ldrb	w0, [x22, #0x1]
                	mov	v0.b[1], w0
                	ldrb	w0, [x22, #0x2]
@@ -792,7 +779,7 @@ Disassembly of section .text:
                	mov	v0.b[14], w0
                	ldrb	w0, [x22, #0xf]
                	mov	v0.b[15], w0
-               	stur	q0, [x29, #-0xc0]
+               	stur	q0, [x29, #-0xb0]
                	add	x0, x22, #0x10
                	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
@@ -825,7 +812,7 @@ Disassembly of section .text:
                	mov	v0.b[14], w1
                	ldrb	w0, [x0, #0xf]
                	mov	v0.b[15], w0
-               	stur	q0, [x29, #-0xb0]
+               	stur	q0, [x29, #-0xa0]
                	add	x0, x22, #0x20
                	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
@@ -858,7 +845,7 @@ Disassembly of section .text:
                	mov	v0.b[14], w1
                	ldrb	w0, [x0, #0xf]
                	mov	v0.b[15], w0
-               	stur	q0, [x29, #-0xa0]
+               	stur	q0, [x29, #-0x90]
                	add	x0, x22, #0x30
                	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
@@ -891,7 +878,7 @@ Disassembly of section .text:
                	mov	v0.b[14], w1
                	ldrb	w0, [x0, #0xf]
                	mov	v0.b[15], w0
-               	stur	q0, [x29, #-0x90]
+               	stur	q0, [x29, #-0x80]
                	add	x0, x22, #0x40
                	ld1	{ v0.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
@@ -924,18 +911,18 @@ Disassembly of section .text:
                	mov	v0.b[14], w1
                	ldrb	w0, [x0, #0xf]
                	mov	v0.b[15], w0
-               	stur	q0, [x29, #-0x80]
-               	sub	x0, x29, #0x110
-               	ldur	q1, [x29, #-0xc0]
-               	ldur	q2, [x29, #-0xb0]
-               	ldur	q3, [x29, #-0xa0]
-               	ldur	q4, [x29, #-0x90]
-               	str	q1, [sp, #0x80]
-               	stur	q2, [x29, #-0x100]
-               	stur	q3, [x29, #-0xf0]
-               	stur	q4, [x29, #-0xe0]
-               	stur	q0, [x29, #-0xd0]
-               	sub	x1, x29, #0x160
+               	stur	q0, [x29, #-0x70]
+               	sub	x0, x29, #0x100
+               	ldur	q1, [x29, #-0xb0]
+               	ldur	q2, [x29, #-0xa0]
+               	ldur	q3, [x29, #-0x90]
+               	ldur	q4, [x29, #-0x80]
+               	stur	q1, [x29, #-0x100]
+               	stur	q2, [x29, #-0xf0]
+               	stur	q3, [x29, #-0xe0]
+               	stur	q4, [x29, #-0xd0]
+               	stur	q0, [x29, #-0xc0]
+               	sub	x1, x29, #0x150
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
@@ -949,11 +936,10 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	cmp	w21, w24
                	b.ge	<addr>
-               	sub	x0, x29, #0x160
+               	sub	x0, x29, #0x150
                	lsl	x1, x21, #4
                	sxtw	x1, w1
                	add	x3, x23, x1
-               	ldr	q0, [sp, #0x180]
                	ld1	{ v0.b }[0], [x3]
                	ldrb	w1, [x3, #0x1]
                	mov	v0.b[1], w1
@@ -986,8 +972,8 @@ Disassembly of section .text:
                	ldrb	w1, [x3, #0xf]
                	mov	v16.16b, v0.16b
                	mov	v16.b[15], w1
-               	str	q16, [sp, #0x180]
-               	sub	x20, x29, #0xc0
+               	str	q16, [sp, #0x170]
+               	sub	x20, x29, #0xb0
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x20]
                	ldp	x16, x17, [x0, #0x10]
@@ -1001,39 +987,39 @@ Disassembly of section .text:
                	add	x7, x20, #0x40
                	ldr	q0, [x7]
                	bl	<addr>
-               	ldr	q16, [sp, #0x180]
+               	ldr	q16, [sp, #0x170]
                	eor	v16.16b, v16.16b, v0.16b
                	str	q16, [sp, #0x170]
                	add	x7, x20, #0x30
                	ldr	q0, [x7]
                	bl	<addr>
+               	ldur	q1, [x29, #-0x70]
+               	eor	v0.16b, v1.16b, v0.16b
+               	stur	q0, [x29, #-0x70]
+               	add	x7, x20, #0x20
+               	ldr	q0, [x7]
+               	bl	<addr>
                	ldur	q1, [x29, #-0x80]
                	eor	v0.16b, v1.16b, v0.16b
                	stur	q0, [x29, #-0x80]
-               	add	x7, x20, #0x20
+               	add	x7, x20, #0x10
                	ldr	q0, [x7]
                	bl	<addr>
                	ldur	q1, [x29, #-0x90]
                	eor	v0.16b, v1.16b, v0.16b
                	stur	q0, [x29, #-0x90]
-               	add	x7, x20, #0x10
-               	ldr	q0, [x7]
+               	ldr	q0, [x20]
                	bl	<addr>
                	ldur	q1, [x29, #-0xa0]
                	eor	v0.16b, v1.16b, v0.16b
                	stur	q0, [x29, #-0xa0]
-               	ldr	q0, [x20]
-               	bl	<addr>
                	ldur	q1, [x29, #-0xb0]
-               	eor	v0.16b, v1.16b, v0.16b
-               	stur	q0, [x29, #-0xb0]
-               	ldur	q1, [x29, #-0xc0]
                	ldr	q17, [sp, #0x170]
                	eor	v1.16b, v1.16b, v17.16b
-               	stur	q1, [x29, #-0xc0]
-               	ldur	q2, [x29, #-0xa0]
-               	ldur	q3, [x29, #-0x90]
-               	ldur	q4, [x29, #-0x80]
+               	stur	q1, [x29, #-0xb0]
+               	ldur	q2, [x29, #-0x90]
+               	ldur	q3, [x29, #-0x80]
+               	ldur	q4, [x29, #-0x70]
                	str	q1, [sp, #0x30]
                	str	q0, [sp, #0x40]
                	str	q2, [sp, #0x50]
@@ -1042,8 +1028,8 @@ Disassembly of section .text:
                	add	x21, x21, #0x1
                	cmp	w21, w24
                	b.lt	<addr>
-               	sub	x1, x29, #0x160
-               	sub	x0, x29, #0x70
+               	sub	x1, x29, #0x150
+               	sub	x0, x29, #0x60
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
@@ -1056,10 +1042,10 @@ Disassembly of section .text:
                	stp	x16, x17, [x0, #0x40]
                	mov	x1, x22
                	bl	<addr>
-               	ldp	x29, x30, [sp, #0x190]
+               	ldp	x29, x30, [sp, #0x180]
                	ldr	x24, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x1a0
+               	ldp	x20, x21, [sp], #0x190
                	ret
 
 <main>:
@@ -1248,8 +1234,6 @@ Disassembly of section .text:
                	b.le	<addr>
                	sub	x1, x29, #0x218
                	ldrb	w0, [sp, #0x128]
-               	mov	x2, #0x0                // =0
-               	fmov	d0, x2
                	mov	v0.b[0], w0
                	ldrb	w0, [sp, #0x129]
                	mov	v0.b[1], w0
@@ -1282,7 +1266,6 @@ Disassembly of section .text:
                	ldrb	w0, [sp, #0x137]
                	mov	v0.b[15], w0
                	add	x0, x1, #0x10
-               	mov	v1.16b, v0.16b
                	ld1	{ v1.b }[0], [x0]
                	ldrb	w2, [x0, #0x1]
                	mov	v1.b[1], w2
@@ -1315,7 +1298,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	v1.b[15], w0
                	add	x0, x1, #0x20
-               	mov	v2.16b, v1.16b
                	ld1	{ v2.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v2.b[1], w1
@@ -1349,7 +1331,6 @@ Disassembly of section .text:
                	mov	v2.b[15], w0
                	sub	x1, x29, #0x218
                	add	x0, x1, #0x30
-               	mov	v3.16b, v2.16b
                	ld1	{ v3.b }[0], [x0]
                	ldrb	w2, [x0, #0x1]
                	mov	v3.b[1], w2
@@ -1382,7 +1363,6 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	v3.b[15], w0
                	add	x0, x1, #0x40
-               	mov	v4.16b, v3.16b
                	ld1	{ v4.b }[0], [x0]
                	ldrb	w1, [x0, #0x1]
                	mov	v4.b[1], w1
@@ -1414,64 +1394,58 @@ Disassembly of section .text:
                	mov	v4.b[14], w1
                	ldrb	w0, [x0, #0xf]
                	mov	v4.b[15], w0
-               	sub	x0, x29, #0x320
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
+               	sub	x1, x29, #0x320
                	str	q0, [sp, #0x20]
                	str	q1, [sp, #0x30]
                	str	q2, [sp, #0x40]
                	str	q3, [sp, #0x50]
                	str	q4, [sp, #0x60]
-               	ldurb	w1, [x29, #-0xd8]
-               	mov	v0.16b, v4.16b
-               	mov	v0.b[0], w1
-               	ldurb	w1, [x29, #-0xd7]
-               	mov	v0.b[1], w1
-               	ldurb	w1, [x29, #-0xd6]
-               	mov	v0.b[2], w1
-               	ldurb	w1, [x29, #-0xd5]
-               	mov	v0.b[3], w1
-               	ldurb	w1, [x29, #-0xd4]
-               	mov	v0.b[4], w1
-               	ldurb	w1, [x29, #-0xd3]
-               	mov	v0.b[5], w1
-               	ldurb	w1, [x29, #-0xd2]
-               	mov	v0.b[6], w1
-               	ldurb	w1, [x29, #-0xd1]
-               	mov	v0.b[7], w1
-               	ldurb	w1, [x29, #-0xd0]
-               	mov	v0.b[8], w1
-               	ldurb	w1, [x29, #-0xcf]
-               	mov	v0.b[9], w1
-               	ldurb	w1, [x29, #-0xce]
-               	mov	v0.b[10], w1
-               	ldurb	w1, [x29, #-0xcd]
-               	mov	v0.b[11], w1
-               	ldurb	w1, [x29, #-0xcc]
-               	mov	v0.b[12], w1
-               	ldurb	w1, [x29, #-0xcb]
-               	mov	v0.b[13], w1
-               	ldurb	w1, [x29, #-0xca]
-               	mov	v0.b[14], w1
-               	ldurb	w1, [x29, #-0xc9]
+               	ldurb	w0, [x29, #-0xd8]
+               	mov	v0.b[0], w0
+               	ldurb	w0, [x29, #-0xd7]
+               	mov	v0.b[1], w0
+               	ldurb	w0, [x29, #-0xd6]
+               	mov	v0.b[2], w0
+               	ldurb	w0, [x29, #-0xd5]
+               	mov	v0.b[3], w0
+               	ldurb	w0, [x29, #-0xd4]
+               	mov	v0.b[4], w0
+               	ldurb	w0, [x29, #-0xd3]
+               	mov	v0.b[5], w0
+               	ldurb	w0, [x29, #-0xd2]
+               	mov	v0.b[6], w0
+               	ldurb	w0, [x29, #-0xd1]
+               	mov	v0.b[7], w0
+               	ldurb	w0, [x29, #-0xd0]
+               	mov	v0.b[8], w0
+               	ldurb	w0, [x29, #-0xcf]
+               	mov	v0.b[9], w0
+               	ldurb	w0, [x29, #-0xce]
+               	mov	v0.b[10], w0
+               	ldurb	w0, [x29, #-0xcd]
+               	mov	v0.b[11], w0
+               	ldurb	w0, [x29, #-0xcc]
+               	mov	v0.b[12], w0
+               	ldurb	w0, [x29, #-0xcb]
+               	mov	v0.b[13], w0
+               	ldurb	w0, [x29, #-0xca]
+               	mov	v0.b[14], w0
+               	ldurb	w0, [x29, #-0xc9]
                	mov	v16.16b, v0.16b
-               	mov	v16.b[15], w1
+               	mov	v16.b[15], w0
                	str	q16, [sp, #0x110]
-               	sub	x1, x29, #0x2d0
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x1, #0x10]
-               	ldp	x16, x17, [x0, #0x20]
-               	stp	x16, x17, [x1, #0x20]
-               	ldp	x16, x17, [x0, #0x30]
-               	stp	x16, x17, [x1, #0x30]
-               	ldp	x16, x17, [x0, #0x40]
-               	stp	x16, x17, [x1, #0x40]
-               	add	x7, x1, #0x40
+               	sub	x0, x29, #0x2d0
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
+               	ldp	x16, x17, [x1, #0x20]
+               	stp	x16, x17, [x0, #0x20]
+               	ldp	x16, x17, [x1, #0x30]
+               	stp	x16, x17, [x0, #0x30]
+               	ldp	x16, x17, [x1, #0x40]
+               	stp	x16, x17, [x0, #0x40]
+               	add	x7, x0, #0x40
                	ldr	q0, [x7]
                	bl	<addr>
                	ldr	q16, [sp, #0x110]

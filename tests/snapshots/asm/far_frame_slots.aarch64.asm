@@ -36,12 +36,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x30]
-               	mov	x8, x0
+               	add	x1, x0, x1
                	sub	x0, x29, #0x28
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	str	xzr, [x0, #0x20]
-               	add	x1, x8, x1
                	stur	x1, [x29, #-0x28]
                	add	x1, x2, x3
                	stur	x1, [x29, #-0x20]

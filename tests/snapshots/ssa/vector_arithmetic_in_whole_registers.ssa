@@ -114,7 +114,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v24  Imm(0)                                           -> x1
     v25  VecExtract { vec=v18, off=0, kind=I32, bytes=16 } -> x1
     v26  Binop { op=mul, lhs=v23, rhs=v25 }               -> x0
-    v27  Imm(0)                                           -> x1
+    v27  Undef                                            -> x1
     v28  VecInsert { vec=v27, value=v26, off=0, kind=I32, bytes=16 } -> d1
     v29  Imm(0)                                           -> x0
     v30  Imm(4)                                           -> x0
@@ -454,7 +454,7 @@ fn ent_pc=10 n_params=2 variadic=false locals=0
     v28  Imm(0)                                           -> x0
     v29  VecExtract { vec=v1, off=0, kind=F32, bytes=8 }  -> d3 [f32]
     v30  Binop { op=fdiv, lhs=v14, rhs=v29 }              -> d2 [f32]
-    v31  Imm(0)                                           -> x0
+    v31  Undef                                            -> x0
     v32  VecInsert { vec=v31, value=v30, off=0, kind=F32, bytes=8 } -> d2
     v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0 [f32]

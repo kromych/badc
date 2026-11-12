@@ -44,7 +44,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
@@ -109,9 +109,9 @@ Disassembly of section .text:
                	movl	$0x10, %eax
                	leave
                	retq
-               	movl	$0x5, -0x38(%rbp)
-               	leaq	-0x38(%rbp), %rax
-               	movq	%rax, -0x30(%rbp)
+               	movl	$0x5, -0x30(%rbp)
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rax, -0x8(%rbp)
                	movl	(%rax), %ecx
                	cmpl	$0x5, %ecx
                	je	<addr>

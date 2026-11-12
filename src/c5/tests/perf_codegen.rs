@@ -3235,6 +3235,59 @@ fn a_select_writes_over_an_arm_it_consumes() {
     assert_eq!(insns.len(), 7, "{insns:x?}");
 }
 
+/// An initializer storing every byte of its object zeroes none first; one
+/// leaving members or padding unnamed zeroes those bytes (C17 6.7.9p21).
+#[test]
+fn an_initializer_naming_every_byte_zeroes_none() {
+    const SRC: &str = "typedef signed char c8 __attribute__((vector_size(8)));\n\
+typedef struct { c8 v[2]; } c8x2;\n\
+struct P { int a, b; };\n\
+struct Q { int a, b, c; };\n\
+struct R { char c; int i; };\n\
+void put(c8x2 *o, c8 a, c8 b) { *o = (c8x2){{a, b}}; }\n\
+void put2(struct P *o, int a, int b) { *o = (struct P){a, b}; }\n\
+void put3(struct Q *o, int a) { *o = (struct Q){a}; }\n\
+void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
+    let mut m = Misses::default();
+    // Two member stores; one and two zero stores; a byte, its padding and
+    // the int.
+    for (name, stores) in [("put", 2), ("put2", 2), ("put3", 3), ("put4", 4)] {
+        let words = a64(SRC, name);
+        let n = words
+            .iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(_, st, _)| st))
+            .count();
+        m.expect(n == stores, || format!("aarch64 {name}: {words:08x?}"));
+        let insns = x64(SRC, name);
+        let n = insns.iter().filter(|i| x64_is_store(i)).count();
+        m.expect(n == stores, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// A vector written lane by lane over every byte reads nothing under its
+/// first lane: that lane loads into the result's register, which holds no
+/// value yet, with no zero or copy ahead of it.
+#[test]
+fn a_vector_built_lane_by_lane_starts_from_nothing() {
+    const SRC: &str = "typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+u8x16 load16(const unsigned char *p) {\n\
+    u8x16 r;\n\
+    for (int i = 0; i < 16; i++) r[i] = p[i];\n\
+    return r;\n}\n";
+    const LD1_B0_X0: u32 = 0x0D40_0000;
+    let mut m = Misses::default();
+    // ld1 of lane 0, a load and an insert per other lane, ret.
+    let words = a64(SRC, "load16");
+    m.expect(words.len() == 32 && words[0] == LD1_B0_X0, || {
+        format!("aarch64: {words:08x?}")
+    });
+    // A load and an insert per lane, ret.
+    let insns = x64(SRC, "load16");
+    m.expect(insns.len() == 33, || format!("x86-64: {insns:x?}"));
+    m.finish();
+}
+
 /// The members of a structure of two 8-byte vectors, read back where it was
 /// built, are the vectors' registers: the copy of the structure moves each
 /// cell as an integer, and its bits come back to the vector file unchanged.

@@ -73,15 +73,13 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movups	(%rdi), %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movq	-0x18(%rbp), %rdx
-               	movq	%rdx, -0x10(%rbp)
-               	movq	-0x20(%rbp), %rdx
-               	movq	%rdx, -0x8(%rbp)
+               	movq	-0x18(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rdx
+               	movq	%rcx, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rcx
+               	movq	%rcx, -0x8(%rbp)
                	testl	%esi, %esi
-               	cmoveq	%rcx, %rax
+               	cmoveq	%rdx, %rax
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	imulq	$0xa, %rcx, %rcx

@@ -24,11 +24,9 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x30]
                	stur	w1, [x29, #-0x28]
                	stur	w0, [x29, #-0x24]
-               	sub	x2, x29, #0x20
-               	stp	xzr, xzr, [x2]
-               	stp	xzr, xzr, [x2, #0x10]
                	mov	x1, #0x1                // =1
                	mov	x4, #0x2                // =2
+               	sub	x2, x29, #0x20
                	stur	x4, [x29, #-0x20]
                	stur	w1, [x29, #-0x18]
                	stur	w0, [x29, #-0x14]

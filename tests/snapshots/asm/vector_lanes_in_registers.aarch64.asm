@@ -88,7 +88,6 @@ Disassembly of section .text:
                	fmov	s2, #2.00000000
                	mov	s3, v0.s[0]
                	fmul	s3, s3, s2
-               	fmov	s3, s3
                	fmul	s1, s1, s2
                	mov	v16.16b, v3.16b
                	mov	v16.s[1], v1.s[0]
@@ -298,17 +297,15 @@ Disassembly of section .text:
                	ret
 
 <three>:
-               	fmov	s0, s0
-               	mov	x1, #0x0                // =0
-               	fmov	d17, x1
+               	mov	x0, #0x0                // =0
+               	fmov	d17, x0
                	mov	v0.s[1], v17.s[0]
-               	fmov	d17, x1
+               	fmov	d17, x0
                	fmov	s3, s17
                	mov	v16.16b, v3.16b
                	mov	v16.s[1], v1.s[0]
                	fmov	d1, d16
-               	fmov	s2, s2
-               	fmov	d17, x1
+               	fmov	d17, x0
                	mov	v2.s[1], v17.s[0]
                	ret
 

@@ -368,20 +368,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movups	(%rbx), %xmm0
-               	leaq	-0x100(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
-               	movups	%xmm14, 0x80(%rax)
-               	movups	%xmm14, 0x90(%rax)
-               	movups	%xmm14, 0xa0(%rax)
-               	movups	%xmm14, 0xb0(%rax)
                	pmovsxbw	%xmm0, %xmm1
                	movups	%xmm1, -0x100(%rbp)
                	pmovsxbd	%xmm0, %xmm1
@@ -1084,10 +1070,6 @@ Disassembly of section .text:
                	andq	$0x11, %rax
                	movb	%al, -0x19(%rbp)
                	xorl	%eax, %eax
-               	leaq	-0x18(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movq	$0x0, 0x10(%rcx)
                	movq	%r12, -0x18(%rbp)
                	movq	%rsi, -0x10(%rbp)
                	leaq	-0x28(%rbp), %rcx
@@ -1410,12 +1392,11 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	xorl	%eax, %eax
-               	leaq	-0x30(%rbp), %rdx
-               	movswq	(%rdx,%rcx,2), %rdx
-               	movq	%rax, %xmm0
-               	vpinsrw	$0x0, %edx, %xmm0, %xmm0
+               	leaq	-0x30(%rbp), %rax
+               	movswq	(%rax,%rcx,2), %rax
+               	vpinsrw	$0x0, %eax, %xmm0, %xmm0
                	vpinsrw	$0x1, %ecx, %xmm0, %xmm0
+               	xorl	%eax, %eax
                	vpinsrw	$0x2, %eax, %xmm0, %xmm0
                	vpinsrw	$0x3, %eax, %xmm0, %xmm0
                	vpinsrw	$0x4, %eax, %xmm0, %xmm0
@@ -2191,16 +2172,6 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %r12
                	movups	-0x50(%rbp), %xmm0
                	movups	-0x40(%rbp), %xmm1
-               	leaq	-0x100(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
                	vpminsb	%xmm1, %xmm0, %xmm2
                	movups	%xmm2, -0x100(%rbp)
                	vpmaxsb	%xmm1, %xmm0, %xmm2

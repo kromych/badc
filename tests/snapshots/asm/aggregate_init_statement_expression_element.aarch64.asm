@@ -30,11 +30,9 @@ Disassembly of section .text:
                	mov	x0, #0x1000             // =4096
                	stur	w0, [x29, #-0x8]
                	ldursw	x20, [x29, #-0x8]
-               	sub	x0, x29, #0x18
-               	str	xzr, [x0]
-               	str	wzr, [x0, #0x8]
                	mov	x1, #0xc3d4             // =50132
                	movk	x1, #0xa1b2, lsl #16
+               	sub	x0, x29, #0x18
                	stur	w1, [x29, #-0x18]
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x14]
@@ -58,8 +56,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x20, [x29, #-0x8]
                	sub	x0, x29, #0x18
-               	str	xzr, [x0]
-               	str	wzr, [x0, #0x8]
                	stur	w20, [x29, #-0x18]
                	mov	x1, #0x15               // =21
                	stur	w1, [x29, #-0x14]
@@ -78,8 +74,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x20, [x29, #-0x8]
                	sub	x0, x29, #0x18
-               	str	xzr, [x0]
-               	str	wzr, [x0, #0x8]
                	stur	w20, [x29, #-0x18]
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x14]

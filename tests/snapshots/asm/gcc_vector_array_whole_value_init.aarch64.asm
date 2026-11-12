@@ -26,24 +26,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	q2, [x0]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	stur	q0, [x29, #-0x60]
                	stur	q1, [x29, #-0x50]
                	stur	q2, [x29, #-0x40]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	stur	q0, [x29, #-0x60]
                	stur	q1, [x29, #-0x50]
                	stur	q2, [x29, #-0x40]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	stur	q0, [x29, #-0x60]
                	stur	q1, [x29, #-0x50]
                	stur	q2, [x29, #-0x40]
@@ -52,9 +40,6 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stur	q2, [x29, #-0x60]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	mov	x0, #0x7                // =7
                	sturb	w0, [x29, #-0x60]
                	sturb	w0, [x29, #-0x5f]
@@ -83,9 +68,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	mov	x0, #0x3                // =3
                	sturb	w0, [x29, #-0x60]
                	sturb	w0, [x29, #-0x5f]
@@ -114,9 +96,6 @@ Disassembly of section .text:
                	stur	q0, [x29, #-0x40]
                	stur	q1, [x29, #-0x60]
                	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	stur	q2, [x29, #-0x60]
                	add	x1, x0, #0x10
                	ldp	x16, x17, [x0]
@@ -124,22 +103,10 @@ Disassembly of section .text:
                	add	x1, x0, #0x20
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
                	stur	q0, [x29, #-0x60]
                	stur	q1, [x29, #-0x50]
                	stur	q2, [x29, #-0x40]
                	stur	q0, [x29, #-0x30]
-               	sub	x0, x29, #0x60
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	stur	q0, [x29, #-0x60]
                	stur	q1, [x29, #-0x50]
                	stur	q2, [x29, #-0x40]

@@ -75,9 +75,6 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	leaq	-0x40(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movl	$0x61, -0x40(%rbp)
                	movl	$0x62, -0x3c(%rbp)
                	movl	$0x0, -0x38(%rbp)

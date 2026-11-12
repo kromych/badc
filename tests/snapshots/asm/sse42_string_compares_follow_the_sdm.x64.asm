@@ -1405,8 +1405,6 @@ Disassembly of section .text:
                	testb	$0x40, %bl
                	jne	<addr>
                	leaq	-0x10(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
                	movl	%eax, -0x10(%rbp)
                	movl	$0x0, -0xc(%rbp)
                	movl	$0x0, -0x8(%rbp)
@@ -1496,8 +1494,6 @@ Disassembly of section .text:
                	testb	$0x40, %bl
                	jne	<addr>
                	leaq	-0x10(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
                	movl	%eax, -0x10(%rbp)
                	movl	$0x0, -0xc(%rbp)
                	movl	$0x0, -0x8(%rbp)

@@ -66,16 +66,13 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	movb	$0x77, -0xc(%rbp)
                	movb	$0x78, -0xb(%rbp)
                	movb	$0x79, -0xa(%rbp)
                	movb	$0x7a, -0x9(%rbp)
                	movb	$0x0, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rcx
                	movb	$0x0, -0x7(%rbp)
+               	leaq	-0x10(%rbp), %rcx
                	movb	$0x0, -0x6(%rbp)
                	movb	$0x0, -0x5(%rbp)
                	leaq	0x6(%rdi), %rax

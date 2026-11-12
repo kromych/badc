@@ -30,18 +30,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x40
+               	sub	x0, x29, #0x40
                	stur	q0, [x29, #-0x40]
                	stur	q1, [x29, #-0x30]
-               	sub	x0, x29, #0x20
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	add	x2, x1, #0x10
+               	add	x2, x0, #0x10
+               	sub	x1, x29, #0x20
                	ldp	x16, x17, [x2]
-               	stp	x16, x17, [x0]
-               	add	x0, x0, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
+               	add	x1, x1, #0x10
+               	ldp	x16, x17, [x0]
+               	stp	x16, x17, [x1]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
                	add	sp, sp, #0x40

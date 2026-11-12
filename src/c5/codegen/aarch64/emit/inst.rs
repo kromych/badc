@@ -898,9 +898,7 @@ pub(super) fn lane_memory(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
                     kind,
                     bytes: 8 | 16,
                     ..
-                } if !matches!(func.insts[vec as usize], Inst::Undef | Inst::Imm(0)) => {
-                    (value, lane_bytes(kind))
-                }
+                } if !matches!(func.insts[vec as usize], Inst::Imm(0)) => (value, lane_bytes(kind)),
                 Inst::Store {
                     disp: 0,
                     value,
@@ -999,7 +997,9 @@ pub(super) fn emit_lane_memory(
         (true, Place::FpReg(r)) => r,
         _ => frame.fp_scratch[0],
     };
+    // A lane loaded over an undefined vector forms in the result's register.
     let qn = match bytes {
+        _ if load && matches!(func.insts[vec as usize], Inst::Undef) => Some(qd),
         16 => materialize_v128(code, place_of(alloc, vec), qd, frame, scratch.secondary),
         _ => materialize_fp(code, place_of(alloc, vec), qd, frame),
     };
@@ -1139,7 +1139,7 @@ fn emit_vec_insert(
     }
     // An undefined vector leaves the register as it is.
     let base = place_of(alloc, vec);
-    if !matches!(base, Place::None) {
+    if blank != Some(true) && !matches!(base, Place::None) {
         let qn = match bytes {
             16 => materialize_v128(code, base, qd, frame, scratch.secondary),
             _ => materialize_fp(code, base, qd, frame),

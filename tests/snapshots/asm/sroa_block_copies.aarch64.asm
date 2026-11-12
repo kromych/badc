@@ -101,8 +101,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sub	x2, x29, #0x20
-               	stp	xzr, xzr, [x2]
-               	stp	xzr, xzr, [x2, #0x10]
                	stur	x0, [x29, #-0x20]
                	stur	x1, [x29, #-0x18]
                	stur	x1, [x29, #-0x10]
@@ -126,8 +124,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	xzr, [x29, #-0x10]
-               	stur	xzr, [x29, #-0x8]
                	stur	x1, [x29, #-0x10]
                	add	x1, x1, #0x1
                	stur	x1, [x29, #-0x8]
@@ -155,7 +151,6 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
                	stur	x1, [x29, #-0x10]
                	lsl	x1, x1, #1
                	stur	x1, [x29, #-0x8]
@@ -184,7 +179,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x2, x0
                	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
                	stur	x1, [x29, #-0x10]
                	mov	x1, #0x4                // =4
                	stur	x1, [x29, #-0x8]
@@ -207,8 +201,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	x8, [x29, #-0x20]
                	sub	x1, x29, #0x18
-               	stp	xzr, xzr, [x1]
-               	str	xzr, [x1, #0x10]
                	stur	x0, [x29, #-0x18]
                	mov	x2, #0x1                // =1
                	stur	x2, [x29, #-0x10]
@@ -335,7 +327,6 @@ Disassembly of section .text:
                	ret
 
 <array_member_copy>:
-               	stp	xzr, xzr, [x0]
                	str	x1, [x0]
                	add	x1, x1, #0x5
                	str	x1, [x0, #0x8]
@@ -410,7 +401,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x20, [x0, #0x10]
                	sub	x0, x29, #0x278
-               	stp	xzr, xzr, [x0]
                	str	x20, [sp, #0x18]
                	add	x1, x20, #0x1
                	str	x1, [sp, #0x20]

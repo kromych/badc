@@ -9,38 +9,38 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v3   Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v3)
   block 1  start_pc=0
-    v399 BinopI { op=mul, lhs=v396, rhs_imm=3 }           -> x2
-    v400 BinopI { op=add, lhs=v399, rhs_imm=7 }           -> x6
-    v401 Binop { op=add, lhs=v397, rhs=v400 }             -> x1
-    v402 Binop { op=add, lhs=v396, rhs=v396 }             -> x6
-    v403 Binop { op=add, lhs=v402, rhs=v396 }             -> x6
-    v404 Binop { op=sub, lhs=v403, rhs=v399 }             -> x6
-    v405 Binop { op=add, lhs=v401, rhs=v404 }             -> x1
-    v406 BinopI { op=add, lhs=v396, rhs_imm=1 }           -> x0
-    terminator Jmp(b2)   (exit_acc=v406)
+    v398 BinopI { op=mul, lhs=v395, rhs_imm=3 }           -> x2
+    v399 BinopI { op=add, lhs=v398, rhs_imm=7 }           -> x6
+    v400 Binop { op=add, lhs=v396, rhs=v399 }             -> x1
+    v401 Binop { op=add, lhs=v395, rhs=v395 }             -> x6
+    v402 Binop { op=add, lhs=v401, rhs=v395 }             -> x6
+    v403 Binop { op=sub, lhs=v402, rhs=v398 }             -> x6
+    v404 Binop { op=add, lhs=v400, rhs=v403 }             -> x1
+    v405 BinopI { op=add, lhs=v395, rhs_imm=1 }           -> x0
+    terminator Jmp(b2)   (exit_acc=v405)
   block 2  start_pc=0
-    v396 Phi { incoming=[b0:v3, b1:v406], kind=I64 }      -> x0
-    v397 Phi { incoming=[b0:v3, b1:v405], kind=I64 }      -> x1
-    v398 BinopI { op=lt, lhs=v396, rhs_imm=50 }           -> x2
-    terminator Bz { cond=v398, target=b3, fall=b1 }   (exit_acc=v398)
+    v395 Phi { incoming=[b0:v3, b1:v405], kind=I64 }      -> x0
+    v396 Phi { incoming=[b0:v3, b1:v404], kind=I64 }      -> x1
+    v397 BinopI { op=lt, lhs=v395, rhs_imm=50 }           -> x2
+    terminator Bz { cond=v397, target=b3, fall=b1 }   (exit_acc=v397)
   block 3  start_pc=0
     v4   Imm(50)                                          -> x0
     v5   Imm(50)                                          -> x0
     v6   Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v6)
   block 4  start_pc=0
-    v410 BinopI { op=mul, lhs=v407, rhs_imm=3 }           -> x6
-    v411 BinopI { op=add, lhs=v410, rhs_imm=7 }           -> x6
-    v412 Binop { op=add, lhs=v408, rhs=v411 }             -> x2
-    v413 BinopI { op=add, lhs=v407, rhs_imm=1 }           -> x0
-    terminator Jmp(b5)   (exit_acc=v413)
+    v409 BinopI { op=mul, lhs=v406, rhs_imm=3 }           -> x6
+    v410 BinopI { op=add, lhs=v409, rhs_imm=7 }           -> x6
+    v411 Binop { op=add, lhs=v407, rhs=v410 }             -> x2
+    v412 BinopI { op=add, lhs=v406, rhs_imm=1 }           -> x0
+    terminator Jmp(b5)   (exit_acc=v412)
   block 5  start_pc=0
-    v407 Phi { incoming=[b3:v6, b4:v413], kind=I64 }      -> x0
-    v408 Phi { incoming=[b3:v6, b4:v412], kind=I64 }      -> x2
-    v409 BinopI { op=lt, lhs=v407, rhs_imm=50 }           -> x6
-    terminator Bz { cond=v409, target=b6, fall=b4 }   (exit_acc=v409)
+    v406 Phi { incoming=[b3:v6, b4:v412], kind=I64 }      -> x0
+    v407 Phi { incoming=[b3:v6, b4:v411], kind=I64 }      -> x2
+    v408 BinopI { op=lt, lhs=v406, rhs_imm=50 }           -> x6
+    terminator Bz { cond=v408, target=b6, fall=b4 }   (exit_acc=v408)
   block 6  start_pc=0
-    v7   Binop { op=eq, lhs=v397, rhs=v408 }              -> x0
+    v7   Binop { op=eq, lhs=v396, rhs=v407 }              -> x0
     v8   Imm(0)                                           -> x1
     v9   Imm(305441741)                                   -> x1
     v10  StoreLocal { off=-1, value=v9, kind=I64 }        -> -
@@ -350,14 +350,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v310 LifetimeEnd(-1)                                  -> -
     terminator Return(v306)   (exit_acc=v306)
   block 9  start_pc=0
-    v389 ImmData(1)                                       -> x7
-    v390 CallExt { binding_idx=0, args=[v389], fp_arg_mask=0x0 } -> x0
-    v391 Imm(1)                                           -> x0
+    v388 ImmData(1)                                       -> x7
+    v389 CallExt { binding_idx=0, args=[v388], fp_arg_mask=0x0 } -> x0
+    v390 Imm(1)                                           -> x0
+    v391 LifetimeEnd(0)                                   -> -
     v392 LifetimeEnd(0)                                   -> -
     v393 LifetimeEnd(0)                                   -> -
-    v394 LifetimeEnd(0)                                   -> -
-    v395 LifetimeEnd(-1)                                  -> -
-    terminator Return(v391)   (exit_acc=v391)
+    v394 LifetimeEnd(-1)                                  -> -
+    terminator Return(v390)   (exit_acc=v390)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

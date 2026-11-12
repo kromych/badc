@@ -53,12 +53,9 @@ Disassembly of section .text:
                	movq	%r10, -0x40(%rbp)
                	movq	0x28(%rbp), %r10
                	movq	%r10, -0x38(%rbp)
-               	leaq	-0x30(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
-               	movups	%xmm14, 0x10(%rcx)
                	leaq	-0x50(%rbp), %rax
                	leaq	0x10(%rax), %rdx
+               	leaq	-0x30(%rbp), %rcx
                	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
                	leaq	0x10(%rcx), %rdx

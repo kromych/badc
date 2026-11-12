@@ -327,8 +327,8 @@ Disassembly of section .text:
                	add	x26, x26, #0x2
                	cmp	w26, #0x100
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
-               	fmov	d17, x1
+               	mov	x0, #0x0                // =0
+               	fmov	d17, x0
                	fmov	s0, s17
                	mov	x0, #0x80000000         // =2147483648
                	fmov	d17, x0

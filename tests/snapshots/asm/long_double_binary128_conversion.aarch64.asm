@@ -280,7 +280,6 @@ Disassembly of section .text:
                	orr	x0, x24, x0, lsl #48
                	orr	x22, x0, x1
                	sub	x1, x29, #0x10
-               	stp	xzr, xzr, [x1]
                	stur	x21, [x29, #-0x10]
                	stur	x22, [x29, #-0x8]
                	sub	x0, x29, #0x20
@@ -360,7 +359,6 @@ Disassembly of section .text:
                	eor	x21, x1, x1, lsl #17
                	str	x21, [x0, #0x10]
                	sub	x1, x29, #0x10
-               	stp	xzr, xzr, [x1]
                	stur	x21, [x29, #-0x10]
                	stur	x20, [x29, #-0x8]
                	sub	x0, x29, #0x20

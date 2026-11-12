@@ -93,14 +93,6 @@ Disassembly of section .text:
                	movw	%r10w, (%rdi)
                	movzbq	0x2(%r8), %r10
                	movb	%r10b, 0x2(%rdi)
-               	leaq	-0x60(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
-               	movups	%xmm14, 0x10(%rdi)
-               	movups	%xmm14, 0x20(%rdi)
-               	movups	%xmm14, 0x30(%rdi)
-               	movups	%xmm14, 0x40(%rdi)
-               	movups	%xmm14, 0x50(%rdi)
                	movq	%rax, -0x60(%rbp)
                	movq	%rcx, -0x58(%rbp)
                	movq	%rdx, -0x50(%rbp)
@@ -138,10 +130,6 @@ Disassembly of section .text:
                	movw	%r10w, (%rsi)
                	movzbq	0x2(%rdi), %r10
                	movb	%r10b, 0x2(%rsi)
-               	leaq	-0xd8(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
-               	movups	%xmm14, 0x10(%rdi)
                	movq	%rcx, -0xd8(%rbp)
                	movq	%rdx, -0xd0(%rbp)
                	movq	%rsi, -0xc8(%rbp)
@@ -170,16 +158,10 @@ Disassembly of section .text:
                	movw	%r10w, (%rdi)
                	movzbq	0x2(%r8), %r10
                	movb	%r10b, 0x2(%rdi)
-               	leaq	-0xb8(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
-               	movups	%xmm14, 0x10(%rdi)
-               	movq	$0x0, 0x20(%rdi)
                	movq	%rcx, -0xb8(%rbp)
                	movq	%rdx, -0xb0(%rbp)
                	movq	%rsi, -0xa8(%rbp)
-               	leaq	-0x120(%rbp), %rcx
-               	movq	%rcx, -0xa0(%rbp)
+               	movq	%rdi, -0xa0(%rbp)
                	movq	$0x0, -0x98(%rbp)
                	leaq	-0x118(%rbp), %rcx
                	leaq	<rip>, %rdx
@@ -203,22 +185,16 @@ Disassembly of section .text:
                	movw	%r10w, (%rdi)
                	movzbq	0x2(%r8), %r10
                	movb	%r10b, 0x2(%rdi)
-               	leaq	-0xf8(%rbp), %rdi
-               	leaq	<rip>, %r8
-               	movzwq	(%r8), %r10
-               	movw	%r10w, (%rdi)
-               	movzbq	0x2(%r8), %r10
-               	movb	%r10b, 0x2(%rdi)
-               	leaq	-0x90(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
-               	movups	%xmm14, 0x10(%rdi)
-               	movups	%xmm14, 0x20(%rdi)
+               	leaq	-0xf8(%rbp), %r8
+               	leaq	<rip>, %r9
+               	movzwq	(%r9), %r10
+               	movw	%r10w, (%r8)
+               	movzbq	0x2(%r9), %r10
+               	movb	%r10b, 0x2(%r8)
                	movq	%rcx, -0x90(%rbp)
                	movq	%rdx, -0x88(%rbp)
                	movq	%rsi, -0x80(%rbp)
-               	leaq	-0x100(%rbp), %rcx
-               	movq	%rcx, -0x78(%rbp)
+               	movq	%rdi, -0x78(%rbp)
                	leaq	-0xf8(%rbp), %rcx
                	movq	%rcx, -0x70(%rbp)
                	movq	$0x0, -0x68(%rbp)

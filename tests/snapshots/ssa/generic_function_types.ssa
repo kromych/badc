@@ -4,27 +4,25 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   ImmCode(ent_pc=0)                                -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmCode(ent_pc=0)                                -> x0
-    v4   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   ImmCode(ent_pc=1)                                -> x0
     v5   Imm(0)                                           -> x0
-    v6   ImmCode(ent_pc=1)                                -> x0
+    v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
+    v11  ImmCode(ent_pc=0)                                -> x0
     v12  Imm(0)                                           -> x0
-    v13  ImmCode(ent_pc=0)                                -> x0
-    v14  Imm(0)                                           -> x0
-    v15  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x1
+    v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  LifetimeEnd(0)                                   -> -
-    v20  LifetimeEnd(0)                                   -> -
-    terminator Return(v15)   (exit_acc=v15)
+    v17  LifetimeEnd(0)                                   -> -
+    v18  LifetimeEnd(0)                                   -> -
+    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -72,14 +72,13 @@ Disassembly of section .text:
                	sub	x2, x29, #0x20
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x2]
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
-               	ldur	x3, [x29, #-0x18]
-               	stur	x3, [x29, #-0x10]
-               	ldur	x3, [x29, #-0x20]
-               	stur	x3, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x18]
+               	sub	x3, x29, #0x10
+               	stur	x0, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x20]
+               	stur	x0, [x29, #-0x8]
                	cmp	w1, #0x0
-               	csel	x0, x2, x0, ne
+               	csel	x0, x2, x3, ne
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10

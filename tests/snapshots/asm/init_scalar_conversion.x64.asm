@@ -84,10 +84,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
+               	leaq	-0x20(%rbp), %r9
                	movq	$0x0, -0x20(%rbp)
                	movq	$0x0, -0x18(%rbp)
                	movabsq	$0x408a400000000000, %rax # imm = 0x408A400000000000
@@ -109,7 +106,6 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x20(%rbp), %r9
                	subq	$0x20, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
@@ -128,9 +124,6 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x20(%rbp), %r9
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%r9)
-               	movups	%xmm14, 0x10(%r9)
                	movq	$0x0, -0x20(%rbp)
                	movq	$0x0, -0x18(%rbp)
                	movabsq	$0x408a400000000000, %rax # imm = 0x408A400000000000

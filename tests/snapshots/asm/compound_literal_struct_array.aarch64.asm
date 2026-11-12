@@ -363,7 +363,6 @@ Disassembly of section .text:
                	stp	x16, x17, [x1, #0x10]
                	mov	x0, #0x3                // =3
                	sub	x3, x29, #0x30
-               	stp	xzr, xzr, [x3]
                	stur	w0, [x29, #-0x30]
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x2c]

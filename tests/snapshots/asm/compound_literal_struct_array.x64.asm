@@ -323,8 +323,6 @@ Disassembly of section .text:
                	movups	0x10(%rax), %xmm14
                	movups	%xmm14, 0x10(%rcx)
                	leaq	-0x30(%rbp), %rsi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
                	movl	$0x3, -0x30(%rbp)
                	movl	$0x4, -0x2c(%rbp)
                	movl	$0x5, -0x28(%rbp)

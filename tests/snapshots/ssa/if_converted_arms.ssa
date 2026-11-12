@@ -10,24 +10,19 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Imm(0)                                           -> x0
-    v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
-    v10  Imm(0)                                           -> x0
-    v11  Imm(0)                                           -> x0
-    v12  Neg(v1)                                          -> x0
-    v13  Extend { value=v12, kind=I32, nsw }              -> x1
-    v14  Imm(0)                                           -> x1
-    v15  Imm(0)                                           -> x1
-    v16  Imm(0)                                           -> x1
-    v17  Imm(0)                                           -> x1
-    v18  LifetimeEnd(0)                                   -> -
-    v19  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v20  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x2
-    v21  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x0
-    v22  Binop { op=or, lhs=v19, rhs=v21 }                -> x0
-    v23  AggParts { desc=0, parts=[v22], fp_mask=0x0 }    -> -
-    terminator Return(v23)   (exit_acc=v17)
+    v7   Neg(v1)                                          -> x0
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
+    v9   Imm(0)                                           -> x1
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Imm(0)                                           -> x1
+    v13  LifetimeEnd(0)                                   -> -
+    v14  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
+    v15  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x2
+    v16  BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x0
+    v17  Binop { op=or, lhs=v14, rhs=v16 }                -> x0
+    v18  AggParts { desc=0, parts=[v17], fp_mask=0x0 }    -> -
+    terminator Return(v18)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=narrow_compare_in_arm
 fn ent_pc=1 n_params=1 variadic=false locals=0

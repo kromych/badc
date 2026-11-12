@@ -36,8 +36,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	vpextrb	$0x0, %xmm0, %eax
                	shlq	%rax
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm1
                	vpinsrb	$0x0, %eax, %xmm1, %xmm1
                	vpextrb	$0x1, %xmm0, %eax
                	shlq	%rax
@@ -140,9 +138,6 @@ Disassembly of section .text:
                	movl	$0x1b, %eax
                	andq	$0xff, %rcx
                	imulq	%rax, %rcx
-               	xorl	%r10d, %r10d
-               	movq	%r10, 0x30(%rsp)
-               	movups	0x28(%rsp), %xmm0
                	vpinsrb	$0x0, %ecx, %xmm0, %xmm0
                	andq	$0xff, %rdx
                	imulq	%rax, %rdx
@@ -198,8 +193,6 @@ Disassembly of section .text:
                	movl	$0x63, %eax
                	vpextrb	$0x0, %xmm0, %ecx
                	xorq	%rax, %rcx
-               	xorl	%edx, %edx
-               	movq	%rdx, %xmm1
                	vpinsrb	$0x0, %ecx, %xmm1, %xmm1
                	vpextrb	$0x1, %xmm0, %ecx
                	xorq	%rax, %rcx
@@ -1085,16 +1078,7 @@ Disassembly of section .text:
                	movq	%rdi, %r12
                	movq	%rdx, %r15
                	movq	%rsi, %r14
-               	leaq	-0x70(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
                	movzbq	(%r12), %rax
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
                	vpinsrb	$0x0, %eax, %xmm0, %xmm0
                	movzbq	0x1(%r12), %rax
                	vpinsrb	$0x1, %eax, %xmm0, %xmm0
@@ -1231,6 +1215,8 @@ Disassembly of section .text:
                	movups	%xmm0, -0x40(%rbp)
                	leaq	0x40(%r12), %rax
                	movzbq	(%rax), %rcx
+               	xorl	%edx, %edx
+               	movq	%rdx, %xmm0
                	vpinsrb	$0x0, %ecx, %xmm0, %xmm0
                	movzbq	0x1(%rax), %rcx
                	vpinsrb	$0x1, %ecx, %xmm0, %xmm0
@@ -1296,7 +1282,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	%r14, %rax
                	movzbq	(%rax), %rcx
-               	movups	0xe0(%rsp), %xmm0
                	vpinsrb	$0x0, %ecx, %xmm0, %xmm0
                	movzbq	0x1(%rax), %rcx
                	vpinsrb	$0x1, %ecx, %xmm0, %xmm0
@@ -1327,11 +1312,8 @@ Disassembly of section .text:
                	movzbq	0xe(%rax), %rcx
                	vpinsrb	$0xe, %ecx, %xmm0, %xmm0
                	movzbq	0xf(%rax), %rax
-               	movapd	%xmm0, %xmm14
-               	vpinsrb	$0xf, %eax, %xmm14, %xmm14
-               	movups	%xmm14, 0xe0(%rsp)
-               	movups	0xe0(%rsp), %xmm14
-               	movups	%xmm14, -0x20(%rbp)
+               	vpinsrb	$0xf, %eax, %xmm0, %xmm0
+               	movups	%xmm0, -0x20(%rbp)
                	leaq	-0x20(%rbp), %r9
                	subq	$0x50, %rsp
                	movq	%r13, %r10
@@ -1620,8 +1602,6 @@ Disassembly of section .text:
                	jle	<addr>
                	leaq	-0x218(%rbp), %rcx
                	movzbq	-0x218(%rbp), %rax
-               	xorl	%edx, %edx
-               	movq	%rdx, %xmm0
                	vpinsrb	$0x0, %eax, %xmm0, %xmm0
                	movzbq	-0x217(%rbp), %rax
                	vpinsrb	$0x1, %eax, %xmm0, %xmm0
@@ -1655,7 +1635,6 @@ Disassembly of section .text:
                	vpinsrb	$0xf, %eax, %xmm0, %xmm0
                	leaq	0x10(%rcx), %rax
                	movzbq	(%rax), %rdx
-               	movapd	%xmm0, %xmm1
                	vpinsrb	$0x0, %edx, %xmm1, %xmm1
                	movzbq	0x1(%rax), %rdx
                	vpinsrb	$0x1, %edx, %xmm1, %xmm1
@@ -1689,7 +1668,6 @@ Disassembly of section .text:
                	vpinsrb	$0xf, %eax, %xmm1, %xmm1
                	leaq	0x20(%rcx), %rax
                	movzbq	(%rax), %rcx
-               	movapd	%xmm1, %xmm2
                	vpinsrb	$0x0, %ecx, %xmm2, %xmm2
                	movzbq	0x1(%rax), %rcx
                	vpinsrb	$0x1, %ecx, %xmm2, %xmm2
@@ -1724,7 +1702,6 @@ Disassembly of section .text:
                	leaq	-0x218(%rbp), %rcx
                	leaq	0x30(%rcx), %rax
                	movzbq	(%rax), %rdx
-               	movapd	%xmm2, %xmm3
                	vpinsrb	$0x0, %edx, %xmm3, %xmm3
                	movzbq	0x1(%rax), %rdx
                	vpinsrb	$0x1, %edx, %xmm3, %xmm3
@@ -1758,7 +1735,6 @@ Disassembly of section .text:
                	vpinsrb	$0xf, %eax, %xmm3, %xmm3
                	leaq	0x40(%rcx), %rax
                	movzbq	(%rax), %rcx
-               	movapd	%xmm3, %xmm4
                	vpinsrb	$0x0, %ecx, %xmm4, %xmm4
                	movzbq	0x1(%rax), %rcx
                	vpinsrb	$0x1, %ecx, %xmm4, %xmm4
@@ -1791,12 +1767,6 @@ Disassembly of section .text:
                	movzbq	0xf(%rax), %rax
                	vpinsrb	$0xf, %eax, %xmm4, %xmm4
                	leaq	-0x2d0(%rbp), %r9
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%r9)
-               	movups	%xmm14, 0x10(%r9)
-               	movups	%xmm14, 0x20(%r9)
-               	movups	%xmm14, 0x30(%r9)
-               	movups	%xmm14, 0x40(%r9)
                	movups	%xmm0, -0x2d0(%rbp)
                	movups	%xmm1, -0x2c0(%rbp)
                	movups	%xmm2, -0x2b0(%rbp)
@@ -1804,7 +1774,6 @@ Disassembly of section .text:
                	movups	%xmm4, -0x290(%rbp)
                	leaq	-0x280(%rbp), %rdi
                	movzbq	-0xd8(%rbp), %rax
-               	movapd	%xmm4, %xmm0
                	vpinsrb	$0x0, %eax, %xmm0, %xmm0
                	movzbq	-0xd7(%rbp), %rax
                	vpinsrb	$0x1, %eax, %xmm0, %xmm0

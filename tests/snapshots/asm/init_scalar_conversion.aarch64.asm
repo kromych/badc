@@ -42,8 +42,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sub	x7, x29, #0x20
-               	stp	xzr, xzr, [x7]
-               	stp	xzr, xzr, [x7, #0x10]
                	stur	xzr, [x29, #-0x20]
                	stur	xzr, [x29, #-0x18]
                	adrp	x16, <page>
@@ -73,8 +71,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x20
-               	stp	xzr, xzr, [x7]
-               	stp	xzr, xzr, [x7, #0x10]
                	stur	xzr, [x29, #-0x20]
                	stur	xzr, [x29, #-0x18]
                	adrp	x16, <page>

@@ -104,41 +104,36 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v89  Imm(1077936128)                                  -> x0 [f32]
     v90  Imm(1082130432)                                  -> x1 [f32]
     v91  Imm(0)                                           -> x2
-    v92  Imm(0)                                           -> x2 [f32]
+    v92  Imm(0)                                           -> x2
     v93  Imm(0)                                           -> x2
-    v94  Imm(0)                                           -> x2 [f32]
+    v94  Imm(0)                                           -> x2
     v95  Imm(0)                                           -> x2
     v96  Imm(0)                                           -> x2
     v97  Imm(0)                                           -> x2
-    v98  Imm(0)                                           -> x2
-    v99  Imm(0)                                           -> x2
-    v100 Imm(0)                                           -> x2
-    v101 Imm(0)                                           -> x2
-    v102 Imm(0)                                           -> x2
-    v103 LocalAddr(-1)                                    -> x2
-    v104 Imm(0)                                           -> x2 [f32]
-    v105 StoreLocal { off=-1, value=v89, kind=F32 }       -> -
-    v106 Imm(0)                                           -> x0 [f32]
-    v107 StoreLocal { off=-1, disp=4, value=v90, kind=F32 } -> -
-    v108 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v109 LifetimeEnd(-1)                                  -> -
-    v110 LifetimeEnd(0)                                   -> -
-    v111 BinopI { op=ne, lhs=v108, rhs_imm=4647714816524288000 } -> x0
-    terminator Bz { cond=v111, target=b9, fall=b8 }   (exit_acc=v111)
+    v98  LocalAddr(-1)                                    -> x2
+    v99  Imm(0)                                           -> x2 [f32]
+    v100 StoreLocal { off=-1, value=v89, kind=F32 }       -> -
+    v101 Imm(0)                                           -> x0 [f32]
+    v102 StoreLocal { off=-1, disp=4, value=v90, kind=F32 } -> -
+    v103 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v104 LifetimeEnd(-1)                                  -> -
+    v105 LifetimeEnd(0)                                   -> -
+    v106 BinopI { op=ne, lhs=v103, rhs_imm=4647714816524288000 } -> x0
+    terminator Bz { cond=v106, target=b9, fall=b8 }   (exit_acc=v106)
   block 8  start_pc=0
-    v112 Imm(5)                                           -> x0
+    v107 Imm(5)                                           -> x0
+    v108 LifetimeEnd(-2)                                  -> -
+    v109 LifetimeEnd(0)                                   -> -
+    v110 LifetimeEnd(0)                                   -> -
+    v111 LifetimeEnd(0)                                   -> -
+    terminator Return(v107)   (exit_acc=v107)
+  block 9  start_pc=0
+    v112 Imm(0)                                           -> x0
     v113 LifetimeEnd(-2)                                  -> -
     v114 LifetimeEnd(0)                                   -> -
     v115 LifetimeEnd(0)                                   -> -
     v116 LifetimeEnd(0)                                   -> -
     terminator Return(v112)   (exit_acc=v112)
-  block 9  start_pc=0
-    v117 Imm(0)                                           -> x0
-    v118 LifetimeEnd(-2)                                  -> -
-    v119 LifetimeEnd(0)                                   -> -
-    v120 LifetimeEnd(0)                                   -> -
-    v121 LifetimeEnd(0)                                   -> -
-    terminator Return(v117)   (exit_acc=v117)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -52,9 +52,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rcx
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rcx)
                	movl	$0x2a, -0x20(%rbp)
                	movl	$0x2a, -0x1c(%rbp)
                	movl	$0x2a, -0x18(%rbp)

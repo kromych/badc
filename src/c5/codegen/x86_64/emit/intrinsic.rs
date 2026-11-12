@@ -2966,7 +2966,7 @@ fn emit_vec_insert_gpr(
     // The base vector into the register the result forms in; an undefined
     // one leaves it as it is.
     let base = place_of(alloc, vec);
-    if !matches!(base, Place::None) {
+    if blank != Some(true) && !matches!(base, Place::None) {
         let got = match (w, bytes) {
             (_, 8) => materialize_fp(code, base, Reg(rd), frame),
             (VecWidth::V128, _) => materialize_v128(code, base, Reg(rd), frame),

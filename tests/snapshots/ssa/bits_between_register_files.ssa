@@ -23,36 +23,31 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
     v19  Imm(0)                                           -> x0
-    v20  Imm(0)                                           -> x0
+    v20  VecBinop { op=Add, lane=I8, bytes=8, lhs=v11, rhs=v14 } -> d2
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x0
-    v25  VecBinop { op=Add, lane=I8, bytes=8, lhs=v11, rhs=v14 } -> d2
+    v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
-    v27  FpCast { kind=FpBits, value=v25 }                -> x0
+    v27  VecBinop { op=Sub, lane=I8, bytes=8, lhs=v11, rhs=v14 } -> d0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x0
-    v32  VecBinop { op=Sub, lane=I8, bytes=8, lhs=v11, rhs=v14 } -> d0
-    v33  Imm(0)                                           -> x0
+    v32  LifetimeEnd(0)                                   -> -
+    v33  LifetimeEnd(0)                                   -> -
     v34  Imm(0)                                           -> x0
-    v35  FpCast { kind=FpBits, value=v32 }                -> x0
-    v36  Imm(0)                                           -> x0
-    v37  LifetimeEnd(0)                                   -> -
-    v38  LifetimeEnd(0)                                   -> -
+    v35  FpCast { kind=FpBits, value=v20 }                -> x0
+    v36  FpCast { kind=FpBits, value=v27 }                -> x0
+    v37  Imm(0)                                           -> x0
+    v38  Imm(0)                                           -> x0
     v39  Imm(0)                                           -> x0
     v40  Imm(0)                                           -> x0
-    v41  Imm(0)                                           -> x0
+    v41  Store { addr=v1, disp=0, value=v20, kind=F64 }   -> -
     v42  Imm(0)                                           -> x0
-    v43  Imm(0)                                           -> x0
-    v44  Imm(0)                                           -> x0
-    v45  Imm(0)                                           -> x0
-    v46  Store { addr=v1, disp=0, value=v25, kind=F64 }   -> -
-    v47  Imm(0)                                           -> x0
-    v48  Store { addr=v1, disp=8, value=v32, kind=F64 }   -> -
-    v49  LifetimeEnd(0)                                   -> -
+    v43  Store { addr=v1, disp=8, value=v27, kind=F64 }   -> -
+    v44  LifetimeEnd(0)                                   -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=flip

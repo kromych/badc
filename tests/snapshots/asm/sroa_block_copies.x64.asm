@@ -116,15 +116,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x20(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
                	movq	%rdi, -0x20(%rbp)
                	movq	%rsi, -0x18(%rbp)
                	movq	%rsi, -0x10(%rbp)
                	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x20(%rbp), %rcx
-               	addq	$0x10, %rcx
+               	leaq	0x10(%rax), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movq	$0x1, -0x10(%rbp)
@@ -140,8 +136,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	$0x0, -0x10(%rbp)
-               	movq	$0x0, -0x8(%rbp)
                	movq	%rsi, -0x10(%rbp)
                	leaq	0x1(%rsi), %rax
                	movq	%rax, -0x8(%rbp)
@@ -167,8 +161,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	leaq	-0x10(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movq	%rsi, -0x10(%rbp)
                	shlq	%rsi
                	movq	%rsi, -0x8(%rbp)
@@ -197,8 +189,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdi, %rax
                	leaq	-0x10(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movq	%rsi, -0x10(%rbp)
                	movq	$0x4, -0x8(%rbp)
                	movups	(%rdi), %xmm14
@@ -335,8 +325,6 @@ Disassembly of section .text:
                	retq
 
 <array_member_copy>:
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movq	%rsi, (%rdi)
                	leaq	0x5(%rsi), %rax
                	movq	%rax, 0x8(%rdi)
@@ -409,8 +397,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
                	leaq	-0x278(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	movq	%rbx, -0x278(%rbp)
                	leaq	0x1(%rbx), %rax
                	movq	%rax, -0x270(%rbp)

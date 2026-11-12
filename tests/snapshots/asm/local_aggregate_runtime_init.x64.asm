@@ -93,10 +93,8 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x28(%rbp), %rdi
-               	movq	$0x0, (%rdi)
-               	movl	$0x0, 0x8(%rdi)
                	movl	<rip>, %eax # <addr>
+               	leaq	-0x28(%rbp), %rdi
                	movl	%eax, -0x28(%rbp)
                	movl	<rip>, %eax # <addr>
                	movl	%eax, -0x24(%rbp)

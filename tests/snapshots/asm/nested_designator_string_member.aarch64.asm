@@ -59,9 +59,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x10
-               	stp	xzr, xzr, [x2]
                	mov	x1, #0x77               // =119
+               	sub	x2, x29, #0x10
                	sturb	w1, [x29, #-0xc]
                	mov	x1, #0x78               // =120
                	sturb	w1, [x29, #-0xb]

@@ -154,6 +154,50 @@ pub(crate) fn pair_low(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<
     }
 }
 
+/// The bottom of a run of lane inserts that `inst` tops and that writes every
+/// byte of its vector, each insert below `inst` read by the next alone: the
+/// vector under that bottom insert is overwritten everywhere.
+pub(crate) fn covered_bottom(func: &FunctionSsa, uses: &[u32], inst: &Inst) -> Option<ValueId> {
+    let &Inst::VecInsert {
+        vec,
+        off,
+        kind,
+        bytes,
+        ..
+    } = inst
+    else {
+        return None;
+    };
+    let full = match bytes {
+        64 => u64::MAX,
+        n if n < 64 => (1u64 << n) - 1,
+        _ => return None,
+    };
+    let lanes = |off: u8, kind| lane_store_bytes(kind).map(|n| ((1u64 << n) - 1) << off);
+    let mut covered = lanes(off, kind)?;
+    let mut below = vec;
+    loop {
+        let &Inst::VecInsert {
+            vec,
+            off,
+            kind,
+            bytes: b,
+            ..
+        } = func.insts.get(below as usize)?
+        else {
+            return None;
+        };
+        if b != bytes || uses.get(below as usize) != Some(&1) {
+            return None;
+        }
+        covered |= lanes(off, kind)?;
+        if covered == full {
+            return Some(below);
+        }
+        below = vec;
+    }
+}
+
 /// Rewrite the eligible slots of `func`; returns them.
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {
@@ -750,6 +794,84 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
     vector
 }
 
+/// The lane stores that each begin a run of lane stores to one slot, in one
+/// block with no other access to the slot between, writing every byte of
+/// it: nothing reads the vector under the first.
+fn blank_runs(
+    func: &FunctionSsa,
+    edits: &[Edit],
+    w: Whole,
+    holding: impl Fn(i64) -> Option<i64>,
+) -> BTreeSet<ValueId> {
+    let bytes = w.cells * 8;
+    let full = if bytes >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << bytes) - 1
+    };
+    let mut touched: BTreeMap<ValueId, Vec<i64>> = BTreeMap::new();
+    let mut stores: BTreeMap<ValueId, (i64, u64)> = BTreeMap::new();
+    for e in edits {
+        let (at, offs) = match e {
+            Edit::LaneStore {
+                at,
+                base,
+                byte,
+                kind,
+            } => {
+                if let Some(n) = lane_store_bytes(*kind) {
+                    let lanes = ((1u64 << n) - 1) << byte;
+                    stores.insert(*at, (*base, lanes));
+                    continue;
+                }
+                (*at, alloc::vec![*base])
+            }
+            Edit::LaneLoad { at, base, .. } => (*at, alloc::vec![*base]),
+            Edit::Load { at, off } | Edit::Store { at, off } | Edit::Zero { at, off } => {
+                (*at, alloc::vec![*off])
+            }
+            Edit::Copy { at, src, dst, .. } => (
+                *at,
+                [src, dst]
+                    .into_iter()
+                    .filter_map(|s| match s {
+                        Side::Slot(off) => Some(*off),
+                        Side::Addr(_) => None,
+                    })
+                    .collect(),
+            ),
+            Edit::Asm { at, inputs } => (*at, inputs.iter().map(|&(_, off)| off).collect()),
+            Edit::Addr { .. } => continue,
+        };
+        touched.entry(at).or_default().extend(offs);
+    }
+    let mut blank = BTreeSet::new();
+    for block in &func.blocks {
+        let mut runs: BTreeMap<i64, (ValueId, u64)> = BTreeMap::new();
+        for v in block.inst_range.clone() {
+            if let Some(&(base, lanes)) = stores.get(&v) {
+                let run = runs.entry(base).or_insert((v, 0));
+                run.1 |= lanes;
+                if run.1 == full {
+                    blank.insert(run.0);
+                    runs.remove(&base);
+                }
+                continue;
+            }
+            if let Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } =
+                func.insts[v as usize]
+                && let Some(base) = holding(off)
+            {
+                runs.remove(&base);
+            }
+            for off in touched.get(&v).into_iter().flatten() {
+                runs.remove(off);
+            }
+        }
+    }
+    blank
+}
+
 fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
     let addr: BTreeMap<ValueId, i64> = func
         .insts
@@ -904,6 +1026,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
             _ => {}
         }
     }
+    let blank = blank_runs(func, &edits, w, slot_holding);
     let mut ins: Vec<Insertion> = Vec::new();
     for e in &edits {
         let mut put = |at: ValueId, inst: Inst| {
@@ -917,7 +1040,14 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
         match e {
             Edit::LaneLoad { at, base, .. } => put(*at, slot_load(*base, w)),
             Edit::LaneStore { at, base, .. } => {
-                put(*at, slot_load(*base, w));
+                put(
+                    *at,
+                    if blank.contains(at) {
+                        Inst::Undef
+                    } else {
+                        slot_load(*base, w)
+                    },
+                );
                 ins.push(Insertion {
                     at: At::After(*at),
                     inst: slot_store(*base, *at, w),

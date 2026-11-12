@@ -184,9 +184,6 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x30(%rbp), %r9
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%r9)
-               	movq	$0x0, 0x10(%r9)
                	movq	$0xa, -0x30(%rbp)
                	movq	$0xb, -0x28(%rbp)
                	movq	$0xc, -0x20(%rbp)

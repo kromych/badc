@@ -30,16 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	movl	$0x0, <rip> # <addr>
-               	leaq	-0x48(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movl	$0x0, 0x40(%rax)
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
                	movl	$0xb, -0x48(%rbp)
                	movl	-0x48(%rbp), %eax
                	movl	%eax, -0x44(%rbp)
@@ -55,8 +46,8 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	%eax, -0x1c(%rbp)
                	movl	%eax, -0x18(%rbp)
-               	leaq	-0x48(%rbp), %rcx
                	movl	%eax, -0x14(%rbp)
+               	leaq	-0x48(%rbp), %rcx
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, -0xc(%rbp)
                	movl	%eax, -0x8(%rbp)
@@ -90,9 +81,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x48(%rbp)
                	movq	-0x48(%rbp), %rcx
-               	leaq	-0x68(%rbp), %rdx
-               	movq	$0x0, (%rdx)
-               	movl	$0x0, 0x8(%rdx)
                	movl	<rip>, %edx # <addr>
                	incq	%rdx
                	movl	%edx, <rip> # <addr>
@@ -108,16 +96,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x0, <rip> # <addr>
-               	leaq	-0x48(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movl	$0x0, 0x40(%rax)
-               	movl	<rip>, %eax # <addr>
-               	incq	%rax
-               	movl	%eax, <rip> # <addr>
+               	movl	$0x1, <rip> # <addr>
                	movl	$0x13, -0x48(%rbp)
                	movl	-0x48(%rbp), %eax
                	movl	%eax, -0x44(%rbp)
@@ -133,8 +112,8 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	%eax, -0x1c(%rbp)
                	movl	%eax, -0x18(%rbp)
-               	leaq	-0x48(%rbp), %rcx
                	movl	%eax, -0x14(%rbp)
+               	leaq	-0x48(%rbp), %rcx
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, -0xc(%rbp)
                	movl	%eax, -0x8(%rbp)

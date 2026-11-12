@@ -11530,7 +11530,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13211 Imm(0)                                           -> x2
     v13212 VecExtract { vec=v13206, off=0, kind=U8, bytes=16 } -> x2
     v13213 Binop { op=mul, lhs=v13212, rhs=v13209 }         -> x2
-    v13214 Imm(0)                                           -> x6
+    v13214 Undef                                            -> x6
     v13215 VecInsert { vec=v13214, value=v13213, off=0, kind=I8, bytes=16 } -> d1
     v13216 Imm(0)                                           -> x2
     v13217 Imm(1)                                           -> x2
@@ -11736,7 +11736,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13401 BinopI { op=shr, lhs=v13400, rhs_imm=32 }        -> x0
     v13402 BinopI { op=shru, lhs=v13401, rhs_imm=63 }       -> x1
     v13403 Binop { op=add, lhs=v13401, rhs=v13402 }         -> x0
-    v13404 Imm(0)                                           -> x1
+    v13404 Undef                                            -> x1
     v13405 VecInsert { vec=v13404, value=v13403, off=0, kind=I32, bytes=16 } -> d0
     v13406 Imm(0)                                           -> x0
     v13407 BinopI { op=add, lhs=v13396, rhs_imm=4 }         -> x0
@@ -11863,7 +11863,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13511 Imm(0)                                           -> x0
     v13512 VecExtract { vec=v13506, off=0, kind=U8, bytes=16 } -> x0
     v13513 BinopI { op=shl, lhs=v13512, rhs_imm=1 }         -> x0
-    v13514 Imm(0)                                           -> x1
+    v13514 Undef                                            -> x1
     v13515 VecInsert { vec=v13514, value=v13513, off=0, kind=I8, bytes=16 } -> d1
     v13516 Imm(0)                                           -> x0
     v13517 Imm(1)                                           -> x0
@@ -12087,7 +12087,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13735 Imm(0)                                           -> [spill 9]
     v13736 Extend { value=v13642, kind=I8 }                 -> x1
     v13737 Binop { op=and, lhs=v13736, rhs=v13734 }         -> x1
-    v13738 Imm(0)                                           -> [spill 9]
+    v13738 Undef                                            -> [spill 9]
     v13739 VecInsert { vec=v13738, value=v13737, off=0, kind=I8, bytes=16 } -> d0
     v13740 Imm(0)                                           -> x1
     v13741 Extend { value=v13647, kind=I8 }                 -> x1

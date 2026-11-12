@@ -50,9 +50,6 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x70             // =-112
                	str	w17, [x16, #0x1c]
-               	sub	x0, x29, #0x50
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	ldur	x0, [x29, #-0x10]
                	stur	x0, [x29, #-0x50]
                	ldur	x0, [x29, #-0x8]
@@ -162,13 +159,11 @@ Disassembly of section .text:
                	ldr	x4, [x0, #0x10]
                	ldr	x5, [x0, #0x18]
                	sub	x0, x29, #0x48
-               	sub	x0, x29, #0x28
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	ldr	x6, [x1]
+               	ldr	x0, [x1]
                	mov	x17, #0xa               // =10
-               	mul	x6, x6, x17
-               	add	x2, x6, x2
+               	mul	x0, x0, x17
+               	add	x2, x0, x2
+               	sub	x0, x29, #0x28
                	stur	x2, [x29, #-0x28]
                	ldr	x2, [x1, #0x8]
                	mov	x17, #0xa               // =10

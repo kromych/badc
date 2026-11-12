@@ -10,17 +10,15 @@ Disassembly of section .text:
                	movq	%gs:0x28, %r11
                	movq	%r11, -0x8(%rbp)
                	xorl	%r11d, %r11d
-               	movq	%rsi, %rax
-               	leaq	-0x20(%rbp), %rsi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rsi)
+               	leaq	-0x20(%rbp), %rax
                	movl	%edi, -0x20(%rbp)
                	movl	$0x10, -0x1c(%rbp)
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rsi, -0x18(%rbp)
                	movq	$0x0, %rdi
 		R_X86_64_32S	idt_table
                	movl	$0x1, %edx
                	xorl	%ecx, %ecx
+               	movq	%rax, %rsi
                	callq	<addr>
 		R_X86_64_PLT32	idt_setup_from_table-0x4
                	movq	%gs:0x28, %r11

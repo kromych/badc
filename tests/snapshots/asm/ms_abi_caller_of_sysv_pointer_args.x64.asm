@@ -59,37 +59,29 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x38, %rsp
                	pushq	%rbx
-               	leaq	-0x30(%rbp), %rdi
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rdi)
                	leaq	0x1(%rcx), %rax
+               	leaq	-0x30(%rbp), %rdi
                	movq	%rax, -0x30(%rbp)
                	movq	$0x2, -0x28(%rbp)
                	movq	0x18(%rbp), %rdx
                	leaq	(%r8,%r8,8), %rax
                	leaq	0x2(%rax), %rcx
-               	leaq	-0x20(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	leaq	0x1(%rsi), %rax
+               	leaq	-0x20(%rbp), %r8
                	movq	%rax, -0x20(%rbp)
                	movq	$0x5, -0x18(%rbp)
-               	leaq	-0x20(%rbp), %r8
-               	leaq	-0x10(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
                	movq	0x10(%rbp), %rax
                	incq	%rax
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %r9
                	movq	$0x6, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
                	shlq	%rsi
-               	leaq	0x5(%rsi), %rax
+               	addq	$0x5, %rsi
                	movq	0x18(%rbp), %rbx
                	subq	$0x20, %rsp
-               	movq	%rax, 0x10(%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	movq	$0x134ac, 0x18(%rsp)    # imm = 0x134AC
-               	movq	%r9, %r10
+               	movq	%rax, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11

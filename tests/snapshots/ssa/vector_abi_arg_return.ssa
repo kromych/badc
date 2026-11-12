@@ -262,7 +262,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v11  BinopI { op=add, lhs=v10, rhs_imm=0 }            -> x1
     v12  Extend { value=v10, kind=I32, nsw }              -> x1
     v13  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
-    v14  Imm(0)                                           -> x1
+    v14  Undef                                            -> x1
     v15  VecInsert { vec=v14, value=v10, off=0, kind=I8, bytes=16 } -> d0
     v16  Imm(0)                                           -> x1
     v17  Imm(0)                                           -> x1

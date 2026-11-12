@@ -333,15 +333,15 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
                	movq	%rdi, -0x60(%rbp)
-               	leaq	-0x18(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rcx
                	vmovd	%xmm0, %r11d
                	vmovd	%r11d, %xmm0
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm15
+               	xorl	%eax, %eax
+               	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
                	movsd	%xmm0, -0x18(%rbp)
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vmovd	%r11d, %xmm0
                	vmovd	%xmm1, %r11d
@@ -349,14 +349,14 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x10(%rbp)
                	vmovd	%xmm2, %r11d
                	vmovd	%r11d, %xmm0
-               	movq	%rcx, %xmm15
+               	movq	%rax, %xmm15
                	vmovd	%xmm15, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x60(%rbp), %rax
-               	movups	(%rdx), %xmm14
+               	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	0x10(%rdx), %r10
+               	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
                	leave
                	retq

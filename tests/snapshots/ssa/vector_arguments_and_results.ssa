@@ -84,22 +84,20 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-10)                                   -> x1
-    v2   Mzero { dst=v1, size=32, align=8 }               -> -
-    v3   LocalAddr(-9)                                    -> x0
-    v4   BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x2
-    v5   LocalAddr(-10)                                   -> x6
-    v6   Mcpy { dst=v1, src=v4, size=16, align=16 }       -> -
-    v7   LocalAddr(-9)                                    -> x2
-    v8   LocalAddr(-10)                                   -> x2
-    v9   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
-    v10  Mcpy { dst=v9, src=v3, size=16, align=16 }       -> -
-    v11  LoadLocal { off=2, kind=I64 }                    -> x0
-    v12  LocalAddr(-10)                                   -> x2
-    v13  Mcpy { dst=v11, src=v1, size=32, align=16 }      -> -
-    v14  LifetimeEnd(-10)                                 -> -
-    v15  LifetimeEnd(-9)                                  -> -
-    terminator Return(v11)   (exit_acc=v11)
+    v1   LocalAddr(-9)                                    -> x0
+    v2   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
+    v3   LocalAddr(-10)                                   -> x1
+    v4   Mcpy { dst=v3, src=v2, size=16, align=16 }       -> -
+    v5   LocalAddr(-9)                                    -> x2
+    v6   LocalAddr(-10)                                   -> x2
+    v7   BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x2
+    v8   Mcpy { dst=v7, src=v1, size=16, align=16 }       -> -
+    v9   LoadLocal { off=2, kind=I64 }                    -> x0
+    v10  LocalAddr(-10)                                   -> x2
+    v11  Mcpy { dst=v9, src=v3, size=32, align=16 }       -> -
+    v12  LifetimeEnd(-10)                                 -> -
+    v13  LifetimeEnd(-9)                                  -> -
+    terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=spin
 fn ent_pc=4 n_params=3 variadic=false locals=0

@@ -35,27 +35,12 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm2
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
                	movups	%xmm0, -0x60(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movups	%xmm2, -0x40(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
                	movups	%xmm0, -0x60(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movups	%xmm2, -0x40(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
                	movups	%xmm0, -0x60(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movups	%xmm2, -0x40(%rbp)
@@ -65,10 +50,6 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movups	%xmm14, 0x20(%rax)
                	movups	%xmm2, -0x60(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
                	movb	$0x7, -0x60(%rbp)
                	movb	$0x7, -0x5f(%rbp)
                	movb	$0x7, -0x5e(%rbp)
@@ -95,10 +76,6 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
                	movb	$0x3, -0x60(%rbp)
                	movb	$0x3, -0x5f(%rbp)
                	movb	$0x3, -0x5e(%rbp)
@@ -127,10 +104,6 @@ Disassembly of section .text:
                	movups	%xmm0, -0x40(%rbp)
                	movups	%xmm1, -0x60(%rbp)
                	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
                	movups	%xmm2, -0x60(%rbp)
                	leaq	0x10(%rax), %rcx
                	movups	(%rax), %xmm14
@@ -138,24 +111,10 @@ Disassembly of section .text:
                	leaq	0x20(%rax), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
                	movups	%xmm0, -0x60(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movups	%xmm2, -0x40(%rbp)
                	movups	%xmm0, -0x30(%rbp)
-               	leaq	-0x60(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
                	movups	%xmm0, -0x60(%rbp)
                	movups	%xmm1, -0x50(%rbp)
                	movups	%xmm2, -0x40(%rbp)

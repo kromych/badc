@@ -207,8 +207,6 @@ Disassembly of section .text:
 
 <ramp>:
                	and	x0, x0, #0xff
-               	mov	x1, #0x0                // =0
-               	fmov	d0, x1
                	mov	v0.b[0], w0
                	add	x1, x0, #0x1
                	and	x1, x1, #0xff

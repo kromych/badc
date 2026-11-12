@@ -241,9 +241,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0xc0
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	uzp1	v1.4s, v0.4s, v2.4s
                	stur	q1, [x29, #-0xc0]
                	uzp2	v0.4s, v0.4s, v2.4s

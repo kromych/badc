@@ -592,37 +592,37 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v508 Imm(0)                                           -> x0
     v509 Imm(0)                                           -> x0
     v510 Imm(0)                                           -> x0
-    v511 Imm(0)                                           -> x0
-    v512 Imm(0)                                           -> x0
-    v513 Imm(6)                                           -> x0
-    v514 Imm(6)                                           -> x0
+    v511 Imm(6)                                           -> x0
+    v512 Imm(6)                                           -> x0
+    v513 Imm(0)                                           -> x0
+    v514 Imm(0)                                           -> x0
     v515 Imm(0)                                           -> x0
     v516 Imm(0)                                           -> x0
-    v517 Imm(0)                                           -> x0
-    v518 Imm(0)                                           -> x0
-    v519 Imm(7)                                           -> x0
-    v520 Imm(7)                                           -> x0
+    v517 Imm(7)                                           -> x0
+    v518 Imm(7)                                           -> x0
+    v519 Imm(0)                                           -> x0
+    v520 Imm(0)                                           -> x0
     v521 Imm(0)                                           -> x0
     v522 Imm(0)                                           -> x0
     v523 Imm(0)                                           -> x0
-    v524 Imm(0)                                           -> x0
+    v524 Imm(6)                                           -> x0
     v525 Imm(0)                                           -> x0
-    v526 Imm(6)                                           -> x0
+    v526 Imm(0)                                           -> x0
     v527 Imm(0)                                           -> x0
     v528 Imm(0)                                           -> x0
-    v529 Imm(0)                                           -> x0
+    v529 Imm(7)                                           -> x0
     v530 Imm(0)                                           -> x0
-    v531 Imm(7)                                           -> x0
+    v531 Imm(0)                                           -> x0
     v532 Imm(0)                                           -> x0
     v533 Imm(0)                                           -> x0
     v534 Imm(0)                                           -> x0
     v535 Imm(0)                                           -> x0
-    v536 Imm(0)                                           -> x0
+    v536 Imm(1)                                           -> x0
     v537 Imm(0)                                           -> x0
-    v538 Imm(1)                                           -> x0
-    v539 Imm(0)                                           -> x0
+    v538 Imm(0)                                           -> x0
+    v539 Imm(2)                                           -> x0
     v540 Imm(0)                                           -> x0
-    v541 Imm(2)                                           -> x0
+    v541 Imm(0)                                           -> x0
     v542 Imm(0)                                           -> x0
     v543 Imm(0)                                           -> x0
     v544 Imm(0)                                           -> x0
@@ -631,23 +631,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v547 Imm(0)                                           -> x0
     v548 Imm(0)                                           -> x0
     v549 Imm(0)                                           -> x0
-    v550 Imm(0)                                           -> x0
+    v550 Imm(2)                                           -> x0
     v551 Imm(0)                                           -> x0
-    v552 Imm(2)                                           -> x0
+    v552 Imm(0)                                           -> x0
     v553 Imm(0)                                           -> x0
     v554 Imm(0)                                           -> x0
-    v555 Imm(0)                                           -> x0
+    v555 Imm(8)                                           -> x0
     v556 Imm(0)                                           -> x0
-    v557 Imm(8)                                           -> x0
+    v557 Imm(5)                                           -> x0
     v558 Imm(0)                                           -> x0
-    v559 Imm(5)                                           -> x0
+    v559 Imm(0)                                           -> x0
     v560 Imm(0)                                           -> x0
     v561 Imm(0)                                           -> x0
     v562 Imm(0)                                           -> x0
     v563 Imm(0)                                           -> x0
-    v564 Imm(0)                                           -> x0
+    v564 Imm(4)                                           -> x0
     v565 Imm(0)                                           -> x0
-    v566 Imm(4)                                           -> x0
+    v566 Imm(0)                                           -> x0
     v567 Imm(0)                                           -> x0
     v568 Imm(0)                                           -> x0
     v569 Imm(0)                                           -> x0
@@ -662,17 +662,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v578 Imm(0)                                           -> x0
     v579 Imm(0)                                           -> x0
     v580 Imm(0)                                           -> x0
-    v581 Imm(0)                                           -> x0
+    v581 Imm(8)                                           -> x0
     v582 Imm(0)                                           -> x0
-    v583 Imm(8)                                           -> x0
-    v584 Imm(0)                                           -> x0
+    v583 Imm(0)                                           -> x0
+    v584 Imm(5)                                           -> x0
     v585 Imm(0)                                           -> x0
-    v586 Imm(5)                                           -> x0
+    v586 Imm(0)                                           -> x0
     v587 Imm(0)                                           -> x0
     v588 Imm(0)                                           -> x0
     v589 Imm(0)                                           -> x0
-    v590 Imm(0)                                           -> x0
-    v591 Imm(0)                                           -> x0
+    v590 LifetimeEnd(0)                                   -> -
+    v591 LifetimeEnd(0)                                   -> -
     v592 LifetimeEnd(0)                                   -> -
     v593 LifetimeEnd(0)                                   -> -
     v594 LifetimeEnd(0)                                   -> -
@@ -682,9 +682,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v598 LifetimeEnd(0)                                   -> -
     v599 LifetimeEnd(0)                                   -> -
     v600 LifetimeEnd(0)                                   -> -
-    v601 LifetimeEnd(0)                                   -> -
-    v602 LifetimeEnd(0)                                   -> -
-    terminator Return(v591)   (exit_acc=v591)
+    terminator Return(v589)   (exit_acc=v589)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -42,25 +42,21 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x5, x6
                	mov	x2, x7
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
                	add	x3, x3, #0x1
+               	sub	x0, x29, #0x30
                	stur	x3, [x29, #-0x30]
                	mov	x3, #0x2                // =2
                	stur	x3, [x29, #-0x28]
                	add	x3, x4, x4, lsl #3
                	add	x3, x3, #0x2
+               	add	x5, x1, #0x1
                	sub	x4, x29, #0x20
-               	stp	xzr, xzr, [x4]
-               	add	x6, x1, #0x1
-               	stur	x6, [x29, #-0x20]
-               	mov	x6, #0x5                // =5
-               	stur	x6, [x29, #-0x18]
+               	stur	x5, [x29, #-0x20]
+               	mov	x5, #0x5                // =5
+               	stur	x5, [x29, #-0x18]
+               	add	x5, x6, #0x1
                	sub	x6, x29, #0x10
-               	stp	xzr, xzr, [x6]
-               	add	x5, x5, #0x1
                	stur	x5, [x29, #-0x10]
                	mov	x5, #0x6                // =6
                	stur	x5, [x29, #-0x8]

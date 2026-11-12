@@ -80,13 +80,11 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	s0, [x0, #0x30]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
                	stur	s0, [x29, #-0x18]
-               	ldur	w1, [x29, #-0x18]
+               	ldur	w0, [x29, #-0x18]
                	mov	x17, #0x7               // =7
                	movk	x17, #0x7fc0, lsl #16
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
@@ -94,17 +92,17 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	s0, [x16, #0xc]
-               	stur	w0, [x29, #-0x18]
                	stur	s0, [x29, #-0x18]
-               	ldur	w1, [x29, #-0x18]
+               	ldur	w0, [x29, #-0x18]
                	mov	x17, #0x1               // =1
                	movk	x17, #0x7fc0, lsl #16
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
                	mov	x1, #-0x12c             // =-300
                	stur	w1, [x29, #-0x10]
                	b	<addr>

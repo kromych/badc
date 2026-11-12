@@ -20,9 +20,6 @@ Disassembly of section .text:
                	stp	x20, x21, [sp, #0x40]
                	stp	x22, x23, [sp, #0x50]
                	and	x0, x0, #0xff
-               	sub	x1, x29, #0x40
-               	strh	wzr, [x1]
-               	strb	wzr, [x1, #0x2]
                	sturb	w0, [x29, #-0x40]
                	sturb	w0, [x29, #-0x3f]
                	sturb	w0, [x29, #-0x3e]

@@ -81,19 +81,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0x10]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	cmp	x0, x1
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldrsw	x1, [x0]
                	sub	x0, x29, #0x28
-               	str	xzr, [x0]
-               	str	wzr, [x0, #0x8]
-               	ldrsw	x1, [x1]
                	stur	w1, [x29, #-0x28]
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x10]

@@ -63,9 +63,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	and	x1, x0, #0xff
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	sturb	w1, [x29, #-0x30]
                	sturb	w1, [x29, #-0x2f]
                	sturb	w1, [x29, #-0x2e]
@@ -85,8 +82,8 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x20]
                	sturb	w1, [x29, #-0x1f]
                	sturb	w1, [x29, #-0x1e]
-               	sub	x0, x29, #0x30
                	sturb	w1, [x29, #-0x1d]
+               	sub	x0, x29, #0x30
                	sturb	w1, [x29, #-0x1c]
                	sturb	w1, [x29, #-0x1b]
                	sturb	w1, [x29, #-0x1a]
@@ -116,8 +113,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	sub	x1, x29, #0x30
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
                	stur	w0, [x29, #-0x30]
                	stur	w0, [x29, #-0x2c]
                	stur	w0, [x29, #-0x28]
@@ -143,8 +138,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	stur	s0, [x29, #-0x30]
                	stur	s0, [x29, #-0x2c]
                	stur	s0, [x29, #-0x28]
@@ -170,8 +163,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	stur	x8, [x29, #-0x8]
                	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	stur	d0, [x29, #-0x30]
                	stur	d0, [x29, #-0x28]
                	stur	d0, [x29, #-0x20]
@@ -193,10 +184,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	stur	x8, [x29, #-0x8]
                	sub	x1, x29, #0x50
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
-               	stp	xzr, xzr, [x1, #0x30]
                	stur	w0, [x29, #-0x50]
                	stur	w0, [x29, #-0x4c]
                	stur	w0, [x29, #-0x48]
@@ -234,10 +221,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	stur	x8, [x29, #-0x8]
                	sub	x1, x29, #0x50
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
-               	stp	xzr, xzr, [x1, #0x30]
                	stur	x0, [x29, #-0x50]
                	stur	x0, [x29, #-0x48]
                	stur	x0, [x29, #-0x40]
@@ -309,8 +292,6 @@ Disassembly of section .text:
                	mov	x1, #0x2345             // =9029
                	movk	x1, #0x1, lsl #16
                	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	stur	w1, [x29, #-0x30]
                	stur	w1, [x29, #-0x2c]
                	stur	w1, [x29, #-0x28]
@@ -337,8 +318,6 @@ Disassembly of section .text:
                	stur	x8, [x29, #-0x8]
                	mov	x1, #-0x1               // =-1
                	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
                	stur	w1, [x29, #-0x30]
                	stur	w1, [x29, #-0x2c]
                	stur	w1, [x29, #-0x28]

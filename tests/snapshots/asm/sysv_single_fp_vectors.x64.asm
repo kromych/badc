@@ -91,7 +91,6 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movq	%rdi, -0x30(%rbp)
                	leaq	-0x8(%rbp), %rcx
-               	movl	$0x0, (%rcx)
                	movss	%xmm0, -0x8(%rbp)
                	movq	-0x30(%rbp), %rax
                	movl	(%rcx), %r10d

@@ -6160,8 +6160,6 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	vpextrb	$0x0, %xmm0, %edx
                	imulq	%rax, %rdx
-               	xorl	%esi, %esi
-               	movq	%rsi, %xmm1
                	vpinsrb	$0x0, %edx, %xmm1, %xmm1
                	vpextrb	$0x1, %xmm0, %edx
                	imulq	%rax, %rdx
@@ -6301,8 +6299,6 @@ Disassembly of section .text:
                	movups	0x60(%rsp), %xmm0
                	vpextrb	$0x0, %xmm0, %eax
                	shlq	%rax
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm1
                	vpinsrb	$0x0, %eax, %xmm1, %xmm1
                	vpextrb	$0x1, %xmm0, %eax
                	shlq	%rax
@@ -6425,9 +6421,6 @@ Disassembly of section .text:
                	movl	$0x1b, %eax
                	movsbq	%cl, %rcx
                	andq	%rax, %rcx
-               	xorl	%r10d, %r10d
-               	movq	%r10, -0x90(%rbp)
-               	movups	-0x98(%rbp), %xmm0
                	vpinsrb	$0x0, %ecx, %xmm0, %xmm0
                	movsbq	%dl, %rcx
                	andq	%rax, %rcx

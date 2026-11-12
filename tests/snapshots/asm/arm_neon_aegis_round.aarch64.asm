@@ -206,8 +206,6 @@ Disassembly of section .text:
                	mov	x4, #0x1b               // =27
                	smov	x0, v0.b[0]
                	and	x0, x0, x4
-               	mov	x2, #0x0                // =0
-               	fmov	d3, x2
                	mov	v3.b[0], w0
                	smov	x0, v0.b[1]
                	and	x0, x0, x4

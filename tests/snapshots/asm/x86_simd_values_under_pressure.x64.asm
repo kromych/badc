@@ -123,10 +123,10 @@ Disassembly of section .text:
                	movups	0x150(%rsp), %xmm15
                	vpaddd	%xmm15, %xmm14, %xmm14
                	movups	%xmm14, 0x150(%rsp)
-               	movl	$0x3, %edx
-               	xorl	%ecx, %ecx
-               	vmovd	%edx, %xmm14
+               	movl	$0x3, %ecx
+               	vmovd	%ecx, %xmm14
                	movups	%xmm14, 0x140(%rsp)
+               	xorl	%ecx, %ecx
                	movups	0x140(%rsp), %xmm14
                	vpinsrd	$0x1, %ecx, %xmm14, %xmm14
                	movups	%xmm14, 0x140(%rsp)
@@ -524,28 +524,6 @@ Disassembly of section .text:
                	incq	%r8
                	cmpl	$0x4, %r8d
                	jl	<addr>
-               	leaq	-0x440(%rbp), %rax
-               	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	%xmm14, 0x10(%rax)
-               	movups	%xmm14, 0x20(%rax)
-               	movups	%xmm14, 0x30(%rax)
-               	movups	%xmm14, 0x40(%rax)
-               	movups	%xmm14, 0x50(%rax)
-               	movups	%xmm14, 0x60(%rax)
-               	movups	%xmm14, 0x70(%rax)
-               	movups	%xmm14, 0x80(%rax)
-               	movups	%xmm14, 0x90(%rax)
-               	movups	%xmm14, 0xa0(%rax)
-               	movups	%xmm14, 0xb0(%rax)
-               	movups	%xmm14, 0xc0(%rax)
-               	movups	%xmm14, 0xd0(%rax)
-               	movups	%xmm14, 0xe0(%rax)
-               	movups	%xmm14, 0xf0(%rax)
-               	movups	%xmm14, 0x100(%rax)
-               	movups	%xmm14, 0x110(%rax)
-               	movups	%xmm14, 0x120(%rax)
-               	movups	%xmm14, 0x130(%rax)
                	movups	0x170(%rsp), %xmm14
                	movups	%xmm14, -0x440(%rbp)
                	movups	0x180(%rsp), %xmm14
@@ -568,8 +546,8 @@ Disassembly of section .text:
                	movups	%xmm7, -0x380(%rbp)
                	movups	%xmm6, -0x370(%rbp)
                	movups	%xmm5, -0x360(%rbp)
-               	leaq	-0x440(%rbp), %r9
                	movups	%xmm1, -0x350(%rbp)
+               	leaq	-0x440(%rbp), %r9
                	movups	%xmm4, -0x340(%rbp)
                	movups	%xmm3, -0x330(%rbp)
                	movups	%xmm2, -0x320(%rbp)

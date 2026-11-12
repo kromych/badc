@@ -78,8 +78,6 @@ Disassembly of section .text:
 <ramp>:
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %xmm0
                	vpinsrb	$0x0, %eax, %xmm0, %xmm0
                	leaq	0x1(%rax), %rcx
                	andq	$0xff, %rcx

@@ -80,13 +80,6 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x1]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.16b, v0.16b, v1.16b
                	stur	q2, [x29, #-0x80]
                	zip2	v2.16b, v0.16b, v1.16b
@@ -252,13 +245,6 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x1]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.16b, v0.16b, v1.16b
                	stur	q2, [x29, #-0x80]
                	zip2	v2.16b, v0.16b, v1.16b
@@ -379,10 +365,6 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x32]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	zip1	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x30]
                	zip2	v2.4h, v0.4h, v1.4h
@@ -519,13 +501,6 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x2]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.8h, v0.8h, v1.8h
                	stur	q2, [x29, #-0x80]
                	zip2	v2.8h, v0.8h, v1.8h
@@ -646,10 +621,6 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x32]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	zip1	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x30]
                	zip2	v2.4h, v0.4h, v1.4h
@@ -786,13 +757,6 @@ Disassembly of section .text:
                	sturh	w0, [x29, #-0x2]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.8h, v0.8h, v1.8h
                	stur	q2, [x29, #-0x80]
                	zip2	v2.8h, v0.8h, v1.8h
@@ -905,10 +869,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x34]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	zip1	v2.2s, v0.2s, v1.2s
                	stur	d2, [x29, #-0x30]
                	zip2	v2.2s, v0.2s, v1.2s
@@ -1019,13 +979,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x4]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.4s, v0.4s, v1.4s
                	stur	q2, [x29, #-0x80]
                	zip2	v2.4s, v0.4s, v1.4s
@@ -1142,10 +1095,6 @@ Disassembly of section .text:
                	stur	s0, [x29, #-0x34]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x0, x29, #0x30
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
                	zip1	v2.2s, v0.2s, v1.2s
                	stur	d2, [x29, #-0x30]
                	zip2	v2.2s, v0.2s, v1.2s
@@ -1275,13 +1224,6 @@ Disassembly of section .text:
                	stur	s0, [x29, #-0x4]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.4s, v0.4s, v1.4s
                	stur	q2, [x29, #-0x80]
                	zip2	v2.4s, v0.4s, v1.4s
@@ -1413,13 +1355,6 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.2d, v0.2d, v1.2d
                	stur	q2, [x29, #-0x80]
                	zip2	v2.2d, v0.2d, v1.2d
@@ -1526,13 +1461,6 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x8]
                	ldur	q0, [x29, #-0x20]
                	ldur	q1, [x29, #-0x10]
-               	sub	x0, x29, #0x80
-               	stp	xzr, xzr, [x0]
-               	stp	xzr, xzr, [x0, #0x10]
-               	stp	xzr, xzr, [x0, #0x20]
-               	stp	xzr, xzr, [x0, #0x30]
-               	stp	xzr, xzr, [x0, #0x40]
-               	stp	xzr, xzr, [x0, #0x50]
                	zip1	v2.2d, v0.2d, v1.2d
                	stur	q2, [x29, #-0x80]
                	zip2	v2.2d, v0.2d, v1.2d
@@ -1657,11 +1585,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x70
                	stur	d2, [x29, #-0x70]
                	stur	d3, [x29, #-0x68]
-               	sub	x5, x29, #0x60
-               	stp	xzr, xzr, [x5]
-               	stp	xzr, xzr, [x5, #0x10]
-               	stp	xzr, xzr, [x5, #0x20]
                	zip1	v2.4h, v0.4h, v1.4h
+               	sub	x5, x29, #0x60
                	stur	d2, [x29, #-0x60]
                	zip2	v2.4h, v0.4h, v1.4h
                	stur	d2, [x29, #-0x58]
@@ -1673,11 +1598,8 @@ Disassembly of section .text:
                	stur	d2, [x29, #-0x40]
                	trn2	v0.4h, v0.4h, v1.4h
                	stur	d0, [x29, #-0x38]
-               	sub	x4, x29, #0x30
-               	stp	xzr, xzr, [x4]
-               	stp	xzr, xzr, [x4, #0x10]
-               	stp	xzr, xzr, [x4, #0x20]
                	mov	x0, #0x0                // =0
+               	sub	x4, x29, #0x30
                	ldr	x16, [x1]
                	str	x16, [x4]
                	add	x1, x1, #0x8
@@ -2217,10 +2139,6 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x31]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x1, x29, #0x30
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
                	zip1	v2.8b, v0.8b, v1.8b
                	stur	d2, [x29, #-0x30]
                	zip2	v2.8b, v0.8b, v1.8b
@@ -2346,10 +2264,6 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x31]
                	ldur	d0, [x29, #-0x40]
                	ldur	d1, [x29, #-0x38]
-               	sub	x1, x29, #0x30
-               	stp	xzr, xzr, [x1]
-               	stp	xzr, xzr, [x1, #0x10]
-               	stp	xzr, xzr, [x1, #0x20]
                	zip1	v2.8b, v0.8b, v1.8b
                	stur	d2, [x29, #-0x30]
                	zip2	v2.8b, v0.8b, v1.8b

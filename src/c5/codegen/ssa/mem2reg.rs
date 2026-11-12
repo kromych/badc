@@ -918,7 +918,8 @@ fn filled_locals(func: &FunctionSsa) -> BTreeSet<i64> {
 /// constant zero, which suits every kind and register file, ahead of
 /// allocation. One only phis read stays: its edges move nothing and keep
 /// it unplaced. So does the vector under the low half of a pair
-/// ([`super::vector_slots::pair_low`]): the halves overwrite all of it.
+/// ([`super::vector_slots::pair_low`]) or under any run of inserts writing
+/// every byte ([`super::vector_slots::covered_bottom`]).
 pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
     if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
         return;
@@ -928,7 +929,10 @@ pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
     let lows: BTreeSet<ValueId> = func
         .insts
         .iter()
-        .filter_map(|inst| super::vector_slots::pair_low(func, &counts, inst))
+        .filter_map(|inst| {
+            super::vector_slots::pair_low(func, &counts, inst)
+                .or_else(|| super::vector_slots::covered_bottom(func, &counts, inst))
+        })
         .collect();
     let mut read = alloc::vec![false; func.insts.len()];
     let mut mark = |v: ValueId| {

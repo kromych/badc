@@ -6718,3 +6718,28 @@ double f(const double *c, const double *xs, int n) {\n\
     });
     m.finish();
 }
+
+/// A spilled indirect-call target that no free register can hold across
+/// the argument moves reloads from its own slot after them: no second
+/// stack slot to stage it through. Here a variadic call fills every
+/// argument register and `al`, and the target spills as it holds a
+/// callee-saved register for less than the save and restore would cost.
+#[test]
+fn x64_spilled_indirect_call_target_reloads_from_its_slot() {
+    const SRC: &str = "typedef int (*vfn)(char *, unsigned long, const char *, ...);\n\
+extern void *table[];\n\
+int check(char *);\n\
+int dispatch(char *buf) {\n\
+int n = ((vfn)table[0])(buf, 32, \"%d %s %d\", 4, \"mid\", 9);\n\
+if (n != 7) return 1;\n\
+if (check(buf)) return 2;\n\
+return 0;\n}\n";
+    let insns = x64(SRC, "dispatch");
+    // `sub rsp, imm`.
+    let sub_rsp = |i: &&X64Insn| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC);
+    assert_eq!(
+        insns.iter().filter(sub_rsp).count(),
+        1,
+        "the target is staged through a second slot: {insns:x?}"
+    );
+}

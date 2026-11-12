@@ -39,12 +39,8 @@ Disassembly of section .text:
                	leaq	<rip>, %r8
                	movl	$0x63, %r9d
                	movq	0x8(%rsp), %r10
-               	subq	$0x10, %rsp
-               	movq	%r10, (%rsp)
-               	movq	(%rsp), %r10
                	movb	$0x0, %al
                	callq	*%r10
-               	addq	$0x10, %rsp
                	leaq	-0x40(%rbp), %rdi
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax

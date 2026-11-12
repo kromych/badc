@@ -875,25 +875,42 @@ pub(super) fn emit_call_indirect(
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
     let xmm_used = xmm_arg_count(&plan);
-    if let Some(target_scratch) = target_scratch {
+    let spilled = matches!(target_place, Place::Spill(_));
+    if target_scratch.is_some() || spilled {
         // A free caller-saved register is available: stage the
         // target there, then marshal. The marshal never writes
         // `target_scratch` (it is neither an arg source nor r10).
-        let Some(target_r) = materialize_int(code, target_place, target_scratch, frame) else {
-            return fail("CallIndirect: target not int reg / spill");
-        };
-        if target_r.0 != target_scratch.0 {
-            emit_mov_rr(code, target_scratch, target_r);
+        // A spilled target is otherwise read from its own slot into r10
+        // once the marshal is done with it.
+        if let Some(target_scratch) = target_scratch {
+            let Some(target_r) = materialize_int(code, target_place, target_scratch, frame) else {
+                return fail("CallIndirect: target not int reg / spill");
+            };
+            if target_r.0 != target_scratch.0 {
+                emit_mov_rr(code, target_scratch, target_r);
+            }
         }
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
         marshal_args(code, &plan, args, &aggs, alloc, frame, abi, "CallIndirect")?;
+        let call_r = match target_scratch {
+            Some(r) => r,
+            None => {
+                let sp_shift = plan.scratch_bytes;
+                let Some(r) =
+                    materialize_int_shifted(code, target_place, SCRATCH_R10, frame, sp_shift)
+                else {
+                    return fail("CallIndirect: target not int reg / spill");
+                };
+                r
+            }
+        };
         if sysv_variadic_call {
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
         clear_upper(code, frame, wide_args(args, &aggs, &plan, alloc));
-        emit_hardened_call_r(code, target_scratch, abi, extern_sites);
+        emit_hardened_call_r(code, call_r, abi, extern_sites);
         if ends_path {
             return Ok(());
         }
@@ -901,7 +918,8 @@ pub(super) fn emit_call_indirect(
             emit_add_rsp(code, plan.scratch_bytes);
         }
     } else {
-        // No register survives the marshal: the target spills to a 16-byte slot
+        // No register survives the marshal: the register-held target spills
+        // to a 16-byte slot
         // above the scratch window (the call site keeps rsp 16-aligned) and
         // reloads into r10 for the `call`.
         let Some(target_r) = materialize_int(code, target_place, SCRATCH_R10, frame) else {

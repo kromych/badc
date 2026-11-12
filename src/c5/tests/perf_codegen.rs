@@ -3316,15 +3316,22 @@ __m128i isub(__m128i a, __m128i b) { return _mm_sub_epi32(b, a); }\n";
 
 /// A float converted to `int` is the 64-bit conversion's value, already
 /// sign-extended for every float the conversion is defined on (C17
-/// 6.3.1.4p1): the floor idiom `(a < (int)a) ? (int)a - 1 : (int)a` takes no
-/// `sxtw` after the `fcvtzs`.
+/// 6.3.1.4p1), and converted back for a comparison alone it is the float
+/// truncated: the floor idiom `(a < (int)a) ? (int)a - 1 : (int)a` takes no
+/// `sxtw`, and compares against `frintz` rather than `scvtf` of the
+/// integer.
 #[test]
 fn a_float_to_int_conversion_needs_no_sign_extension() {
     const SRC: &str = "int ff(float a) { int ai = (int)a; return (a < ai) ? ai - 1 : ai; }\n";
     let words = a64(SRC, "ff");
     let sxtw = |w: &u32| w & 0xFFFF_FC00 == 0x9340_7C00;
+    let frintz = |w: &u32| w & 0xFFFF_FC00 == 0x1E25_C000;
+    let scvtf = |w: &u32| w & 0x7F3F_FC00 == 0x1E22_0000;
     assert!(
-        words.len() <= 6 && !words.iter().any(sxtw),
+        words.len() <= 6
+            && !words.iter().any(sxtw)
+            && words.iter().any(frintz)
+            && !words.iter().any(scvtf),
         "aarch64 ff: {words:08x?}"
     );
 }

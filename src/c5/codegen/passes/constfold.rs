@@ -64,7 +64,71 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
         let lanes = fold_lane_reads(func);
         let forwarded = forward_identities(func);
         if !folded && !lanes && !forwarded {
-            return;
+            break;
+        }
+    }
+    // After the rounds, which fold a round trip of a constant whole.
+    compared_truncations(func);
+}
+
+/// `(float)(int)x` that only comparisons read is `trunc(x)`: the two are
+/// equal wherever the conversion to an integer is defined (C17 6.3.1.4p1)
+/// but in the sign of a zero, which a comparison does not see, and the
+/// truncation takes no integer round trip.
+fn compared_truncations(func: &mut FunctionSsa) {
+    let n = func.insts.len();
+    let (mut read, mut compared) = (vec![false; n], vec![true; n]);
+    for inst in &func.insts {
+        let compare =
+            matches!(inst, Inst::Binop { op, .. } if crate::c5::ir::is_fp_comparison_op(*op));
+        inst.for_each_operand(|v| {
+            if let Some(r) = read.get_mut(v as usize) {
+                *r = true;
+                compared[v as usize] &= compare;
+            }
+        });
+    }
+    for b in &func.blocks {
+        b.terminator.for_each_operand(|v| {
+            if let Some(c) = compared.get_mut(v as usize) {
+                *c = false;
+            }
+        });
+    }
+    let f32 =
+        |func: &FunctionSsa, v: ValueId| func.f32_values.get(v as usize).copied().unwrap_or(false);
+    for i in 0..n {
+        let Inst::FpCast {
+            kind: FpCastKind::IntToFp,
+            value,
+        } = func.insts[i]
+        else {
+            continue;
+        };
+        let int = match func.insts[value as usize] {
+            Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                ..
+            } => value,
+            _ => value,
+        };
+        if let Inst::FpCast {
+            kind: FpCastKind::FpToInt,
+            value: x,
+        } = func.insts[int as usize]
+            && read[i]
+            && compared[i]
+            && f32(func, x) == f32(func, i as ValueId)
+        {
+            let kind = match f32(func, x) {
+                true => crate::c5::op::Intrinsic::Truncf,
+                false => crate::c5::op::Intrinsic::Trunc,
+            };
+            func.insts[i] = Inst::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec![x],
+            };
         }
     }
 }

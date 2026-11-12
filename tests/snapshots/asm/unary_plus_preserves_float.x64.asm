@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	movq	%rax, %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	cvttsd2si	%xmm0, %rdx
-               	cmpq	$0x2, %rdx
+               	cvttsd2si	%xmm0, %rcx
+               	cmpq	$0x2, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -61,10 +61,9 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	movq	%rax, %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	cvttsd2si	%xmm0, %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movq	%rcx, %xmm15
+               	roundsd	$0xb, %xmm0, %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -75,9 +74,7 @@ Disassembly of section .text:
                	movq	%r11, %xmm0
                	movq	%rax, %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	cvttsd2si	%xmm0, %rax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
+               	roundsd	$0xb, %xmm0, %xmm0
                	movabsq	$-0x4000000000000000, %rax # imm = 0xC000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

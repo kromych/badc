@@ -302,6 +302,12 @@ pub(crate) enum Sem {
     Bcax,
     Rax1,
     Xar,
+    /// FEAT_SHA256: four rounds of the hash on the state halves, the
+    /// accumulator `abcd` with `efgh` (`sha256h`, `true`) or `efgh` with
+    /// `abcd` (`sha256h2`), and the two message schedule updates.
+    Sha256Hash(bool),
+    Sha256Su0,
+    Sha256Su1,
     /// Data movement: the form carries the direction.
     Move,
     /// Hardware random number generator.
@@ -1030,6 +1036,27 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             }
             return Some(o);
         }
+        Sem::Sha256Hash(part1) => {
+            return Some(match part1 {
+                true => sha256_hash(acc, a, b, true),
+                false => sha256_hash(a, acc, b, false),
+            });
+        }
+        Sem::Sha256Su1 => {
+            let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+            let sigma1 = |x: u32| x.rotate_right(17) ^ x.rotate_right(19) ^ x >> 10;
+            let t0 = |e: usize| if e < 3 { w(a, e + 1) } else { w(b, 0) };
+            let mut r = [0u32; 4];
+            for e in 0..4 {
+                let t1 = if e < 2 { w(b, e + 2) } else { r[e - 2] };
+                r[e] = sigma1(t1).wrapping_add(w(acc, e)).wrapping_add(t0(e));
+            }
+            let mut o = [0u8; 16];
+            r.iter()
+                .enumerate()
+                .for_each(|(e, &x)| set_lane(&mut o, 4, e, u64::from(x)));
+            return Some(o);
+        }
         Sem::Eor3 | Sem::Bcax => {
             let mut o = [0u8; 16];
             for i in 0..16 {
@@ -1650,6 +1677,14 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             };
         }
         Sem::AesMix => o = mix_columns(a, MIX),
+        Sem::Sha256Su0 => {
+            let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+            for e in 0..4 {
+                let t = if e < 3 { w(a, e + 1) } else { w(b, 0) };
+                let x = t.rotate_right(7) ^ t.rotate_right(18) ^ t >> 3;
+                set_lane(&mut o, 4, e, u64::from(x.wrapping_add(w(a, e))));
+            }
+        }
         Sem::Rax1 | Sem::Xar => {
             for i in 0..2 {
                 let x = match sem {
@@ -1700,7 +1735,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         // permutations across a 32-byte vector.
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
-        Sem::Eor3 | Sem::Bcax => {}
+        Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
@@ -1834,6 +1869,35 @@ pub(crate) fn eval_wide(
             }
         }
     }
+    o
+}
+
+/// Four SHA-256 rounds over state halves `x` (`abcd`) and `y` (`efgh`) with
+/// the schedule words of `w`, as the Arm ARM's `SHA256hash`: `x` after
+/// them when `part1`, else `y`.
+fn sha256_hash(x: &[u8; 16], y: &[u8; 16], w: &[u8; 16], part1: bool) -> [u8; 16] {
+    let word = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
+    let mut x: [u32; 4] = core::array::from_fn(|i| word(x, i));
+    let mut y: [u32; 4] = core::array::from_fn(|i| word(y, i));
+    for e in 0..4 {
+        let chs = ((y[1] ^ y[2]) & y[0]) ^ y[2];
+        let maj = (x[0] & x[1]) | ((x[0] | x[1]) & x[2]);
+        let s1 = y[0].rotate_right(6) ^ y[0].rotate_right(11) ^ y[0].rotate_right(25);
+        let s0 = x[0].rotate_right(2) ^ x[0].rotate_right(13) ^ x[0].rotate_right(22);
+        let t = y[3]
+            .wrapping_add(s1)
+            .wrapping_add(chs)
+            .wrapping_add(word(w, e));
+        x[3] = t.wrapping_add(x[3]);
+        y[3] = t.wrapping_add(s0).wrapping_add(maj);
+        // The 256-bit y:x rotated left by one word.
+        (x, y) = ([y[3], x[0], x[1], x[2]], [x[3], y[0], y[1], y[2]]);
+    }
+    let mut o = [0u8; 16];
+    let r = if part1 { x } else { y };
+    r.iter()
+        .enumerate()
+        .for_each(|(e, &v)| set_lane(&mut o, 4, e, u64::from(v)));
     o
 }
 

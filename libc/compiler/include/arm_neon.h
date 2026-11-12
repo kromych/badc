@@ -1074,14 +1074,18 @@ __BADC_INTRIN uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
 }
 #define __BADC_NEON_SHAQ(name, T, insn, A)                                  \
     __BADC_NEON_FN3(name, T, T, T, insn " %q0, %q1, %2." #A)
-__BADC_NEON_SHAQ(vsha256hq_u32, uint32x4_t, "sha256h", 4s)
-__BADC_NEON_SHAQ(vsha256h2q_u32, uint32x4_t, "sha256h2", 4s)
-__BADC_INTRIN uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
-    __asm__("sha256su0 %0.4s, %1.4s" : "+w"(__a) : "w"(__b));
-    return __a;
+__BADC_INTRIN uint32x4_t vsha256hq_u32(uint32x4_t __abcd, uint32x4_t __efgh, uint32x4_t __wk) {
+    return (uint32x4_t)__builtin_neon_sha256h_4s(__abcd, __efgh, __wk);
 }
-__BADC_NEON_FN3(vsha256su1q_u32, uint32x4_t, uint32x4_t, uint32x4_t,
-                __BADC_NEON_I3("sha256su1", 4s, 4s, 4s))
+__BADC_INTRIN uint32x4_t vsha256h2q_u32(uint32x4_t __efgh, uint32x4_t __abcd, uint32x4_t __wk) {
+    return (uint32x4_t)__builtin_neon_sha256h2_4s(__efgh, __abcd, __wk);
+}
+__BADC_INTRIN uint32x4_t vsha256su0q_u32(uint32x4_t __a, uint32x4_t __b) {
+    return (uint32x4_t)__builtin_neon_sha256su0_4s(__a, __b);
+}
+__BADC_INTRIN uint32x4_t vsha256su1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_t __c) {
+    return (uint32x4_t)__builtin_neon_sha256su1_4s(__a, __b, __c);
+}
 
 /* SHA-512 and SHA3 (FEAT_SHA512, FEAT_SHA3): the hash and schedule
  * updates, the three-way xor `eor3`, `bcax` (a ^ (b & ~c)), `rax1`

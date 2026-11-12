@@ -1744,6 +1744,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Bcax
         | Sem::Rax1
         | Sem::Xar
+        | Sem::Sha256Hash(_)
+        | Sem::Sha256Su0
+        | Sem::Sha256Su1
         | Sem::MulHi(..)
         | Sem::Avg(_)
         | Sem::Min(..)

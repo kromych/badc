@@ -142,7 +142,7 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
-               	sub	x2, x29, #0x40
+               	sub	x3, x29, #0x40
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x40]
                	stur	w0, [x29, #-0x3c]
@@ -167,14 +167,14 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x4]
                	ldur	q1, [x29, #-0x80]
                	ldur	q0, [x29, #-0x70]
-               	adrp	x3, <addr>
-               	add	x3, x3, <lo12>
+               	adrp	x4, <addr>
+               	add	x4, x4, <lo12>
                	sub	x1, x29, #0x1a0
-               	add	x4, x1, x0, lsl #4
+               	add	x2, x1, x0, lsl #4
                	cmp	w0, #0x4
                	b.ge	<addr>
                	lsl	x1, x0, #2
-               	add	x5, x2, x1, lsl #2
+               	add	x5, x3, x1, lsl #2
                	sub	x1, x29, #0xa0
                	ldp	x16, x17, [x5]
                	stp	x16, x17, [x1]
@@ -189,20 +189,18 @@ Disassembly of section .text:
                	sub	x5, x0, #0x2
                	add	x5, x1, x5, lsl #4
                	sub	x6, x0, #0x1
-               	add	x1, x1, x6, lsl #4
-               	ldr	q3, [x5]
-               	ldr	q4, [x1]
-               	sha256su1	v2.4s, v3.4s, v4.4s
+               	add	x6, x1, x6, lsl #4
                	sub	x1, x29, #0x90
+               	ldr	q3, [x5]
+               	ldr	q4, [x6]
+               	sha256su1	v2.4s, v3.4s, v4.4s
                	stur	q2, [x29, #-0x90]
                	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x4]
-               	sub	x1, x29, #0x1a0
-               	add	x1, x1, x0, lsl #4
-               	lsl	x4, x0, #2
-               	add	x4, x3, x4, lsl #2
-               	ldr	q2, [x4]
-               	ldr	q3, [x1]
+               	stp	x16, x17, [x2]
+               	lsl	x1, x0, #2
+               	add	x1, x4, x1, lsl #2
+               	ldr	q2, [x1]
+               	ldr	q3, [x2]
                	add	v2.4s, v3.4s, v2.4s
                	mov	v3.16b, v1.16b
                	sha256h	q3, q0, v2.4s

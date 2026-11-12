@@ -667,6 +667,53 @@ fn the_sha3_bitwise_forms_are_rows() {
     }
 }
 
+/// The SHA-256 hash and schedule updates are rows: eight chained rounds
+/// of each over a seeded state give the checksum AArch64 hardware and
+/// clang give (34) in the interpreter, and each is one instruction under
+/// -O, the hash naming its state halves as q registers.
+#[cfg(feature = "full")]
+#[test]
+fn the_sha256_updates_are_rows() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        int main(void) {\n\
+            volatile unsigned seed = 0x9e3779b9u;\n\
+            unsigned x = seed;\n\
+            uint32x4_t a, b, w, s;\n\
+            for (int i = 0; i < 4; i++) {\n\
+                x = x * 1664525u + 1013904223u; a[i] = x;\n\
+                x = x * 1664525u + 1013904223u; b[i] = x;\n\
+                x = x * 1664525u + 1013904223u; w[i] = x;\n\
+                x = x * 1664525u + 1013904223u; s[i] = x;\n\
+            }\n\
+            unsigned sum = 0;\n\
+            for (int r = 0; r < 8; r++) {\n\
+                uint32x4_t a2 = vsha256hq_u32(a, b, w);\n\
+                uint32x4_t b2 = vsha256h2q_u32(b, a, w);\n\
+                uint32x4_t s0 = vsha256su0q_u32(s, w);\n\
+                uint32x4_t s1 = vsha256su1q_u32(s0, a2, b2);\n\
+                a = a2; b = b2; w = s1; s = s0;\n\
+                for (int i = 0; i < 4; i++) sum = sum * 33 + a[i] + 3 * b[i] + 5 * w[i] + 7 * s[i];\n\
+            }\n\
+            return (int)(sum % 251);\n\
+        }\n";
+    let program = super::compile_str_bare_for(SRC, crate::Target::LinuxAarch64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 34);
+    const OPS: &str = "#include <arm_neon.h>\n\
+        uint32x4_t h(uint32x4_t a, uint32x4_t b, uint32x4_t w) { return vsha256hq_u32(a, b, w); }\n\
+        uint32x4_t h2(uint32x4_t a, uint32x4_t b, uint32x4_t w) { return vsha256h2q_u32(a, b, w); }\n\
+        uint32x4_t s0(uint32x4_t a, uint32x4_t b) { return vsha256su0q_u32(a, b); }\n\
+        uint32x4_t s1(uint32x4_t a, uint32x4_t b, uint32x4_t c) { return vsha256su1q_u32(a, b, c); }\n";
+    for (name, want) in [
+        ("h", 0x5E02_4020u32),
+        ("h2", 0x5E02_5020),
+        ("s0", 0x5E28_2820),
+        ("s1", 0x5E02_6020),
+    ] {
+        let words = super::perf_codegen::a64_at(OPS, name, true);
+        assert_eq!(words, [want, 0xD65F_03C0], "{name}: {words:08x?}");
+    }
+}
+
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
 /// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
 /// between them and the operations that use them: `ldr q`, `str q`,

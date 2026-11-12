@@ -173,7 +173,7 @@ Disassembly of section .text:
                	sub	x7, x29, #0x60
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	ldur	q0, [x29, #-0x60]
+               	ldur	q0, [x29, #-0x80]
                	ldur	q1, [x29, #-0x70]
                	eor	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x60]
@@ -189,7 +189,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	ldur	q0, [x29, #-0x60]
+               	ldur	q0, [x29, #-0x80]
                	ldur	q1, [x29, #-0x70]
                	and	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x60]
@@ -205,7 +205,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x7]
-               	ldur	q0, [x29, #-0x60]
+               	ldur	q0, [x29, #-0x80]
                	ldur	q1, [x29, #-0x70]
                	orr	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x60]

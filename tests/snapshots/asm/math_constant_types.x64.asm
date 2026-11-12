@@ -34,7 +34,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movl	-0x8(%rbp), %ecx
+               	movl	-0x10(%rbp), %ecx
                	movl	$0xffc00000, %r11d      # imm = 0xFFC00000
                	andq	%r11, %rcx
                	cmpl	$0x7fc00000, %ecx       # imm = 0x7FC00000

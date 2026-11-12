@@ -97,8 +97,8 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	d4, [x29, #-0x10]
-               	ldur	d5, [x29, #-0x8]
+               	ldur	d4, [x29, #-0x98]
+               	ldur	d5, [x29, #-0x90]
                	fmul	d1, d5, d1
                	fmadd	d0, d4, d0, d1
                	fadd	d0, d0, d2

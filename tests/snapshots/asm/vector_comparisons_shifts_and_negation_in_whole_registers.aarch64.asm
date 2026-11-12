@@ -102,7 +102,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x90
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x90]
+               	ldur	q1, [x29, #-0x100]
                	ldur	q0, [x29, #-0xa0]
                	cmhi	v1.16b, v1.16b, v0.16b
                	sub	x4, x29, #0xf0
@@ -254,22 +254,22 @@ Disassembly of section .text:
                	sub	x3, x29, #0x30
                	ldr	x16, [x0]
                	str	x16, [x3]
-               	ldur	d0, [x29, #-0x30]
-               	ldur	d1, [x29, #-0x38]
-               	cmhi	v2.4h, v0.4h, v1.4h
+               	ldur	d1, [x29, #-0x40]
+               	ldur	d0, [x29, #-0x38]
+               	cmhi	v1.4h, v1.4h, v0.4h
                	sub	x4, x29, #0x28
-               	stur	d2, [x29, #-0x28]
-               	cmhs	v2.4h, v0.4h, v1.4h
+               	stur	d1, [x29, #-0x28]
+               	ldur	d1, [x29, #-0x30]
+               	cmhs	v2.4h, v1.4h, v0.4h
                	sub	x5, x29, #0x20
                	stur	d2, [x29, #-0x20]
-               	cmhi	v2.4h, v1.4h, v0.4h
+               	cmhi	v2.4h, v0.4h, v1.4h
                	sub	x6, x29, #0x18
                	stur	d2, [x29, #-0x18]
-               	cmhs	v0.4h, v1.4h, v0.4h
+               	cmhs	v0.4h, v0.4h, v1.4h
                	sub	x7, x29, #0x10
                	stur	d0, [x29, #-0x10]
                	ldur	d0, [x29, #-0x38]
-               	ldur	d1, [x29, #-0x30]
                	cmeq	v0.4h, v0.4h, v1.4h
                	sub	x8, x29, #0x8
                	stur	d0, [x29, #-0x8]
@@ -406,7 +406,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x90
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x90]
+               	ldur	q1, [x29, #-0x70]
                	ldur	q0, [x29, #-0x100]
                	cmhi	v1.4s, v1.4s, v0.4s
                	sub	x4, x29, #0xf0
@@ -558,7 +558,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x90
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x3]
-               	ldur	q1, [x29, #-0x90]
+               	ldur	q1, [x29, #-0x70]
                	ldur	q0, [x29, #-0x100]
                	cmhi	v1.2d, v1.2d, v0.2d
                	sub	x4, x29, #0xf0

@@ -187,7 +187,7 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %r9
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x80(%rbp), %xmm0
                	movups	-0x70(%rbp), %xmm1
                	pxor	%xmm1, %xmm0
                	movups	%xmm0, -0x60(%rbp)
@@ -204,7 +204,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x80(%rbp), %xmm0
                	movups	-0x70(%rbp), %xmm1
                	pand	%xmm1, %xmm0
                	movups	%xmm0, -0x60(%rbp)
@@ -221,7 +221,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	movups	-0x60(%rbp), %xmm0
+               	movups	-0x80(%rbp), %xmm0
                	movups	-0x70(%rbp), %xmm1
                	por	%xmm1, %xmm0
                	movups	%xmm0, -0x60(%rbp)

@@ -4444,7 +4444,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	add	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4465,7 +4465,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	sub	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4486,7 +4486,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	mul	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4571,7 +4571,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	sub	x0, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldrb	w3, [sp]
                	ldrb	w4, [sp, #0x10]
                	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x70]
@@ -4734,7 +4734,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	sub	x0, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldrb	w3, [sp]
                	ldrb	w4, [sp, #0x10]
                	udiv	w17, w3, w4
                	msub	w3, w17, w4, w3
@@ -4833,7 +4833,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	and	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4854,7 +4854,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	orr	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4875,7 +4875,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q0, [x29, #-0x70]
+               	ldr	q0, [sp]
                	ldr	q1, [sp, #0x10]
                	eor	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x70]
@@ -4960,7 +4960,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	sub	x0, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldrb	w3, [sp]
                	ldurb	w4, [x29, #-0x50]
                	lsl	x3, x3, x4
                	sturb	w3, [x29, #-0x70]
@@ -5107,7 +5107,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	sub	x0, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldrb	w3, [sp]
                	ldurb	w4, [x29, #-0x50]
                	lsr	x3, x3, x4
                	sturb	w3, [x29, #-0x70]
@@ -5226,28 +5226,28 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldursh	x0, [x29, #-0x70]
+               	ldrsh	x0, [sp, #0x60]
                	ldrsh	x3, [sp, #0x70]
                	sdiv	x0, x0, x3
-               	ldursh	x3, [x29, #-0x6e]
+               	ldrsh	x3, [sp, #0x62]
                	ldrsh	x4, [sp, #0x72]
                	sdiv	x3, x3, x4
-               	ldursh	x4, [x29, #-0x6c]
+               	ldrsh	x4, [sp, #0x64]
                	ldrsh	x5, [sp, #0x74]
                	sdiv	x4, x4, x5
-               	ldursh	x5, [x29, #-0x6a]
+               	ldrsh	x5, [sp, #0x66]
                	ldrsh	x6, [sp, #0x76]
                	sdiv	x5, x5, x6
-               	ldursh	x6, [x29, #-0x68]
+               	ldrsh	x6, [sp, #0x68]
                	ldrsh	x7, [sp, #0x78]
                	sdiv	x6, x6, x7
-               	ldursh	x7, [x29, #-0x66]
+               	ldrsh	x7, [sp, #0x6a]
                	ldrsh	x8, [sp, #0x7a]
                	sdiv	x7, x7, x8
-               	ldursh	x8, [x29, #-0x64]
+               	ldrsh	x8, [sp, #0x6c]
                	ldrsh	x9, [sp, #0x7c]
                	sdiv	x8, x8, x9
-               	ldursh	x9, [x29, #-0x62]
+               	ldrsh	x9, [sp, #0x6e]
                	ldrsh	x10, [sp, #0x7e]
                	sdiv	x9, x9, x10
                	and	x0, x0, #0xffff
@@ -5287,10 +5287,10 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	x0, [x29, #-0x70]
+               	ldur	x0, [x29, #-0xd0]
                	ldur	x3, [x29, #-0xc0]
                	mul	x0, x0, x3
-               	ldur	x3, [x29, #-0x68]
+               	ldur	x3, [x29, #-0xc8]
                	ldur	x4, [x29, #-0xb8]
                	mul	x3, x3, x4
                	stur	x0, [x29, #-0x70]
@@ -5308,7 +5308,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	sub	x0, x29, #0x70
-               	ldurb	w2, [x29, #-0xb0]
+               	ldrb	w2, [sp]
                	sub	x2, x2, #0x40
                	sturb	w2, [x29, #-0x70]
                	ldurb	w2, [x29, #-0xaf]
@@ -5423,7 +5423,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
                	sub	x2, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldrb	w3, [sp]
                	sub	x3, x3, #0x40
                	sturb	w3, [x29, #-0x70]
                	ldurb	w3, [x29, #-0x8f]
@@ -5474,7 +5474,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
                	sub	x2, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldurb	w3, [x29, #-0x70]
                	sub	x3, x3, #0x40
                	sturb	w3, [x29, #-0x70]
                	ldurb	w3, [x29, #-0x8f]
@@ -5525,7 +5525,7 @@ Disassembly of section .text:
                	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
                	sub	x2, x29, #0x70
-               	ldurb	w3, [x29, #-0x90]
+               	ldurb	w3, [x29, #-0x70]
                	sub	x3, x3, #0x40
                	sturb	w3, [x29, #-0x70]
                	ldurb	w3, [x29, #-0x8f]

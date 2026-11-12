@@ -291,11 +291,11 @@ fn ent_pc=5 n_params=0 variadic=false locals=19
     v279 Imm(1)                                           -> x0
     v280 LocalAddr(-2)                                    -> x0
     v281 Imm(1)                                           -> x0
-    v282 LoadLocal { off=-2, kind=F64 }                   -> d0
+    v282 LoadLocal { off=-19, kind=F64 }                  -> d0
     v283 Imm(4616189618054758400)                         -> x0
     v284 Binop { op=fmul.c, lhs=v282, rhs=v251 }          -> d1
     v285 BinopI { op=add, lhs=v277, rhs_imm=8 }           -> x0
-    v286 LoadLocal { off=-2, disp=8, kind=F64 }           -> d1
+    v286 LoadLocal { off=-19, disp=8, kind=F64 }          -> d1
     v287 Imm(4611686018427387904)                         -> x0
     v288 Binop { op=fmul.c, lhs=v286, rhs=v255 }          -> d1
     v289 Fma { a=v282, b=v251, c=v288, neg_product=false, neg_addend=false } -> d0

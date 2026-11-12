@@ -514,7 +514,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x40
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q2, [x29, #-0x40]
+               	ldur	q2, [x29, #-0xa0]
                	ldur	q3, [x29, #-0x90]
                	fmul	v2.4s, v2.4s, v3.4s
                	stur	q2, [x29, #-0x40]
@@ -535,7 +535,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x40
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
-               	ldur	q2, [x29, #-0x40]
+               	ldur	q2, [x29, #-0xa0]
                	ldur	q3, [x29, #-0x90]
                	fadd	v2.4s, v2.4s, v3.4s
                	stur	q2, [x29, #-0x40]
@@ -567,25 +567,21 @@ Disassembly of section .text:
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
                	fmov	s1, #2.00000000
-               	ldur	s2, [x29, #-0x60]
-               	fmul	s2, s2, s1
-               	ldur	s3, [x29, #-0x5c]
-               	fmul	s3, s3, s1
-               	ldur	s4, [x29, #-0x58]
-               	fmul	s4, s4, s1
-               	ldur	s5, [x29, #-0x54]
-               	fmul	s5, s5, s1
-               	stur	s2, [x29, #-0x60]
-               	stur	s3, [x29, #-0x5c]
-               	stur	s4, [x29, #-0x58]
-               	stur	s5, [x29, #-0x54]
                	ldur	s2, [x29, #-0xa0]
-               	fmul	s2, s2, s1
+               	fmul	s6, s2, s1
                	ldur	s3, [x29, #-0x9c]
-               	fmul	s3, s3, s1
+               	fmul	s7, s3, s1
                	ldur	s4, [x29, #-0x98]
-               	fmul	s4, s4, s1
+               	fmul	s19, s4, s1
                	ldur	s5, [x29, #-0x94]
+               	fmul	s20, s5, s1
+               	stur	s6, [x29, #-0x60]
+               	stur	s7, [x29, #-0x5c]
+               	stur	s19, [x29, #-0x58]
+               	stur	s20, [x29, #-0x54]
+               	fmul	s2, s2, s1
+               	fmul	s3, s3, s1
+               	fmul	s4, s4, s1
                	fmul	s1, s5, s1
                	sub	x2, x29, #0x40
                	stur	s2, [x29, #-0x40]

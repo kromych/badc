@@ -703,7 +703,7 @@ Disassembly of section .text:
                	leaq	-0x70(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	-0x58(%rbp), %rax
+               	movq	-0x68(%rbp), %rax
                	addq	$0x2faf080, %rax        # imm = 0x2FAF080
                	movq	%rax, -0x58(%rbp)
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
@@ -802,7 +802,7 @@ Disassembly of section .text:
                	leaq	-0x70(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	-0x58(%rbp), %rax
+               	movq	-0x68(%rbp), %rax
                	addq	$0x2faf080, %rax        # imm = 0x2FAF080
                	movq	%rax, -0x58(%rbp)
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00

@@ -507,7 +507,7 @@ Disassembly of section .text:
                	leaq	-0x48(%rbp), %rcx
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	movl	-0x38(%rbp), %eax
+               	movl	-0x48(%rbp), %eax
                	movl	0x4(%r8), %ecx
                	cmpl	%ecx, %eax
                	je	<addr>

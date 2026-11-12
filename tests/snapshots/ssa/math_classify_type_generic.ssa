@@ -697,7 +697,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=8
     v177 StoreLocal { off=-58, value=v175, kind=F80 }     -> -
     v178 LocalAddr(-62)                                   -> x0
     v179 Mcpy { dst=v178, src=v176, size=16, align=16 }   -> -
-    v180 LoadLocal { off=-62, kind=F80 }                  -> d0
+    v180 LoadLocal { off=-58, kind=F80 }                  -> d0
     v181 Imm(0)                                           -> x1
     v182 StoreLocal { off=-8, value=v180, kind=F64 }      -> -
     v183 Imm(0)                                           -> x1
@@ -747,7 +747,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=8
     v885 StoreLocal { off=-59, value=v883, kind=F80 }     -> -
     v886 LocalAddr(-62)                                   -> x2
     v887 Mcpy { dst=v178, src=v884, size=16, align=16 }   -> -
-    v888 LoadLocal { off=-62, kind=F80 }                  -> d0
+    v888 LoadLocal { off=-59, kind=F80 }                  -> d0
     v889 Imm(0)                                           -> x1
     v890 StoreLocal { off=-8, value=v888, kind=F64 }      -> -
     v891 Imm(0)                                           -> x1
@@ -790,7 +790,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=8
     v193 StoreLocal { off=-60, value=v191, kind=F80 }     -> -
     v194 LocalAddr(-62)                                   -> x2
     v195 Mcpy { dst=v178, src=v192, size=16, align=16 }   -> -
-    v196 LoadLocal { off=-62, kind=F80 }                  -> d0
+    v196 LoadLocal { off=-60, kind=F80 }                  -> d0
     v197 Imm(0)                                           -> x0
     v198 StoreLocal { off=-8, value=v196, kind=F64 }      -> -
     v199 Imm(0)                                           -> x0
@@ -833,7 +833,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=8
     v209 StoreLocal { off=-61, value=v207, kind=F80 }     -> -
     v210 LocalAddr(-63)                                   -> x1
     v211 Mcpy { dst=v210, src=v208, size=16, align=16 }   -> -
-    v212 LoadLocal { off=-63, kind=F80 }                  -> d0
+    v212 LoadLocal { off=-61, kind=F80 }                  -> d0
     v213 Imm(0)                                           -> x0
     v214 StoreLocal { off=-8, value=v212, kind=F64 }      -> -
     v215 Imm(0)                                           -> x0

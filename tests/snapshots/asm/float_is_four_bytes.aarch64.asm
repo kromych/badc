@@ -77,7 +77,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x10
                	ldr	w16, [x2]
                	str	w16, [x1]
-               	ldur	w1, [x29, #-0x8]
+               	ldur	w1, [x29, #-0x10]
                	eor	x2, x1, #0x3f800000
                	cbz	w2, <addr>
                	adrp	x0, <page>

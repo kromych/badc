@@ -3097,7 +3097,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm0
+               	movss	-0x20(%rbp), %xmm0
                	vmovd	%xmm0, %r11d
                	movups	0x60(%rsp), %xmm0
                	vpinsrd	$0x0, %r11d, %xmm0, %xmm0
@@ -3140,7 +3140,7 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm1
+               	movss	-0x20(%rbp), %xmm1
                	vmovd	%xmm1, %r11d
                	movups	0x90(%rsp), %xmm1
                	vpinsrd	$0x0, %r11d, %xmm1, %xmm1
@@ -3184,7 +3184,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm2
+               	movss	-0x20(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	vpinsrd	$0x1, %r11d, %xmm0, %xmm0
                	movq	<rip>, %rax # <addr>
@@ -3227,7 +3227,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rcx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm2
+               	movss	-0x20(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	vpinsrd	$0x1, %r11d, %xmm1, %xmm1
                	movq	<rip>, %rax # <addr>
@@ -3270,7 +3270,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm2
+               	movss	-0x20(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	vpinsrd	$0x2, %r11d, %xmm0, %xmm0
                	movq	<rip>, %rax # <addr>
@@ -3312,7 +3312,7 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm2
+               	movss	-0x20(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	vpinsrd	$0x2, %r11d, %xmm1, %xmm1
                	movq	<rip>, %rax # <addr>
@@ -3356,7 +3356,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm2
+               	movss	-0x20(%rbp), %xmm2
                	vmovd	%xmm2, %r11d
                	movapd	%xmm0, %xmm14
                	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
@@ -3400,7 +3400,7 @@ Disassembly of section .text:
                	movl	%eax, -0x20(%rbp)
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
-               	movss	-0x18(%rbp), %xmm0
+               	movss	-0x20(%rbp), %xmm0
                	vmovd	%xmm0, %r11d
                	movapd	%xmm1, %xmm14
                	vpinsrd	$0x3, %r11d, %xmm14, %xmm14
@@ -3449,7 +3449,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdx
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x8(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	vmovq	%xmm0, %r11
                	movups	0x70(%rsp), %xmm0
                	vpinsrq	$0x0, %r11, %xmm0, %xmm0
@@ -3495,7 +3495,7 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x8(%rbp), %xmm1
+               	movsd	-0x10(%rbp), %xmm1
                	vmovq	%xmm1, %r11
                	movups	0x80(%rsp), %xmm1
                	vpinsrq	$0x0, %r11, %xmm1, %xmm1
@@ -3543,7 +3543,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdx
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x8(%rbp), %xmm2
+               	movsd	-0x10(%rbp), %xmm2
                	vmovq	%xmm2, %r11
                	movapd	%xmm0, %xmm14
                	vpinsrq	$0x1, %r11, %xmm14, %xmm14
@@ -3668,7 +3668,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	(%rdx), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x8(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	vmovq	%xmm0, %r11
                	movapd	%xmm1, %xmm14
                	vpinsrq	$0x1, %r11, %xmm14, %xmm14

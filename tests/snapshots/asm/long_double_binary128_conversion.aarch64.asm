@@ -204,7 +204,7 @@ Disassembly of section .text:
                	ldr	x16, [x1]
                	str	x16, [x0]
                	sub	x0, x29, #0x30
-               	ldur	d0, [x29, #-0x8]
+               	ldur	d0, [x29, #-0x20]
                	bl	<addr>
                	ldur	x4, [x29, #-0x30]
                	ldur	x5, [x29, #-0x28]
@@ -297,7 +297,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	x25, [x29, #-0x18]
+               	ldur	x25, [x29, #-0x20]
                	and	x0, x22, #0x8000000000000000
                	ubfx	x3, x22, #48, #15
                	and	x1, x22, #0xffffffffffff
@@ -382,7 +382,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	x23, [x29, #-0x18]
+               	ldur	x23, [x29, #-0x20]
                	and	x0, x20, #0x8000000000000000
                	ubfx	x3, x20, #48, #15
                	and	x1, x20, #0xffffffffffff

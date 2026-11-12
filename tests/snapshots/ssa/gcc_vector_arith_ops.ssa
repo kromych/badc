@@ -9192,7 +9192,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10606 LocalAddr(-1126)                                 -> x0
     v10607 LocalAddr(-1126)                                 -> x0
     v10608 LocalAddr(-1028)                                 -> x0
-    v10609 LoadLocal { off=-1126, kind=V128 }               -> d0
+    v10609 LoadLocal { off=-1027, kind=V128 }               -> d0
     v10610 LoadLocal { off=-1028, kind=V128 }               -> d1
     v10611 VecBinop { op=Add, lane=I8, bytes=16, lhs=v10609, rhs=v10610 } -> d0
     v10612 Imm(0)                                           -> x0
@@ -9244,7 +9244,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10679 LocalAddr(-1128)                                 -> x0
     v10680 LocalAddr(-1128)                                 -> x0
     v10681 LocalAddr(-1028)                                 -> x0
-    v10682 LoadLocal { off=-1128, kind=V128 }               -> d0
+    v10682 LoadLocal { off=-1027, kind=V128 }               -> d0
     v10683 LoadLocal { off=-1028, kind=V128 }               -> d1
     v10684 VecBinop { op=Sub, lane=I8, bytes=16, lhs=v10682, rhs=v10683 } -> d0
     v10685 Imm(0)                                           -> x0
@@ -9401,7 +9401,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v10857 LocalAddr(-1130)                                 -> x0
     v10858 LocalAddr(-1028)                                 -> x0
     v10859 LocalAddr(-1196)                                 -> x0
-    v10860 LoadLocal { off=-1130, kind=U8 }                 -> x6
+    v10860 LoadLocal { off=-1027, kind=U8 }                 -> x6
     v10861 LoadLocal { off=-1028, kind=U8 }                 -> x7
     v10862 Binop { op=mul, lhs=v10860, rhs=v10861 }         -> x6
     v10863 StoreLocal { off=-1196, value=v10862, kind=I8 }  -> -
@@ -9661,7 +9661,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11138 LocalAddr(-1132)                                 -> x0
     v11139 LocalAddr(-1028)                                 -> x0
     v11140 LocalAddr(-1198)                                 -> x7
-    v11141 LoadLocal { off=-1132, kind=U8 }                 -> x0
+    v11141 LoadLocal { off=-1027, kind=U8 }                 -> x0
     v11142 LoadLocal { off=-1028, kind=U8 }                 -> x8
     v11143 Binop { op=divu, lhs=v11141, rhs=v11142 }        -> x0
     v11144 StoreLocal { off=-1198, value=v11143, kind=I8 }  -> -
@@ -9953,7 +9953,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11451 LocalAddr(-1134)                                 -> x0
     v11452 LocalAddr(-1028)                                 -> x0
     v11453 LocalAddr(-1200)                                 -> x6
-    v11454 LoadLocal { off=-1134, kind=U8 }                 -> x7
+    v11454 LoadLocal { off=-1027, kind=U8 }                 -> x7
     v11455 LoadLocal { off=-1028, kind=U8 }                 -> x8
     v11456 Binop { op=divu, lhs=v11454, rhs=v11455 }        -> x0
     v11457 Binop { op=mul, lhs=v11456, rhs=v11455 }         -> x0
@@ -10140,7 +10140,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11659 LocalAddr(-1136)                                 -> x0
     v11660 LocalAddr(-1136)                                 -> x0
     v11661 LocalAddr(-1028)                                 -> x0
-    v11662 LoadLocal { off=-1136, kind=V128 }               -> d0
+    v11662 LoadLocal { off=-1027, kind=V128 }               -> d0
     v11663 LoadLocal { off=-1028, kind=V128 }               -> d1
     v11664 VecBinop { op=And, lane=I8, bytes=16, lhs=v11662, rhs=v11663 } -> d0
     v11665 Imm(0)                                           -> x0
@@ -10192,7 +10192,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11732 LocalAddr(-1138)                                 -> x0
     v11733 LocalAddr(-1138)                                 -> x0
     v11734 LocalAddr(-1028)                                 -> x0
-    v11735 LoadLocal { off=-1138, kind=V128 }               -> d0
+    v11735 LoadLocal { off=-1027, kind=V128 }               -> d0
     v11736 LoadLocal { off=-1028, kind=V128 }               -> d1
     v11737 VecBinop { op=Or, lane=I8, bytes=16, lhs=v11735, rhs=v11736 } -> d0
     v11738 Imm(0)                                           -> x0
@@ -10244,7 +10244,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11805 LocalAddr(-1140)                                 -> x0
     v11806 LocalAddr(-1140)                                 -> x0
     v11807 LocalAddr(-1028)                                 -> x0
-    v11808 LoadLocal { off=-1140, kind=V128 }               -> d0
+    v11808 LoadLocal { off=-1027, kind=V128 }               -> d0
     v11809 LoadLocal { off=-1028, kind=V128 }               -> d1
     v11810 VecBinop { op=Xor, lane=I8, bytes=16, lhs=v11808, rhs=v11809 } -> d0
     v11811 Imm(0)                                           -> x0
@@ -10401,7 +10401,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v11983 LocalAddr(-1142)                                 -> x0
     v11984 LocalAddr(-1087)                                 -> x0
     v11985 LocalAddr(-1202)                                 -> x0
-    v11986 LoadLocal { off=-1142, kind=U8 }                 -> x6
+    v11986 LoadLocal { off=-1027, kind=U8 }                 -> x6
     v11987 LoadLocal { off=-1087, kind=U8 }                 -> x7
     v11988 Binop { op=shl, lhs=v11986, rhs=v11987 }         -> x6
     v11989 StoreLocal { off=-1202, value=v11988, kind=I8 }  -> -
@@ -10661,7 +10661,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12264 LocalAddr(-1144)                                 -> x0
     v12265 LocalAddr(-1087)                                 -> x0
     v12266 LocalAddr(-1204)                                 -> x0
-    v12267 LoadLocal { off=-1144, kind=U8 }                 -> x6
+    v12267 LoadLocal { off=-1027, kind=U8 }                 -> x6
     v12268 LoadLocal { off=-1087, kind=U8 }                 -> x7
     v12269 Binop { op=shru, lhs=v12267, rhs=v12268 }        -> x6
     v12270 StoreLocal { off=-1204, value=v12269, kind=I8 }  -> -
@@ -10865,7 +10865,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12489 LocalAddr(-1146)                                 -> x0
     v12490 LocalAddr(-1034)                                 -> x0
     v12491 LocalAddr(-1206)                                 -> x7
-    v12492 LoadLocal { off=-1146, kind=I16 }                -> x0
+    v12492 LoadLocal { off=-1033, kind=I16 }                -> x0
     v12493 LoadLocal { off=-1034, kind=I16 }                -> x8
     v12494 Binop { op=div, lhs=v12492, rhs=v12493 }         -> x0
     v12495 StoreLocal { off=-1206, value=v12494, kind=I16 } -> -
@@ -10974,12 +10974,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12619 LocalAddr(-1148)                                 -> x0
     v12620 LocalAddr(-1042)                                 -> x0
     v12621 Imm(0)                                           -> x0
-    v12622 LoadLocal { off=-1148, kind=I64 }                -> x0
+    v12622 LoadLocal { off=-1041, kind=I64 }                -> x0
     v12623 LoadLocal { off=-1042, kind=I64 }                -> x6
     v12624 Binop { op=mul, lhs=v12622, rhs=v12623 }         -> x0
     v12625 Imm(0)                                           -> x6
     v12626 BinopI { op=add, lhs=v12616, rhs_imm=8 }         -> x6
-    v12627 LoadLocal { off=-1148, disp=8, kind=I64 }        -> x6
+    v12627 LoadLocal { off=-1041, disp=8, kind=I64 }        -> x6
     v12628 BinopI { op=add, lhs=v12597, rhs_imm=8 }         -> x7
     v12629 LoadLocal { off=-1042, disp=8, kind=I64 }        -> x7
     v12630 Binop { op=mul, lhs=v12627, rhs=v12629 }         -> x6
@@ -11025,7 +11025,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12691 LocalAddr(-1149)                                 -> x0
     v12692 Imm(64)                                          -> x0
     v12693 LocalAddr(-1207)                                 -> x0
-    v12694 LoadLocal { off=-1149, kind=U8 }                 -> x2
+    v12694 LoadLocal { off=-1027, kind=U8 }                 -> x2
     v12695 BinopI { op=sub, lhs=v12694, rhs_imm=64 }        -> x2
     v12696 StoreLocal { off=-1207, value=v12695, kind=I8 }  -> -
     v12697 BinopI { op=add, lhs=v12688, rhs_imm=1 }         -> x2
@@ -11221,7 +11221,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12908 LocalAddr(-1151)                                 -> x1
     v12909 Imm(64)                                          -> x1
     v12910 LocalAddr(-1209)                                 -> x1
-    v12911 LoadLocal { off=-1151, kind=U8 }                 -> x2
+    v12911 LoadLocal { off=-1027, kind=U8 }                 -> x2
     v12912 BinopI { op=sub, lhs=v12911, rhs_imm=64 }        -> x2
     v12913 StoreLocal { off=-1209, value=v12912, kind=I8 }  -> -
     v12914 BinopI { op=add, lhs=v12905, rhs_imm=1 }         -> x2
@@ -11303,7 +11303,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v12990 LocalAddr(-1151)                                 -> x1
     v12991 LocalAddr(-1151)                                 -> x1
     v12992 LocalAddr(-1210)                                 -> x1
-    v12993 LoadLocal { off=-1151, kind=U8 }                 -> x2
+    v12993 LoadLocal { off=-1209, kind=U8 }                 -> x2
     v12994 BinopI { op=sub, lhs=v12993, rhs_imm=64 }        -> x2
     v12995 StoreLocal { off=-1210, value=v12994, kind=I8 }  -> -
     v12996 BinopI { op=add, lhs=v12905, rhs_imm=1 }         -> x2
@@ -11385,7 +11385,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v13072 LocalAddr(-1151)                                 -> x1
     v13073 LocalAddr(-1151)                                 -> x1
     v13074 LocalAddr(-1211)                                 -> x1
-    v13075 LoadLocal { off=-1151, kind=U8 }                 -> x2
+    v13075 LoadLocal { off=-1210, kind=U8 }                 -> x2
     v13076 BinopI { op=sub, lhs=v13075, rhs_imm=64 }        -> x2
     v13077 StoreLocal { off=-1211, value=v13076, kind=I8 }  -> -
     v13078 BinopI { op=add, lhs=v12905, rhs_imm=1 }         -> x2

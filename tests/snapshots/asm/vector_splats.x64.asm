@@ -664,7 +664,7 @@ Disassembly of section .text:
                	vmovups	%ymm14, (%rcx)
                	vmovups	0x20(%rax), %ymm14
                	vmovups	%ymm14, 0x20(%rcx)
-               	movl	-0x60(%rbp), %eax
+               	movl	(%rsp), %eax
                	cmpl	%ebx, %eax
                	je	<addr>
                	movl	$0xf, %eax
@@ -673,49 +673,49 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	movl	-0x5c(%rbp), %eax
+               	movl	0x4(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x58(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x54(%rbp), %eax
+               	movl	0xc(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x50(%rbp), %eax
+               	movl	0x10(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x4c(%rbp), %eax
+               	movl	0x14(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x48(%rbp), %eax
+               	movl	0x18(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x44(%rbp), %eax
+               	movl	0x1c(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x40(%rbp), %eax
+               	movl	0x20(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x3c(%rbp), %eax
+               	movl	0x24(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x38(%rbp), %eax
+               	movl	0x28(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x34(%rbp), %eax
+               	movl	0x2c(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x30(%rbp), %eax
+               	movl	0x30(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x2c(%rbp), %eax
+               	movl	0x34(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x28(%rbp), %eax
+               	movl	0x38(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
-               	movl	-0x24(%rbp), %eax
+               	movl	0x3c(%rsp), %eax
                	cmpl	%ebx, %eax
                	jne	<addr>
                	leaq	0x40(%rsp), %rdi

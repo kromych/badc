@@ -7008,7 +7008,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v403 LocalAddr(-3)                                    -> x1
     v404 LocalAddr(-4)                                    -> x2
     v405 Mcpy { dst=v403, src=v404, size=4, align=4 }     -> -
-    v406 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
+    v406 LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v407 LifetimeEnd(-3)                                  -> -
     v408 LifetimeEnd(-4)                                  -> -
     v409 Imm(0)                                           -> x0
@@ -7075,7 +7075,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v462 LocalAddr(-3)                                    -> x0
     v463 LocalAddr(-4)                                    -> x0
     v464 Mcpy { dst=v403, src=v404, size=4, align=4 }     -> -
-    v465 LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v465 LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
     v466 LifetimeEnd(-3)                                  -> -
     v467 LifetimeEnd(-4)                                  -> -
     v468 Imm(0)                                           -> x0
@@ -7147,7 +7147,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v526 LocalAddr(-3)                                    -> x0
     v527 LocalAddr(-4)                                    -> x2
     v528 Mcpy { dst=v403, src=v527, size=4, align=4 }     -> -
-    v529 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v529 LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
     v530 LifetimeEnd(-3)                                  -> -
     v531 LifetimeEnd(-4)                                  -> -
     v532 Imm(0)                                           -> x0
@@ -7214,7 +7214,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v585 LocalAddr(-3)                                    -> x1
     v586 LocalAddr(-4)                                    -> x0
     v587 Mcpy { dst=v585, src=v527, size=4, align=4 }     -> -
-    v588 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v588 LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
     v589 LifetimeEnd(-3)                                  -> -
     v590 LifetimeEnd(-4)                                  -> -
     v591 Imm(0)                                           -> x0
@@ -7286,7 +7286,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v649 LocalAddr(-3)                                    -> x0
     v650 LocalAddr(-4)                                    -> x2
     v651 Mcpy { dst=v585, src=v650, size=4, align=4 }     -> -
-    v652 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v652 LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
     v653 LifetimeEnd(-3)                                  -> -
     v654 LifetimeEnd(-4)                                  -> -
     v655 Imm(0)                                           -> x0
@@ -7353,7 +7353,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v708 LocalAddr(-3)                                    -> x0
     v709 LocalAddr(-4)                                    -> x0
     v710 Mcpy { dst=v585, src=v650, size=4, align=4 }     -> -
-    v711 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v711 LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
     v712 LifetimeEnd(-3)                                  -> -
     v713 LifetimeEnd(-4)                                  -> -
     v714 Imm(0)                                           -> x0
@@ -7425,7 +7425,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v772 LocalAddr(-3)                                    -> x1
     v773 LocalAddr(-4)                                    -> x2
     v774 Mcpy { dst=v772, src=v773, size=4, align=4 }     -> -
-    v775 LoadLocal { off=-3, kind=F32 }                   -> d2 [f32]
+    v775 LoadLocal { off=-4, kind=F32 }                   -> d2 [f32]
     v776 LifetimeEnd(-3)                                  -> -
     v777 LifetimeEnd(-4)                                  -> -
     v778 Imm(0)                                           -> x0
@@ -7492,7 +7492,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v831 LocalAddr(-3)                                    -> x0
     v832 LocalAddr(-4)                                    -> x0
     v833 Mcpy { dst=v772, src=v773, size=4, align=4 }     -> -
-    v834 LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
+    v834 LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v835 LifetimeEnd(-3)                                  -> -
     v836 LifetimeEnd(-4)                                  -> -
     v837 Imm(0)                                           -> x0
@@ -7561,7 +7561,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v908 LocalAddr(-1)                                    -> x1
     v909 LocalAddr(-2)                                    -> x2
     v910 Mcpy { dst=v908, src=v909, size=8, align=8 }     -> -
-    v911 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v911 LoadLocal { off=-2, kind=F64 }                   -> d0
     v912 LifetimeEnd(-1)                                  -> -
     v913 LifetimeEnd(-2)                                  -> -
     v914 Imm(0)                                           -> x0
@@ -7621,7 +7621,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v976 LocalAddr(-1)                                    -> x0
     v977 LocalAddr(-2)                                    -> x0
     v978 Mcpy { dst=v908, src=v909, size=8, align=8 }     -> -
-    v979 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v979 LoadLocal { off=-2, kind=F64 }                   -> d1
     v980 LifetimeEnd(-1)                                  -> -
     v981 LifetimeEnd(-2)                                  -> -
     v982 Imm(0)                                           -> x0
@@ -7686,7 +7686,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v1049 LocalAddr(-1)                                    -> x1
     v1050 LocalAddr(-2)                                    -> x2
     v1051 Mcpy { dst=v1049, src=v1050, size=8, align=8 }   -> -
-    v1052 LoadLocal { off=-1, kind=F64 }                   -> d2
+    v1052 LoadLocal { off=-2, kind=F64 }                   -> d2
     v1053 LifetimeEnd(-1)                                  -> -
     v1054 LifetimeEnd(-2)                                  -> -
     v1055 Imm(0)                                           -> x0
@@ -7858,7 +7858,7 @@ fn ent_pc=399 n_params=0 variadic=false locals=4
     v1117 LocalAddr(-1)                                    -> x0
     v1118 LocalAddr(-2)                                    -> x0
     v1119 Mcpy { dst=v1049, src=v1050, size=8, align=8 }   -> -
-    v1120 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v1120 LoadLocal { off=-2, kind=F64 }                   -> d0
     v1121 LifetimeEnd(-1)                                  -> -
     v1122 LifetimeEnd(-2)                                  -> -
     v1123 Imm(0)                                           -> x0

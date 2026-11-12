@@ -289,7 +289,7 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	fldt	-0x50(%rbp)
+               	fldt	-0x60(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
@@ -312,7 +312,7 @@ Disassembly of section .text:
                	fstpt	-0x60(%rbp)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	fldt	-0x50(%rbp)
+               	fldt	-0x60(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
@@ -340,7 +340,7 @@ Disassembly of section .text:
                	fstpt	-0x60(%rbp)
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	fldt	-0x50(%rbp)
+               	fldt	-0x60(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
@@ -369,7 +369,7 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	fldt	-0x50(%rbp)
+               	fldt	-0x60(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)

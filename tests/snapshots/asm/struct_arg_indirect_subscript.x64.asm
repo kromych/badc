@@ -108,8 +108,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r8
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r8)
-               	movsd	-0x10(%rbp), %xmm0
-               	movsd	-0x8(%rbp), %xmm1
+               	movsd	-0x98(%rbp), %xmm0
+               	movsd	-0x90(%rbp), %xmm1
                	movq	%rdx, %xmm15
                	mulsd	%xmm15, %xmm1
                	movq	%rcx, %xmm15

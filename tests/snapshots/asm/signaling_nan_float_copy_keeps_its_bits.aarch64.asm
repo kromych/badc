@@ -34,7 +34,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x30
                	ldr	w16, [x1]
                	str	w16, [x0]
-               	ldur	w0, [x29, #-0x38]
+               	ldur	w0, [x29, #-0x30]
                	ldur	w1, [x29, #-0x28]
                	cmp	w0, w1
                	b.ne	<addr>
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x28
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x28]
                	mov	x17, #0x20000000        // =536870912
                	movk	x17, #0x7ff8, lsl #48
                	cmp	x0, x17
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	ldr	w16, [x1]
                	str	w16, [x0]
-               	ldur	w0, [x29, #-0x38]
+               	ldur	w0, [x29, #-0x20]
                	mov	x17, #0x1               // =1
                	movk	x17, #0x7fc0, lsl #16
                	cmp	w0, w17

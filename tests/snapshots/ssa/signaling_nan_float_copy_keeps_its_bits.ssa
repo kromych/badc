@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v12  LocalAddr(-7)                                    -> x0
     v13  LocalAddr(-6)                                    -> x1
     v14  Mcpy { dst=v12, src=v13, size=4, align=4 }       -> -
-    v15  LoadLocal { off=-7, kind=U32 }                   -> x0
+    v15  LoadLocal { off=-6, kind=U32 }                   -> x0
     v16  LoadLocal { off=-5, kind=U32 }                   -> x1
     v17  Binop { op=ne, lhs=v15, rhs=v16 }                -> x0
     v18  Imm(0)                                           -> x1
@@ -49,7 +49,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v37  LocalAddr(-4)                                    -> x0
     v38  LocalAddr(-5)                                    -> x1
     v39  Mcpy { dst=v37, src=v38, size=8, align=8 }       -> -
-    v40  LoadLocal { off=-4, kind=I64 }                   -> x0
+    v40  LoadLocal { off=-5, kind=I64 }                   -> x0
     v41  BinopI { op=ne, lhs=v40, rhs_imm=9221120237577961472 } -> x0
     v42  Imm(0)                                           -> x1
     terminator Bnz { cond=v41, target=b5, fall=b4 }   (exit_acc=v41)
@@ -83,7 +83,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v65  LocalAddr(-7)                                    -> x0
     v66  LocalAddr(-4)                                    -> x1
     v67  Mcpy { dst=v65, src=v66, size=4, align=4 }       -> -
-    v68  LoadLocal { off=-7, kind=U32 }                   -> x0
+    v68  LoadLocal { off=-4, kind=U32 }                   -> x0
     v69  BinopI { op=ne, lhs=v68, rhs_imm=2143289345 }    -> x0
     v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x1
     v71  BinopI { op=eq, lhs=v68, rhs_imm=2143289345 }    -> x1

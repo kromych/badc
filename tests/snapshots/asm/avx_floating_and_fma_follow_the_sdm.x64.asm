@@ -369,7 +369,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	movss	-0x8(%rbp), %xmm0
+               	movss	-0x10(%rbp), %xmm0
                	leave
                	retq
                	shrq	$0x10, %rax
@@ -429,7 +429,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movsd	-0x8(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	leave
                	retq
                	movq	%rax, %rcx

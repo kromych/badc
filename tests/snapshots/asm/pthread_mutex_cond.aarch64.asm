@@ -691,7 +691,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldur	x0, [x29, #-0x58]
+               	ldur	x0, [x29, #-0x68]
                	mov	x17, #0xf080            // =61568
                	movk	x17, #0x2fa, lsl #16
                	add	x0, x0, x17
@@ -794,7 +794,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x70
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldur	x0, [x29, #-0x58]
+               	ldur	x0, [x29, #-0x68]
                	mov	x17, #0xf080            // =61568
                	movk	x17, #0x2fa, lsl #16
                	add	x0, x0, x17

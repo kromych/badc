@@ -8511,7 +8511,7 @@ Disassembly of section .text:
                	movl	(%rdx), %r10d
                	movl	%r10d, (%rcx)
                	movl	0x60(%rsp), %ecx
-               	movl	-0x68(%rbp), %edx
+               	movl	-0x40(%rbp), %edx
                	cmpl	%edx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx

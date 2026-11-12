@@ -931,7 +931,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v473 Mcpy { dst=v471, src=v472, size=16, align=8 }    -> -
     v474 LocalAddr(-12)                                   -> x0
     v475 BinopI { op=add, lhs=v471, rhs_imm=8 }           -> x0
-    v476 LoadLocal { off=-12, disp=8, kind=I64 }          -> x0
+    v476 LoadLocal { off=-14, disp=8, kind=I64 }          -> x0
     v477 BinopI { op=add, lhs=v476, rhs_imm=50000000 }    -> x0
     v478 StoreLocal { off=-12, disp=8, value=v477, kind=I64 } -> -
     v479 LocalAddr(-12)                                   -> x1
@@ -1074,7 +1074,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=20
     v539 Mcpy { dst=v537, src=v538, size=16, align=8 }    -> -
     v540 LocalAddr(-12)                                   -> x0
     v541 BinopI { op=add, lhs=v537, rhs_imm=8 }           -> x0
-    v542 LoadLocal { off=-12, disp=8, kind=I64 }          -> x0
+    v542 LoadLocal { off=-14, disp=8, kind=I64 }          -> x0
     v543 BinopI { op=add, lhs=v542, rhs_imm=50000000 }    -> x0
     v544 StoreLocal { off=-12, disp=8, value=v543, kind=I64 } -> -
     v545 LocalAddr(-12)                                   -> x1

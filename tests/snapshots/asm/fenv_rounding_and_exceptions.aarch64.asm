@@ -25,7 +25,7 @@ Disassembly of section .text:
                	str	x16, [x0]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	ldur	x2, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x20]
                	bl	<addr>
                	mov	x0, #0x1f               // =31
                	bl	<addr>
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	str	w16, [x0]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	ldur	w2, [x29, #-0x8]
+               	ldur	w2, [x29, #-0x10]
                	bl	<addr>
                	mov	x0, #0x1f               // =31
                	bl	<addr>

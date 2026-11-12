@@ -9533,7 +9533,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v1856 Imm(0)                                           -> x0
     v1857 Imm(0)                                           -> x0
     v1858 LocalAddr(-4)                                    -> x0
-    v1859 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v1859 LoadLocal { off=-28, kind=F64 }                  -> d1
     v1860 LocalAddr(-1)                                    -> x0
     v1861 Mzero { dst=v1860, size=8, align=8 }             -> -
     v1862 VecExtract { vec=v1852, off=0, kind=U16, bytes=8 } -> x0
@@ -9593,7 +9593,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v335 Imm(0)                                           -> x0
     v336 Imm(0)                                           -> x0
     v337 LocalAddr(-4)                                    -> x0
-    v338 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v338 LoadLocal { off=-28, kind=F64 }                  -> d1
     v339 LocalAddr(-1)                                    -> x0
     v340 Mzero { dst=v339, size=8, align=8 }              -> -
     v341 VecExtract { vec=v331, off=0, kind=I16, bytes=8 } -> x0
@@ -9729,7 +9729,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v277 Imm(0)                                           -> x0
     v278 Imm(0)                                           -> x0
     v279 LocalAddr(-4)                                    -> x0
-    v280 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v280 LoadLocal { off=-28, kind=F64 }                  -> d1
     v281 LocalAddr(-1)                                    -> x0
     v282 Mzero { dst=v281, size=8, align=8 }              -> -
     v283 VecExtract { vec=v273, off=0, kind=U16, bytes=8 } -> x0
@@ -9789,7 +9789,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v390 Imm(0)                                           -> x0
     v391 Imm(0)                                           -> x0
     v392 LocalAddr(-4)                                    -> x0
-    v393 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v393 LoadLocal { off=-28, kind=F64 }                  -> d1
     v394 LocalAddr(-1)                                    -> x0
     v395 Mzero { dst=v394, size=8, align=8 }              -> -
     v396 VecExtract { vec=v386, off=0, kind=I16, bytes=8 } -> x1
@@ -10053,7 +10053,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2025 Imm(0)                                           -> x6
     v2026 Imm(0)                                           -> x6
     v2027 LocalAddr(-4)                                    -> x6
-    v2028 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v2028 LoadLocal { off=-28, kind=F64 }                  -> d1
     v2029 LocalAddr(-1)                                    -> x6
     v2030 Mzero { dst=v2029, size=8, align=8 }             -> -
     v2031 VecExtract { vec=v2021, off=0, kind=U32, bytes=8 } -> x6
@@ -10223,7 +10223,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2173 Imm(0)                                           -> x0
     v2174 Imm(0)                                           -> x0
     v2175 LocalAddr(-4)                                    -> x0
-    v2176 LoadLocal { off=-4, kind=F64 }                   -> d1
+    v2176 LoadLocal { off=-28, kind=F64 }                  -> d1
     v2177 LocalAddr(-1)                                    -> x0
     v2178 Mzero { dst=v2044, size=8, align=8 }             -> -
     v2179 VecExtract { vec=v2169, off=0, kind=U32, bytes=8 } -> x0
@@ -10799,7 +10799,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2714 LocalAddr(-3)                                    -> x0
     v2715 LoadLocal { off=-3, kind=U8 }                    -> x0
     v2716 LocalAddr(-2)                                    -> x1
-    v2717 LoadLocal { off=-2, kind=I8 }                    -> x1
+    v2717 LoadLocal { off=-4, kind=I8 }                    -> x1
     v2718 Binop { op=mul, lhs=v2715, rhs=v2717 }           -> x0
     v2719 Extend { value=v2718, kind=I32, nsw }            -> x1
     v2720 LocalAddr(-3)                                    -> x1
@@ -10807,7 +10807,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v2722 LoadLocal { off=-3, disp=1, kind=U8 }            -> x1
     v2723 LocalAddr(-2)                                    -> x6
     v2724 BinopI { op=add, lhs=v2723, rhs_imm=1 }          -> x6
-    v2725 LoadLocal { off=-2, disp=1, kind=I8 }            -> x6
+    v2725 LoadLocal { off=-4, disp=1, kind=I8 }            -> x6
     v2726 Binop { op=mul, lhs=v2722, rhs=v2725 }           -> x1
     v2727 Extend { value=v2726, kind=I32, nsw }            -> x6
     v2728 Binop { op=add, lhs=v2718, rhs=v2726 }           -> x1
@@ -11083,7 +11083,7 @@ fn ent_pc=448 n_params=0 variadic=false locals=29
     v551 LocalAddr(-3)                                    -> x1
     v552 LoadLocal { off=-3, kind=I16 }                   -> x1
     v553 LocalAddr(-2)                                    -> x2
-    v554 LoadLocal { off=-2, kind=I16 }                   -> x2
+    v554 LoadLocal { off=-4, kind=I16 }                   -> x2
     v555 Binop { op=mul, lhs=v552, rhs=v554 }             -> x1
     v556 Extend { value=v555, kind=I32, nsw }             -> x1
     v557 BinopI { op=shr, lhs=v556, rhs_imm=14 }          -> x1

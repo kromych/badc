@@ -361,7 +361,7 @@ Disassembly of section .text:
                	cmp	w1, w0
                	b.eq	<addr>
                	b	<addr>
-               	ldur	x2, [x29, #-0x90]
+               	ldur	x2, [x29, #-0x88]
                	cmp	x2, x0
                	cset	x0, eq
                	b	<addr>

@@ -72,50 +72,50 @@ Disassembly of section .text:
                	movq	%r10, (%rax)
                	movl	0x8(%rcx), %r10d
                	movl	%r10d, 0x8(%rax)
-               	movl	-0x210(%rbp), %eax
+               	movl	-0x420(%rbp), %eax
                	cmpl	$0x64, %eax
                	jne	<addr>
-               	movl	-0x20c(%rbp), %eax
+               	movl	-0x41c(%rbp), %eax
                	cmpl	$0xc8, %eax
                	jne	<addr>
-               	movl	-0x208(%rbp), %eax
+               	movl	-0x418(%rbp), %eax
                	cmpl	$0x12c, %eax            # imm = 0x12C
                	jne	<addr>
-               	movl	-0x204(%rbp), %eax
+               	movl	-0x414(%rbp), %eax
                	cmpl	$0x190, %eax            # imm = 0x190
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	-0x14(%rbp), %eax
+               	movl	-0x224(%rbp), %eax
                	cmpl	$0x1f4, %eax            # imm = 0x1F4
                	jne	<addr>
-               	movl	-0x10(%rbp), %eax
+               	movl	-0x220(%rbp), %eax
                	cmpl	$0x258, %eax            # imm = 0x258
                	jne	<addr>
                	leaq	-0x210(%rbp), %rsi
-               	movl	-0xc(%rbp), %eax
+               	movl	-0x21c(%rbp), %eax
                	cmpl	$0x2bc, %eax            # imm = 0x2BC
                	jne	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	-0x218(%rbp), %eax
                	cmpl	$0x320, %eax            # imm = 0x320
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	-0x160(%rbp), %eax
+               	movl	-0x370(%rbp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	-0xbc(%rbp), %eax
+               	movl	-0x2cc(%rbp), %eax
                	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movl	-0x18(%rbp), %eax
+               	movl	-0x228(%rbp), %eax
                	cmpl	$-0x3, %eax
                	je	<addr>
                	movl	$0x5, %eax

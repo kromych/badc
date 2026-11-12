@@ -646,7 +646,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     v241 LocalAddr(-4)                                    -> x8
     v242 Mcpy { dst=v241, src=v235, size=32, align=8 }    -> -
     v243 LocalAddr(-4)                                    -> x7
-    v244 LoadLocal { off=-4, kind=I64 }                   -> x7
+    v244 LoadLocal { off=-8, kind=I64 }                   -> x7
     v245 SegStore { addr=v209, value=v215, kind=I64, seg=Gs } -> -
     v246 BinopI { op=add, lhs=v241, rhs_imm=8 }           -> x2
     v247 LoadLocal { off=-4, disp=8, kind=I64 }           -> x7

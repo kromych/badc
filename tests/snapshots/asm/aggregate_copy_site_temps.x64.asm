@@ -181,11 +181,10 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rcx)
                	movq	0x20(%rdx), %r10
                	movq	%r10, 0x20(%rcx)
-               	movq	-0x8(%rbp), %rax
+               	movq	-0x48(%rbp), %rax
+               	leaq	0xe(%rax), %rsi
                	addq	$0xe, %rax
-               	movq	-0x48(%rbp), %rsi
-               	addq	$0xe, %rsi
-               	cmpq	%rsi, %rax
+               	cmpq	%rax, %rsi
                	jne	<addr>
                	xorl	%eax, %eax
                	movzbq	(%rdx,%rax), %rsi

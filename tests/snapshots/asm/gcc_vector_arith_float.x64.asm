@@ -503,7 +503,7 @@ Disassembly of section .text:
                	leaq	(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
-               	movups	(%rsp), %xmm1
+               	movups	0x20(%rsp), %xmm1
                	movups	0x30(%rsp), %xmm2
                	mulps	%xmm2, %xmm1
                	movups	%xmm1, (%rsp)
@@ -524,7 +524,7 @@ Disassembly of section .text:
                	leaq	(%rsp), %rcx
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
-               	movups	(%rsp), %xmm1
+               	movups	0x20(%rsp), %xmm1
                	movups	0x30(%rsp), %xmm2
                	addps	%xmm2, %xmm1
                	movups	%xmm1, (%rsp)
@@ -558,32 +558,28 @@ Disassembly of section .text:
                	vmovups	(%rax), %xmm14
                	vmovups	%xmm14, (%rcx)
                	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movss	0x40(%rsp), %xmm1
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm1
-               	movss	0x44(%rsp), %xmm2
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm2
-               	movss	0x48(%rsp), %xmm3
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm3
-               	movss	0x4c(%rsp), %xmm4
-               	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm4
-               	movss	%xmm1, 0x40(%rsp)
-               	movss	%xmm2, 0x44(%rsp)
-               	movss	%xmm3, 0x48(%rsp)
-               	movss	%xmm4, 0x4c(%rsp)
                	movss	0x20(%rsp), %xmm1
                	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm1
+               	vmulss	%xmm15, %xmm1, %xmm5
                	movss	0x24(%rsp), %xmm2
                	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm2
+               	vmulss	%xmm15, %xmm2, %xmm6
                	movss	0x28(%rsp), %xmm3
                	movq	%rax, %xmm15
-               	mulss	%xmm15, %xmm3
+               	vmulss	%xmm15, %xmm3, %xmm7
                	movss	0x2c(%rsp), %xmm4
+               	movq	%rax, %xmm15
+               	vmulss	%xmm15, %xmm4, %xmm8
+               	movss	%xmm5, 0x40(%rsp)
+               	movss	%xmm6, 0x44(%rsp)
+               	movss	%xmm7, 0x48(%rsp)
+               	movss	%xmm8, 0x4c(%rsp)
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm1
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm2
+               	movq	%rax, %xmm15
+               	mulss	%xmm15, %xmm3
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm4
                	leaq	(%rsp), %rdx

@@ -219,7 +219,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rcx)
                	movq	-0x48(%rbp), %rax
                	imulq	$0xa, %rax, %rax
-               	movq	-0x20(%rbp), %rcx
+               	movq	-0x50(%rbp), %rcx
                	leaq	(%rax,%rcx), %r10
                	movq	%r10, 0x8(%rsp)
                	movq	$-0x1, -0x30(%rbp)
@@ -244,12 +244,12 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdi)
                	movq	0x10(%rax), %r10
                	movq	%r10, 0x10(%rdi)
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x60(%rbp), %rax
                	imulq	$0x64, %rax, %rax
-               	movq	-0x28(%rbp), %rcx
+               	movq	-0x58(%rbp), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	-0x20(%rbp), %rcx
+               	movq	-0x50(%rbp), %rcx
                	addq	%rcx, %rax
                	incq	%rax
                	leaq	0x8(%rax), %r10

@@ -348,17 +348,47 @@ fn run_one(func: &mut FunctionSsa) {
     // A block one predecessor alone reaches starts from what that block
     // ended with: the predecessor dominates it, and no other path enters.
     let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
-    type Tables = (Vec<Entry>, Vec<IndexedEntry>, Vec<SlotEntry>);
+    type Tables = (Vec<Entry>, Vec<IndexedEntry>, Vec<SlotEntry>, Vec<Copied>);
     let mut exits: Vec<Option<Tables>> = alloc::vec![None; func.blocks.len()];
-    for (b, block) in func.blocks.iter().enumerate() {
-        let (mut table, mut indexed, mut slot_table) = match preds[b].as_slice() {
+    for b in 0..func.blocks.len() {
+        let range = func.blocks[b].inst_range.clone();
+        let (mut table, mut indexed, mut slot_table, mut copies) = match preds[b].as_slice() {
             [p] if *p as usize != b => exits[*p as usize].clone().unwrap_or_default(),
             _ => Default::default(),
         };
-        for idx in block.inst_range.clone() {
+        for idx in range {
             let i = idx as usize;
             if i >= func.insts.len() {
                 break;
+            }
+            // A copy of a copy reads the first source; the load then
+            // forwards from what that source holds.
+            for _ in 0..copies.len() {
+                let Some(load) = copy_source(func, &copies, i) else {
+                    break;
+                };
+                func.insts[i] = load;
+                any = true;
+            }
+            if writes_memory(&func.insts[i]) {
+                copies.clear();
+            }
+            if let Inst::Mcpy {
+                dst,
+                src,
+                size,
+                align,
+            } = func.insts[i]
+                && let (base, at) = base_disp(func, dst, 0)
+                && let Some(&Inst::LocalAddr(off)) = func.insts.get(base as usize)
+            {
+                copies.push(Copied {
+                    off,
+                    at,
+                    size,
+                    src,
+                    align,
+                });
             }
             match &func.insts[i] {
                 // A volatile load must perform its own memory access
@@ -713,7 +743,7 @@ fn run_one(func: &mut FunctionSsa) {
                 }
             }
         }
-        exits[b] = Some((table, indexed, slot_table));
+        exits[b] = Some((table, indexed, slot_table, copies));
     }
     for (idx, inst) in rewrites {
         func.insts[idx] = inst;
@@ -826,6 +856,99 @@ fn slot_bytes(func: &FunctionSsa, addr: ValueId, disp: i32) -> Option<i64> {
         Inst::LocalAddr(off) => off.checked_mul(8)?.checked_add(at),
         _ => None,
     }
+}
+
+/// `size` bytes of frame object `off` from byte `at` on, copied from `src`
+/// at the copy's alignment `align`, while nothing has written memory since:
+/// a load of the range reads the source.
+#[derive(Clone, Copy, Debug)]
+struct Copied {
+    off: i64,
+    at: i64,
+    size: i64,
+    src: ValueId,
+    align: u32,
+}
+
+/// The frame load of the copy source a frame load `i` within one of
+/// `copies` becomes, when the source is a frame object: the same bytes of
+/// it, at an alignment the copy proves at that offset. A source behind a
+/// pointer would keep the pointer live to the load.
+fn copy_source(func: &FunctionSsa, copies: &[Copied], i: usize) -> Option<Inst> {
+    let Inst::LoadLocal {
+        off,
+        disp,
+        kind,
+        volatile: false,
+    } = func.insts[i]
+    else {
+        return None;
+    };
+    let (at, w) = (i64::from(disp), i64::from(load_width(kind)));
+    let c = copies
+        .iter()
+        .rev()
+        .find(|c| c.off == off && at >= c.at && at + w <= c.at + c.size)?;
+    let delta = at - c.at;
+    let proven = match delta {
+        0 => c.align,
+        d => c.align.min(1 << d.trailing_zeros()),
+    };
+    let (s, sat) = base_disp(func, c.src, i32::try_from(delta).ok()?);
+    match func.insts.get(s as usize)? {
+        &Inst::LocalAddr(off) if i64::from(proven) >= w => Some(Inst::LoadLocal {
+            off,
+            disp: i32::try_from(sat).ok()?,
+            kind,
+            volatile: false,
+        }),
+        _ => None,
+    }
+}
+
+/// Whether `inst` may change memory: any store, fill, copy, call, atomic,
+/// asm statement, alloca, lifetime end or SIMD instruction with a memory
+/// destination.
+fn writes_memory(inst: &Inst) -> bool {
+    !matches!(
+        inst,
+        Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::Imm(_)
+            | Inst::Undef
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::AllocaInit(0)
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Neg(_)
+            | Inst::Fneg(_)
+            | Inst::Fma { .. }
+            | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
+            | Inst::Extend { .. }
+            | Inst::Bswap { .. }
+            | Inst::BitCount { .. }
+            | Inst::Copy { .. }
+            | Inst::FpCast { .. }
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::SimdVal { .. }
+            | Inst::VecBinop { .. }
+            | Inst::VecInsert { .. }
+            | Inst::VecSplat { .. }
+            | Inst::VecConst { .. }
+            | Inst::VecExtract { .. }
+            | Inst::Select { .. }
+            | Inst::Phi { .. }
+    )
 }
 
 /// A location the block prefix has written a known constant to.
@@ -1818,6 +1941,118 @@ mod tests {
             let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
             assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
         }
+    }
+
+    /// A frame load of bytes a block copy filled from a frame object reads
+    /// that object at the same offset. A source behind a pointer, or a
+    /// store after the copy, keeps the frame load.
+    #[test]
+    fn a_load_of_copied_bytes_reads_the_copy_source() {
+        for (src, stored, want) in [
+            (
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                false,
+                Inst::LoadLocal {
+                    off: -2,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+            (
+                Inst::LocalAddr(-6),
+                false,
+                Inst::LoadLocal {
+                    off: -6,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+            (
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                true,
+                Inst::LoadLocal {
+                    off: -2,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    src,
+                    Inst::LocalAddr(-2),
+                    Inst::Mcpy {
+                        dst: 1,
+                        src: 0,
+                        size: 16,
+                        align: 8,
+                    },
+                    if stored {
+                        Inst::StoreLocal {
+                            disp: 0,
+                            off: -4,
+                            value: 0,
+                            kind: StoreKind::I64,
+                            volatile: false,
+                            nsw: false,
+                        }
+                    } else {
+                        Inst::Imm(0)
+                    },
+                    Inst::LoadLocal {
+                        off: -2,
+                        disp: 8,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(4),
+                4,
+            );
+            run_one(&mut f);
+            assert_eq!(format!("{:?}", f.insts[4]), format!("{want:?}"));
+        }
+    }
+
+    /// Each frame object has its own number, whatever its size: a copy into
+    /// the 16-byte object -2 leaves a load of object -1 reading that object.
+    #[test]
+    fn a_copy_into_one_object_leaves_the_next_one_alone() {
+        let load = Inst::LoadLocal {
+            off: -1,
+            disp: 0,
+            kind: LoadKind::I64,
+            volatile: false,
+        };
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::LocalAddr(-2),
+                Inst::Mcpy {
+                    dst: 1,
+                    src: 0,
+                    size: 16,
+                    align: 8,
+                },
+                load.clone(),
+            ],
+            Terminator::Return(3),
+            3,
+        );
+        run_one(&mut f);
+        assert_eq!(format!("{:?}", f.insts[3]), format!("{load:?}"));
     }
 
     /// A call between the slot store and the reload blocks the forward:

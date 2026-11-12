@@ -24,7 +24,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	x0, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x900000000000    // =158329674399744
                	movk	x17, #0x407f, lsl #48
                	cmp	x0, x17

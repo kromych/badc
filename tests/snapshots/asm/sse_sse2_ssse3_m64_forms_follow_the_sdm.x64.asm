@@ -2880,7 +2880,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	leaq	-0x8(%rbp), %rax
                	movq	$0x0, (%rax)
                	vpextrw	$0x0, %xmm0, %eax
@@ -2911,7 +2911,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	leaq	-0x8(%rbp), %rax
                	movq	$0x0, (%rax)
                	vpextrw	$0x0, %xmm0, %eax
@@ -2958,7 +2958,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	leaq	-0x8(%rbp), %rax
                	movq	$0x0, (%rax)
                	vpextrw	$0x0, %xmm0, %eax
@@ -2989,7 +2989,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	leaq	-0x8(%rbp), %rax
                	movq	$0x0, (%rax)
                	vpextrw	$0x0, %xmm0, %ecx
@@ -3077,7 +3077,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	movq	(%rsi), %r10
                	movq	%r10, (%rdi)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	leaq	-0x8(%rbp), %rsi
                	movq	$0x0, (%rsi)
                	vmovd	%xmm0, %esi
@@ -3134,7 +3134,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdx
                	movq	(%rax), %r10
                	movq	%r10, (%rdx)
-               	movsd	-0x20(%rbp), %xmm1
+               	movsd	-0xe0(%rbp), %xmm1
                	movq	$0x0, (%rsi)
                	vmovd	%xmm0, %eax
                	vpextrd	$0x1, %xmm0, %edx
@@ -3281,10 +3281,10 @@ Disassembly of section .text:
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
                	movzbq	-0x18(%rbp), %rax
-               	movsbq	-0x10(%rbp), %rcx
+               	movsbq	-0x20(%rbp), %rcx
                	imulq	%rcx, %rax
                	movzbq	-0x17(%rbp), %rcx
-               	movsbq	-0xf(%rbp), %rsi
+               	movsbq	-0x1f(%rbp), %rsi
                	imulq	%rsi, %rcx
                	addq	%rax, %rcx
                	movl	$0x7fff, %eax           # imm = 0x7FFF
@@ -3385,7 +3385,7 @@ Disassembly of section .text:
                	movq	(%rcx), %r10
                	movq	%r10, (%rdx)
                	movswq	-0x18(%rbp), %rcx
-               	movswq	-0x10(%rbp), %rdx
+               	movswq	-0x20(%rbp), %rdx
                	imulq	%rdx, %rcx
                	movslq	%ecx, %rcx
                	sarq	$0xe, %rcx

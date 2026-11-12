@@ -27,7 +27,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x10
                	ldr	x16, [x3]
                	str	x16, [x2]
-               	ldur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x10]
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x18
                	ldr	x16, [x3]
                	str	x16, [x2]
-               	ldur	x2, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x18]
                	ldur	x3, [x29, #-0x10]
                	cmp	x2, x3
                	b.ne	<addr>
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x10]
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
@@ -280,7 +280,7 @@ Disassembly of section .text:
                	sub	x3, x29, #0x18
                	ldr	x16, [x3]
                	str	x16, [x2]
-               	ldur	x2, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x18]
                	and	x3, x2, #0x7ff0000000000000
                	mov	x17, #0x7ff0000000000000 // =9218868437227405312
                	cmp	x3, x17
@@ -512,7 +512,7 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x10]
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	ldur	d0, [x29, #-0x20]
+               	ldur	d0, [x29, #-0x10]
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]

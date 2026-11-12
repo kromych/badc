@@ -37,7 +37,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	movq	(%rsi), %r10
                	movq	%r10, (%rdx)
-               	movsd	-0x20(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x30(%rbp)
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rsi
                	movq	(%rsi), %r10
                	movq	%r10, (%rdx)
-               	movq	-0x8(%rbp), %rdx
+               	movq	-0x18(%rbp), %rdx
                	movq	-0x10(%rbp), %rsi
                	cmpq	%rsi, %rdx
                	jne	<addr>
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movsd	-0x20(%rbp), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x30(%rbp)
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movq	-0x8(%rbp), %rax
+               	movq	-0x18(%rbp), %rax
                	movabsq	$0x7ff0000000000000, %rcx # imm = 0x7FF0000000000000
                	andq	%rax, %rcx
                	movabsq	$0x7ff0000000000000, %r11 # imm = 0x7FF0000000000000

@@ -258,7 +258,7 @@ Disassembly of section .text:
                	cmpl	%eax, %ecx
                	je	<addr>
                	jmp	<addr>
-               	movq	-0x90(%rbp), %rdx
+               	movq	-0x88(%rbp), %rdx
                	cmpq	%rax, %rdx
                	sete	%al
                	movzbq	%al, %rax

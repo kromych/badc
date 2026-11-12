@@ -973,7 +973,7 @@ fn ent_pc=1358 n_params=0 variadic=false locals=11
     v322 LocalAddr(-7)                                    -> x0
     v323 LocalAddr(-9)                                    -> x1
     v324 Mcpy { dst=v322, src=v323, size=4, align=4 }     -> -
-    v325 LoadLocal { off=-7, kind=U32 }                   -> x0
+    v325 LoadLocal { off=-9, kind=U32 }                   -> x0
     v326 ImmData(1696)                                    -> x1
     v327 BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
     v328 BinopI { op=shl, lhs=v64, rhs_imm=3 }            -> x1

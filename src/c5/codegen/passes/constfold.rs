@@ -67,7 +67,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
             break;
         }
     }
-    // After the rounds, which fold a round trip of a constant whole.
+    // After the rounds, which fold a round trip of a constant whole and
+    // the lane reads of a constant vector's inserts.
+    fold_constant_halves(func);
     compared_truncations(func);
 }
 
@@ -181,6 +183,133 @@ fn fold_constant_lanes(func: &mut FunctionSsa) -> bool {
             kind: StoreKind::I64,
             bytes: 8,
         };
+        changed = true;
+    }
+    changed
+}
+
+/// A chain of three or more integer constants inserted into a 16-byte
+/// constant vector, each insert read by the next alone, is its two 64-bit
+/// halves: the second insert from the end becomes the low half in both
+/// lanes, the one after it the high half as an 8-byte constant, and the
+/// last inserts that over the low one. Equal halves are one splat.
+fn fold_constant_halves(func: &mut FunctionSsa) -> bool {
+    let mut uses = vec![0u32; func.insts.len()];
+    for inst in &func.insts {
+        inst.for_each_operand(|v| {
+            if let Some(u) = uses.get_mut(v as usize) {
+                *u += 1;
+            }
+        });
+    }
+    for b in &func.blocks {
+        b.terminator.for_each_operand(|v| {
+            if let Some(u) = uses.get_mut(v as usize) {
+                *u += 1;
+            }
+        });
+    }
+    // The insert at `i` of an integer constant into a 16-byte vector: its
+    // vector and the lane written, as a mask and the bits.
+    let lane = |func: &FunctionSsa, i: ValueId| -> Option<(ValueId, u128, u128)> {
+        let Inst::VecInsert {
+            vec,
+            value,
+            off,
+            kind,
+            bytes: 16,
+        } = func.insts[i as usize]
+        else {
+            return None;
+        };
+        if !matches!(
+            kind,
+            StoreKind::I8 | StoreKind::I16 | StoreKind::I32 | StoreKind::I64
+        ) {
+            return None;
+        }
+        let w = u32::from(store_width(kind));
+        let Some(&Inst::Imm(x)) = func.insts.get(value as usize) else {
+            return None;
+        };
+        let at = 8 * u32::from(off);
+        let mask = (u128::MAX >> (128 - 8 * w)) << at;
+        Some((vec, mask, (u128::from(x as u64) << at) & mask))
+    };
+    // A chain is folded from its end: an insert another one writes over is
+    // inside a chain.
+    let mut inner = vec![false; func.insts.len()];
+    for i in 0..func.insts.len() {
+        if let Some((vec, ..)) = lane(func, i as ValueId)
+            && let Some(x) = inner.get_mut(vec as usize)
+        {
+            *x = true;
+        }
+    }
+    let mut changed = false;
+    for last in 0..func.insts.len() {
+        if uses[last] == 0 || inner[last] {
+            continue;
+        }
+        let mut chain = Vec::new();
+        let (mut at, mut known, mut bits) = (last as ValueId, 0u128, 0u128);
+        let base = loop {
+            let Some((vec, mask, x)) = lane(func, at) else {
+                break None;
+            };
+            if !chain.is_empty() && uses[at as usize] != 1 {
+                break None;
+            }
+            chain.push(at);
+            // A lane written later wins over one written before it.
+            bits |= x & !known;
+            known |= mask;
+            match func.insts[vec as usize] {
+                Inst::Imm(0) | Inst::Undef => break Some(0u128),
+                Inst::VecConst {
+                    imm,
+                    kind,
+                    bytes: 16,
+                } => {
+                    let w = 8 * u32::from(store_width(kind));
+                    let l = u128::from(imm as u64) & (u128::MAX >> (128 - w));
+                    break Some((0..128 / w).fold(0, |p, j| p | l << (j * w)));
+                }
+                _ => at = vec,
+            }
+        };
+        let Some(base) = base else { continue };
+        if chain.len() < 3 {
+            continue;
+        }
+        let v = (base & !known) | bits;
+        let (lo, hi) = (v as u64 as i64, (v >> 64) as u64 as i64);
+        let (pair_lo, pair_hi) = (chain[2], chain[1]);
+        if lo == hi {
+            func.insts[last] = Inst::VecConst {
+                imm: lo,
+                kind: StoreKind::I64,
+                bytes: 16,
+            };
+        } else {
+            func.insts[pair_lo as usize] = Inst::VecConst {
+                imm: lo,
+                kind: StoreKind::I64,
+                bytes: 16,
+            };
+            func.insts[pair_hi as usize] = Inst::VecConst {
+                imm: hi,
+                kind: StoreKind::I64,
+                bytes: 8,
+            };
+            func.insts[last] = Inst::VecInsert {
+                vec: pair_lo,
+                value: pair_hi,
+                off: 8,
+                kind: StoreKind::F64,
+                bytes: 16,
+            };
+        }
         changed = true;
     }
     changed

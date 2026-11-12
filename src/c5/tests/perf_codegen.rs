@@ -3336,6 +3336,31 @@ fn a_float_to_int_conversion_needs_no_sign_extension() {
     );
 }
 
+/// A 16-byte vector built lane by lane from constants is its two 64-bit
+/// halves -- the low one in both lanes and the high one inserted over it --
+/// rather than an immediate move and an insert per lane; equal halves are
+/// one broadcast.
+#[test]
+fn a_vector_of_constant_lanes_is_its_two_halves() {
+    const SRC: &str = "typedef unsigned char u8x16 __attribute__((vector_size(16)));\n\
+typedef int v4 __attribute__((vector_size(16)));\n\
+u8x16 bytes(void) { unsigned char b = 1; return (u8x16){b, b+1, b+2, b+3, b+4, b+5, b+6, b+7, b+8, b+9, b+10, b+11, b+12, b+13, b+14, b+15}; }\n\
+v4 same(void) { int w = 5; return (v4){w, w + 1, w, w + 1}; }\n";
+    let ins = |w: &u32| w & 0xBFE0_FC00 == 0x0E00_1C00;
+    let mut m = Misses::default();
+    let words = a64(SRC, "bytes");
+    m.expect(words.len() <= 12 && !words.iter().any(ins), || {
+        format!("aarch64 bytes: {words:08x?}")
+    });
+    let words = a64(SRC, "same");
+    m.expect(words.len() <= 4, || format!("aarch64 same: {words:08x?}"));
+    for (name, n) in [("bytes", 7), ("same", 4)] {
+        let insns = x64(SRC, name);
+        m.expect(insns.len() <= n, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`

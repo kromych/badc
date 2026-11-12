@@ -62,6 +62,9 @@ pub(super) fn emit_copy(
     scratch: &ScratchPool,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    if src_place == dst {
+        return Ok(());
+    }
     // A reload lands in the destination itself.
     if is_fp && alloc.is_wide(value) {
         let Some(qd) = fp_or_spill_dst(dst, frame) else {

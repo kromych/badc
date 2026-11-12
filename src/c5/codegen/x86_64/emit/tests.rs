@@ -1115,6 +1115,22 @@ mod two_address_tests {
         );
     }
 
+    /// A copy into the place its source holds emits nothing, a spill slot
+    /// included.
+    #[test]
+    fn a_copy_into_its_source_s_place_emits_nothing() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = binop_of("long f(long a, long b) { return a + b; }", BinOp::Add);
+        for place in [Place::Spill(0), Place::IntReg(Reg::RBX.0)] {
+            alloc.places[v as usize] = place;
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            super::super::arith::emit_copy(&mut code, place, v, false, &alloc, frame)
+                .expect("copy");
+            assert!(code.is_empty(), "{place:?}: {code:02x?}");
+        }
+    }
+
     /// A division saves rax / rdx exactly for the values the allocation
     /// records live in them across it, never over its own result; without
     /// a record, any value placed there counts. Encodings are clang's.

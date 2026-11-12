@@ -268,6 +268,9 @@ pub(super) fn emit_copy(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
+    if src_place == dst {
+        return Ok(());
+    }
     let w = alloc.width(value);
     if is_fp && w >= VecWidth::V256 {
         let Some(dd) = fp_or_spill_dst(dst, frame) else {

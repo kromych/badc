@@ -1459,6 +1459,44 @@ fn emit_return_42() {
     );
 }
 
+/// A copy into the place its source holds emits nothing, a spill slot
+/// included.
+#[test]
+fn a_copy_into_its_source_s_place_emits_nothing() {
+    let target = Target::LinuxAarch64;
+    let program = Compiler::with_target(
+        "long f(long a, long b){ return a + b; } int main(void){ return 0; }".into(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let func = funcs.into_iter().find(|f| f.name == "f").expect("f");
+    let v = (func.insts.iter())
+        .position(|i| matches!(i, crate::c5::ir::Inst::Binop { .. }))
+        .expect("the addition") as u32;
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.spill_count = alloc.spill_count.max(1);
+    for place in [Place::Spill(0), Place::IntReg(19)] {
+        alloc.places[v as usize] = place;
+        let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+        let mut code = Vec::new();
+        super::arith::emit_copy(
+            &mut code,
+            place,
+            v,
+            false,
+            &alloc,
+            frame,
+            &ScratchPool::new(),
+        )
+        .expect("copy");
+        assert!(code.is_empty(), "{place:?}: {code:02x?}");
+    }
+}
+
 /// An indexed store `a[i] = v` needs three registers: base, index,
 /// and value. AArch64 has two scratch registers, so when all three
 /// spill, base and index take both and the value would otherwise

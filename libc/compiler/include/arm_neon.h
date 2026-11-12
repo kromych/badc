@@ -1068,8 +1068,6 @@ __BADC_INTRIN uint32x4_t vsha1su0q_u32(uint32x4_t __a, uint32x4_t __b, uint32x4_
 __BADC_INTRIN uint32x4_t vsha1su1q_u32(uint32x4_t __a, uint32x4_t __b) {
     return (uint32x4_t)__builtin_neon_sha1su1_4s(__a, __b);
 }
-#define __BADC_NEON_SHAQ(name, T, insn, A)                                  \
-    __BADC_NEON_FN3(name, T, T, T, insn " %q0, %q1, %2." #A)
 __BADC_INTRIN uint32x4_t vsha256hq_u32(uint32x4_t __abcd, uint32x4_t __efgh, uint32x4_t __wk) {
     return (uint32x4_t)__builtin_neon_sha256h_4s(__abcd, __efgh, __wk);
 }
@@ -1086,14 +1084,18 @@ __BADC_INTRIN uint32x4_t vsha256su1q_u32(uint32x4_t __a, uint32x4_t __b, uint32x
 /* SHA-512 and SHA3 (FEAT_SHA512, FEAT_SHA3): the hash and schedule
  * updates, the three-way xor `eor3`, `bcax` (a ^ (b & ~c)), `rax1`
  * (a ^ rol(b, 1)) and `xar` (ror(a ^ b, imm)). */
-__BADC_NEON_SHAQ(vsha512hq_u64, uint64x2_t, "sha512h", 2d)
-__BADC_NEON_SHAQ(vsha512h2q_u64, uint64x2_t, "sha512h2", 2d)
-__BADC_INTRIN uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
-    __asm__("sha512su0 %0.2d, %1.2d" : "+w"(__a) : "w"(__b));
-    return __a;
+__BADC_INTRIN uint64x2_t vsha512hq_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512h_2d(__a, __b, __c);
 }
-__BADC_NEON_FN3(vsha512su1q_u64, uint64x2_t, uint64x2_t, uint64x2_t,
-                __BADC_NEON_I3("sha512su1", 2d, 2d, 2d))
+__BADC_INTRIN uint64x2_t vsha512h2q_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512h2_2d(__a, __b, __c);
+}
+__BADC_INTRIN uint64x2_t vsha512su0q_u64(uint64x2_t __a, uint64x2_t __b) {
+    return (uint64x2_t)__builtin_neon_sha512su0_2d(__a, __b);
+}
+__BADC_INTRIN uint64x2_t vsha512su1q_u64(uint64x2_t __a, uint64x2_t __b, uint64x2_t __c) {
+    return (uint64x2_t)__builtin_neon_sha512su1_2d(__a, __b, __c);
+}
 #define __BADC_NEON_XOR3(name, T, insn)                                     \
     __BADC_INTRIN T name(T __a, T __b, T __c) {                             \
         return (T)__builtin_neon_##insn##_16b(__a, __b, __c);               \

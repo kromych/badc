@@ -1750,6 +1750,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Sha1Hash(_)
         | Sem::Sha1Su0
         | Sem::Sha1Su1
+        | Sem::Sha512Hash(_)
+        | Sem::Sha512Su0
+        | Sem::Sha512Su1
         | Sem::MulHi(..)
         | Sem::Avg(_)
         | Sem::Min(..)

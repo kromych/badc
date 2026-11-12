@@ -315,6 +315,11 @@ pub(crate) enum Sem {
     Sha1Hash(Sha1F),
     Sha1Su0,
     Sha1Su1,
+    /// FEAT_SHA512: the two halves of two hash rounds (`sha512h`, `true`,
+    /// and `sha512h2`), and the two message schedule updates.
+    Sha512Hash(bool),
+    Sha512Su0,
+    Sha512Su1,
     /// Data movement: the form carries the direction.
     Move,
     /// Hardware random number generator.
@@ -1052,6 +1057,18 @@ pub(crate) fn eval_acc(sem: Sem, acc: &[u8; 16], a: &[u8; 16], b: &[u8; 16]) -> 
             return Some(o);
         }
         Sem::Sha1Hash(f) => return Some(sha1_hash(acc, lane(a, 4, 0) as u32, b, f)),
+        Sem::Sha512Hash(part1) => return Some(sha512_hash(acc, a, b, part1)),
+        Sem::Sha512Su1 => {
+            let sigma1 = |x: u64| x.rotate_right(19) ^ x.rotate_right(61) ^ x >> 6;
+            let mut o = [0u8; 16];
+            for e in 0..2 {
+                let x = lane(acc, 8, e)
+                    .wrapping_add(sigma1(lane(a, 8, e)))
+                    .wrapping_add(lane(b, 8, e));
+                set_lane(&mut o, 8, e, x);
+            }
+            return Some(o);
+        }
         Sem::Sha1Su0 => {
             let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
             let mut o = [0u8; 16];
@@ -1702,6 +1719,21 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             };
         }
         Sem::AesMix => o = mix_columns(a, MIX),
+        Sem::Sha512Su0 => {
+            let sigma0 = |x: u64| x.rotate_right(1) ^ x.rotate_right(8) ^ x >> 7;
+            set_lane(
+                &mut o,
+                8,
+                0,
+                lane(a, 8, 0).wrapping_add(sigma0(lane(a, 8, 1))),
+            );
+            set_lane(
+                &mut o,
+                8,
+                1,
+                lane(a, 8, 1).wrapping_add(sigma0(lane(b, 8, 0))),
+            );
+        }
         Sem::Sha1Su1 => {
             let w = |v: &[u8; 16], i: usize| lane(v, 4, i) as u32;
             let t: [u32; 4] =
@@ -1773,7 +1805,7 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
         Sem::Float(..) | Sem::FloatCmp(..) | Sem::Convert(_) | Sem::ToInt(..) => {}
         Sem::MulAcc(_) | Sem::MulSub(_) | Sem::AbsDiffAcc(..) | Sem::BitSelect | Sem::Tbx(_) => {}
         Sem::Eor3 | Sem::Bcax | Sem::Sha256Hash(_) | Sem::Sha256Su1 => {}
-        Sem::Sha1Hash(_) | Sem::Sha1Su0 => {}
+        Sem::Sha1Hash(_) | Sem::Sha1Su0 | Sem::Sha512Hash(_) | Sem::Sha512Su1 => {}
         Sem::FloatRel(..) | Sem::FloatFma(..) | Sem::LongAcc(..) => {}
         Sem::Perm4x64
         | Sem::PermVar32
@@ -1907,6 +1939,37 @@ pub(crate) fn eval_wide(
             }
         }
     }
+    o
+}
+
+/// The Arm ARM's `SHA512H` (`part1`) and `SHA512H2` over the accumulator
+/// `w` and the operands `x` and `y`, each a 64-bit lane pair.
+fn sha512_hash(w: &[u8; 16], x: &[u8; 16], y: &[u8; 16], part1: bool) -> [u8; 16] {
+    let l = |v: &[u8; 16], i: usize| lane(v, 8, i);
+    let (x0, x1, y0, y1) = (l(x, 0), l(x, 1), l(y, 0), l(y, 1));
+    let (lo, hi) = if part1 {
+        let sigma1 = |v: u64| v.rotate_right(14) ^ v.rotate_right(18) ^ v.rotate_right(41);
+        let hi = ((y1 & x0) ^ (!y1 & x1))
+            .wrapping_add(sigma1(y1))
+            .wrapping_add(l(w, 1));
+        let t = hi.wrapping_add(y0);
+        let lo = ((t & y1) ^ (!t & x0))
+            .wrapping_add(sigma1(t))
+            .wrapping_add(l(w, 0));
+        (lo, hi)
+    } else {
+        let sigma0 = |v: u64| v.rotate_right(28) ^ v.rotate_right(34) ^ v.rotate_right(39);
+        let hi = ((x0 & y1) ^ (x0 & y0) ^ (y1 & y0))
+            .wrapping_add(sigma0(y0))
+            .wrapping_add(l(w, 1));
+        let lo = ((hi & y0) ^ (hi & y1) ^ (y1 & y0))
+            .wrapping_add(sigma0(hi))
+            .wrapping_add(l(w, 0));
+        (lo, hi)
+    };
+    let mut o = [0u8; 16];
+    set_lane(&mut o, 8, 0, lo);
+    set_lane(&mut o, 8, 1, hi);
     o
 }
 

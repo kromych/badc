@@ -27,7 +27,7 @@ fn sources(row: &SimdOp) -> Option<(usize, bool)> {
 /// Whether the instruction computes in the register of the row's first
 /// source: the three-operand forms but the four-register `eor3` and
 /// `bcax`, the accumulating and inserting shifts by an immediate, the AES
-/// rounds, `sha256su0` and `sha1su1`.
+/// rounds and the two-operand schedule updates.
 fn accumulates(row: &SimdOp) -> bool {
     use simd::Sem;
     match row.sem {
@@ -36,7 +36,8 @@ fn accumulates(row: &SimdOp) -> bool {
         | Sem::ShiftInsert(..)
         | Sem::AesRound(_)
         | Sem::Sha256Su0
-        | Sem::Sha1Su1 => true,
+        | Sem::Sha1Su1
+        | Sem::Sha512Su0 => true,
         _ => row.form == Form::Vvv,
     }
 }
@@ -91,11 +92,15 @@ fn encode(row: &SimdOp, regs: &[u8], imm: Option<u8>) -> Result<u32, alloc::stri
         };
         return table::encode(row.mnem, &[Opnd::QReg(*rd), e, w]);
     }
-    // The SHA-256 hash names its state halves as q registers.
-    if let (crate::c5::simd::Sem::Sha256Hash(_), [rd, rn, rm]) = (row.sem, regs) {
+    // The SHA-256 and SHA-512 hashes name their state halves as q registers.
+    if let (
+        crate::c5::simd::Sem::Sha256Hash(_) | crate::c5::simd::Sem::Sha512Hash(_),
+        [rd, rn, rm],
+    ) = (row.sem, regs)
+    {
         let w = Opnd::VecReg {
             num: *rm,
-            size: 2,
+            size: row.ret.lane_bytes().trailing_zeros() as u8,
             q: true,
         };
         return table::encode(row.mnem, &[Opnd::QReg(*rd), Opnd::QReg(*rn), w]);

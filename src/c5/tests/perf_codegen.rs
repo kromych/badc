@@ -3363,7 +3363,8 @@ fn a_loop_takes_the_registers_of_values_living_through_it() {
     });
     // AArch64: the same span between the byte load and its back edge.
     let words = a64(SRC, "f");
-    let ldrb = |w: u32| w & 0xFFC0_0000 == 0x3940_0000;
+    // `ldrb` at an unsigned offset, or post-indexed.
+    let ldrb = |w: u32| w & 0xFFC0_0000 == 0x3940_0000 || w & 0xFFE0_0C00 == 0x3840_0400;
     let off_frame = |w: u32| {
         let base = (w >> 5) & 31;
         let access = a64_mem_imm(w).is_some() || w & 0x3A00_0000 == 0x2800_0000;
@@ -7567,5 +7568,32 @@ unsigned crc(unsigned crc, const unsigned char *p, unsigned long len) {\n\
         back.is_some_and(|(h, b)| !ws[h..=b].iter().any(mov32)),
         || format!("aarch64: {ws:08x?}"),
     );
+    m.finish();
+}
+
+#[test]
+fn a_pointer_stepped_in_a_loop_is_read_through_its_step() {
+    const SRC: &str = "unsigned sum(const unsigned char *p, unsigned long n) {\n\
+    unsigned a = 1, b = 0;\n\
+    while (n--) { a += *p++; b += a; }\n\
+    return a ^ b;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: the byte load reads one below the stepped pointer.
+    let insns = x64(SRC, "sum");
+    m.expect(insns.iter().any(|i| i.op == 0x0FB6 && i.disp == -1), || {
+        format!("x86-64: {insns:x?}")
+    });
+    // AArch64: one post-indexed `ldrb` performs the load and the step.
+    let ws = a64(SRC, "sum");
+    m.expect(ws.iter().any(|&w| w & 0xFFFF_FC00 == 0x3840_1400), || {
+        format!("aarch64: {ws:08x?}")
+    });
+    // A zero stored through a stepped pointer: `strh wzr, [xN], #2`.
+    const CLEAR: &str = "void clear(unsigned short *p, long n) { while (n--) *p++ = 0; }\n";
+    let ws = a64(CLEAR, "clear");
+    m.expect(ws.iter().any(|&w| w & 0xFFFF_FC1F == 0x7800_241F), || {
+        format!("aarch64 clear: {ws:08x?}")
+    });
     m.finish();
 }

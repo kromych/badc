@@ -43,52 +43,38 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	movq	(%r11,%rdx,8), %r10
                	jmpq	*%r10
-               	movq	%rdi, %rcx
-               	movq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rdi
-               	leaq	0x1(%rdx), %rsi
-               	movsbq	(%rdx), %rdx
-               	movb	%dl, (%rcx)
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
-               	movq	%rcx, %rdi
-               	movq	%rdx, %rsi
-               	leaq	0x1(%rdi), %rcx
-               	leaq	0x1(%rsi), %rdx
-               	movsbq	(%rsi), %rsi
-               	movb	%sil, (%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
+               	incq	%rdi
+               	incq	%rsi
+               	movsbq	-0x1(%rsi), %rcx
+               	movb	%cl, -0x1(%rdi)
                	decq	%rax
                	testl	%eax, %eax
                	jg	<addr>

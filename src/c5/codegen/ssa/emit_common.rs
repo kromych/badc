@@ -3167,6 +3167,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let tags = callee_return_tags(program, funcs);
             super::super::passes::return_call::run(funcs, &tags, target);
         });
+        // An access past a pointer's step reads through the stepped value.
+        pipeline.run(
+            "passes::index_fold::rebase_on_steps",
+            &mut ssa_funcs,
+            |funcs| {
+                funcs
+                    .iter_mut()
+                    .for_each(super::super::passes::index_fold::rebase_on_steps);
+            },
+        );
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test. Reorders blocks and remaps block ids only, so it
         // runs last; the emit elides jumps to the next block in the new

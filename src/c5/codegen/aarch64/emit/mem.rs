@@ -1164,7 +1164,7 @@ pub(super) fn int_load_op(kind: LoadKind) -> Option<MemOp> {
     })
 }
 
-fn int_store_op(kind: StoreKind) -> Option<MemOp> {
+pub(super) fn int_store_op(kind: StoreKind) -> Option<MemOp> {
     Some(match kind {
         StoreKind::I64 => STR_X,
         StoreKind::I32 => STR_W,

@@ -30,7 +30,7 @@ const NO_BLOCK: BlockId = BlockId::MAX;
 const END: u32 = u32::MAX;
 
 /// Whether `inst` sets its value from its encoding alone, a TLS address where that is no call.
-fn rematerializable(inst: &Inst, tls_addr_is_call: bool) -> bool {
+pub(crate) fn rematerializable(inst: &Inst, tls_addr_is_call: bool) -> bool {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)

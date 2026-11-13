@@ -45,13 +45,10 @@ Disassembly of section .text:
                	add	x21, x21, x0
                	sub	x22, x1, x0
                	cbz	w22, <addr>
-               	add	x0, x20, #0x1
-               	add	x1, x21, #0x1
-               	ldrb	w2, [x21]
-               	strb	w2, [x20]
+               	add	x20, x20, #0x1
+               	ldrb	w0, [x21], #0x1
+               	sturb	w0, [x20, #-0x1]
                	sub	x22, x22, #0x1
-               	mov	x20, x0
-               	mov	x21, x1
                	cbnz	w22, <addr>
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x22, [sp, #0x10]

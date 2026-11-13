@@ -1714,6 +1714,15 @@ impl MemOp {
             .or_else(|| self.unscaled_field(disp))
     }
 
+    /// The post-indexed form: the access at the base, which then moves by
+    /// `step` in [-256, 255].
+    pub(crate) fn post_indexed(self, step: i64) -> Option<MemOff> {
+        (-256..256).contains(&step).then_some(MemOff {
+            scale: self.scale,
+            field: (((step as u32) & 0x1FF) << 12) | (1 << 10),
+        })
+    }
+
     /// The scaled form at byte offset `imm`, refused in every build past it.
     pub(crate) fn scaled(self, imm: u32) -> MemOff {
         match self.scaled_field(imm.into()) {

@@ -946,6 +946,144 @@ pub(super) fn lane_memory(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
     fused
 }
 
+/// A pointer step and the access through the stepped pointer that one
+/// post-indexed load or store performs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PostIndex {
+    /// The step `q = p + k`, which the access performs.
+    Step,
+    /// The access at `[q - k]`, emitted as `[p], #k`.
+    Access(i32),
+}
+
+/// The register a post-indexed access moves data through, and its form:
+/// an integer access with its value in a general register, or a `float` or
+/// `double` load into a floating register.
+fn post_indexed_op(func: &FunctionSsa, alloc: &Allocation, a: usize) -> Option<(MemOp, u8, i32)> {
+    let reg = |v: super::super::ir::ValueId| match place_of(alloc, v) {
+        Place::IntReg(r) if r != 31 => Some((r, false)),
+        Place::FpReg(r) => Some((r, true)),
+        _ => None,
+    };
+    match func.insts[a] {
+        Inst::Load {
+            disp,
+            kind,
+            pc_rel: false,
+            align: 0,
+            ..
+        } => {
+            let (rt, fp) = reg(a as super::super::ir::ValueId)?;
+            let op = match kind {
+                LoadKind::F64 => LDR_D,
+                LoadKind::F32 if alloc.is_f32(a as super::super::ir::ValueId) => LDR_S,
+                k => int_load_op(k)?,
+            };
+            (fp == matches!(kind, LoadKind::F32 | LoadKind::F64)).then_some((op, rt, disp))
+        }
+        Inst::Store {
+            disp,
+            value,
+            kind,
+            pc_rel: false,
+            align: 0,
+            ..
+        } if place_of(alloc, a as super::super::ir::ValueId) == Place::None => {
+            // A stored zero comes out of the zero register; the constant
+            // has no register of its own (`Allocation::imm_store`).
+            let rt = if alloc.imm_store.get(a) == Some(&true) {
+                31
+            } else {
+                let (r, false) = reg(value)? else {
+                    return None;
+                };
+                r
+            };
+            Some((int_store_op(kind)?, rt, disp))
+        }
+        _ => None,
+    }
+}
+
+/// Steps `q = p + k` that keep `p`'s register, each with the access through
+/// `[q - k]` emitted next, which one post-indexed access performs.
+pub(super) fn post_indexed(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<PostIndex>> {
+    let mut out = alloc::vec![None; func.insts.len()];
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let (p, k) = match func.insts[v as usize] {
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm),
+                Inst::BinopI {
+                    op: BinOp::Sub,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm.wrapping_neg()),
+                _ => continue,
+            };
+            let r = place_of(alloc, v);
+            if !(-256..256).contains(&k)
+                || k == 0
+                || !matches!(r, Place::IntReg(x) if x != 31)
+                || place_of(alloc, p) != r
+                || alloc.high_dead(v)
+                || super::ssa::emit_common::inst_emits_nothing(&func.insts[v as usize], v, alloc)
+            {
+                continue;
+            }
+            let next = (v + 1..block.inst_range.end).find(|&u| {
+                !super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc)
+            });
+            let Some(a) = next else { continue };
+            let addr = match func.insts[a as usize] {
+                Inst::Load { addr, .. } | Inst::Store { addr, .. } => addr,
+                _ => continue,
+            };
+            let Place::IntReg(rn) = r else { continue };
+            if let Some((_, rt, disp)) = post_indexed_op(func, alloc, a as usize)
+                && addr == v
+                && i64::from(disp) == -k
+                && (rt != rn || matches!(place_of(alloc, a), Place::FpReg(_)))
+                && alloc
+                    .call_saves
+                    .binary_search_by_key(&a, |&(site, _)| site)
+                    .is_err()
+            {
+                out[v as usize] = Some(PostIndex::Step);
+                out[a as usize] = Some(PostIndex::Access(k as i32));
+            }
+        }
+    }
+    out
+}
+
+/// The post-indexed access [`post_indexed`] paired with the step ahead of
+/// it; `None` for any other instruction.
+pub(super) fn emit_post_indexed(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    paired: &[Option<PostIndex>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let Some(PostIndex::Access(k)) = paired.get(v as usize).copied().flatten() else {
+        return None;
+    };
+    let (func, alloc) = (fcx.func, fcx.alloc);
+    let (op, rt, _) = post_indexed_op(func, alloc, v as usize)?;
+    let (Inst::Load { addr, .. } | Inst::Store { addr, .. }) = func.insts[v as usize] else {
+        return None;
+    };
+    let Place::IntReg(rn) = place_of(alloc, addr) else {
+        return Some(fail("post-indexed access: base not in a register"));
+    };
+    let off = op.post_indexed(k.into())?;
+    emit(code, enc_mem(op, rt, Reg(rn), off));
+    Some(Ok(()))
+}
+
 /// `ld1` or `st1` of one lane for a lane insert or store whose value
 /// [`lane_memory`] fused into it; `None` for any other instruction.
 pub(super) fn emit_lane_memory(

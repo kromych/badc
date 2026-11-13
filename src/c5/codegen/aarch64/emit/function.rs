@@ -130,6 +130,8 @@ struct FunctionEmitter<'a, 'b> {
     prebatched: Vec<bool>,
     /// Loads and lane reads a lane insert or store performs ([`lane_memory`]).
     lane_mem: Vec<bool>,
+    /// Pointer steps and the accesses performing them ([`post_indexed`]).
+    post_index: Vec<Option<PostIndex>>,
     block_offsets: Vec<usize>,
     branch_fixups: Vec<BranchFixup>,
     /// Per block: its conditional branch does not reach its target and
@@ -336,6 +338,7 @@ pub(crate) fn emit_function(
         plan,
         prebatched: Vec::new(),
         lane_mem: lane_memory(func, alloc),
+        post_index: post_indexed(func, alloc),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         far_cond: alloc::vec![false; func.blocks.len()],
@@ -971,7 +974,10 @@ impl FunctionEmitter<'_, '_> {
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
-        if self.prebatched[v as usize] || self.lane_mem[v as usize] {
+        if self.prebatched[v as usize]
+            || self.lane_mem[v as usize]
+            || self.post_index[v as usize] == Some(PostIndex::Step)
+        {
             return Ok(());
         }
         // An inline-asm block takes the mapping state itself.
@@ -1009,7 +1015,8 @@ impl FunctionEmitter<'_, '_> {
         for s in saves {
             call_save(self.cx.code, self.fcx.frame, s, true);
         }
-        let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx);
+        let fused = emit_lane_memory(self.cx.code, inst, &self.lane_mem, place, &self.fcx)
+            .or_else(|| emit_post_indexed(self.cx.code, v, &self.post_index, &self.fcx));
         let lowered = fused.unwrap_or_else(|| {
             emit_inst(
                 self.cx,

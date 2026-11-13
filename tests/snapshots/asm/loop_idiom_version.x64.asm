@@ -60,13 +60,11 @@ Disassembly of section .text:
                	subq	%rax, %r13
                	testl	%r13d, %r13d
                	je	<addr>
-               	leaq	0x1(%rbx), %rdi
-               	leaq	0x1(%r12), %rsi
-               	movzbq	(%r12), %rax
-               	movb	%al, (%rbx)
+               	incq	%rbx
+               	incq	%r12
+               	movzbq	-0x1(%r12), %rax
+               	movb	%al, -0x1(%rbx)
                	decq	%r13
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
                	testl	%r13d, %r13d
                	jne	<addr>
                	popq	%rbx

@@ -61,13 +61,13 @@ fn ent_pc=3 n_params=3 variadic=false locals=0
     terminator Jmp(b6)
   block 5  start_pc=0
     v85  Imm(0)                                           -> x0
-    v86  BinopI { op=add, lhs=v81, rhs_imm=1 }            -> x7
+    v86  BinopI { op=add, lhs=v81, rhs_imm=1 }            -> x3
     v87  Imm(0)                                           -> x0
     v88  Imm(0)                                           -> x0
-    v89  BinopI { op=add, lhs=v82, rhs_imm=1 }            -> x6
+    v89  BinopI { op=add, lhs=v82, rhs_imm=1 }            -> x12
     v90  Imm(0)                                           -> x0
-    v91  Load { addr=v82, disp=0, kind=U8 }               -> x0
-    v92  Store { addr=v81, disp=0, value=v91, kind=I8 }   -> -
+    v91  Load { addr=v89, disp=-1, kind=U8 }              -> x0
+    v92  Store { addr=v86, disp=-1, value=v91, kind=I8 }  -> -
     v93  BinopI { op=and, lhs=v83, rhs_imm=4294967295 }   -> x0
     v94  BinopI { op=add, lhs=v83, rhs_imm=-1 }           -> x13
     v95  Imm(0)                                           -> x0

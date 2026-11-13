@@ -117,10 +117,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v111 BinopI { op=add, lhs=v101, rhs_imm=7 }           -> x0
     terminator Jmp(b2)   (exit_acc=v111)
   block 1  start_pc=0
-    v370 BinopI { op=add, lhs=v364, rhs_imm=-1 }          -> x2
-    v371 BinopI { op=add, lhs=v365, rhs_imm=1 }           -> x7
-    v372 Load { addr=v365, disp=0, kind=I8 }              -> x1
-    v373 Store { addr=v364, disp=0, value=v372, kind=I8 } -> -
+    v370 BinopI { op=add, lhs=v364, rhs_imm=-1 }          -> x0
+    v371 BinopI { op=add, lhs=v365, rhs_imm=1 }           -> x1
+    v372 Load { addr=v371, disp=-1, kind=I8 }             -> x2
+    v373 Store { addr=v370, disp=1, value=v372, kind=I8 } -> -
     terminator Jmp(b2)   (exit_acc=v373)
   block 2  start_pc=0
     v364 Phi { incoming=[b0:v111, b1:v370], kind=I64 }    -> x0
@@ -299,10 +299,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v235 Imm(8)                                           -> x2
     terminator Jmp(b22)   (exit_acc=v235)
   block 21  start_pc=0
-    v404 BinopI { op=add, lhs=v398, rhs_imm=1 }           -> x2
-    v405 BinopI { op=add, lhs=v399, rhs_imm=1 }           -> x7
-    v406 Load { addr=v399, disp=0, kind=I8 }              -> x1
-    v407 Store { addr=v398, disp=0, value=v406, kind=I8 } -> -
+    v404 BinopI { op=add, lhs=v398, rhs_imm=1 }           -> x0
+    v405 BinopI { op=add, lhs=v399, rhs_imm=1 }           -> x1
+    v406 Load { addr=v405, disp=-1, kind=I8 }             -> x2
+    v407 Store { addr=v404, disp=-1, value=v406, kind=I8 } -> -
     terminator Jmp(b22)   (exit_acc=v407)
   block 22  start_pc=0
     v398 Phi { incoming=[b20:v214, b21:v404], kind=I64 }  -> x0

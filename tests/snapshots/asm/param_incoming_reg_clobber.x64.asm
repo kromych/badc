@@ -38,13 +38,11 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	addq	$0x7, %rax
                	leaq	-0x1(%rdx), %rsi
-               	leaq	-0x1(%rax), %rdx
-               	leaq	0x1(%rcx), %rdi
-               	movsbq	(%rcx), %rcx
-               	movb	%cl, (%rax)
-               	movq	%rdx, %rax
+               	decq	%rax
+               	incq	%rcx
+               	movsbq	-0x1(%rcx), %rdx
+               	movb	%dl, 0x1(%rax)
                	movq	%rsi, %rdx
-               	movq	%rdi, %rcx
                	leaq	-0x1(%rdx), %rsi
                	testl	%edx, %edx
                	jne	<addr>
@@ -87,13 +85,11 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movl	$0x8, %edx
                	leaq	-0x1(%rdx), %rsi
-               	leaq	0x1(%rax), %rdx
-               	leaq	0x1(%rcx), %rdi
-               	movsbq	(%rcx), %rcx
-               	movb	%cl, (%rax)
-               	movq	%rdx, %rax
+               	incq	%rax
+               	incq	%rcx
+               	movsbq	-0x1(%rcx), %rdx
+               	movb	%dl, -0x1(%rax)
                	movq	%rsi, %rdx
-               	movq	%rdi, %rcx
                	leaq	-0x1(%rdx), %rsi
                	testl	%edx, %edx
                	jne	<addr>

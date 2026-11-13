@@ -639,6 +639,179 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     }
 }
 
+/// Rebase an access through `p` that follows `q = p + k` in its block onto
+/// `q`, its displacement less `k`, when `p` then dies at `q`: nothing else
+/// reads `p` past `q` in the block and `p` is not live out of it. The two
+/// then share a register, where a pointer stepped in a loop (`*p++`) took a
+/// copy on the back edge. A value set again rather than kept live is not
+/// rebased, nor onto a step nothing else reads.
+pub(crate) fn rebase_on_steps(func: &mut FunctionSsa) {
+    use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+    use crate::c5::ir::BlockId;
+    // A use at a block's end: a terminator, an accumulator, a phi income.
+    const END: u32 = u32::MAX;
+    let mut steps: Vec<(BlockId, ValueId, ValueId, i64)> = Vec::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        for q in block.inst_range.clone() {
+            let (p, k) = match func.insts[q as usize] {
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs,
+                    rhs_imm,
+                } => (lhs, rhs_imm),
+                Inst::BinopI {
+                    op: BinOp::Sub,
+                    lhs,
+                    rhs_imm,
+                } => match rhs_imm.checked_neg() {
+                    Some(k) => (lhs, k),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let set_again = |i: &Inst| crate::c5::codegen::ssa::remat::rematerializable(i, false);
+            if k != 0
+                && (p as usize) < func.insts.len()
+                && !set_again(&func.insts[p as usize])
+                && !steps.iter().any(|s| s.0 == b as BlockId && s.2 == p)
+            {
+                steps.push((b as BlockId, q, p, k));
+            }
+        }
+    }
+    // A step nothing reads would be set only for the rebased accesses.
+    let live = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    steps.retain(|s| live[s.1 as usize] > 0);
+    if steps.is_empty() {
+        return;
+    }
+    let stepped: alloc::collections::BTreeSet<ValueId> = steps.iter().map(|s| s.2).collect();
+    let mut def_block = alloc::vec![BlockId::MAX; func.insts.len()];
+    let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(BlockId, u32)>> =
+        alloc::collections::BTreeMap::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        let b = b as BlockId;
+        for i in block.inst_range.clone() {
+            def_block[i as usize] = b;
+            match &func.insts[i as usize] {
+                Inst::Phi { incoming, .. } => {
+                    for &(pred, v) in incoming {
+                        if stepped.contains(&v) {
+                            uses.entry(v).or_default().push((pred, END));
+                        }
+                    }
+                }
+                inst => inst.for_each_operand(|v| {
+                    if stepped.contains(&v) {
+                        uses.entry(v).or_default().push((b, i));
+                    }
+                }),
+            }
+        }
+        let mut at_end = |v: ValueId| {
+            if stepped.contains(&v) {
+                uses.entry(v).or_default().push((b, END));
+            }
+        };
+        block.terminator.for_each_operand(&mut at_end);
+        at_end(block.exit_acc);
+    }
+    let preds = predecessors(func);
+    let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
+        .map(|b| {
+            successors(
+                &b.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+        })
+        .collect();
+    // Blocks `p` is live into, from its uses back to its definition.
+    let live_in = |p: ValueId, us: &[(BlockId, u32)]| {
+        let def = def_block[p as usize];
+        let mut live = alloc::vec![false; func.blocks.len()];
+        let mut work: Vec<BlockId> = Vec::new();
+        let enter = |b: BlockId, live: &mut Vec<bool>, work: &mut Vec<BlockId>| {
+            if b != def && !core::mem::replace(&mut live[b as usize], true) {
+                work.push(b);
+            }
+        };
+        for &(b, at) in us {
+            match at {
+                END => {
+                    if b != def {
+                        enter(b, &mut live, &mut work);
+                    }
+                }
+                _ => enter(b, &mut live, &mut work),
+            }
+        }
+        while let Some(b) = work.pop() {
+            for &pr in &preds[b as usize] {
+                enter(pr, &mut live, &mut work);
+            }
+        }
+        live
+    };
+    let mut rewrites: Vec<(usize, ValueId, i32)> = Vec::new();
+    for &(b, q, p, k) in &steps {
+        let Some(us) = uses.get(&p) else {
+            continue;
+        };
+        let mut moved = Vec::new();
+        let rebasable = us.iter().all(|&(ub, at)| {
+            if ub != b || (at != END && at <= q) {
+                return true;
+            }
+            let access = match func.insts.get(at as usize) {
+                Some(&Inst::Load {
+                    addr,
+                    disp,
+                    kind,
+                    align,
+                    pc_rel: false,
+                    ..
+                }) if addr == p => Some((disp, load_width(kind), align)),
+                Some(&Inst::Store {
+                    addr,
+                    disp,
+                    value,
+                    kind,
+                    align,
+                    pc_rel: false,
+                    ..
+                }) if addr == p && value != p => Some((disp, store_width(kind), align)),
+                _ => None,
+            };
+            access.is_some_and(|(disp, w, align)| {
+                let off = i64::from(disp) - k;
+                let ok = displacement_reaches(off, w, align != 0) && i32::try_from(off).is_ok();
+                if ok {
+                    moved.push((at as usize, q, off as i32));
+                }
+                ok
+            })
+        });
+        if !rebasable || moved.is_empty() {
+            continue;
+        }
+        let live = live_in(p, us);
+        if succs[b as usize].iter().any(|&s| live[s as usize]) {
+            continue;
+        }
+        rewrites.extend(moved);
+    }
+    for (at, q, off) in rewrites {
+        match &mut func.insts[at] {
+            Inst::Load { addr, disp, .. } | Inst::Store { addr, disp, .. } => {
+                *addr = q;
+                *disp = off;
+            }
+            _ => unreachable!("an access"),
+        }
+    }
+}
+
 /// One round of the scaled-index and displacement folds; whether any
 /// access was rewritten.
 fn fold_round(func: &mut FunctionSsa) -> bool {

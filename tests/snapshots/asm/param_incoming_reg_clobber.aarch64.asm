@@ -30,13 +30,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	add	x0, x0, #0x7
                	sub	x3, x2, #0x1
-               	sub	x2, x0, #0x1
-               	add	x4, x1, #0x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x0]
-               	mov	x0, x2
+               	sub	x0, x0, #0x1
+               	ldrb	w2, [x1], #0x1
+               	strb	w2, [x0, #0x1]
                	mov	x2, x3
-               	mov	x1, x4
                	sub	x3, x2, #0x1
                	cbnz	w2, <addr>
                	mov	x1, #0x0                // =0
@@ -79,13 +76,10 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	mov	x2, #0x8                // =8
                	sub	x3, x2, #0x1
-               	add	x2, x0, #0x1
-               	add	x4, x1, #0x1
-               	ldrb	w1, [x1]
-               	strb	w1, [x0]
-               	mov	x0, x2
+               	add	x0, x0, #0x1
+               	ldrb	w2, [x1], #0x1
+               	sturb	w2, [x0, #-0x1]
                	mov	x2, x3
-               	mov	x1, x4
                	sub	x3, x2, #0x1
                	cbnz	w2, <addr>
                	mov	x0, #0x0                // =0

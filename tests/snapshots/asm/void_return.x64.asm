@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	movl	(%rdi), %eax
-               	incq	%rax
-               	movl	%eax, (%rdi)
+               	addl	$0x1, (%rdi)
                	retq
 
 <copy_pair>:
@@ -77,9 +75,7 @@ Disassembly of section .text:
 <count_down>:
                	testl	%edi, %edi
                	je	<addr>
-               	movl	(%rsi), %eax
-               	addq	%rdi, %rax
-               	movl	%eax, (%rsi)
+               	addl	%edi, (%rsi)
                	decq	%rdi
                	testl	%edi, %edi
                	jne	<addr>

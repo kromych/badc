@@ -38,9 +38,7 @@ Disassembly of section .text:
                	retq
 
 <bump>:
-               	movq	(%rdi), %rax
-               	addq	$0xb, %rax
-               	movq	%rax, (%rdi)
+               	addq	$0xb, (%rdi)
                	retq
 
 <make>:

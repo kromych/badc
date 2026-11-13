@@ -340,6 +340,7 @@ pub(crate) fn emit_function(
         abs_addr_refs,
     };
     let entry_mark = out.mark();
+    let steps = flag_steps(func, alloc);
     let mut fe = FnEmit {
         start: entry_mark.code,
         out,
@@ -352,7 +353,8 @@ pub(crate) fn emit_function(
         abs32_addrs,
         endbr_targets,
         param_prebatched: alloc::vec![false; func.insts.len()],
-        flag_steps: flag_steps(func, alloc),
+        mem_dest: memory_destinations(func, alloc, &steps),
+        flag_steps: steps,
         plan,
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
@@ -420,6 +422,9 @@ struct FnEmit<'a, 'b> {
     /// Steps whose flags a branch reads, and the comparisons they answer
     /// ([`flag_steps`]).
     flag_steps: Vec<Option<FlagStep>>,
+    /// Loads, operations and stores one memory-destination instruction
+    /// performs ([`memory_destinations`]).
+    mem_dest: Vec<Option<MemDest>>,
     /// Which blocks are emitted and where each branch lands. Fixed before
     /// the first pass: the short forms are keyed by emission index, so both
     /// passes have to write the same branches.
@@ -922,6 +927,7 @@ impl FnEmit<'_, '_> {
             call_save(self.out.cx.code, self.fcx.frame, s, true);
         }
         let lowered = emit_flag_step(self.out.cx.code, v, &self.flag_steps, &self.fcx)
+            .or_else(|| emit_memory_destination(self.out.cx.code, v, &self.mem_dest, &self.fcx))
             .unwrap_or_else(|| emit_inst(&mut self.out, inst, v, place, &self.fcx));
         lowered.inspect_err(|_| {
             #[cfg(feature = "codegen_test")]

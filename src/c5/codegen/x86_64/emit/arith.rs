@@ -1983,3 +1983,163 @@ pub(super) fn flag_step_cc(
     };
     Some(if negate { cc.flip() } else { cc })
 }
+
+/// A load, an operation on it and the store of the result to the same
+/// bytes, performed by one memory-destination instruction
+/// ([`memory_destinations`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum MemDest {
+    /// The load or the operation: no code of its own.
+    Folded,
+    /// The store: `op [base + disp], imm` or `op [base + disp], reg`.
+    Writes {
+        mnem: Mnem,
+        width: u8,
+        imm: Option<i32>,
+        reg: u8,
+    },
+}
+
+/// Stores of `op(load, src)` to the bytes the load read, at the store's
+/// width, where `op` is an addition, subtraction or bitwise operation, whose
+/// low bytes the operands' low bytes alone decide: the load and the
+/// operation each read only by the next, nothing emitted between them, and
+/// no flags another instruction set read past the store.
+pub(super) fn memory_destinations(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    steps: &[Option<FlagStep>],
+) -> Vec<Option<MemDest>> {
+    use super::super::ir::ValueId;
+    let mut out = alloc::vec![None; func.insts.len()];
+    let silent =
+        |u: ValueId| super::ssa::emit_common::inst_emits_nothing(&func.insts[u as usize], u, alloc);
+    let single = |v: ValueId| alloc.use_counts.get(v as usize) == Some(&1);
+    let in_reg = |v: ValueId| match place_of(alloc, v) {
+        Place::IntReg(r) => Some(r),
+        _ => None,
+    };
+    let sets_flags = |u: ValueId| {
+        alloc.branch_fused.get(u as usize) == Some(&true)
+            || steps.get(u as usize).copied().flatten().is_some()
+    };
+    for block in &func.blocks {
+        let range = block.inst_range.clone();
+        for s in range.clone() {
+            let Inst::Store {
+                addr,
+                disp,
+                value: o,
+                kind,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            } = func.insts[s as usize]
+            else {
+                continue;
+            };
+            let width: u8 = match kind {
+                StoreKind::I8 => 1,
+                StoreKind::I16 => 2,
+                StoreKind::I32 => 4,
+                StoreKind::I64 => 8,
+                _ => continue,
+            };
+            if place_of(alloc, s) != Place::None
+                || !range.contains(&o)
+                || o >= s
+                || !single(o)
+                || !(o + 1..s).all(silent)
+                || (range.start..s).any(sets_flags)
+                || in_reg(addr).is_none()
+            {
+                continue;
+            }
+            let loaded = |l: ValueId| match func.insts[l as usize] {
+                Inst::Load {
+                    addr: a,
+                    disp: d,
+                    kind,
+                    volatile: false,
+                    pc_rel: false,
+                    align: 0,
+                } => a == addr && d == disp && kind.bytes() == width,
+                _ => false,
+            };
+            // The immediate's low bytes at the store's width, which alone
+            // decide the stored bytes.
+            let narrow = |k: i64| match width {
+                1 => Some(i32::from(k as i8)),
+                2 => Some(i32::from(k as i16)),
+                4 => Some(k as i32),
+                _ => i32::try_from(k).ok(),
+            };
+            let (op, l, imm, reg) = match func.insts[o as usize] {
+                Inst::BinopI { op, lhs, rhs_imm } => match narrow(rhs_imm) {
+                    Some(k) => (op, lhs, Some(k), 0),
+                    None => continue,
+                },
+                Inst::Binop { op, lhs, rhs } if lhs != rhs && loaded(lhs) => match in_reg(rhs) {
+                    Some(r) => (op, lhs, None, r),
+                    None => continue,
+                },
+                Inst::Binop { op, lhs, rhs }
+                    if lhs != rhs
+                        && loaded(rhs)
+                        && matches!(op, BinOp::Add | BinOp::And | BinOp::Or | BinOp::Xor) =>
+                {
+                    match in_reg(lhs) {
+                        Some(r) => (op, rhs, None, r),
+                        None => continue,
+                    }
+                }
+                _ => continue,
+            };
+            let Some(mnem) = alu_mnem(op).filter(|&m| m != Mnem::Imul) else {
+                continue;
+            };
+            if !range.contains(&l) || l >= o || !single(l) || !loaded(l) || !(l + 1..o).all(silent)
+            {
+                continue;
+            }
+            out[l as usize] = Some(MemDest::Folded);
+            out[o as usize] = Some(MemDest::Folded);
+            out[s as usize] = Some(MemDest::Writes {
+                mnem,
+                width,
+                imm,
+                reg,
+            });
+        }
+    }
+    out
+}
+
+/// The instruction [`memory_destinations`] marked; `None` for any other.
+pub(super) fn emit_memory_destination(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    marks: &[Option<MemDest>],
+    fcx: &FnCtx,
+) -> Option<Emit> {
+    let (mnem, width, imm, reg) = match marks.get(v as usize).copied().flatten()? {
+        MemDest::Folded => return Some(Ok(())),
+        MemDest::Writes {
+            mnem,
+            width,
+            imm,
+            reg,
+        } => (mnem, width, imm, reg),
+    };
+    let Inst::Store { addr, disp, .. } = fcx.func.insts[v as usize] else {
+        return None;
+    };
+    let Place::IntReg(base) = place_of(fcx.alloc, addr) else {
+        return Some(fail("memory destination: address not in a register"));
+    };
+    match imm {
+        Some(k) => super::encode::emit_mi(code, mnem, width, Reg(base), disp, k),
+        None => super::encode::emit_mr(code, mnem, width, Reg(base), disp, Reg(reg)),
+    }
+    Some(Ok(()))
+}

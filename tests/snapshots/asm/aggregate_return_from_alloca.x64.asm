@@ -242,9 +242,7 @@ Disassembly of section .text:
                	cvtsi2ss	%rax, %xmm1
                	addss	%xmm1, %xmm0
                	movss	%xmm0, (%rbx)
-               	movl	0x4(%rbx), %ecx
-               	addq	%rcx, %rax
-               	movl	%eax, 0x4(%rbx)
+               	addl	%eax, 0x4(%rbx)
                	movq	(%rbx), %rax
                	leaq	-0x30(%rbp), %rsp
                	popq	%rbx
@@ -380,42 +378,18 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	callq	<addr>
                	leaq	(%r12,%r13), %rax
-               	movsbq	(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, (%rbx)
-               	movsbq	0x1(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x1(%rbx)
-               	movsbq	0x2(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x2(%rbx)
-               	movsbq	0x3(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x3(%rbx)
-               	movsbq	0x4(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x4(%rbx)
-               	movsbq	0x5(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x5(%rbx)
-               	movsbq	0x6(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x6(%rbx)
-               	movsbq	0x7(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x7(%rbx)
-               	movsbq	0x8(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x8(%rbx)
-               	movsbq	0x9(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0x9(%rbx)
-               	movsbq	0xa(%rbx), %rcx
-               	addq	%rax, %rcx
-               	movb	%cl, 0xa(%rbx)
-               	movsbq	0xb(%rbx), %rcx
-               	addq	%rcx, %rax
-               	movb	%al, 0xb(%rbx)
+               	addb	%al, (%rbx)
+               	addb	%al, 0x1(%rbx)
+               	addb	%al, 0x2(%rbx)
+               	addb	%al, 0x3(%rbx)
+               	addb	%al, 0x4(%rbx)
+               	addb	%al, 0x5(%rbx)
+               	addb	%al, 0x6(%rbx)
+               	addb	%al, 0x7(%rbx)
+               	addb	%al, 0x8(%rbx)
+               	addb	%al, 0x9(%rbx)
+               	addb	%al, 0xa(%rbx)
+               	addb	%al, 0xb(%rbx)
                	movzbq	(%rbx), %rax
                	movzbq	0x1(%rbx), %rcx
                	shlq	$0x8, %rcx

@@ -127,9 +127,7 @@ Disassembly of section .text:
                	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rsi
-               	movq	(%rbx), %rax
-               	addq	%rdx, %rax
-               	movq	%rax, (%rbx)
+               	addq	%rdx, (%rbx)
                	jmp	<addr>
                	movq	%rsi, %rax
                	popq	%rbx

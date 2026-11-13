@@ -146,9 +146,7 @@ Disassembly of section .text:
                	leaq	<rip>, %r9 # <addr>
                	movq	(%r9,%r8,8), %r8
                	jmpq	*%r8
-               	movq	-0x8(%rsi), %r8
-               	decq	%r8
-               	movq	%r8, -0x8(%rsi)
+               	addq	$-0x1, -0x8(%rsi)
                	leaq	0x1(%rax), %r9
                	movq	(%rdi,%rax,8), %rax
                	leaq	<rip>, %r8 # <addr>
@@ -273,9 +271,7 @@ Disassembly of section .text:
                	cmpq	$0x0, -0x8(%rsi)
                	cmovneq	%rax, %rdx
                	jmp	<addr>
-               	movq	-0x8(%rsi), %rdx
-               	decq	%rdx
-               	movq	%rdx, -0x8(%rsi)
+               	addq	$-0x1, -0x8(%rsi)
                	movq	%rax, %rdx
                	jmp	<addr>
                	addq	$0x3, %rcx

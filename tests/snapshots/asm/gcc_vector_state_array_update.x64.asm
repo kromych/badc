@@ -993,24 +993,12 @@ Disassembly of section .text:
                	decq	%rax
                	testl	%eax, %eax
                	jg	<addr>
-               	movzbq	(%rdi), %rax
-               	xorq	%r9, %rax
-               	movb	%al, (%rdi)
-               	movzbq	0x1(%rdi), %rax
-               	xorq	%rbx, %rax
-               	movb	%al, 0x1(%rdi)
-               	movzbq	0x2(%rdi), %rax
-               	xorq	%r12, %rax
-               	movb	%al, 0x2(%rdi)
-               	movzbq	0x3(%rdi), %rax
-               	xorq	%r13, %rax
-               	movb	%al, 0x3(%rdi)
-               	movzbq	0x4(%rdi), %rax
-               	xorq	%r14, %rax
-               	movb	%al, 0x4(%rdi)
-               	movzbq	0x5(%rdi), %rax
-               	xorq	%r15, %rax
-               	movb	%al, 0x5(%rdi)
+               	xorb	%r9b, (%rdi)
+               	xorb	%bl, 0x1(%rdi)
+               	xorb	%r12b, 0x2(%rdi)
+               	xorb	%r13b, 0x3(%rdi)
+               	xorb	%r14b, 0x4(%rdi)
+               	xorb	%r15b, 0x5(%rdi)
                	movzbq	0x6(%rdi), %rax
                	xorq	0x78(%rsp), %rax
                	movb	%al, 0x6(%rdi)

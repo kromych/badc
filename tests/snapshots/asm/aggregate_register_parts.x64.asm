@@ -219,12 +219,8 @@ Disassembly of section .text:
                	retq
 
 <bump_via_ptr>:
-               	movq	(%rdi), %rax
-               	addq	$0xa, %rax
-               	movq	%rax, (%rdi)
-               	movq	0x8(%rdi), %rax
-               	addq	$0x14, %rax
-               	movq	%rax, 0x8(%rdi)
+               	addq	$0xa, (%rdi)
+               	addq	$0x14, 0x8(%rdi)
                	retq
 
 <escape>:

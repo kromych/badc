@@ -116,40 +116,20 @@ Disassembly of section .text:
                	shlq	$0x11, %r8
                	movl	(%rbx), %r9d
                	movl	0x4(%rbx), %r12d
-               	movl	0x10(%rbx), %r13d
-               	xorq	%r13, %r9
-               	movl	%r9d, 0x10(%rbx)
-               	movl	0x14(%rbx), %r9d
-               	xorq	%r12, %r9
-               	movl	%r9d, 0x14(%rbx)
-               	movl	0x18(%rbx), %r9d
-               	xorq	%r9, %rcx
-               	movl	%ecx, 0x18(%rbx)
-               	movl	0x1c(%rbx), %ecx
-               	xorq	%rcx, %rax
-               	movl	%eax, 0x1c(%rbx)
+               	xorl	%r9d, 0x10(%rbx)
+               	xorl	%r12d, 0x14(%rbx)
+               	xorl	%ecx, 0x18(%rbx)
+               	xorl	%eax, 0x1c(%rbx)
                	movl	0x10(%rbx), %eax
                	movl	0x14(%rbx), %ecx
-               	movl	0x8(%rbx), %r9d
-               	xorq	%r9, %rax
-               	movl	%eax, 0x8(%rbx)
-               	movl	0xc(%rbx), %eax
-               	xorq	%rcx, %rax
-               	movl	%eax, 0xc(%rbx)
+               	xorl	%eax, 0x8(%rbx)
+               	xorl	%ecx, 0xc(%rbx)
                	movl	0x18(%rbx), %eax
                	movl	0x1c(%rbx), %ecx
-               	movl	(%rbx), %r9d
-               	xorq	%rax, %r9
-               	movl	%r9d, (%rbx)
-               	movl	0x4(%rbx), %r9d
-               	xorq	%rcx, %r9
-               	movl	%r9d, 0x4(%rbx)
-               	movl	0x10(%rbx), %r9d
-               	xorq	%r9, %rdi
-               	movl	%edi, 0x10(%rbx)
-               	movl	0x14(%rbx), %edi
-               	xorq	%r8, %rdi
-               	movl	%edi, 0x14(%rbx)
+               	xorl	%eax, (%rbx)
+               	xorl	%ecx, 0x4(%rbx)
+               	xorl	%edi, 0x10(%rbx)
+               	xorl	%r8d, 0x14(%rbx)
                	movq	%rax, %rdi
                	shrq	$0x13, %rdi
                	movq	%rcx, %r8

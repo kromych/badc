@@ -83,9 +83,7 @@ Disassembly of section .text:
                	retq
 
 <touch>:
-               	movq	(%rdi), %rax
-               	incq	%rax
-               	movq	%rax, (%rdi)
+               	addq	$0x1, (%rdi)
                	retq
 
 <slot>:

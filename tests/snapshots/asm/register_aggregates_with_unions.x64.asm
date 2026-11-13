@@ -156,9 +156,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdi)
-               	movl	(%rdi), %eax
-               	incq	%rax
-               	movl	%eax, (%rdi)
+               	addl	$0x1, (%rdi)
                	movq	(%rdi), %rax
                	movq	0x8(%rdi), %rdx
                	leave

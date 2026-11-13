@@ -7717,3 +7717,34 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     assert_eq!(start % 32, 0);
     assert_eq!(with, 0);
 }
+
+/// A load, an addition, subtraction or bitwise operation on it and the store
+/// of the result to the same bytes is one memory-destination instruction at
+/// the store's width, an immediate taken at that width.
+#[test]
+fn x64_a_location_updated_in_place_is_one_instruction() {
+    const SRC: &str = "struct obj { int ref_count; };\n\
+void dup(struct obj *p) { p->ref_count++; }\n\
+void bump(unsigned char *p) { *p += 300; }\n\
+void mask(long *p, long m) { *p &= m; }\n\
+void sub3(short *p) { p[2] -= 3; }\n";
+    let mut m = Misses::default();
+    // (function, opcode, ModRM reg field of the immediate forms, immediate)
+    for (name, op, ext, imm) in [
+        ("dup", 0x83, 0, Some(1)),
+        ("bump", 0x80, 0, Some(0x2c)),
+        ("mask", 0x21, 0, None),
+        ("sub3", 0x83, 5, Some(3)),
+    ] {
+        let insns = x64(SRC, name);
+        let rmw = insns.first().filter(|i| {
+            let field = i.modrm.map_or(0, |m| (m >> 3) & 7);
+            i.op == op
+                && !i.reg_form()
+                && imm.is_none_or(|k| i.imm == k && field == ext)
+                && insns.len() == 2
+        });
+        m.expect(rmw.is_some(), || format!("{name}: {insns:x?}"));
+    }
+    m.finish();
+}

@@ -526,6 +526,20 @@ pub(crate) fn emit_mi(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp
     );
 }
 
+/// `op [base + disp], reg` -- a memory-destination ALU operation reading a
+/// register of the operand's width.
+pub(crate) fn emit_mr(code: &mut Vec<u8>, mnem: Mnem, width: u8, base: Reg, disp: i32, reg: Reg) {
+    super::table::encode_into(
+        code,
+        mnem,
+        Some(width),
+        &[
+            mw(base, disp, width),
+            super::table::Opnd::Reg { num: reg.0, width },
+        ],
+    );
+}
+
 /// `op [base + index * scale], imm`: [`emit_mi`] over an indexed operand.
 pub(crate) fn emit_mi_sib(
     code: &mut Vec<u8>,

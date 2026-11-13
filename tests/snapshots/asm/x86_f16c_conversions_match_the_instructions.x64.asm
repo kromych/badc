@@ -53,9 +53,7 @@ Disassembly of section .text:
                	retq
                	testl	$0x400000, %edi         # imm = 0x400000
                	jne	<addr>
-               	movl	(%rcx), %edx
-               	orq	$0x1, %rdx
-               	movl	%edx, (%rcx)
+               	orl	$0x1, (%rcx)
                	orq	$0x7e00, %rax           # imm = 0x7E00
                	movq	%rdi, %rcx
                	shrq	$0xd, %rcx
@@ -76,9 +74,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movl	(%rcx), %edx
-               	orq	$0x2, %rdx
-               	movl	%edx, (%rcx)
+               	orl	$0x2, (%rcx)
                	movq	%rdi, %rdx
                	orq	$0x800000, %rdx         # imm = 0x800000
                	testq	%r8, %r8
@@ -125,9 +121,7 @@ Disassembly of section .text:
                	leaq	-0x400(%rdx), %rsi
                	cmpl	$0x7c00, %esi           # imm = 0x7C00
                	jb	<addr>
-               	movl	(%rcx), %edx
-               	orq	$0x28, %rdx
-               	movl	%edx, (%rcx)
+               	orl	$0x28, (%rcx)
                	movq	%rbx, %rdx
                	andq	$0x3, %rdx
                	movl	$0x1, %ecx

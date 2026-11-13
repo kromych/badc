@@ -222,6 +222,17 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	mov	x4, x0
                	mov	x5, x0
+               	b	<addr>
+               	ldrsw	x6, [x2, #0x40]
+               	add	x7, x6, #0x1
+               	str	w7, [x2, #0x40]
+               	mov	x7, #0x2e               // =46
+               	strb	w7, [x3, x6]
+               	ldrsw	x6, [x2, #0x40]
+               	strb	wzr, [x3, x6]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
+               	b.ge	<addr>
                	mov	x7, sp
                	add	x17, x9, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -271,16 +282,6 @@ Disassembly of section .text:
                	cmp	x6, x5
                	csel	x4, x8, x4, ne
                	b	<addr>
-               	ldrsw	x6, [x2, #0x40]
-               	add	x7, x6, #0x1
-               	str	w7, [x2, #0x40]
-               	mov	x7, #0x2e               // =46
-               	strb	w7, [x3, x6]
-               	ldrsw	x6, [x2, #0x40]
-               	strb	wzr, [x3, x6]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x4
-               	b.lt	<addr>
                	mov	x0, x4
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10

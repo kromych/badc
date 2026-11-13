@@ -198,7 +198,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x13
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	and	x2, x2, #0xffff
                	and	x4, x4, #0xffff

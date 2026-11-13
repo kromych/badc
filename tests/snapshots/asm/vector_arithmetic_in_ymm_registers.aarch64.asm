@@ -2002,6 +2002,11 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	str	w0, [x4, x2, lsl #2]
                	mov	x0, #0x1                // =1
+               	b	<addr>
+               	str	w1, [x5, x2, lsl #2]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x12
+               	b.ge	<addr>
                	add	x5, x4, x0, lsl #5
                	ldrsw	x1, [x5, x2, lsl #2]
                	sub	x3, x0, #0x1
@@ -2017,10 +2022,7 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	b	<addr>
                	eor	x1, x1, x3
-               	str	w1, [x5, x2, lsl #2]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x12
-               	b.lt	<addr>
+               	b	<addr>
                	add	x2, x2, #0x1
                	cmp	w2, #0x8
                	b.lt	<addr>

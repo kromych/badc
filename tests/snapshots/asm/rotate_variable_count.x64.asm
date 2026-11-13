@@ -49,6 +49,10 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %esi
                	xorl	%eax, %eax
                	movq	%rax, %rcx
+               	jmp	<addr>
+               	incq	%rax
+               	cmpl	$0x40, %eax
+               	jge	<addr>
                	movl	$0x1, %edi
                	shlxq	%rax, %rdi, %rdi
                	andq	%rdx, %rdi
@@ -60,9 +64,7 @@ Disassembly of section .text:
                	movl	$0x1, %r8d
                	shlxq	%rdi, %r8, %rdi
                	orq	%rdi, %rcx
-               	incq	%rax
-               	cmpl	$0x40, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	cmpq	%rcx, %rbx
                	jne	<addr>
                	movl	-0x10(%rbp), %eax
@@ -84,6 +86,10 @@ Disassembly of section .text:
                	orq	%rcx, %r8
                	xorl	%eax, %eax
                	movq	%rax, %rcx
+               	jmp	<addr>
+               	incq	%rax
+               	cmpl	$0x40, %eax
+               	jge	<addr>
                	movl	$0x1, %edx
                	shlxq	%rax, %rdx, %rdi
                	andq	%rsi, %rdi
@@ -93,9 +99,7 @@ Disassembly of section .text:
                	andq	$0x3f, %rdi
                	shlxq	%rdi, %rdx, %rdx
                	orq	%rdx, %rcx
-               	incq	%rax
-               	cmpl	$0x40, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	cmpq	%rcx, %r8
                	je	<addr>
                	movl	$0x2, %eax

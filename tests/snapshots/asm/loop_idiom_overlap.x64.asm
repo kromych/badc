@@ -124,11 +124,11 @@ Disassembly of section .text:
                	movb	%dl, (%rcx,%rax)
                	incq	%rax
                	cmpl	$0x7, %eax
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	movsbq	(%rcx,%rax), %rdx
                	movb	%dl, (%rsi,%rax)
                	incq	%rax
                	cmpl	$0x9, %eax
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>

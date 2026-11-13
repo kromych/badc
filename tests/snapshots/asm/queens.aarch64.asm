@@ -26,6 +26,10 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	add	x24, x22, #0x1
                	mov	x23, x20
+               	b	<addr>
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x8
+               	b.ge	<addr>
                	mov	x2, #0x0                // =0
                	cmp	w2, w22
                	b.ge	<addr>
@@ -48,9 +52,7 @@ Disassembly of section .text:
                	mov	x1, x24
                	bl	<addr>
                	add	x23, x23, x0
-               	add	x20, x20, #0x1
-               	cmp	w20, #0x8
-               	b.lt	<addr>
+               	b	<addr>
                	mov	x0, x23
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x24, [sp, #0x20]

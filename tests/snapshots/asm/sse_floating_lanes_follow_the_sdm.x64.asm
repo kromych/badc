@@ -2948,6 +2948,50 @@ Disassembly of section .text:
                	movups	0x70(%rsp), %xmm0
                	movups	0x60(%rsp), %xmm3
                	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	movq	%rax, %xmm4
+               	vunpcklpd	%xmm4, %xmm1, %xmm1 # xmm1 = xmm1[0],xmm4[0]
+               	leaq	-0xa0(%rbp), %r9
+               	movups	%xmm3, -0xa0(%rbp)
+               	leaq	-0x90(%rbp), %rax
+               	movups	%xmm0, -0x90(%rbp)
+               	movups	%xmm3, 0x60(%rsp)
+               	movups	%xmm0, 0x70(%rsp)
+               	movups	%xmm2, 0x80(%rsp)
+               	movups	%xmm1, 0x90(%rsp)
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	callq	<addr>
+               	movups	0x60(%rsp), %xmm3
+               	movups	0x70(%rsp), %xmm0
+               	movups	0x80(%rsp), %xmm2
+               	movups	0x90(%rsp), %xmm1
+               	leaq	-0x80(%rbp), %r9
+               	movups	%xmm2, -0x80(%rbp)
+               	leaq	-0x70(%rbp), %rax
+               	movups	%xmm1, -0x70(%rbp)
+               	leaq	-0x60(%rbp), %rcx
+               	movups	%xmm0, -0x60(%rbp)
+               	movups	%xmm3, 0x60(%rsp)
+               	movups	%xmm0, 0x70(%rsp)
+               	movups	%xmm2, 0x80(%rsp)
+               	movups	%xmm1, 0x90(%rsp)
+               	movq	%r9, %r10
+               	movups	(%r10), %xmm0
+               	movq	%rax, %r10
+               	movups	(%r10), %xmm1
+               	movq	%rcx, %r10
+               	movups	(%r10), %xmm2
+               	callq	<addr>
+               	movups	0x60(%rsp), %xmm3
+               	movups	0x70(%rsp), %xmm0
+               	movups	0x80(%rsp), %xmm2
+               	movups	0x90(%rsp), %xmm1
+               	incq	%rbx
+               	cmpl	$0x12c, %ebx            # imm = 0x12C
+               	jge	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	shrq	$0xc, %rcx
@@ -3497,49 +3541,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	shrq	$0x10, %rax
                	jmp	<addr>
-               	movq	%rax, %xmm4
-               	vunpcklpd	%xmm4, %xmm1, %xmm1 # xmm1 = xmm1[0],xmm4[0]
-               	leaq	-0xa0(%rbp), %r9
-               	movups	%xmm3, -0xa0(%rbp)
-               	leaq	-0x90(%rbp), %rax
-               	movups	%xmm0, -0x90(%rbp)
-               	movups	%xmm3, 0x60(%rsp)
-               	movups	%xmm0, 0x70(%rsp)
-               	movups	%xmm2, 0x80(%rsp)
-               	movups	%xmm1, 0x90(%rsp)
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm1
-               	callq	<addr>
-               	movups	0x60(%rsp), %xmm3
-               	movups	0x70(%rsp), %xmm0
-               	movups	0x80(%rsp), %xmm2
-               	movups	0x90(%rsp), %xmm1
-               	leaq	-0x80(%rbp), %r9
-               	movups	%xmm2, -0x80(%rbp)
-               	leaq	-0x70(%rbp), %rax
-               	movups	%xmm1, -0x70(%rbp)
-               	leaq	-0x60(%rbp), %rcx
-               	movups	%xmm0, -0x60(%rbp)
-               	movups	%xmm3, 0x60(%rsp)
-               	movups	%xmm0, 0x70(%rsp)
-               	movups	%xmm2, 0x80(%rsp)
-               	movups	%xmm1, 0x90(%rsp)
-               	movq	%r9, %r10
-               	movups	(%r10), %xmm0
-               	movq	%rax, %r10
-               	movups	(%r10), %xmm1
-               	movq	%rcx, %r10
-               	movups	(%r10), %xmm2
-               	callq	<addr>
-               	movups	0x60(%rsp), %xmm3
-               	movups	0x70(%rsp), %xmm0
-               	movups	0x80(%rsp), %xmm2
-               	movups	0x90(%rsp), %xmm1
-               	incq	%rbx
-               	cmpl	$0x12c, %ebx            # imm = 0x12C
-               	jl	<addr>
                	incq	%r12
                	cmpl	$0x4, %r12d
                	jl	<addr>

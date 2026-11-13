@@ -70,6 +70,14 @@ Disassembly of section .text:
                	cmpq	$0x0, <rip> # <addr>
                	jne	<addr>
                	xorl	%eax, %eax
+               	jmp	<addr>
+               	leaq	-0xd8(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, -0xe0(%rbp)
+               	incq	%rax
+               	movq	%rsi, %rcx
+               	cmpl	$0x3, %eax
+               	jge	<addr>
                	leaq	-0xd8(%rbp), %rsi
                	imulq	$0x48, %rax, %rdx
                	addq	%rdx, %rsi
@@ -128,13 +136,7 @@ Disassembly of section .text:
                	imulq	$0x48, %rax, %r8
                	addq	%r8, %rdi
                	movq	%rdi, 0x38(%rdx)
-               	leaq	-0xd8(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, -0xe0(%rbp)
-               	incq	%rax
-               	movq	%rsi, %rcx
-               	cmpl	$0x3, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	xorl	%edx, %edx
                	movq	%rcx, %rax
                	testq	%rax, %rax

@@ -45,7 +45,12 @@ Disassembly of section .text:
                	movl	(%r12,%rax,4), %eax
                	movq	%r13, %rdx
                	movq	%rsi, %rbx
-               	jmp	<addr>
+               	cmpl	%edx, %ebx
+               	jg	<addr>
+               	movslq	%ebx, %rcx
+               	movl	(%r12,%rcx,4), %edi
+               	cmpl	%eax, %edi
+               	jge	<addr>
                	incq	%rbx
                	movslq	%ebx, %rcx
                	movl	(%r12,%rcx,4), %edi

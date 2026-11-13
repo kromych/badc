@@ -73,7 +73,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	mov	x1, x0
                	cmp	w1, w2
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	cmp	w1, #0x1
                	b.lt	<addr>
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	mov	x1, x0
                	cmp	w1, w2
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x1, x1, #0x1
                	cmp	w1, w2
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
 
 <main>:

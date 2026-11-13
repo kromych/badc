@@ -63,6 +63,15 @@ Disassembly of section .text:
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	mov	x0, x1
+               	b	<addr>
+               	sub	x1, x29, #0xd8
+               	mul	x5, x0, x3
+               	add	x1, x1, x5
+               	stur	x1, [x29, #-0xe0]
+               	add	x0, x0, #0x1
+               	mov	x1, x2
+               	cmp	w0, #0x3
+               	b.ge	<addr>
                	mul	x5, x0, x3
                	add	x2, x7, x5
                	str	x1, [x2, #0x8]
@@ -110,14 +119,7 @@ Disassembly of section .text:
                	mul	x6, x0, x3
                	add	x5, x5, x6
                	str	x5, [x1, #0x38]
-               	sub	x1, x29, #0xd8
-               	mul	x5, x0, x3
-               	add	x1, x1, x5
-               	stur	x1, [x29, #-0xe0]
-               	add	x0, x0, #0x1
-               	mov	x1, x2
-               	cmp	w0, #0x3
-               	b.lt	<addr>
+               	b	<addr>
                	mov	x2, #0x0                // =0
                	mov	x3, #0xa                // =10
                	mov	x0, x1

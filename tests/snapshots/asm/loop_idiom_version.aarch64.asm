@@ -67,7 +67,7 @@ Disassembly of section .text:
                	add	x21, x21, #0x3
                	sub	x22, x22, #0x3
                	cmp	w22, #0x2
-               	b.ls	<addr>
+               	b.hi	<addr>
                	b	<addr>
 
 <walk1>:
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	sub	x2, x2, #0x1
                	cmp	w2, #0x0
-               	b.ls	<addr>
+               	b.hi	<addr>
                	b	<addr>
 
 <same>:
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, w20
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x14
@@ -369,13 +369,13 @@ Disassembly of section .text:
                	strb	w3, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, w20
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	ldrb	w3, [x2, x0]
                	strb	w3, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, w20
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x14
@@ -573,7 +573,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x10
                	sub	x2, x2, #0x4
                	cmp	w2, #0x4
-               	b.lo	<addr>
+               	b.hs	<addr>
                	b	<addr>
                	ldrb	w0, [x4]
                	strb	w0, [x3]

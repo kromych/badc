@@ -133,6 +133,12 @@ Disassembly of section .text:
                	b.lo	<addr>
                	ldur	x0, [x29, #-0x58]
                	mov	x20, #0x0               // =0
+               	b	<addr>
+               	sub	x1, x29, #0x78
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
+               	bl	<addr>
                	cbz	x0, <addr>
                	ldrsw	x1, [x0, #0x8]
                	cmp	w1, #0x29
@@ -192,22 +198,16 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, x20
                	b	<addr>
-               	sub	x1, x29, #0x78
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
-               	bl	<addr>
-               	cbnz	x0, <addr>
+               	mov	x0, #0x1a               // =26
+               	ldp	x29, x30, [sp, #0xf0]
+               	ldp	x20, x21, [sp], #0x100
+               	ret
                	mov	x0, x21
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x1b               // =27
                	cmp	x20, #0x0
                	csel	x0, x0, x1, ne
-               	ldp	x29, x30, [sp, #0xf0]
-               	ldp	x20, x21, [sp], #0x100
-               	ret
-               	mov	x0, #0x1a               // =26
                	ldp	x29, x30, [sp, #0xf0]
                	ldp	x20, x21, [sp], #0x100
                	ret
@@ -609,6 +609,11 @@ Disassembly of section .text:
                	b.lo	<addr>
                	ldur	x20, [x29, #-0x70]
                	mov	x21, #0x0               // =0
+               	b	<addr>
+               	sub	x0, x29, #0x90
+               	mov	x1, x20
+               	bl	<addr>
+               	mov	x20, x0
                	cbz	x20, <addr>
                	ldrsw	x0, [x20, #0x8]
                	cbnz	w0, <addr>
@@ -635,19 +640,15 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0xe0]
                	cmp	w0, #0x0
                	cset	x21, gt
-               	sub	x0, x29, #0x90
-               	mov	x1, x20
-               	bl	<addr>
-               	mov	x20, x0
-               	cbnz	x20, <addr>
+               	b	<addr>
+               	mov	x0, #0x12               // =18
+               	b	<addr>
                	mov	x0, x22
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x13               // =19
                	cmp	x21, #0x0
                	csel	x0, x0, x1, ne
-               	b	<addr>
-               	mov	x0, #0x12               // =18
                	b	<addr>
                	mov	x20, #0x0               // =0
                	b	<addr>

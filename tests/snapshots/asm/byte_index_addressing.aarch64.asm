@@ -688,6 +688,11 @@ Disassembly of section .text:
                	mov	x0, #0x101              // =257
                	strh	w0, [x21]
                	mov	x20, #0x2               // =2
+               	b	<addr>
+               	add	x20, x20, #0x1
+               	mul	x0, x20, x20
+               	cmp	w0, #0x40
+               	b.ge	<addr>
                	ldrb	w0, [x21, x20]
                	cbnz	w0, <addr>
                	ldrsw	x0, [x22, #0x20]
@@ -695,10 +700,7 @@ Disassembly of section .text:
                	mov	x0, x21
                	mov	x1, x20
                	bl	<addr>
-               	add	x20, x20, #0x1
-               	mul	x0, x20, x20
-               	cmp	w0, #0x40
-               	b.lt	<addr>
+               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>

@@ -509,6 +509,10 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	%rax, %rdx
                	movq	%rax, %rdi
+               	jmp	<addr>
+               	decq	%rsi
+               	testl	%esi, %esi
+               	jl	<addr>
                	movq	%rcx, %rbx
                	shrq	$0x3f, %rbx
                	movq	%rax, %r12
@@ -590,9 +594,7 @@ Disassembly of section .text:
                	orq	%rbx, %r9
                	orq	%r8, %rdi
                	orq	%r9, %rdx
-               	decq	%rsi
-               	testl	%esi, %esi
-               	jge	<addr>
+               	jmp	<addr>
                	movq	0x50(%rsp), %rsi
                	movq	%rax, (%rsi)
                	movq	%rcx, 0x8(%rsi)

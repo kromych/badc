@@ -391,6 +391,13 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rax)
                	movl	$0x1, %r12d
                	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	andq	%rax, %r12
+               	leaq	-0x60(%rbp), %rax
+               	movq	%rax, <rip> # <addr>
+               	incq	%rbx
+               	cmpl	$0x3, %ebx
+               	jge	<addr>
                	leaq	-0x60(%rbp), %r13
                	testq	%rbx, %rbx
                	je	<addr>
@@ -494,12 +501,6 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x20(%rbp), %rax
                	jmp	<addr>
-               	andq	%rax, %r12
-               	leaq	-0x60(%rbp), %rax
-               	movq	%rax, <rip> # <addr>
-               	incq	%rbx
-               	cmpl	$0x3, %ebx
-               	jl	<addr>
                	movq	%r12, %rax
                	popq	%rbx
                	popq	%r12

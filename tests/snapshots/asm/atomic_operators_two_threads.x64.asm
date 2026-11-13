@@ -35,6 +35,10 @@ Disassembly of section .text:
                	movb	%dil, -0x3f(%rbp)
                	movb	%dil, -0x3e(%rbp)
                	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	incq	%rbx
+               	cmpl	$0x4e20, %ebx           # imm = 0x4E20
+               	jge	<addr>
                	leaq	<rip>, %rcx # <addr>
                	lock
                	addl	$0x1, (%rcx)
@@ -197,9 +201,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	lock
                	addl	$0x1, (%rax)
-               	incq	%rbx
-               	cmpl	$0x4e20, %ebx           # imm = 0x4E20
-               	jl	<addr>
+               	jmp	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
                	leave

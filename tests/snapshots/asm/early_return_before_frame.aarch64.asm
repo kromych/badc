@@ -50,7 +50,11 @@ Disassembly of section .text:
                	ldr	x0, [x21, x0, lsl #3]
                	mov	x2, x22
                	mov	x20, x1
-               	b	<addr>
+               	cmp	w20, w2
+               	b.gt	<addr>
+               	ldr	x3, [x21, w20, sxtw #3]
+               	cmp	x3, x0
+               	b.ge	<addr>
                	add	x20, x20, #0x1
                	ldr	x3, [x21, w20, sxtw #3]
                	cmp	x3, x0
@@ -208,6 +212,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, x0
+               	b	<addr>
+               	add	x20, x20, #0x1
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	blr	x0
                	ldrb	w0, [x20]
                	sub	x0, x0, #0x2a
                	cmp	x0, #0x10
@@ -222,14 +231,7 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	str	wzr, [x0, #0x90]
-               	add	x20, x20, #0x1
-               	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
-               	blr	x0
-               	ldrb	w0, [x20]
-               	sub	x0, x0, #0x2a
-               	cmp	x0, #0x10
-               	b.lo	<addr>
+               	b	<addr>
                	adrp	x0, <page>
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x90]
@@ -585,6 +587,10 @@ Disassembly of section .text:
                	add	x20, x20, <lo12>
                	adrp	x22, <page>
                	adrp	x21, <page>
+               	b	<addr>
+               	add	x20, x20, #0x1
+               	ldr	x0, [x22, #0x18]
+               	blr	x0
                	ldrb	w0, [x20]
                	sub	x0, x0, #0x2a
                	cmp	x0, #0x10
@@ -597,13 +603,7 @@ Disassembly of section .text:
                	str	w0, [x21, #0x90]
                	b	<addr>
                	str	wzr, [x21, #0x90]
-               	add	x20, x20, #0x1
-               	ldr	x0, [x22, #0x18]
-               	blr	x0
-               	ldrb	w0, [x20]
-               	sub	x0, x0, #0x2a
-               	cmp	x0, #0x10
-               	b.lo	<addr>
+               	b	<addr>
                	adrp	x0, <page>
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x90]

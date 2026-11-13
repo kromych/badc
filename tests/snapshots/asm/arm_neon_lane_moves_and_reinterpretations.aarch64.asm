@@ -6216,6 +6216,8 @@ Disassembly of section .text:
                	mov	x1, x24
                	bl	<addr>
                	mov	x20, #0x0               // =0
+               	b	<addr>
+               	add	x20, x20, #0x1
                	ldrsw	x1, [x21, #0x18]
                	ldrsw	x0, [x21, #0x20]
                	mul	x1, x1, x0
@@ -6248,12 +6250,6 @@ Disassembly of section .text:
                	and	x0, x0, x2
                	orr	x0, x1, x0
                	b	<addr>
-               	add	x20, x20, #0x1
-               	ldrsw	x1, [x21, #0x18]
-               	ldrsw	x0, [x21, #0x20]
-               	mul	x1, x1, x0
-               	cmp	w20, w1
-               	b.lt	<addr>
                	add	x27, x27, #0x1
                	cmp	w27, #0x4
                	b.lt	<addr>

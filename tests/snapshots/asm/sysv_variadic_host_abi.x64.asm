@@ -58,6 +58,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	xorl	%ecx, %ecx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0xa, %ecx
+               	jge	<addr>
                	testb	$0x1, %cl
                	jne	<addr>
                	leaq	-0x18(%rbp), %rdx
@@ -88,9 +92,7 @@ Disassembly of section .text:
                	movsd	(%rdx), %xmm0
                	cvttsd2si	%xmm0, %rdx
                	addq	%rdx, %rax
-               	incq	%rcx
-               	cmpl	$0xa, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	leaq	-0x18(%rbp), %rcx
                	leave
                	retq

@@ -24,6 +24,11 @@ Disassembly of section .text:
                	sturb	w0, [x29, #-0x3f]
                	sturb	w0, [x29, #-0x3e]
                	mov	x20, #0x0               // =0
+               	b	<addr>
+               	add	x20, x20, #0x1
+               	mov	x17, #0x4e20            // =20000
+               	cmp	w20, w17
+               	b.ge	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x1                // =1
@@ -290,10 +295,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	ldaddal	w1, w16, [x0]
-               	add	x20, x20, #0x1
-               	mov	x17, #0x4e20            // =20000
-               	cmp	w20, w17
-               	b.lt	<addr>
+               	b	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x22, x23, [sp, #0x50]
                	ldp	x20, x21, [sp, #0x40]

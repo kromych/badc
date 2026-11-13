@@ -209,6 +209,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%r12d, %r12d
+               	jmp	<addr>
+               	incq	%r12
+               	cmpl	$0x3, %r12d
+               	jge	<addr>
                	movl	0x8(%rbx), %r13d
                	xorl	%eax, %eax
                	callq	<addr>
@@ -276,16 +280,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	jmp	<addr>
-               	incq	%r12
-               	cmpl	$0x3, %r12d
-               	jl	<addr>
-               	xorl	%eax, %eax
+               	leaq	0x1(%r12), %rax
                	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
-               	leaq	0x1(%r12), %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	xorl	%eax, %eax
                	incq	%r14
                	cmpl	$0x24, %r14d
                	jb	<addr>

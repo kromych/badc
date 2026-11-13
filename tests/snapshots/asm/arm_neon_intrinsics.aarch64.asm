@@ -152,6 +152,10 @@ Disassembly of section .text:
                	sub	x1, x29, #0x50
                	ldrb	w4, [x1, x2]
                	mov	x1, x0
+               	b	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
+               	b.ge	<addr>
                	ldrb	w5, [x3, x2]
                	mov	x6, #0x1                // =1
                	lsl	x6, x6, x0
@@ -161,9 +165,7 @@ Disassembly of section .text:
                	lsl	x5, x4, x0
                	and	x5, x5, #0xff
                	eor	x1, x1, x5
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x8
-               	b.lt	<addr>
+               	b	<addr>
                	sub	x0, x29, #0x20
                	ldrb	w0, [x0, x2]
                	cmp	w0, w1

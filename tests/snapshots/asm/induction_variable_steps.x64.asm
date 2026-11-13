@@ -191,6 +191,10 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movl	0xfc(%rdi), %esi
                	movq	$-0x1, %rax
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x3f, %ecx
+               	jge	<addr>
                	movl	(%rdi,%rcx,4), %edx
                	cmpl	%esi, %edx
                	jge	<addr>
@@ -198,9 +202,7 @@ Disassembly of section .text:
                	movl	(%rdi,%rax,4), %r8d
                	movl	%edx, (%rdi,%rax,4)
                	movl	%r8d, (%rdi,%rcx,4)
-               	incq	%rcx
-               	cmpl	$0x3f, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	incq	%rax
                	movslq	%eax, %rcx
                	movl	(%rdi,%rcx,4), %edx

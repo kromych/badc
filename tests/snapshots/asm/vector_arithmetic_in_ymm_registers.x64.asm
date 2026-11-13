@@ -620,6 +620,13 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movl	%eax, (%r9,%rdx,4)
                	movl	$0x1, %eax
+               	jmp	<addr>
+               	leaq	-0x240(%rbp), %rsi
+               	addq	%rdi, %rsi
+               	movl	%ecx, (%rsi,%rdx,4)
+               	incq	%rax
+               	cmpl	$0x12, %eax
+               	jge	<addr>
                	movq	%rax, %rdi
                	shlq	$0x5, %rdi
                	leaq	(%r9,%rdi), %rcx
@@ -640,12 +647,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	jmp	<addr>
                	xorq	%rsi, %rcx
-               	leaq	-0x240(%rbp), %rsi
-               	addq	%rdi, %rsi
-               	movl	%ecx, (%rsi,%rdx,4)
-               	incq	%rax
-               	cmpl	$0x12, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	incq	%rdx
                	cmpl	$0x8, %edx
                	jl	<addr>

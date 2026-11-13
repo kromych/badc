@@ -114,11 +114,11 @@ Disassembly of section .text:
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x7
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>
                	ldrb	w2, [x1, x0]
                	strb	w2, [x3, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
-               	b.ge	<addr>
+               	b.lt	<addr>
                	b	<addr>

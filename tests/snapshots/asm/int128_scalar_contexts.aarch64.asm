@@ -412,7 +412,7 @@ Disassembly of section .text:
                	and	x2, x4, x2
                	orr	x1, x1, x2
                	eor	x1, x1, #0x1
-               	cbnz	x1, <addr>
+               	cbz	x1, <addr>
                	b	<addr>
                	cmp	x1, #0x0
                	cset	x5, gt
@@ -421,7 +421,7 @@ Disassembly of section .text:
                	and	x4, x4, x6
                	orr	x4, x5, x4
                	eor	x4, x4, #0x1
-               	cbnz	x4, <addr>
+               	cbz	x4, <addr>
                	b	<addr>
                	cmp	x2, x1
                	cset	x1, lt
@@ -431,7 +431,7 @@ Disassembly of section .text:
                	and	x3, x4, x3
                	orr	x1, x1, x3
                	eor	x1, x1, #0x1
-               	cbnz	x1, <addr>
+               	cbz	x1, <addr>
                	b	<addr>
                	cmp	x1, #0x0
                	cset	x4, gt
@@ -440,7 +440,7 @@ Disassembly of section .text:
                	and	x2, x2, x5
                	orr	x2, x4, x2
                	eor	x2, x2, #0x1
-               	cbnz	x2, <addr>
+               	cbz	x2, <addr>
                	b	<addr>
                	mov	x17, #-0x1              // =-1
                	cmp	x1, x17

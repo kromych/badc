@@ -84,7 +84,7 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	%edx, %ecx
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	movq	%rax, %rcx
                	cmpl	%edx, %ecx
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	%edx, %ecx
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	cmpl	$0x1, %edi
                	jl	<addr>
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	%edx, %ecx
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	movq	%rax, %rcx
                	cmpl	%edx, %ecx
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	%edx, %ecx
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
 
 <main>:

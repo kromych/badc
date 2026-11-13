@@ -3265,6 +3265,45 @@ void put4(struct R *o, char c, int i) { *o = (struct R){c, i}; }\n";
     m.finish();
 }
 
+/// A `continue` reaches the latch ahead of its header backward, one branch
+/// per iteration, rather than forward to a latch below the body and back.
+#[test]
+fn a_continue_branches_back_to_a_latch_ahead_of_its_header() {
+    const SRC: &str = "int count(const unsigned char *cell, const int *w) {\n\
+    int s = 0;\n\
+    for (int i = 0; i < 81; i++) {\n\
+        if (cell[i] != 0)\n\
+            continue;\n\
+        s += w[i] * 3 + (s >> 1);\n\
+    }\n\
+    return s;\n\
+}\n";
+    let mut m = Misses::default();
+    let insns = x64(SRC, "count");
+    let jcc = |i: &X64Insn| matches!(i.op, 0x70..=0x7F | 0x0F80..=0x0F8F);
+    let read = insns
+        .iter()
+        .position(|i| i.op == 0x0FB6 || (i.op == 0x80 && i.modrm.is_some_and(|m| m >> 6 != 3)));
+    let test = read.and_then(|r| (r..insns.len()).find(|&k| jcc(&insns[k])));
+    m.expect(test.is_some_and(|k| insns[k].imm < 0), || {
+        format!("x86-64: {insns:x?}")
+    });
+    let words = a64(SRC, "count");
+    let ldrb = |w: u32| w & 0xFFC0_0000 == 0x3940_0000 || w & 0xFFE0_0C00 == 0x3860_0800;
+    let load = words.iter().position(|&w| ldrb(w));
+    let test = load.and_then(|l| {
+        (l..words.len()).find_map(|k| {
+            a64_branch(words[k], k)
+                .filter(|&(_, u)| !u)
+                .map(|(t, _)| (k, t))
+        })
+    });
+    m.expect(test.is_some_and(|(k, t)| t < k as i64), || {
+        format!("aarch64: {words:08x?}")
+    });
+    m.finish();
+}
+
 /// Ten values used in one inner loop live through a second that never reads
 /// them; they give their registers up for its duration, stored ahead of it
 /// and loaded past it, so the second loop's own values touch no frame slot.
@@ -3303,8 +3342,14 @@ fn a_loop_takes_the_registers_of_values_living_through_it() {
         }
     };
     let jcc = |i: &X64Insn| matches!(i.op, 0x70..=0x7F | 0x0F80..=0x0F8F);
+    // The innermost back edge: of the backward branches past the load, the
+    // one landing nearest ahead of it.
     let load = insns.iter().position(|i| i.op == 0x0FB6);
-    let back = load.and_then(|l| (l..insns.len()).find(|&k| jcc(&insns[k]) && insns[k].imm < 0));
+    let back = load.and_then(|l| {
+        (l..insns.len())
+            .filter(|&k| jcc(&insns[k]) && insns[k].target() <= insns[l].at)
+            .max_by_key(|&k| insns[k].target())
+    });
     let body = load.zip(back).map(|(_, b)| {
         let target = (insns[b].at + insns[b].len) as i64 + insns[b].imm;
         let head = insns
@@ -3329,13 +3374,16 @@ fn a_loop_takes_the_registers_of_values_living_through_it() {
         (w & 0xFF00_0010 == 0x5400_0000 && (w >> 23) & 1 == 1)
             || (w & 0x7E00_0000 == 0x3400_0000 && (w >> 23) & 1 == 1)
     };
+    let target = |b: usize| b as i64 + ((((words[b] >> 5) & 0x7FFFF) as i64) - (1 << 19));
     let load = words.iter().position(|&w| ldrb(w));
-    let closing = load.and_then(|l| (l..words.len()).find(|&k| back(k)));
-    let span = load.zip(closing).map(|(_, b)| {
-        let imm19 = ((words[b] >> 5) & 0x7FFFF) as i64;
-        let target = b as i64 + (imm19 - (1 << 19));
-        &words[target.max(0) as usize..=b]
+    let closing = load.and_then(|l| {
+        (l..words.len())
+            .filter(|&k| back(k) && target(k) <= l as i64)
+            .max_by_key(|&k| target(k))
     });
+    let span = load
+        .zip(closing)
+        .map(|(_, b)| &words[target(b).max(0) as usize..=b]);
     m.expect(
         span.is_some_and(|s| !s.iter().any(|&w| off_frame(w))),
         || format!("aarch64: {words:08x?}"),

@@ -116,6 +116,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	movq	%rax, %rbx
+               	jmp	<addr>
+               	incq	%rax
+               	cmpl	$0x2, %eax
+               	jge	<addr>
                	leaq	-0x18(%rbp), %rdx
                	imulq	$0xc, %rax, %rcx
                	addq	%rcx, %rdx
@@ -133,9 +137,11 @@ Disassembly of section .text:
                	cmpq	%r13, %rcx
                	jne	<addr>
                	orq	$0x2, %rbx
-               	incq	%rax
-               	cmpl	$0x2, %eax
-               	jl	<addr>
+               	jmp	<addr>
+               	movl	$0x8, %eax
+               	jmp	<addr>
+               	movl	$0x7, %eax
+               	jmp	<addr>
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -155,8 +161,4 @@ Disassembly of section .text:
                	movl	$0x9, %ecx
                	cmpl	$0x3, %ebx
                	cmovneq	%rcx, %rax
-               	jmp	<addr>
-               	movl	$0x8, %eax
-               	jmp	<addr>
-               	movl	$0x7, %eax
                	jmp	<addr>

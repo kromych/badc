@@ -322,6 +322,10 @@ Disassembly of section .text:
                	mov	x2, #0x20               // =32
                	bl	<addr>
                	mov	x21, #0x0               // =0
+               	b	<addr>
+               	add	x21, x21, #0x1
+               	cmp	w21, #0x3
+               	b.ge	<addr>
                	ldrsw	x22, [x20, #0x8]
                	bl	<addr>
                	str	wzr, [x0]
@@ -376,14 +380,10 @@ Disassembly of section .text:
                	bl	<addr>
                	fmov	d8, d0
                	b	<addr>
-               	add	x21, x21, #0x1
-               	cmp	w21, #0x3
-               	b.lt	<addr>
-               	mov	x0, #0x0                // =0
+               	add	x0, x21, #0x1
                	cbz	x0, <addr>
                	b	<addr>
-               	add	x0, x21, #0x1
-               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	add	x23, x23, #0x1
                	cmp	w23, #0x24
                	b.lo	<addr>

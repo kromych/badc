@@ -42,7 +42,12 @@ Disassembly of section .text:
 <partition>:
                	xorl	%eax, %eax
                	movl	$0x8, %ecx
-               	jmp	<addr>
+               	cmpl	%ecx, %eax
+               	jg	<addr>
+               	movslq	%eax, %rdx
+               	movl	(%rdi,%rdx,4), %esi
+               	cmpl	$0x4, %esi
+               	jge	<addr>
                	incq	%rax
                	movslq	%eax, %rdx
                	movl	(%rdi,%rdx,4), %esi
@@ -100,6 +105,10 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	leaq	<rip>, %r8 # <addr>
                	movq	%rdx, %rsi
+               	jmp	<addr>
+               	incq	%rdx
+               	cmpl	$0xfa0, %edx            # imm = 0xFA0
+               	jge	<addr>
                	xorl	%ecx, %ecx
                	movq	%rdx, %rax
                	testl	%eax, %eax
@@ -121,9 +130,7 @@ Disassembly of section .text:
                	movq	(%rbx), %rax
                	addq	%rdx, %rax
                	movq	%rax, (%rbx)
-               	incq	%rdx
-               	cmpl	$0xfa0, %edx            # imm = 0xFA0
-               	jl	<addr>
+               	jmp	<addr>
                	movq	%rsi, %rax
                	popq	%rbx
                	leave
@@ -156,8 +163,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %ecx
+               	jmp	<addr>
+               	incq	%rcx
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
+               	cmpq	$0x3e8, %rax            # imm = 0x3E8
+               	jge	<addr>
                	cmpb	$0x0, (%rdi,%rcx)
                	jne	<addr>
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
@@ -166,11 +177,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jl	<addr>
-               	incq	%rcx
-               	movq	%rcx, %rax
-               	imulq	%rcx, %rax
-               	cmpq	$0x3e8, %rax            # imm = 0x3E8
-               	jl	<addr>
+               	jmp	<addr>
                	addq	$0x2, %rdi
                	movl	$0x3e6, %esi            # imm = 0x3E6
                	popq	%rbp

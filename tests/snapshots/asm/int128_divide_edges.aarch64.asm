@@ -604,6 +604,10 @@ Disassembly of section .text:
                	mov	x1, x5
                	mov	x7, x5
                	mov	x2, x5
+               	b	<addr>
+               	sub	x3, x3, #0x1
+               	cmp	w3, #0x0
+               	b.lt	<addr>
                	lsr	x13, x2, #63
                	lsl	x2, x2, #1
                	orr	x2, x2, x0, lsr #63
@@ -650,9 +654,7 @@ Disassembly of section .text:
                	orr	x6, x6, x8
                	orr	x7, x7, x12
                	orr	x1, x1, x6
-               	sub	x3, x3, #0x1
-               	cmp	w3, #0x0
-               	b.ge	<addr>
+               	b	<addr>
                	str	x0, [x22]
                	str	x2, [x22, #0x8]
                	mov	x0, x7

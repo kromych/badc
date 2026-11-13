@@ -219,6 +219,38 @@ impl BlockPlan {
                 reached[h as usize] = indirect[h as usize];
             }
         }
+        // A conditional that runs into neither arm branches to the one behind
+        // it, a loop's back edge -- the nearer of two, its innermost loop's --
+        // and jumps to the other.
+        for p in (0..n).filter(|&p| !self.skipped[p] && self.repeat[p] == NO_BLOCK) {
+            let (Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            }) = func.blocks[p].terminator
+            else {
+                continue;
+            };
+            let (t, f, into) = (
+                self.resolve(target),
+                self.resolve(fall_through),
+                self.runs_into(p),
+            );
+            let behind = |x: BlockId| (x as usize) <= p;
+            let prefer_f = match (behind(f), behind(t)) {
+                (true, false) => true,
+                (true, true) => f > t,
+                _ => false,
+            };
+            if t != f && into != t && into != f && prefer_f {
+                self.flip[p] = true;
+            }
+        }
         let decided: BTreeSet<BlockId> = (0..n)
             .filter(|&p| self.decided[p] != NO_BLOCK)
             .map(|p| self.repeat[p])

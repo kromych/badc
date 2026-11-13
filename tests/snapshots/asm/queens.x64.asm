@@ -41,6 +41,10 @@ Disassembly of section .text:
                	xorl	%ebx, %ebx
                	leaq	0x1(%r13), %r15
                	movq	%rbx, %r14
+               	jmp	<addr>
+               	incq	%rbx
+               	cmpl	$0x8, %ebx
+               	jge	<addr>
                	xorl	%eax, %eax
                	cmpl	%r13d, %eax
                	jge	<addr>
@@ -66,9 +70,7 @@ Disassembly of section .text:
                	movq	%r15, %rsi
                	callq	<addr>
                	addq	%rax, %r14
-               	incq	%rbx
-               	cmpl	$0x8, %ebx
-               	jl	<addr>
+               	jmp	<addr>
                	movq	%r14, %rax
                	popq	%rbx
                	popq	%r12

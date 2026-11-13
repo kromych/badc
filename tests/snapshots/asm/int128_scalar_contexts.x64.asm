@@ -454,7 +454,7 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	xorq	$0x1, %rax
                	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	testq	%rax, %rax
                	setg	%sil
@@ -466,7 +466,7 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	xorq	$0x1, %rdx
                	testq	%rdx, %rdx
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	cmpq	%rax, %rdx
                	setl	%al
@@ -478,7 +478,7 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	xorq	$0x1, %rax
                	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	testq	%rax, %rax
                	setg	%sil
@@ -490,7 +490,7 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	xorq	$0x1, %rdx
                	testq	%rdx, %rdx
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	cmpq	$-0x1, %rcx
                	jmp	<addr>

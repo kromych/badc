@@ -4344,6 +4344,8 @@ Disassembly of section .text:
                	mov	x1, x24
                	bl	<addr>
                	mov	x21, #0x0               // =0
+               	b	<addr>
+               	add	x21, x21, #0x1
                	ldrsw	x0, [x20, #0x18]
                	cmp	w21, w0
                	b.ge	<addr>
@@ -4472,10 +4474,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	stur	x1, [x29, #-0x78]
                	b	<addr>
-               	add	x21, x21, #0x1
-               	ldrsw	x0, [x20, #0x18]
-               	cmp	w21, w0
-               	b.lt	<addr>
                	ldr	x16, [sp, #0x108]
                	add	x16, x16, #0x1
                	str	x16, [sp, #0x108]

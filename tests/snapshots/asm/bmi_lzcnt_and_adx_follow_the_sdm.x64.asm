@@ -184,22 +184,28 @@ Disassembly of section .text:
                	movl	$0xf0f0f0, %ecx         # imm = 0xF0F0F0
                	xorl	%edx, %edx
                	movl	$0x1, %esi
+               	jmp	<addr>
+               	shlq	%rsi
+               	leaq	-0x1(%rcx), %rax
+               	andq	%rax, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	testb	$0x2d, %sil
                	je	<addr>
                	movq	%rcx, %rax
                	negq	%rax
                	andq	%rcx, %rax
                	orq	%rax, %rdx
-               	shlq	%rsi
-               	leaq	-0x1(%rcx), %rax
-               	andq	%rax, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jmp	<addr>
                	cmpl	$0x20d0, %edx           # imm = 0x20D0
                	jne	<addr>
                	xorl	%edx, %edx
                	movl	$0x1, %esi
                	movq	%r9, %rcx
+               	jmp	<addr>
+               	shlq	%rsi
+               	leaq	-0x1(%rcx), %rax
+               	andq	%rax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	%esi, %eax
@@ -210,11 +216,7 @@ Disassembly of section .text:
                	negq	%rax
                	andq	%rcx, %rax
                	orq	%rax, %rdx
-               	shlq	%rsi
-               	leaq	-0x1(%rcx), %rax
-               	andq	%rax, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jmp	<addr>
                	testl	%edx, %edx
                	jne	<addr>
                	movl	$0xff00ff, %ecx         # imm = 0xFF00FF
@@ -260,6 +262,12 @@ Disassembly of section .text:
                	movabsq	$-0x100000000000000, %rcx # imm = 0xFF00000000000000
                	xorl	%edx, %edx
                	movl	$0x1, %esi
+               	jmp	<addr>
+               	shlq	%rsi
+               	leaq	-0x1(%rcx), %rax
+               	andq	%rax, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
                	movq	%rbx, %rax
                	andq	%rsi, %rax
                	testq	%rax, %rax
@@ -268,11 +276,7 @@ Disassembly of section .text:
                	negq	%rax
                	andq	%rcx, %rax
                	orq	%rax, %rdx
-               	shlq	%rsi
-               	leaq	-0x1(%rcx), %rax
-               	andq	%rax, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jmp	<addr>
                	movabsq	$-0x1100000000000000, %r11 # imm = 0xEF00000000000000
                	movq	%rdx, %rax
                	cmpq	%r11, %rdx

@@ -515,6 +515,10 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	mov	x2, x0
+               	b	<addr>
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x40
+               	b.ge	<addr>
                	lsr	x5, x4, x0
                	tbz	w5, #0x0, <addr>
                	lsl	x5, x3, x0
@@ -524,9 +528,7 @@ Disassembly of section .text:
                	sub	x5, x5, x0
                	lsr	x5, x3, x5
                	eor	x1, x1, x5
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x40
-               	b.lt	<addr>
+               	b	<addr>
                	mov	x16, #0xbeef            // =48879
                	movk	x16, #0xdead, lsl #16
                	movk	x16, #0xface, lsl #32

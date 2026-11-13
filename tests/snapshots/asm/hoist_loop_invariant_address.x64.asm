@@ -56,6 +56,10 @@ Disassembly of section .text:
                	movabsq	$0x1a13b8631, %rax      # imm = 0x1A13B8631
                	movq	%rax, <rip> # <addr>
                	xorl	%eax, %eax
+               	jmp	<addr>
+               	movq	%rcx, 0x8(%rdx)
+               	cmpl	$0x18, %eax
+               	jge	<addr>
                	leaq	<rip>, %rcx # <addr>
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
@@ -70,9 +74,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	jmp	<addr>
                	xorl	%ecx, %ecx
-               	movq	%rcx, 0x8(%rdx)
-               	cmpl	$0x18, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	xorl	%esi, %esi
                	xorl	%eax, %eax
                	movq	%rsi, %rcx

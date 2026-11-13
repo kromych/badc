@@ -71,6 +71,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xffffffff         // =4294967295
                	sxtw	x2, w2
+               	b	<addr>
+               	sub	x2, x2, #0x8
+               	add	x1, x1, #0x8
                	cmp	w2, #0x8
                	b.lt	<addr>
                	sub	x4, x29, #0x8
@@ -84,10 +87,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	ldur	x4, [x29, #-0x8]
                	crc32x	w0, w0, x4
-               	sub	x2, x2, #0x8
-               	add	x1, x1, #0x8
-               	cmp	w2, #0x8
-               	b.ge	<addr>
+               	b	<addr>
                	cmp	w2, #0x4
                	b.lt	<addr>
                	sub	x4, x29, #0x8
@@ -161,6 +161,21 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0x70]
                	adrp	x4, <addr>
                	add	x4, x4, <lo12>
+               	b	<addr>
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x2]
+               	lsl	x1, x0, #2
+               	add	x1, x4, x1, lsl #2
+               	ldr	q2, [x1]
+               	ldr	q3, [x2]
+               	add	v2.4s, v3.4s, v2.4s
+               	mov	v3.16b, v1.16b
+               	sha256h	q3, q0, v2.4s
+               	sha256h2	q0, q1, v2.4s
+               	add	x0, x0, #0x1
+               	mov	v1.16b, v3.16b
+               	cmp	w0, #0x10
+               	b.ge	<addr>
                	sub	x1, x29, #0x1a0
                	add	x2, x1, x0, lsl #4
                	cmp	w0, #0x4
@@ -187,20 +202,7 @@ Disassembly of section .text:
                	ldr	q4, [x6]
                	sha256su1	v2.4s, v3.4s, v4.4s
                	stur	q2, [x29, #-0x90]
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x2]
-               	lsl	x1, x0, #2
-               	add	x1, x4, x1, lsl #2
-               	ldr	q2, [x1]
-               	ldr	q3, [x2]
-               	add	v2.4s, v3.4s, v2.4s
-               	mov	v3.16b, v1.16b
-               	sha256h	q3, q0, v2.4s
-               	sha256h2	q0, q1, v2.4s
-               	add	x0, x0, #0x1
-               	mov	v1.16b, v3.16b
-               	cmp	w0, #0x10
-               	b.lt	<addr>
+               	b	<addr>
                	sub	x0, x29, #0x60
                	ldur	q2, [x29, #-0x80]
                	add	v1.4s, v1.4s, v2.4s
@@ -350,6 +352,12 @@ Disassembly of section .text:
                	adrp	x7, <addr>
                	add	x7, x7, <lo12>
                	mov	x0, x2
+               	b	<addr>
+               	ldr	q0, [x1]
+               	add	x0, x0, #0x1
+               	mov	x3, x4
+               	cmp	w0, #0x14
+               	b.ge	<addr>
                	sub	x1, x29, #0x220
                	add	x4, x1, x0, lsl #4
                	cmp	w0, #0x4
@@ -407,11 +415,6 @@ Disassembly of section .text:
                	sha1su1	v1.4s, v2.4s
                	stur	q1, [x29, #-0xd0]
                	b	<addr>
-               	ldr	q0, [x1]
-               	add	x0, x0, #0x1
-               	mov	x3, x4
-               	cmp	w0, #0x14
-               	b.lt	<addr>
                	sub	x0, x29, #0x98
                	ldur	q1, [x29, #-0xb0]
                	add	v0.4s, v0.4s, v1.4s

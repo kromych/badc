@@ -950,6 +950,10 @@ Disassembly of section .text:
                	vpinsrd	$0x3, %r11d, %xmm0, %xmm0
                	movups	%xmm0, 0x20(%rsp)
                	xorl	%eax, %eax
+               	jmp	<addr>
+               	incq	%rax
+               	cmpl	$0x8, %eax
+               	jge	<addr>
                	leaq	(%rsp), %rdx
                	movq	%rax, %rcx
                	shlq	$0x2, %rcx
@@ -968,11 +972,8 @@ Disassembly of section .text:
                	movss	(%rcx), %xmm1
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
-               	jne	<addr>
-               	incq	%rax
-               	cmpl	$0x8, %eax
-               	jl	<addr>
-               	xorl	%eax, %eax
+               	je	<addr>
+               	movl	$0x4, %eax
                	leaq	-0xb0(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
@@ -981,7 +982,7 @@ Disassembly of section .text:
                	vzeroupper
                	leave
                	retq
-               	movl	$0x4, %eax
+               	xorl	%eax, %eax
                	leaq	-0xb0(%rbp), %rsp
                	popq	%rbx
                	popq	%r12

@@ -105,8 +105,8 @@ fn a64_mov_rr(w: u32) -> Option<(u32, u32)> {
 }
 
 /// An empty block whose edge moves values keeps its place: the rotation is
-/// in the loop, the branch over it lands past it, and nothing lands on a
-/// branch.
+/// in the loop, the branch around it lands past it or where the rotation's
+/// own jump lands, and nothing lands on a branch.
 #[test]
 fn edge_block_with_moves_keeps_them() {
     let ws = a64_at(SWAP_WALK, "swap_walk", true);
@@ -118,9 +118,14 @@ fn edge_block_with_moves_keeps_them() {
         m.is_some_and(|m| (0..4).all(|k| m[k].1 == m[(k + 1) % 4].0))
     });
     let at = cycle.unwrap_or_else(|| panic!("aarch64: no rotation in the loop: {ws:08x?}"));
-    let skips = ws.iter().enumerate().any(
-        |(i, &w)| matches!(a64_branch(w, i), Some((t, false)) if i < at && t == at as i64 + 4),
-    );
+    let past = at as i64 + 4;
+    let closes = (ws.get(at + 4))
+        .and_then(|&w| a64_branch(w, at + 4))
+        .filter(|&(_, uncond)| uncond)
+        .map(|(t, _)| t);
+    let skips = ws.iter().enumerate().any(|(i, &w)| {
+        matches!(a64_branch(w, i), Some((t, false)) if i < at && (t == past || Some(t) == closes))
+    });
     assert!(
         skips,
         "aarch64: no conditional branch over the rotation: {ws:08x?}"
@@ -133,10 +138,13 @@ fn edge_block_with_moves_keeps_them() {
         .rposition(|i| i.op == 0x87)
         .unwrap_or_else(|| panic!("x86-64: no xchg in the loop: {insns:x?}"));
     let after = insns[at].at + insns[at].len;
+    let closes = (insns.iter())
+        .find(|i| i.at == after && i.is_jmp())
+        .map(|i| i.target());
     assert!(
         insns[..at]
             .iter()
-            .any(|i| i.is_jcc() && i.target() == after),
+            .any(|i| i.is_jcc() && (i.target() == after || Some(i.target()) == closes)),
         "x86-64: no conditional branch over the rotation: {insns:x?}"
     );
 }

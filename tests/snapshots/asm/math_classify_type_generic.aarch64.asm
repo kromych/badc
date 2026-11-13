@@ -1231,14 +1231,14 @@ Disassembly of section .text:
                	csel	x0, x0, x2, ne
                	b	<addr>
                	cmp	w1, #0xff
-               	b.ne	<addr>
+               	b.eq	<addr>
                	b	<addr>
                	cmp	w1, #0xff
-               	b.ne	<addr>
+               	b.eq	<addr>
                	b	<addr>
                	cmp	w1, #0xff
-               	b.ne	<addr>
+               	b.eq	<addr>
                	b	<addr>
                	cmp	w1, #0x7ff
-               	b.ne	<addr>
+               	b.eq	<addr>
                	b	<addr>

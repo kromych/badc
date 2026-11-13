@@ -19,6 +19,8 @@ Disassembly of section .text:
                	movk	x5, #0x5555, lsl #16
                	mov	x0, x2
                	mov	x1, #0x0                // =0
+               	b	<addr>
+               	add	x1, x1, #0x1
                	cmp	w1, w2
                	b.ge	<addr>
                	add	x3, x2, x1
@@ -32,9 +34,7 @@ Disassembly of section .text:
                	cmp	w1, #0x4
                	b.eq	<addr>
                	add	x0, x0, x1
-               	add	x1, x1, #0x1
-               	cmp	w1, w2
-               	b.lt	<addr>
+               	b	<addr>
                	add	x0, x0, x2
                	add	x2, x2, #0x1
                	cmp	w2, #0x6

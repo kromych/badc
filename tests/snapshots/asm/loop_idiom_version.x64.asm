@@ -84,7 +84,7 @@ Disassembly of section .text:
                	addq	$0x3, %r12
                	subq	$0x3, %r13
                	cmpl	$0x2, %r13d
-               	jbe	<addr>
+               	ja	<addr>
                	jmp	<addr>
 
 <walk1>:
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	incq	%rsi
                	decq	%rdx
                	testl	%edx, %edx
-               	jbe	<addr>
+               	ja	<addr>
                	jmp	<addr>
 
 <same>:
@@ -254,7 +254,7 @@ Disassembly of section .text:
                	movb	%sil, (%rcx,%rax)
                	incq	%rax
                	cmpl	%ebx, %eax
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	incq	%rbx
                	cmpl	$0x14, %ebx
@@ -385,13 +385,13 @@ Disassembly of section .text:
                	movb	%sil, (%rdx,%rax)
                	incq	%rax
                	cmpl	%ebx, %eax
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	movzbq	(%rdx,%rax), %rsi
                	movb	%sil, (%rcx,%rax)
                	incq	%rax
                	cmpl	%ebx, %eax
-               	jge	<addr>
+               	jl	<addr>
                	jmp	<addr>
                	incq	%rbx
                	cmpl	$0x14, %ebx
@@ -584,7 +584,7 @@ Disassembly of section .text:
                	addq	$0x10, %rcx
                	subq	$0x4, %rdx
                	cmpl	$0x4, %edx
-               	jb	<addr>
+               	jae	<addr>
                	jmp	<addr>
                	movzbq	(%rdi), %rax
                	movb	%al, <rip> # <addr>

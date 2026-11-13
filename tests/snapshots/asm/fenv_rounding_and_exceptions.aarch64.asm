@@ -81,6 +81,38 @@ Disassembly of section .text:
                	mov	x0, #0x1f               // =31
                	bl	<addr>
                	mov	x20, #0x0               // =0
+               	b	<addr>
+               	mov	x0, x22
+               	bl	<addr>
+               	mov	x21, #0x1f              // =31
+               	mov	x0, x21
+               	bl	<addr>
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	fmov	d0, #0.25000000
+               	fmov	d1, #2.50000000
+               	fmov	d2, #-0.25000000
+               	adrp	x1, <page>
+               	ldr	d3, [x1, #0x20]
+               	adrp	x2, <page>
+               	ldr	d4, [x2, #0x28]
+               	fdiv	d3, d3, d4
+               	ldr	d4, [x1, #0x20]
+               	fneg	d4, d4
+               	ldr	d5, [x2, #0x28]
+               	fdiv	d4, d4, d5
+               	ldr	d5, [x1, #0x20]
+               	ldr	d6, [x2, #0x28]
+               	fdiv	d5, d5, d6
+               	ldr	d6, [x1, #0x20]
+               	ldr	d7, [x2, #0x28]
+               	fdiv	d6, d6, d7
+               	bl	<addr>
+               	mov	x0, x21
+               	bl	<addr>
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x4
+               	b.ge	<addr>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, x20, lsl #2]
@@ -1682,37 +1714,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	b	<addr>
-               	mov	x0, x22
-               	bl	<addr>
-               	mov	x21, #0x1f              // =31
-               	mov	x0, x21
-               	bl	<addr>
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
-               	fmov	d0, #0.25000000
-               	fmov	d1, #2.50000000
-               	fmov	d2, #-0.25000000
-               	adrp	x1, <page>
-               	ldr	d3, [x1, #0x20]
-               	adrp	x2, <page>
-               	ldr	d4, [x2, #0x28]
-               	fdiv	d3, d3, d4
-               	ldr	d4, [x1, #0x20]
-               	fneg	d4, d4
-               	ldr	d5, [x2, #0x28]
-               	fdiv	d4, d4, d5
-               	ldr	d5, [x1, #0x20]
-               	ldr	d6, [x2, #0x28]
-               	fdiv	d5, d5, d6
-               	ldr	d6, [x1, #0x20]
-               	ldr	d7, [x2, #0x28]
-               	fdiv	d6, d6, d7
-               	bl	<addr>
-               	mov	x0, x21
-               	bl	<addr>
-               	add	x20, x20, #0x1
-               	cmp	w20, #0x4
-               	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	adrp	x1, <addr>

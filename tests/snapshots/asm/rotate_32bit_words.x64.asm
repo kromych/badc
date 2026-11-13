@@ -94,6 +94,10 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
                	testb	$0x1, %sil
                	je	<addr>
@@ -102,15 +106,17 @@ Disassembly of section .text:
                	andq	$0x1f, %rdi
                	shlxq	%rdi, %rsi, %rsi
                	orq	%rsi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
                	testb	$0x1, %sil
                	je	<addr>
@@ -119,15 +125,17 @@ Disassembly of section .text:
                	andq	$0x1f, %rdi
                	shlxq	%rdi, %rsi, %rsi
                	orq	%rsi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
                	testb	$0x1, %sil
                	je	<addr>
@@ -136,9 +144,7 @@ Disassembly of section .text:
                	andq	$0x1f, %rdi
                	shlxq	%rdi, %rsi, %rsi
                	orq	%rsi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movl	$0x1, -0x10(%rbp)
@@ -149,6 +155,10 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %esi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rdi
                	testb	$0x1, %dil
                	je	<addr>
@@ -158,9 +168,7 @@ Disassembly of section .text:
                	andq	$0x1f, %r8
                	shlxq	%r8, %rdi, %rdi
                	orq	%rdi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movl	-0x10(%rbp), %esi
@@ -171,6 +179,10 @@ Disassembly of section .text:
                	subq	%rcx, %rsi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rdi
                	testb	$0x1, %dil
                	je	<addr>
@@ -180,9 +192,7 @@ Disassembly of section .text:
                	andq	$0x1f, %r8
                	shlxq	%r8, %rdi, %rdi
                	orq	%rdi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	cmpl	%edx, %eax
                	jne	<addr>
                	movl	-0x10(%rbp), %eax
@@ -195,6 +205,10 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rbx, %rsi
                	testb	$0x1, %sil
                	je	<addr>
@@ -203,9 +217,7 @@ Disassembly of section .text:
                	andq	$0x1f, %rdi
                	shlxq	%rdi, %rsi, %rsi
                	orq	%rsi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	movl	%edx, %ecx
                	incq	%rcx
                	cmpq	%rcx, %rax
@@ -253,6 +265,10 @@ Disassembly of section .text:
                	movl	%ecx, %esi
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x20, %ecx
+               	jge	<addr>
                	shrxq	%rcx, %rsi, %rdi
                	testb	$0x1, %dil
                	je	<addr>
@@ -261,9 +277,7 @@ Disassembly of section .text:
                	andq	$0x1f, %r8
                	shlxq	%r8, %rdi, %rdi
                	orq	%rdi, %rdx
-               	incq	%rcx
-               	cmpl	$0x20, %ecx
-               	jl	<addr>
+               	jmp	<addr>
                	movl	%edx, %ecx
                	cmpq	%rcx, %rax
                	jne	<addr>

@@ -389,6 +389,14 @@ Disassembly of section .text:
                	stp	x16, x17, [x0, #0x10]
                	mov	x21, #0x1               // =1
                	mov	x20, #0x0               // =0
+               	b	<addr>
+               	and	x21, x21, x0
+               	adrp	x0, <page>
+               	sub	x1, x29, #0x60
+               	str	x1, [x0, #0x20]
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x3
+               	b.ge	<addr>
                	sub	x22, x29, #0x60
                	cbz	x20, <addr>
                	sub	x8, x29, #0x40
@@ -466,13 +474,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x20
                	b	<addr>
-               	and	x21, x21, x0
-               	adrp	x0, <page>
-               	sub	x1, x29, #0x60
-               	str	x1, [x0, #0x20]
-               	add	x20, x20, #0x1
-               	cmp	w20, #0x3
-               	b.lt	<addr>
                	mov	x0, x21
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x22, [sp, #0x10]

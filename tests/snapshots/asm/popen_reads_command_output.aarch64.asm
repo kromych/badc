@@ -40,6 +40,9 @@ Disassembly of section .text:
                	sub	x20, x29, #0x40
                	mov	x0, x20
                	bl	<addr>
+               	b	<addr>
+               	sub	x0, x0, #0x1
+               	strb	wzr, [x20, x0]
                	cbz	x0, <addr>
                	sub	x1, x0, #0x1
                	ldrb	w2, [x20, x1]
@@ -50,10 +53,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x40
                	ldrb	w1, [x2, x1]
                	cmp	w1, #0x20
-               	b.ne	<addr>
-               	sub	x0, x0, #0x1
-               	strb	wzr, [x20, x0]
-               	cbnz	x0, <addr>
+               	b.eq	<addr>
                	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

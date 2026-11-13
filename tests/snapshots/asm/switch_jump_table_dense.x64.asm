@@ -27,6 +27,10 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x3, %ecx
+               	jmp	<addr>
+               	incq	%rcx
+               	cmpl	$0x13, %ecx
+               	jg	<addr>
                	cmpl	$0xf, %ecx
                	je	<addr>
                	leaq	-0x2(%rcx), %rax
@@ -73,11 +77,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x10, %eax
                	cmpl	%edx, %eax
-               	jne	<addr>
-               	incq	%rcx
-               	cmpl	$0x13, %ecx
-               	jle	<addr>
-               	xorl	%eax, %eax
-               	retq
+               	je	<addr>
                	movl	$0x1, %eax
+               	retq
+               	xorl	%eax, %eax
                	retq

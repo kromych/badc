@@ -188,6 +188,8 @@ Disassembly of section .text:
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
                	movi	d0, #0000000000000000
+               	b	<addr>
+               	add	x0, x0, #0x1
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
@@ -234,10 +236,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x2]
                	scvtf	d1, x2
                	fadd	d0, d0, d1
-               	add	x0, x0, #0x1
-               	ldrsw	x2, [x29, #0x10]
-               	cmp	w0, w2
-               	b.lt	<addr>
+               	b	<addr>
                	sub	x0, x29, #0x20
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -548,6 +548,12 @@ Disassembly of section .text:
                                                 # <addr>
                	movl	$0x2, %ebx
                	leaq	<rip>, %rcx # <addr>
+               	jmp	<addr>
+               	incq	%rbx
+               	movq	%rbx, %rax
+               	imulq	%rbx, %rax
+               	cmpl	$0x40, %eax
+               	jge	<addr>
                	cmpb	$0x0, (%rcx,%rbx)
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
@@ -557,11 +563,7 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	<addr>
                	movq	0x18(%rsp), %rcx
-               	incq	%rbx
-               	movq	%rbx, %rax
-               	imulq	%rbx, %rax
-               	cmpl	$0x40, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>
                	leaq	0x40(%rax), %rsi

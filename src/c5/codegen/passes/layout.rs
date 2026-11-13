@@ -803,9 +803,19 @@ fn lay_out(
         let header_first = chunks.first().map(|c| c.as_slice()) == Some(&[l.header][..]);
         debug_assert!(header_first, "loop chain must start at its header");
         if header_first && chunks.len() >= 2 && rotatable(func, l) {
-            let header_chunk = chunks.remove(0);
-            chunks.push(header_chunk);
-            move_latch_before_header(func, l.header, &mut chunks);
+            match continued_latch(func, l, &chunks) {
+                // Ahead of its header, the latch takes the `continue`
+                // edges backward and falls into the test.
+                Some(lp) => {
+                    let latch = chunks.remove(lp);
+                    chunks.insert(0, latch);
+                }
+                None => {
+                    let header_chunk = chunks.remove(0);
+                    chunks.push(header_chunk);
+                    move_latch_before_header(func, l.header, &mut chunks);
+                }
+            }
         }
     }
     for chunk in chunks {
@@ -817,6 +827,33 @@ fn lay_out(
 /// `Jmp(header)`) directly before the header chunk of a rotated loop
 /// so the back edge falls through. Skipped when the chunk already
 /// preceding the header reaches it by fallthrough.
+/// The chunk of a loop's unconditional latch that blocks of the body other
+/// than one reach: the end of an iteration and a `continue`. Rotated to
+/// the bottom with its header, the latch costs a `continue` a forward jump
+/// to it and the back edge after it; placed ahead of the header, every
+/// iteration takes one branch back to it, the exit test falling through.
+fn continued_latch(func: &FunctionSsa, l: &NaturalLoop, chunks: &[Vec<BlockId>]) -> Option<usize> {
+    let lp = chunks.iter().position(|c| {
+        c.len() == 1
+            && matches!(
+                func.blocks[c[0] as usize].terminator,
+                Terminator::Jmp(t) | Terminator::FallThrough(t) if t == l.header
+            )
+    })?;
+    let latch = chunks[lp][0];
+    let into = (l.body.iter())
+        .filter(|&&b| {
+            successors(
+                &func.blocks[b as usize].terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+            .contains(&latch)
+        })
+        .count();
+    (into >= 2).then_some(lp)
+}
+
 fn move_latch_before_header(func: &FunctionSsa, header: BlockId, chunks: &mut Vec<Vec<BlockId>>) {
     let hpos = chunks.len() - 1;
     debug_assert_eq!(chunks[hpos].as_slice(), &[header]);

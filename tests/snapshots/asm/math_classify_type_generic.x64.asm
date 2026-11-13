@@ -480,14 +480,14 @@ Disassembly of section .text:
                	cmovneq	%rcx, %rax
                	jmp	<addr>
                	cmpl	$0xff, %eax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	cmpl	$0xff, %eax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	cmpl	$0xff, %edx
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	cmpl	$0x7ff, %edx            # imm = 0x7FF
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>

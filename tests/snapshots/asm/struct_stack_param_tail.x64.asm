@@ -128,6 +128,10 @@ Disassembly of section .text:
                	movl	0x10(%rcx), %r10d
                	movl	%r10d, 0x10(%rax)
                	xorl	%eax, %eax
+               	jmp	<addr>
+               	incq	%rax
+               	cmpl	$0x17, %eax
+               	jge	<addr>
                	cmpl	$0x16, %eax
                	jge	<addr>
                	leaq	-0x48(%rbp), %rcx
@@ -144,9 +148,7 @@ Disassembly of section .text:
                	movl	$0x28, %edx
                	subq	%rax, %rdx
                	movb	%dl, (%rcx,%rax)
-               	incq	%rax
-               	cmpl	$0x17, %eax
-               	jl	<addr>
+               	jmp	<addr>
                	leaq	-0x60(%rbp), %r9
                	subq	$0x20, %rsp
                	movq	%r9, %r10

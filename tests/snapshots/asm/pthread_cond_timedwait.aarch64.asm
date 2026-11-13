@@ -14,16 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x20, [sp, #-0xd0]!
-               	stp	x29, x30, [sp, #0xc0]
-               	add	x29, sp, #0xc0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0xc0
                	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0xc0]
-               	ldr	x20, [sp], #0xd0
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x40
                	mov	x1, #0x0                // =0
@@ -31,16 +31,16 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0xc0]
-               	ldr	x20, [sp], #0xd0
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0xc0]
-               	ldr	x20, [sp], #0xd0
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xa0
                	mov	x1, #0x0                // =0
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x70
                	sub	x1, x29, #0xa0
                	bl	<addr>
-               	mov	x20, x0
+               	str	x0, [sp, #0x8]
                	sub	x0, x29, #0xa0
                	bl	<addr>
                	sub	x0, x29, #0x70
@@ -66,8 +66,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x4                // =4
-               	cmp	w20, #0x0
+               	ldr	x16, [sp, #0x8]
+               	cmp	w16, #0x0
                	csel	x0, x0, x1, ne
-               	ldp	x29, x30, [sp, #0xc0]
-               	ldr	x20, [sp], #0xd0
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
                	ret

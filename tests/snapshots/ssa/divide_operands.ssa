@@ -290,7 +290,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=wide_quot
 fn ent_pc=13 n_params=2 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x7
     v1   ParamPart(0, part=1, kind=I64)                   -> x6
@@ -323,18 +323,18 @@ fn ent_pc=13 n_params=2 variadic=false locals=0
     v53  Binop { op=shru, lhs=v52, rhs=v50 }              -> x2
     v54  Binop { op=or, lhs=v51, rhs=v53 }                -> x0
     v55  BinopI { op=shru, lhs=v1, rhs_imm=1 }            -> x2
-    v56  BinopI { op=shru, lhs=v0, rhs_imm=1 }            -> x3
-    v57  BinopI { op=shl, lhs=v1, rhs_imm=63 }            -> x12
-    v58  Binop { op=or, lhs=v56, rhs=v57 }                -> x3
+    v56  BinopI { op=shru, lhs=v0, rhs_imm=1 }            -> [spill 0]
+    v57  BinopI { op=shl, lhs=v1, rhs_imm=63 }            -> [spill 1]
+    v58  Binop { op=or, lhs=v56, rhs=v57 }                -> [spill 0]
     v59  Udiv128 { hi=v55, lo=v58, divisor=v54 }          -> x0
     v60  Binop { op=shru, lhs=v59, rhs=v50 }              -> x9
     v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> x0
     v62  Binop { op=sub, lhs=v60, rhs=v61 }               -> x9
     v63  Binop { op=mulhu, lhs=v62, rhs=v2 }              -> x2
-    v64  Binop { op=mul, lhs=v62, rhs=v3 }                -> x3
+    v64  Binop { op=mul, lhs=v62, rhs=v3 }                -> [spill 0]
     v65  Binop { op=mul, lhs=v62, rhs=v2 }                -> x0
     v66  Binop { op=add, lhs=v63, rhs=v64 }               -> x2
-    v67  Binop { op=ult, lhs=v0, rhs=v65 }                -> x3
+    v67  Binop { op=ult, lhs=v0, rhs=v65 }                -> [spill 0]
     v68  Binop { op=sub, lhs=v0, rhs=v65 }                -> x7
     v69  Binop { op=sub, lhs=v1, rhs=v66 }                -> x0
     v70  Binop { op=sub, lhs=v69, rhs=v67 }               -> x0

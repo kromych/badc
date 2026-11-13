@@ -292,7 +292,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=72
-  spill_count=76 gpr_used=[3, 12] fp_used=[]
+  spill_count=77 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
@@ -2371,7 +2371,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2217 Imm(544)                                         -> x0
     v2218 BinopI { op=add, lhs=v2198, rhs_imm=544 }        -> x0
     v2219 Imm(0)                                           -> x0
-    v2220 LoadLocal { off=-549, disp=544, kind=V256 }      -> [spill 16]
+    v2220 LoadLocal { off=-549, disp=544, kind=V256 }      -> [spill 17]
     v2221 Imm(0)                                           -> x0
     v2222 Imm(0)                                           -> x0
     terminator Jmp(b38)   (exit_acc=v2116)
@@ -2380,7 +2380,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2245 Imm(0)                                           -> x0
     v2246 LocalAddr(-535)                                  -> x0
     v2247 Imm(0)                                           -> x0
-    v2248 LoadLocal { off=-535, kind=V256 }                -> [spill 20]
+    v2248 LoadLocal { off=-535, kind=V256 }                -> [spill 21]
     v2249 VecBinop { op=Add, lane=I32, bytes=32, lhs=v2241, rhs=v2248 } -> [spill 12]
     v2250 Imm(0)                                           -> x0
     v2251 Imm(0)                                           -> x0
@@ -2553,7 +2553,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2418 Imm(0)                                           -> x0
     v2419 Imm(0)                                           -> x0
     v2420 Imm(0)                                           -> x0
-    v2421 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2224, rhs=v2411 } -> [spill 16]
+    v2421 VecBinop { op=Xor, lane=I32, bytes=32, lhs=v2224, rhs=v2411 } -> [spill 17]
     v2422 Imm(0)                                           -> x0
     v2423 Imm(0)                                           -> x0
     v2424 Imm(0)                                           -> x0
@@ -2564,7 +2564,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     terminator Jmp(b38)   (exit_acc=v2427)
   block 38  start_pc=0
     v2223 Phi { incoming=[b36:v2116, b37:v2427], kind=I64 } -> x3
-    v2224 Phi { incoming=[b36:v2220, b37:v2421], kind=V256 } -> [spill 16]
+    v2224 Phi { incoming=[b36:v2220, b37:v2421], kind=V256 } -> [spill 17]
     v2225 Phi { incoming=[b36:v2214, b37:v2411], kind=V256 } -> d0
     v2226 Phi { incoming=[b36:v2208, b37:v2401], kind=V256 } -> d1
     v2227 Phi { incoming=[b36:v2202, b37:v2391], kind=V256 } -> d2
@@ -2740,7 +2740,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     v2433 BinopI { op=lt, lhs=v2431, rhs_imm=18 }          -> x1
     terminator Bz { cond=v2433, target=b42, fall=b40 }   (exit_acc=v2433)
   block 42  start_pc=0
-    v2577 Imm(0)                                           -> x12
+    v2577 Imm(0)                                           -> [spill 16]
     v2578 Imm(0)                                           -> x0
     terminator Jmp(b55)   (exit_acc=v2577)
   block 43  start_pc=0
@@ -2858,11 +2858,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=72
     terminator Bz { cond=v2680, target=b54, fall=b44 }   (exit_acc=v2680)
   block 54  start_pc=0
     v2582 Extend { value=v2579, kind=I32 }                 -> x0
-    v2583 BinopI { op=add, lhs=v2579, rhs_imm=1 }          -> x12
+    v2583 BinopI { op=add, lhs=v2579, rhs_imm=1 }          -> [spill 16]
     v2584 Extend { value=v2583, kind=I32, nsw }            -> x0
     terminator Jmp(b55)   (exit_acc=v2583)
   block 55  start_pc=0
-    v2579 Phi { incoming=[b42:v2577, b54:v2583], kind=I64 } -> x12
+    v2579 Phi { incoming=[b42:v2577, b54:v2583], kind=I64 } -> [spill 16]
     v2580 Extend { value=v2579, kind=I32 }                 -> x0
     v2581 BinopI { op=lt, lhs=v2579, rhs_imm=10 }          -> x0
     terminator Bz { cond=v2581, target=b56, fall=b43 }   (exit_acc=v2581)

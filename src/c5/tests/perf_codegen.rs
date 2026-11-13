@@ -7775,3 +7775,100 @@ void set3(int *p, int a) { *p = a; *p = a + 1; *p = a + 2; }\n";
     }
     m.finish();
 }
+
+/// A function whose calls lie on a path its entry does not always take
+/// saves no callee-saved register for the arguments that path reads: they
+/// are saved around the calls or spilled, which costs only where the calls
+/// run. Before, every argument the calls kept alive took a callee-saved
+/// register, which the prologue saved on every call.
+#[test]
+fn values_crossing_calls_on_a_cold_path_open_no_callee_saved_register() {
+    const SRC: &str = "typedef struct { int n; } Ctx;\n\
+int unpack(void *r, int n, const void *p);\n\
+int slow(void *a, int n, const void *b, void *c);\n\
+int cmp(Ctx *t, int *seen, const void *p1, int n1, const unsigned char *p2, int n2) {\n\
+    const unsigned char *a = (const unsigned char *)p1 + 1, *b = p2 + 1;\n\
+    int res = 0;\n\
+    if (a[0] == b[0]) {\n\
+        for (int i = 0; i < a[1]; i++) {\n\
+            res = a[i] - b[i];\n\
+            if (res) break;\n\
+        }\n\
+        if (res == 0 && t->n > 1) {\n\
+            if (*seen == 0) { unpack(t, n2, p2); *seen = 1; }\n\
+            res = slow(t, n1, p1, (void *)p2);\n\
+        }\n\
+    } else res = a[0] - b[0];\n\
+    return res;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: `push rbp` and at most two callee-saved registers.
+    let insns = x64(SRC, "cmp");
+    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
+    m.expect(pushes <= 3, || {
+        format!("x86-64: {pushes} pushes: {insns:x?}")
+    });
+    // AArch64: no store of x19..x28.
+    let ws = a64(SRC, "cmp");
+    let saves_callee = ws.iter().any(|&w| {
+        let store_pair = w & 0x7FC0_0000 == 0x2980_0000 || w & 0x7FC0_0000 == 0x2900_0000;
+        let rt = w & 31;
+        let rt2 = (w >> 10) & 31;
+        store_pair && ((19..=28).contains(&rt) || (19..=28).contains(&rt2))
+    });
+    m.expect(!saves_callee, || format!("aarch64: {ws:08x?}"));
+    m.finish();
+}
+
+/// Values that live through a loop and across the calls in it, kept in
+/// caller-saved registers saved around those calls, lend no register to
+/// the loop's own values: a save at a call inside the loop would store and
+/// reload what the loop's value left there, over the call's result. The
+/// locals start undefined, which keeps them live through the loop with no
+/// definition ahead of it; the function is compiled under the allocation
+/// check, not run.
+#[cfg(feature = "codegen_test")]
+#[test]
+fn values_saved_around_calls_lend_no_register_to_a_loop() {
+    const SRC: &str = "int pending, option;\n\
+void report(int);\n\
+int step(void);\n\
+int parse(void) {\n\
+    int count, failed, sorted, kind, all, inl, neg, sub, nocase, start;\n\
+    enum { ALL, ASCII, BISECT, DICTIONARY, EXACT, INLINE, START, WORDS } mode;\n\
+    for (; pending;)\n\
+        if (option)\n\
+            switch (option) {\n\
+            case ALL:\n\
+                all = 1;\n\
+                break;\n\
+            case ASCII:\n\
+                sorted = 1;\n\
+            case DICTIONARY:\n\
+                kind = WORDS;\n\
+                mode = pending;\n\
+                break;\n\
+            case INLINE:\n\
+                inl = nocase = neg = sub = 1;\n\
+            case START:\n\
+                if (start)\n\
+                    start = 0;\n\
+                int j;\n\
+                count++;\n\
+                for (; pending; j++)\n\
+                    if (step())\n\
+                        failed = 1;\n\
+            }\n\
+    if (neg)\n\
+        if (sorted && sub)\n\
+            report(nocase);\n\
+    if (all || inl)\n\
+        if (mode)\n\
+            switch (kind)\n\
+            case WORDS:\n\
+                return failed;\n\
+}\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        crate::c5::codegen::ssa::reg_alloc::with_allocation_check(|| object_at(SRC, target, true));
+    }
+}

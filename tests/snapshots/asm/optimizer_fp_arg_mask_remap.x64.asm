@@ -38,30 +38,29 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movapd	%xmm0, %xmm1
+               	movsd	%xmm0, 0x10(%rsp)
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm14
                	sqrtsd	%xmm14, %xmm14
-               	movsd	%xmm14, 0x10(%rsp)
+               	movsd	%xmm14, 0x8(%rsp)
                	xorl	%eax, %eax
-               	movsd	%xmm1, 0x8(%rsp)
                	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movsd	0x8(%rsp), %xmm1
                	movabsq	$0x3fdea7ef9db22d0e, %rax # imm = 0x3FDEA7EF9DB22D0E
-               	movsd	0x18(%rsp), %xmm2
+               	movsd	0x18(%rsp), %xmm1
                	movq	%rax, %xmm15
-               	comisd	%xmm2, %xmm15
+               	comisd	%xmm1, %xmm15
                	ja	<addr>
                	movabsq	$0x3fdeb851eb851eb8, %rax # imm = 0x3FDEB851EB851EB8
                	movq	%rax, %xmm15
-               	comisd	%xmm15, %xmm2
+               	comisd	%xmm15, %xmm1
                	jbe	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movabsq	$0x3fec10624dd2f1aa, %rax # imm = 0x3FEC10624DD2F1AA
+               	movsd	0x10(%rsp), %xmm1
                	movq	%rax, %xmm15
                	comisd	%xmm1, %xmm15
                	ja	<addr>
@@ -73,7 +72,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	0x10(%rsp), %xmm14
+               	movsd	0x8(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>

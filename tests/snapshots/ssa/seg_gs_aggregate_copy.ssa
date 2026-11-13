@@ -485,25 +485,25 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v136 Imm(0)                                           -> x9
     v137 BinopI { op=add, lhs=v103, rhs_imm=16 }          -> x9
     v138 SegLoad { addr=v106, kind=I64, seg=Gs }          -> x9
-    v139 Imm(0)                                           -> [spill 0]
-    v140 Imm(0)                                           -> [spill 0]
-    v141 BinopI { op=add, lhs=v103, rhs_imm=24 }          -> [spill 0]
+    v139 Imm(0)                                           -> x3
+    v140 Imm(0)                                           -> x3
+    v141 BinopI { op=add, lhs=v103, rhs_imm=24 }          -> x3
     v142 SegLoad { addr=v115, kind=I64, seg=Gs }          -> [spill 0]
-    v143 Imm(0)                                           -> [spill 1]
-    v144 Imm(0)                                           -> [spill 1]
-    v145 Imm(0)                                           -> [spill 1]
-    v146 Imm(0)                                           -> [spill 1]
-    v147 Imm(0)                                           -> [spill 1]
-    v148 BinopI { op=and, lhs=v134, rhs_imm=4294967295 }  -> [spill 1]
-    v149 Imm(0)                                           -> [spill 1]
-    v150 Imm(0)                                           -> [spill 1]
-    v151 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> [spill 1]
-    v152 Imm(0)                                           -> [spill 1]
+    v143 Imm(0)                                           -> x3
+    v144 Imm(0)                                           -> x3
+    v145 Imm(0)                                           -> x3
+    v146 Imm(0)                                           -> x3
+    v147 Imm(0)                                           -> x3
+    v148 BinopI { op=and, lhs=v134, rhs_imm=4294967295 }  -> x3
+    v149 Imm(0)                                           -> x3
+    v150 Imm(0)                                           -> x3
+    v151 BinopI { op=and, lhs=v138, rhs_imm=4294967295 }  -> x3
+    v152 Imm(0)                                           -> x3
     v153 LifetimeEnd(0)                                   -> -
-    v154 Imm(0)                                           -> [spill 1]
-    v155 Imm(0)                                           -> [spill 1]
+    v154 Imm(0)                                           -> x3
+    v155 Imm(0)                                           -> x3
     v156 BinopI { op=eq, lhs=v131, rhs_imm=-77129852519530769 } -> x1
-    v157 Imm(0)                                           -> [spill 1]
+    v157 Imm(0)                                           -> x3
     terminator Bz { cond=v156, target=b14, fall=b11 }   (exit_acc=v156)
   block 11  start_pc=0
     v530 Imm(0)                                           -> x1
@@ -830,11 +830,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v423 Imm(0)                                           -> x7
     v424 Imm(24)                                          -> x7
     v425 SegLoad { addr=v424, kind=I64, seg=Gs }          -> x7
-    v426 Imm(0)                                           -> [spill 9]
-    v427 Imm(0)                                           -> [spill 9]
-    v428 Imm(0)                                           -> [spill 9]
-    v429 Imm(0)                                           -> [spill 9]
-    v430 Imm(0)                                           -> [spill 9]
+    v426 Imm(0)                                           -> x3
+    v427 Imm(0)                                           -> x3
+    v428 Imm(0)                                           -> x3
+    v429 Imm(0)                                           -> x3
+    v430 Imm(0)                                           -> x3
     v431 BinopI { op=and, lhs=v417, rhs_imm=4294967295 }  -> x1
     v432 Binop { op=add, lhs=v414, rhs=v431 }             -> x0
     v433 Imm(0)                                           -> x1

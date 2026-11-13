@@ -83,9 +83,8 @@ Disassembly of section .text:
 <destroy_again>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
+               	subq	$0x10, %rsp
+               	movq	%rdi, 0x8(%rsp)
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -95,13 +94,12 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	<rip>, %edi # <addr>
-               	movq	%rbx, %rsi
+               	movq	0x8(%rsp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
-               	popq	%rbx
                	leave
                	retq
 
@@ -229,7 +227,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
+               	subq	$0x68, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	leaq	-0x40(%rbp), %rax
@@ -372,24 +370,26 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorl	%ebx, %ebx
+               	xorl	%r8d, %r8d
                	leaq	-0x40(%rbp), %rax
-               	movq	%rbx, %rcx
+               	movq	%r8, %rcx
                	shlq	$0x3, %rcx
                	leaq	(%rax,%rcx), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	leaq	<rip>, %rax # <addr>
-               	movq	%rbx, %rcx
+               	movq	%r8, %rcx
                	shlq	$0x2, %rcx
                	addq	%rax, %rcx
+               	movq	%r8, 0x18(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x18(%rsp), %r8
                	testq	%rax, %rax
                	jne	<addr>
-               	incq	%rbx
-               	cmpl	$0x2, %ebx
+               	incq	%r8
+               	cmpl	$0x2, %r8d
                	jl	<addr>
                	xorl	%ebx, %ebx
                	leaq	-0x40(%rbp), %rax

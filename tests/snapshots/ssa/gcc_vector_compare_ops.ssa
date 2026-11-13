@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=5
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-587)                                  -> x0
@@ -2142,7 +2142,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v3520 LifetimeEnd(-2)                                  -> -
     v3521 Imm(0)                                           -> x0
     v3522 LocalAddr(-591)                                  -> x3
-    v3523 LocalAddr(-592)                                  -> x12
+    v3523 LocalAddr(-592)                                  -> [spill 0]
     v3524 Imm(0)                                           -> x0
     v3525 LoadLocal { off=-591, kind=V128 }                -> d0
     v3526 LoadLocal { off=-592, kind=V128 }                -> d1
@@ -2761,7 +2761,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4029 LifetimeEnd(-2)                                  -> -
     v4030 Imm(0)                                           -> x0
     v4031 LocalAddr(-593)                                  -> x3
-    v4032 LocalAddr(-594)                                  -> x12
+    v4032 LocalAddr(-594)                                  -> [spill 0]
     v4033 Imm(0)                                           -> x0
     v4034 LoadLocal { off=-593, kind=V128 }                -> d0
     v4035 LoadLocal { off=-594, kind=V128 }                -> d1
@@ -2949,7 +2949,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4174 LifetimeEnd(-2)                                  -> -
     v4175 Imm(0)                                           -> x0
     v4176 LocalAddr(-595)                                  -> x3
-    v4177 LocalAddr(-596)                                  -> x12
+    v4177 LocalAddr(-596)                                  -> [spill 0]
     v4178 Imm(0)                                           -> x0
     v4179 LoadLocal { off=-595, kind=V128 }                -> d0
     v4180 LoadLocal { off=-596, kind=V128 }                -> d1
@@ -3027,7 +3027,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4231 LifetimeEnd(-2)                                  -> -
     v4232 Imm(0)                                           -> x0
     v4233 LocalAddr(-597)                                  -> x3
-    v4234 LocalAddr(-598)                                  -> x12
+    v4234 LocalAddr(-598)                                  -> [spill 0]
     v4235 Imm(0)                                           -> x0
     v4236 LoadLocal { off=-598, kind=V128 }                -> d0
     v4237 LoadLocal { off=-597, kind=V128 }                -> d1
@@ -3323,7 +3323,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4464 LifetimeEnd(-2)                                  -> -
     v4465 Imm(0)                                           -> x0
     v4466 LocalAddr(-599)                                  -> x3
-    v4467 LocalAddr(-600)                                  -> x12
+    v4467 LocalAddr(-600)                                  -> [spill 0]
     v4468 Imm(0)                                           -> x0
     v4469 LoadLocal { off=-599, kind=I64 }                 -> x0
     v4470 LoadLocal { off=-600, kind=I64 }                 -> x1
@@ -3412,7 +3412,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4532 LifetimeEnd(-2)                                  -> -
     v4533 Imm(0)                                           -> x0
     v4534 LocalAddr(-599)                                  -> x3
-    v4535 LocalAddr(-600)                                  -> x12
+    v4535 LocalAddr(-600)                                  -> [spill 0]
     v4536 Imm(0)                                           -> x0
     v4537 LoadLocal { off=-599, kind=I64 }                 -> x0
     v4538 LoadLocal { off=-600, kind=I64 }                 -> x1
@@ -3501,7 +3501,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4600 LifetimeEnd(-2)                                  -> -
     v4601 Imm(0)                                           -> x0
     v4602 LocalAddr(-601)                                  -> x3
-    v4603 LocalAddr(-602)                                  -> x12
+    v4603 LocalAddr(-602)                                  -> [spill 0]
     v4604 Imm(0)                                           -> x0
     v4605 LoadLocal { off=-602, kind=V128 }                -> d0
     v4606 LoadLocal { off=-601, kind=V128 }                -> d1
@@ -3579,7 +3579,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v4657 LifetimeEnd(-2)                                  -> -
     v4658 Imm(0)                                           -> x0
     v4659 LocalAddr(-601)                                  -> x3
-    v4660 LocalAddr(-602)                                  -> x12
+    v4660 LocalAddr(-602)                                  -> [spill 0]
     v4661 Imm(0)                                           -> x0
     v4662 LoadLocal { off=-601, kind=V128 }                -> d0
     v4663 LoadLocal { off=-602, kind=V128 }                -> d1

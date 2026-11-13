@@ -27,22 +27,22 @@ fn ent_pc=2 n_params=4 variadic=false locals=0
     v17  Binop { op=divu, lhs=v1, rhs=v3 }                -> x0
     v18  Binop { op=mul, lhs=v11, rhs=v3 }                -> x0
     v19  Binop { op=sub, lhs=v1, rhs=v18 }                -> x2
-    v20  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> [spill 0]
+    v20  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x3
     v21  Binop { op=ne, lhs=v19, rhs=v7 }                 -> [spill 0]
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
     v22  Imm(2)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 4  start_pc=0
-    v23  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> [spill 0]
-    v24  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> [spill 0]
-    v25  Binop { op=divu, lhs=v1, rhs=v3 }                -> [spill 0]
-    v26  Binop { op=mul, lhs=v11, rhs=v3 }                -> [spill 0]
-    v27  Binop { op=sub, lhs=v1, rhs=v18 }                -> [spill 0]
+    v23  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x3
+    v24  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x3
+    v25  Binop { op=divu, lhs=v1, rhs=v3 }                -> x3
+    v26  Binop { op=mul, lhs=v11, rhs=v3 }                -> x3
+    v27  Binop { op=sub, lhs=v1, rhs=v18 }                -> x3
     v28  Binop { op=add, lhs=v11, rhs=v19 }               -> x2
-    v29  BinopI { op=and, lhs=v28, rhs_imm=4294967295 }   -> [spill 0]
-    v30  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> [spill 0]
-    v31  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> [spill 0]
+    v29  BinopI { op=and, lhs=v28, rhs_imm=4294967295 }   -> x3
+    v30  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x3
+    v31  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x3
     v32  Binop { op=add, lhs=v5, rhs=v7 }                 -> x1
     v33  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x9
     v34  Binop { op=ne, lhs=v28, rhs=v32 }                -> x2

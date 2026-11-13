@@ -163,8 +163,7 @@ Disassembly of section .text:
 <wide_quot>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movq	%rdx, %r8
                	movq	%rsi, %rax
                	orq	%rcx, %rax
@@ -185,13 +184,17 @@ Disassembly of section .text:
                	orq	%rdx, %rax
                	movq	%rsi, %rdx
                	shrq	%rdx
-               	movq	%rdi, %rbx
-               	shrq	%rbx
-               	movq	%rsi, %r12
-               	shlq	$0x3f, %r12
-               	orq	%r12, %rbx
+               	movq	%rdi, %r10
+               	shrq	%r10
+               	movq	%r10, 0x8(%rsp)
+               	movq	%rsi, %r10
+               	shlq	$0x3f, %r10
+               	movq	%r10, (%rsp)
+               	movq	0x8(%rsp), %r10
+               	orq	(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
                	movq	%rax, %r11
-               	movq	%rbx, %rax
+               	movq	0x8(%rsp), %rax
                	divq	%r11
                	shrxq	%r9, %rax, %r9
                	testq	%r9, %r9
@@ -200,18 +203,20 @@ Disassembly of section .text:
                	subq	%rax, %r9
                	movq	%r9, %rax
                	mulq	%r8
-               	movq	%r9, %rbx
-               	imulq	%rcx, %rbx
+               	movq	%r9, %r10
+               	imulq	%rcx, %r10
+               	movq	%r10, 0x8(%rsp)
                	movq	%r9, %rax
                	imulq	%r8, %rax
-               	addq	%rbx, %rdx
+               	addq	0x8(%rsp), %rdx
                	cmpq	%rax, %rdi
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%r10b
+               	movzbq	%r10b, %r10
+               	movq	%r10, 0x8(%rsp)
                	subq	%rax, %rdi
                	movq	%rsi, %rax
                	subq	%rdx, %rax
-               	subq	%rbx, %rax
+               	subq	0x8(%rsp), %rax
                	cmpq	%rcx, %rax
                	setb	%dl
                	movzbq	%dl, %rdx
@@ -227,9 +232,7 @@ Disassembly of section .text:
                	addq	%r9, %rax
                	xorl	%ecx, %ecx
                	movq	%rcx, %rdx
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq
                	xorl	%ecx, %ecx
                	cmpq	%r8, %rsi

@@ -30,18 +30,19 @@ Disassembly of section .text:
                	jge	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movslq	%esi, %rsi
                	movzbq	(%rdi,%rsi), %rax
                	movq	%rsi, %rcx
                	shlq	$0x3, %rcx
                	movslq	%ecx, %rcx
-               	shlxq	%rcx, %rax, %rbx
+               	shlxq	%rcx, %rax, %r10
+               	movq	%r10, 0x8(%rsp)
                	incq	%rsi
                	callq	<addr>
-               	orq	%rbx, %rax
-               	popq	%rbx
+               	movq	%rax, %r10
+               	movq	0x8(%rsp), %rax
+               	orq	%r10, %rax
                	leave
                	retq
                	xorl	%eax, %eax

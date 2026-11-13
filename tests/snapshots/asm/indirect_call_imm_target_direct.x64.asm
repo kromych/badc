@@ -28,18 +28,18 @@ Disassembly of section .text:
 <fact>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	cmpl	$0x2, %ebx
+               	subq	$0x10, %rsp
+               	cmpl	$0x2, %edi
                	jge	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
-               	leaq	-0x1(%rbx), %rdi
+               	leaq	-0x1(%rdi), %rax
+               	movq	%rdi, 0x8(%rsp)
+               	movq	%rax, %rdi
                	callq	<addr>
-               	imulq	%rbx, %rax
+               	movq	0x8(%rsp), %rdi
+               	imulq	%rdi, %rax
                	jmp	<addr>
 
 <main>:

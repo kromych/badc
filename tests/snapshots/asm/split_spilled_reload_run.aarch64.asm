@@ -150,35 +150,42 @@ Disassembly of section .text:
                	add	x27, x4, #0x7
                	ldr	x5, [x0, #0x38]
                	add	x28, x5, #0x8
-               	eor	x16, x1, x2
-               	str	x16, [sp, #0x88]
+               	eor	x6, x1, x2
                	ldr	x1, [x0, #0x8]
-               	eor	x16, x1, x3
-               	str	x16, [sp, #0x80]
+               	eor	x7, x1, x3
                	ldr	x2, [x0, #0x10]
-               	eor	x16, x2, x4
-               	str	x16, [sp, #0x78]
+               	eor	x8, x2, x4
                	ldr	x3, [x0, #0x18]
-               	eor	x16, x3, x5
-               	str	x16, [sp, #0x70]
+               	eor	x5, x3, x5
                	ldr	x4, [x0, #0x20]
-               	ldr	x5, [x0]
-               	add	x16, x4, x5
-               	str	x16, [sp, #0x68]
+               	ldr	x9, [x0]
+               	add	x9, x4, x9
                	ldr	x4, [x0, #0x28]
-               	add	x16, x4, x1
-               	str	x16, [sp, #0x60]
+               	add	x10, x4, x1
                	ldr	x1, [x0, #0x30]
-               	add	x16, x1, x2
-               	str	x16, [sp, #0x58]
+               	add	x11, x1, x2
                	ldr	x0, [x0, #0x38]
                	add	x4, x0, x3
                	cbnz	w20, <addr>
                	eor	x0, x21, x4
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	str	x6, [sp, #0x88]
+               	str	x7, [sp, #0x80]
+               	str	x8, [sp, #0x78]
+               	str	x5, [sp, #0x70]
+               	str	x9, [sp, #0x68]
+               	str	x10, [sp, #0x60]
+               	str	x11, [sp, #0x58]
                	str	x4, [sp, #0x50]
                	blr	x1
+               	ldr	x6, [sp, #0x88]
+               	ldr	x7, [sp, #0x80]
+               	ldr	x8, [sp, #0x78]
+               	ldr	x5, [sp, #0x70]
+               	ldr	x9, [sp, #0x68]
+               	ldr	x10, [sp, #0x60]
+               	ldr	x11, [sp, #0x58]
                	ldr	x4, [sp, #0x50]
                	tbz	w20, #0x0, <addr>
                	mov	x0, #0x0                // =0
@@ -218,20 +225,13 @@ Disassembly of section .text:
                	eor	x0, x0, x26
                	eor	x0, x0, x27
                	eor	x0, x0, x28
-               	ldr	x17, [sp, #0x88]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x80]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x78]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x70]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x68]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x60]
-               	eor	x0, x0, x17
-               	ldr	x17, [sp, #0x58]
-               	eor	x0, x0, x17
+               	eor	x0, x0, x6
+               	eor	x0, x0, x7
+               	eor	x0, x0, x8
+               	eor	x0, x0, x5
+               	eor	x0, x0, x9
+               	eor	x0, x0, x10
+               	eor	x0, x0, x11
                	eor	x0, x0, x4
                	eor	x0, x2, x0
                	ldp	x29, x30, [sp, #0x90]

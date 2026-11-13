@@ -104,8 +104,7 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	d8, [sp, #-0x50]!
-               	stp	x20, x21, [sp, #0x10]
+               	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
                	adrp	x0, <page>
@@ -194,8 +193,7 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
@@ -228,8 +226,7 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -246,14 +243,16 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	sub	x0, x0, #0x1
                	add	x0, x0, #0x1
-               	add	x21, x0, #0x1
+               	add	x16, x0, #0x1
+               	str	x16, [sp, #0x18]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
                	orr	x0, x20, #0x100
                	fcmp	d0, d1
                	csel	x20, x0, x20, ne
-               	sub	x0, x21, #0x1
+               	ldr	x16, [sp, #0x18]
+               	sub	x0, x16, #0x1
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
@@ -263,8 +262,7 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	fmov	d0, #3.00000000
                	bl	<addr>
@@ -293,20 +291,22 @@ Disassembly of section .text:
                	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fmov	d8, d0
+               	str	d0, [sp, #0x18]
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fadd	d0, d8, d0
+               	ldr	d16, [sp, #0x18]
+               	fadd	d0, d16, d0
                	fmov	d1, #12.00000000
                	orr	x0, x20, #0x10
                	fcmp	d0, d1
                	csel	x20, x0, x20, ne
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fmov	d8, d0
+               	str	d0, [sp, #0x18]
                	fmov	d0, #3.00000000
                	bl	<addr>
-               	fadd	d0, d8, d0
+               	ldr	d16, [sp, #0x18]
+               	fadd	d0, d16, d0
                	fmov	d1, #12.00000000
                	orr	x0, x20, #0x20
                	fcmp	d0, d1
@@ -336,11 +336,9 @@ Disassembly of section .text:
                	cbz	w20, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x40]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x40]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x50
+               	ldr	x20, [sp], #0x50
                	ret

@@ -53,14 +53,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movl	<rip>, %ecx # <addr>
                	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	movq	<rip>, %rcx # <addr>
@@ -89,19 +87,21 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movq	%rax, <rip> # <addr>
-               	movq	<rip>, %rbx # <addr>
-               	movl	(%rbx), %eax
-               	movl	$0x80000000, %ecx       # imm = 0x80000000
-               	cmpl	%ecx, %eax
+               	movq	<rip>, %rcx # <addr>
+               	movl	(%rcx), %eax
+               	movl	$0x80000000, %edx       # imm = 0x80000000
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	jmp	<addr>
+               	movq	%rcx, 0x8(%rsp)
                	callq	<addr>
-               	movl	$0x80000000, %ecx       # imm = 0x80000000
-               	cmpl	%ecx, %eax
+               	movq	0x8(%rsp), %rcx
+               	movl	$0x80000000, %edx       # imm = 0x80000000
+               	cmpl	%edx, %eax
                	jne	<addr>
-               	movl	(%rbx), %eax
-               	cmpl	%ecx, %eax
+               	movl	(%rcx), %eax
+               	cmpl	%edx, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	jmp	<addr>

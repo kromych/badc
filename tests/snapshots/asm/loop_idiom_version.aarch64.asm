@@ -14,56 +14,57 @@ Disassembly of section .text:
                	brk	#0x1
 
 <blocked3>:
-               	stp	x20, x21, [sp, #-0x30]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x20, x0
-               	mov	x22, x2
-               	mov	x21, x1
-               	cmp	w22, #0x2
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
+               	cmp	w2, #0x2
                	b.ls	<addr>
-               	sub	x0, x20, x21
-               	mov	w1, w22
+               	sub	x4, x0, x1
+               	mov	w3, w2
                	mov	x17, #0xaaab            // =43691
                	movk	x17, #0xaaaa, lsl #16
-               	mul	x1, x1, x17
-               	lsr	x1, x1, #33
-               	add	x2, x1, x1, lsl #1
-               	cmp	x0, x2
+               	mul	x3, x3, x17
+               	lsr	x3, x3, #33
+               	add	x3, x3, x3, lsl #1
+               	cmp	x4, x3
                	b.lo	<addr>
-               	mov	x0, x20
-               	mov	x1, x21
+               	str	x0, [sp, #0x18]
+               	str	x1, [sp, #0x10]
+               	str	x2, [sp, #0x8]
+               	mov	x2, x3
                	bl	<addr>
-               	mov	w1, w22
+               	mov	x3, x0
+               	ldr	x0, [sp, #0x18]
+               	ldr	x1, [sp, #0x10]
+               	ldr	x2, [sp, #0x8]
+               	mov	w3, w2
                	mov	x17, #0xaaab            // =43691
                	movk	x17, #0xaaaa, lsl #16
-               	mul	x0, x1, x17
-               	lsr	x0, x0, #33
-               	add	x0, x0, x0, lsl #1
-               	add	x20, x20, x0
-               	add	x21, x21, x0
-               	sub	x22, x1, x0
-               	cbz	w22, <addr>
-               	add	x20, x20, #0x1
-               	ldrb	w0, [x21], #0x1
-               	sturb	w0, [x20, #-0x1]
-               	sub	x22, x22, #0x1
-               	cbnz	w22, <addr>
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x30
+               	mul	x2, x3, x17
+               	lsr	x2, x2, #33
+               	add	x2, x2, x2, lsl #1
+               	add	x0, x0, x2
+               	add	x1, x1, x2
+               	sub	x2, x3, x2
+               	cbz	w2, <addr>
+               	add	x0, x0, #0x1
+               	ldrb	w3, [x1], #0x1
+               	sturb	w3, [x0, #-0x1]
+               	sub	x2, x2, #0x1
+               	cbnz	w2, <addr>
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w0, [x21]
-               	strb	w0, [x20]
-               	ldrb	w0, [x21, #0x1]
-               	strb	w0, [x20, #0x1]
-               	ldrb	w0, [x21, #0x2]
-               	strb	w0, [x20, #0x2]
-               	add	x20, x20, #0x3
-               	add	x21, x21, #0x3
-               	sub	x22, x22, #0x3
-               	cmp	w22, #0x2
+               	ldrb	w3, [x1]
+               	strb	w3, [x0]
+               	ldrb	w3, [x1, #0x1]
+               	strb	w3, [x0, #0x1]
+               	ldrb	w3, [x1, #0x2]
+               	strb	w3, [x0, #0x2]
+               	add	x0, x0, #0x3
+               	add	x1, x1, #0x3
+               	sub	x2, x2, #0x3
+               	cmp	w2, #0x2
                	b.hi	<addr>
                	b	<addr>
 

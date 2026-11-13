@@ -244,7 +244,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v33  Imm(4618441417868443648)                         -> x9
     v34  Imm(7)                                           -> x9
     v35  Imm(4619567317775286272)                         -> x9
-    v36  Imm(8)                                           -> [spill 0]
+    v36  Imm(8)                                           -> x3
     v37  Imm(4620693217682128896)                         -> [spill 0]
     v38  Imm(4602678819172646912)                         -> [spill 1]
     v39  LocalAddr(-69)                                   -> [spill 2]
@@ -345,11 +345,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v110 Imm(4617315517961601024)                         -> x8
     v111 Imm(6)                                           -> x9
     v112 Imm(4618441417868443648)                         -> x9
-    v113 Imm(7)                                           -> [spill 0]
+    v113 Imm(7)                                           -> x3
     v114 Imm(4619567317775286272)                         -> [spill 0]
-    v115 Imm(8)                                           -> [spill 1]
+    v115 Imm(8)                                           -> x3
     v116 Imm(4620693217682128896)                         -> [spill 1]
-    v117 Imm(9)                                           -> [spill 2]
+    v117 Imm(9)                                           -> x3
     v118 Imm(4621256167635550208)                         -> [spill 2]
     v119 Imm(4621819117588971520)                         -> [spill 3]
     v120 LocalAddr(-80)                                   -> [spill 4]

@@ -64,8 +64,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
-               	pushq	%rbx
+               	subq	$0x30, %rsp
                	movl	<rip>, %edi # <addr>
                	movq	$-0x7, %rax
                	movl	$0xb2d05e00, %ecx       # imm = 0xB2D05E00
@@ -84,7 +83,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x2, %esi
@@ -92,7 +90,8 @@ Disassembly of section .text:
                	movl	$0x9c40, %ecx           # imm = 0x9C40
                	movq	$-0x32, %r8
                	movl	$0x3c, %r9d
-               	movq	<rip>, %rbx # <addr>
+               	movq	<rip>, %r10 # <addr>
+               	movq	%r10, 0x8(%rsp)
                	subq	$0x30, %rsp
                	movq	%rax, (%rsp)
                	movq	$0x320, 0x8(%rsp)       # imm = 0x320
@@ -100,16 +99,15 @@ Disassembly of section .text:
                	movq	$0x186a0, 0x18(%rsp)    # imm = 0x186A0
                	movl	$0xb2d05e00, %r10d      # imm = 0xB2D05E00
                	movq	%r10, 0x20(%rsp)
-               	callq	*%rbx
+               	movq	0x38(%rsp), %r10
+               	callq	*%r10
                	addq	$0x30, %rsp
                	movl	$0xb2d28602, %r11d      # imm = 0xB2D28602
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbx
                	leave
                	retq

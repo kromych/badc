@@ -28,60 +28,56 @@ Disassembly of section .text:
 <blocked3>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r13
-               	pushq	%r12
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rdx, %r13
-               	movq	%rsi, %r12
-               	cmpl	$0x2, %r13d
+               	subq	$0x20, %rsp
+               	cmpl	$0x2, %edx
                	jbe	<addr>
-               	movq	%rbx, %rax
-               	subq	%r12, %rax
-               	movl	%r13d, %ecx
+               	movq	%rdi, %rcx
+               	subq	%rsi, %rcx
+               	movl	%edx, %eax
                	movl	$0xaaaaaaab, %r11d      # imm = 0xAAAAAAAB
-               	imulq	%r11, %rcx
-               	shrq	$0x21, %rcx
-               	leaq	(%rcx,%rcx,2), %rdx
-               	cmpq	%rdx, %rax
-               	jb	<addr>
-               	movq	%rbx, %rdi
-               	movq	%r12, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movl	%r13d, %r13d
-               	movl	$0xaaaaaaab, %eax       # imm = 0xAAAAAAAB
-               	imulq	%r13, %rax
+               	imulq	%r11, %rax
                	shrq	$0x21, %rax
                	leaq	(%rax,%rax,2), %rax
-               	addq	%rax, %rbx
-               	addq	%rax, %r12
-               	subq	%rax, %r13
-               	testl	%r13d, %r13d
+               	cmpq	%rax, %rcx
+               	jb	<addr>
+               	movq	%rdi, 0x18(%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rdx, 0x8(%rsp)
+               	movq	%rax, %rdx
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movq	0x18(%rsp), %rdi
+               	movq	0x10(%rsp), %rsi
+               	movq	0x8(%rsp), %rdx
+               	movl	%edx, %edx
+               	movl	$0xaaaaaaab, %eax       # imm = 0xAAAAAAAB
+               	imulq	%rdx, %rax
+               	shrq	$0x21, %rax
+               	leaq	(%rax,%rax,2), %rax
+               	addq	%rax, %rdi
+               	addq	%rax, %rsi
+               	subq	%rax, %rdx
+               	testl	%edx, %edx
                	je	<addr>
-               	incq	%rbx
-               	incq	%r12
-               	movzbq	-0x1(%r12), %rax
-               	movb	%al, -0x1(%rbx)
-               	decq	%r13
-               	testl	%r13d, %r13d
+               	incq	%rdi
+               	incq	%rsi
+               	movzbq	-0x1(%rsi), %rax
+               	movb	%al, -0x1(%rdi)
+               	decq	%rdx
+               	testl	%edx, %edx
                	jne	<addr>
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
                	leave
                	retq
-               	movzbq	(%r12), %rax
-               	movb	%al, (%rbx)
-               	movzbq	0x1(%r12), %rax
-               	movb	%al, 0x1(%rbx)
-               	movzbq	0x2(%r12), %rax
-               	movb	%al, 0x2(%rbx)
-               	addq	$0x3, %rbx
-               	addq	$0x3, %r12
-               	subq	$0x3, %r13
-               	cmpl	$0x2, %r13d
+               	movzbq	(%rsi), %rax
+               	movb	%al, (%rdi)
+               	movzbq	0x1(%rsi), %rax
+               	movb	%al, 0x1(%rdi)
+               	movzbq	0x2(%rsi), %rax
+               	movb	%al, 0x2(%rdi)
+               	addq	$0x3, %rdi
+               	addq	$0x3, %rsi
+               	subq	$0x3, %rdx
+               	cmpl	$0x2, %edx
                	ja	<addr>
                	jmp	<addr>
 

@@ -28,21 +28,21 @@ Disassembly of section .text:
 <relay_out_of_line>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%r15
-               	pushq	%r14
-               	pushq	%r13
-               	pushq	%r12
+               	subq	$0x28, %rsp
                	pushq	%rbx
                	movswq	%r8w, %r8
                	andq	$0xff, %r9
                	movsbq	0x10(%rbp), %rax
-               	movq	0x18(%rbp), %rbx
-               	movl	0x20(%rbp), %r12d
-               	movq	0x28(%rbp), %r13
-               	movq	0x30(%rbp), %r14
-               	movl	<rip>, %r15d # <addr>
-               	cmpl	%r15d, %edi
+               	movq	0x18(%rbp), %r10
+               	movq	%r10, 0x28(%rsp)
+               	movl	0x20(%rbp), %r10d
+               	movq	%r10, 0x20(%rsp)
+               	movq	0x28(%rbp), %r10
+               	movq	%r10, 0x18(%rsp)
+               	movq	0x30(%rbp), %r10
+               	movq	%r10, 0x10(%rsp)
+               	movl	<rip>, %ebx # <addr>
+               	cmpl	%ebx, %edi
                	je	<addr>
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
@@ -51,10 +51,6 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	cmovneq	%rdx, %rax
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	leave
                	retq
                	movl	<rip>, %edi # <addr>
@@ -87,24 +83,31 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	jmp	<addr>
-               	andq	$0xffff, %rbx           # imm = 0xFFFF
-               	movzwq	<rip>, %rax # <addr>
-               	cmpl	%eax, %ebx
+               	movq	0x28(%rsp), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
+               	movzwq	<rip>, %rcx # <addr>
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
-               	cmpl	%eax, %r12d
+               	movq	%rax, %r10
+               	movq	0x20(%rsp), %rax
+               	cmpl	%r10d, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	jmp	<addr>
                	movq	<rip>, %rax # <addr>
-               	cmpq	%rax, %r13
+               	movq	%rax, %r10
+               	movq	0x18(%rsp), %rax
+               	cmpq	%r10, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
-               	cmpl	%eax, %r14d
+               	movq	%rax, %r10
+               	movq	0x10(%rsp), %rax
+               	cmpl	%r10d, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	jmp	<addr>

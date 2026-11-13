@@ -65,32 +65,34 @@ Disassembly of section .text:
                	b	<addr>
 
 <carry>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	add	x2, x0, x0, lsl #1
-               	add	x20, x2, #0x1
+               	add	x2, x2, #0x1
                	cmp	w0, #0x3
                	b.ge	<addr>
                	cmp	w1, #0x7
                	b.ge	<addr>
+               	str	x2, [sp, #0x8]
                	mov	x0, x1
                	bl	<addr>
-               	add	x0, x20, x0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	ldr	x2, [sp, #0x8]
+               	add	x0, x2, x0
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	w0, #0x5
                	b.gt	<addr>
                	cmp	w1, #0x9
                	b.le	<addr>
-               	sub	x0, x20, x1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	sub	x0, x2, x1
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	mov	x0, x2
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <tally>:

@@ -1950,61 +1950,61 @@ Disassembly of section .text:
 <compare>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%r15
-               	pushq	%r14
-               	pushq	%r13
-               	pushq	%r12
+               	subq	$0x48, %rsp
                	pushq	%rbx
-               	movq	%rdi, %r12
-               	movq	%r9, %r15
-               	movq	%r8, %r14
-               	movq	%rcx, %r13
-               	movq	%rsi, %rbx
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x10(%rbp), %rax
                	movups	%xmm0, -0x10(%rbp)
-               	movl	0x4(%rbx), %eax
-               	cmpl	%eax, %edx
+               	movl	0x4(%rsi), %ebx
+               	cmpl	%ebx, %edx
                	jne	<addr>
-               	leaq	0x8(%rbx), %rsi
-               	movl	$0x10, %edx
+               	leaq	0x8(%rsi), %rdx
+               	movl	$0x10, %ebx
+               	movq	%rdi, 0x38(%rsp)
+               	movq	%rsi, 0x30(%rsp)
+               	movq	%rcx, 0x28(%rsp)
+               	movq	%r8, 0x20(%rsp)
+               	movq	%r9, 0x18(%rsp)
+               	movq	%rax, %rdi
+               	movq	%rdx, %rsi
+               	movq	%rbx, %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x38(%rsp), %rdi
+               	movq	0x30(%rsp), %rsi
+               	movq	0x28(%rsp), %rcx
+               	movq	0x20(%rsp), %r8
+               	movq	0x18(%rsp), %r9
                	testq	%rax, %rax
                	jne	<addr>
-               	movl	0x18(%rbx), %ecx
+               	movl	0x18(%rsi), %edx
                	xorl	%eax, %eax
-               	testl	%ecx, %ecx
+               	testl	%edx, %edx
                	jne	<addr>
-               	movl	0x1c(%rbx), %eax
+               	movl	0x1c(%rsi), %eax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpl	%eax, %r13d
+               	cmpl	%eax, %ecx
                	jne	<addr>
-               	movl	0x18(%rbx), %eax
-               	cmpl	%eax, %r14d
+               	movl	0x18(%rsi), %eax
+               	cmpl	%eax, %r8d
                	jne	<addr>
-               	movl	0x24(%rbx), %eax
-               	cmpl	%eax, %r15d
+               	movl	0x24(%rsi), %eax
+               	cmpl	%eax, %r9d
                	jne	<addr>
                	movl	0x10(%rbp), %eax
-               	movl	0x20(%rbx), %ecx
+               	movl	0x20(%rsi), %ecx
                	cmpl	%ecx, %eax
                	jne	<addr>
                	movl	0x18(%rbp), %eax
-               	movl	0x1c(%rbx), %ecx
+               	movl	0x1c(%rsi), %ecx
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	<rip>, %eax # <addr>
-               	orq	%r12, %rax
+               	orq	%rdi, %rax
                	movl	%eax, <rip> # <addr>
                	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	leave
                	retq
 

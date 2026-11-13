@@ -183,17 +183,25 @@ std::thread_local! {
 
 impl SuccGraph {
     pub(crate) fn new(func: &FunctionSsa) -> Self {
-        let n = func.blocks.len();
-        let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
-        let mut targets: Vec<BlockId> = Vec::with_capacity(n * 2);
-        let mut pred_counts: Vec<u32> = alloc::vec![0; n + 1];
-        for block in &func.blocks {
-            offsets.push(targets.len() as u32);
-            for s in successors(
+        Self::from_edges(func.blocks.iter().map(|block| {
+            successors(
                 &block.terminator,
                 &func.computed_goto_targets,
                 &func.jump_tables,
-            ) {
+            )
+        }))
+    }
+
+    /// The graph whose node `b` has the `b`-th list's successors; node 0
+    /// is the entry.
+    pub(crate) fn from_edges(succs: impl ExactSizeIterator<Item = Vec<BlockId>>) -> Self {
+        let n = succs.len();
+        let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
+        let mut targets: Vec<BlockId> = Vec::with_capacity(n * 2);
+        let mut pred_counts: Vec<u32> = alloc::vec![0; n + 1];
+        for list in succs {
+            offsets.push(targets.len() as u32);
+            for s in list {
                 targets.push(s);
                 pred_counts[s as usize] += 1;
             }
@@ -390,6 +398,37 @@ pub(crate) fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
 /// blocks unreachable from the entry get [`NO_BLOCK`].
 pub(crate) fn dominators(func: &FunctionSsa) -> Vec<BlockId> {
     dominators_of(&SuccGraph::new(func))
+}
+
+/// [`post_dominators`]' entry for a block post-dominated by the exit alone.
+pub(crate) const EXIT: BlockId = BlockId::MAX - 1;
+
+/// Immediate post-dominator of every block: the dominators of the
+/// reversed graph rooted at an exit every returning block reaches.
+/// [`EXIT`] for a block post-dominated by that exit alone, [`NO_BLOCK`]
+/// for one that reaches no exit.
+pub(crate) fn post_dominators(func: &FunctionSsa) -> Vec<BlockId> {
+    let n = func.blocks.len();
+    let graph = SuccGraph::new(func);
+    // Node 0 is the exit; block `b` is node `b + 1`.
+    let mut rev: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n + 1];
+    for b in 0..n {
+        let succ = graph.of(b as BlockId);
+        if succ.is_empty() {
+            rev[0].push(b as BlockId + 1);
+        }
+        for &s in succ {
+            rev[s as usize + 1].push(b as BlockId + 1);
+        }
+    }
+    let ipdom = dominators_of(&SuccGraph::from_edges(rev.into_iter()));
+    (1..=n)
+        .map(|v| match ipdom[v] {
+            NO_BLOCK => NO_BLOCK,
+            0 => EXIT,
+            p => p - 1,
+        })
+        .collect()
 }
 
 /// [`dominators`] over a successor graph already built.
@@ -4373,6 +4412,71 @@ mod tests {
             f.insts[9]
         );
         assert!(matches!(f.blocks[3].terminator, Terminator::Return(9)));
+    }
+
+    /// A diamond and a block looping on itself: each arm and the entry are
+    /// post-dominated by the join, the join by the exit alone, and the
+    /// loop, which reaches no exit, by nothing. The arms run on half the
+    /// paths through the entry, the join on all of them.
+    #[test]
+    fn post_dominators_and_frequencies_of_a_diamond() {
+        let insts = alloc::vec![Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64
+        }];
+        let mut entry = empty_block(Terminator::Bz {
+            cond: 0,
+            target: 2,
+            fall_through: 1,
+        });
+        entry.inst_range = 0..1;
+        let f = func_with(
+            insts,
+            alloc::vec![
+                entry,
+                empty_block(Terminator::Jmp(3)),
+                empty_block(Terminator::Jmp(3)),
+                empty_block(Terminator::Return(NO_VALUE)),
+                empty_block(Terminator::Jmp(4)),
+            ],
+        );
+        assert_eq!(post_dominators(&f), [3, 3, 3, EXIT, NO_BLOCK]);
+        let one = super::super::reg_alloc::FREQ_ONE;
+        assert_eq!(
+            super::super::reg_alloc::block_frequencies(&f)[..4],
+            [one, one / 2, one / 2, one]
+        );
+    }
+
+    /// A loop whose header tests for its exit: the body, which the header
+    /// does not post-dominate, runs as often as the header, and the exit
+    /// as often as the entry.
+    #[test]
+    fn a_loop_body_runs_as_often_as_its_exit_test() {
+        let insts = alloc::vec![Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64
+        }];
+        let mut entry = empty_block(Terminator::Jmp(1));
+        entry.inst_range = 0..1;
+        let f = func_with(
+            insts,
+            alloc::vec![
+                entry,
+                empty_block(Terminator::Bz {
+                    cond: 0,
+                    target: 3,
+                    fall_through: 2,
+                }),
+                empty_block(Terminator::Jmp(1)),
+                empty_block(Terminator::Return(NO_VALUE)),
+            ],
+        );
+        let freqs = super::super::reg_alloc::block_frequencies(&f);
+        let one = super::super::reg_alloc::FREQ_ONE;
+        assert!(freqs[1] > one, "{freqs:?}");
+        assert_eq!(freqs[2], freqs[1], "{freqs:?}");
+        assert_eq!(freqs[3], one, "{freqs:?}");
     }
 
     fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {

@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	pushq	%r12
+               	subq	$0x18, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
@@ -39,24 +39,24 @@ Disassembly of section .text:
                	jge	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0xa, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %rcx
                	movl	$0x9, %edx
+               	movq	%rcx, 0x18(%rsp)
                	movq	%rbx, %rdi
-               	movq	%r12, %rsi
+               	movq	%rcx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movb	$0x0, 0x9(%r12)
+               	movq	0x18(%rsp), %rcx
+               	movb	$0x0, 0x9(%rcx)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
+               	leave
                	retq

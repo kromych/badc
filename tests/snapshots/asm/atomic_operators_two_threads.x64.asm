@@ -220,24 +220,22 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rsi
-               	movq	%rax, 0x8(%rsp)
+               	movq	%rax, 0x10(%rsp)
                	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	movq	0x8(%rsp), %rax
+               	movq	0x10(%rsp), %rax
                	leaq	<rip>, %rsi
                	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x10(%rsp)
+               	movq	%rax, %r8
                	movq	0x18(%rsp), %r10
                	testq	%r10, %r10
                	je	<addr>
-               	movq	0x10(%rsp), %r10
-               	testq	%r10, %r10
+               	testq	%r8, %r8
                	jne	<addr>
                	movl	$0x70, %eax
                	leave
@@ -246,8 +244,10 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movl	$0x1, %ecx
+               	movq	%r8, 0x8(%rsp)
                	movq	0x18(%rsp), %r11
                	callq	*%r11
+               	movq	0x8(%rsp), %r8
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	-0x50(%rbp), %rax
@@ -255,18 +255,20 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
                	movl	$0x2, %ecx
+               	movq	%r8, 0x8(%rsp)
                	movq	0x18(%rsp), %r11
                	callq	*%r11
+               	movq	0x8(%rsp), %r8
                	testl	%eax, %eax
                	jne	<addr>
                	movq	-0x50(%rbp), %rdi
                	xorl	%esi, %esi
-               	movq	0x10(%rsp), %r11
-               	callq	*%r11
+               	movq	%r8, 0x8(%rsp)
+               	callq	*%r8
+               	movq	0x8(%rsp), %r8
                	movq	-0x48(%rbp), %rdi
                	xorl	%esi, %esi
-               	movq	0x10(%rsp), %r11
-               	callq	*%r11
+               	callq	*%r8
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x9c40, %eax           # imm = 0x9C40

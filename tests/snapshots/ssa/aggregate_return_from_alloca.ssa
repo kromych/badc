@@ -1004,28 +1004,28 @@ fn ent_pc=7 n_params=0 variadic=false locals=5
     v177 LoadLocal { off=-2, disp=5, kind=U8 }            -> x8
     v178 Imm(0)                                           -> x9
     v179 LoadLocal { off=-2, disp=6, kind=U8 }            -> x9
-    v180 Imm(0)                                           -> [spill 4]
+    v180 Imm(0)                                           -> x13
     v181 LoadLocal { off=-2, disp=7, kind=U8 }            -> [spill 4]
-    v182 Imm(0)                                           -> [spill 5]
+    v182 Imm(0)                                           -> x13
     v183 LoadLocal { off=-2, disp=8, kind=U8 }            -> [spill 5]
-    v184 Imm(0)                                           -> [spill 6]
+    v184 Imm(0)                                           -> x13
     v185 LoadLocal { off=-2, disp=9, kind=U8 }            -> [spill 6]
-    v186 Imm(0)                                           -> [spill 7]
+    v186 Imm(0)                                           -> x13
     v187 LoadLocal { off=-2, disp=10, kind=U8 }           -> [spill 7]
-    v188 Imm(0)                                           -> [spill 8]
+    v188 Imm(0)                                           -> x13
     v189 LoadLocal { off=-2, disp=11, kind=U8 }           -> [spill 8]
-    v190 Imm(0)                                           -> [spill 9]
+    v190 Imm(0)                                           -> x13
     v191 LifetimeEnd(-2)                                  -> -
-    v192 Imm(0)                                           -> [spill 9]
-    v193 Imm(0)                                           -> [spill 9]
-    v194 Imm(0)                                           -> [spill 9]
-    v195 Imm(1)                                           -> [spill 9]
-    v196 Imm(0)                                           -> [spill 9]
-    v197 Imm(0)                                           -> [spill 9]
-    v198 Imm(0)                                           -> [spill 9]
+    v192 Imm(0)                                           -> x13
+    v193 Imm(0)                                           -> x13
+    v194 Imm(0)                                           -> x13
+    v195 Imm(1)                                           -> x13
+    v196 Imm(0)                                           -> x13
+    v197 Imm(0)                                           -> x13
+    v198 Imm(0)                                           -> x13
     v199 Extend { value=v167, kind=I8 }                   -> x0
-    v200 Imm(0)                                           -> [spill 9]
-    v201 BinopI { op=add, lhs=v26, rhs_imm=0 }            -> [spill 9]
+    v200 Imm(0)                                           -> x13
+    v201 BinopI { op=add, lhs=v26, rhs_imm=0 }            -> x13
     v202 Extend { value=v26, kind=I8 }                    -> [spill 9]
     v203 Binop { op=ne, lhs=v199, rhs=v202 }              -> x0
     terminator Bz { cond=v203, target=b15, fall=b14 }   (exit_acc=v203)

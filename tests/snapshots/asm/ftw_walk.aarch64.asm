@@ -14,46 +14,47 @@ Disassembly of section .text:
                	brk	#0x1
 
 <visit>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	mov	x20, x2
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x20]
-               	adrp	x2, <page>
-               	ldrsw	x2, [x2, #0x24]
-               	add	x1, x1, x2
+               	adrp	x3, <page>
+               	ldrsw	x3, [x3, #0x24]
+               	add	x1, x1, x3
                	cbnz	w1, <addr>
-               	cmp	w20, #0x1
+               	cmp	w2, #0x1
                	mov	x1, #0x0                // =0
                	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	str	x2, [sp, #0x8]
                	bl	<addr>
                	sxtw	x0, w0
+               	ldr	x2, [sp, #0x8]
                	cmp	x0, #0x0
                	cset	x1, eq
                	adrp	x0, <page>
                	str	w1, [x0, #0x28]
-               	cmp	w20, #0x1
+               	cmp	w2, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x20]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x20]
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	w20, <addr>
+               	cbnz	w2, <addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x24]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x24]
                	b	<addr>
-               	add	x0, x20, #0x64
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	add	x0, x2, #0x64
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <stop_at_file>:

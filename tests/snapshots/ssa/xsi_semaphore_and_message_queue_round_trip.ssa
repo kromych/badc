@@ -291,7 +291,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=17
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=18
-  spill_count=0 gpr_used=[3, 12] fp_used=[]
+  spill_count=1 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Call { target_pc=0, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
@@ -381,7 +381,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=18
   block 12  start_pc=0
     v59  LocalAddr(-15)                                   -> x0
     v60  BinopI { op=add, lhs=v55, rhs_imm=96 }           -> x0
-    v61  LoadLocal { off=-15, disp=96, kind=I32 }         -> x12
+    v61  LoadLocal { off=-15, disp=96, kind=I32 }         -> [spill 0]
     v62  CallExt { binding_idx=135, args=[], fp_arg_mask=0x0 } -> x0
     v63  Binop { op=ne, lhs=v61, rhs=v62 }                -> x0
     v64  Imm(0)                                           -> x1
@@ -529,7 +529,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=18
   block 31  start_pc=0
     v169 LocalAddr(-15)                                   -> x0
     v170 BinopI { op=add, lhs=v164, rhs_imm=100 }         -> x0
-    v171 LoadLocal { off=-15, disp=100, kind=I32 }        -> x12
+    v171 LoadLocal { off=-15, disp=100, kind=I32 }        -> [spill 0]
     v172 CallExt { binding_idx=135, args=[], fp_arg_mask=0x0 } -> x0
     v173 Binop { op=ne, lhs=v171, rhs=v172 }              -> x0
     v174 Imm(0)                                           -> x1

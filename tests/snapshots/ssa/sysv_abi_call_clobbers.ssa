@@ -125,7 +125,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
   spill_count=3 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F64)                            -> d2
+    v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=F64)                            -> d1
     v4   Imm(0)                                           -> x0
@@ -149,11 +149,11 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v22  Imm(4619567317775286272)                         -> x9
     v23  Imm(8)                                           -> x3
     v24  Imm(4620693217682128896)                         -> x3
-    v25  Call { target_pc=3, args=[v10, v12, v14, v16, v18, v20, v22, v24], fixed_args=8, fp_return=true, fp_arg_mask=0xff } -> d0
+    v25  Call { target_pc=3, args=[v10, v12, v14, v16, v18, v20, v22, v24], fixed_args=8, fp_return=true, fp_arg_mask=0xff } -> d2
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  Binop { op=fadd, lhs=v7, rhs=v25 }               -> d0
+    v29  Binop { op=fadd, lhs=v7, rhs=v25 }               -> d2
     v30  Imm(0)                                           -> x0
     v31  Binop { op=fadd, lhs=v29, rhs=v1 }               -> d0
     v32  Imm(0)                                           -> x0

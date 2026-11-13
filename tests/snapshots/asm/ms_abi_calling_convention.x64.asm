@@ -258,16 +258,19 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
-               	movq	%rax, %rbx
-               	movq	%rbx, %r12
-               	shlq	%r12
-               	leaq	(%rbx,%rbx,2), %r10
-               	movq	%r10, 0x28(%rsp)
-               	cmpl	$0x2, %ebx
-               	jne	<addr>
-               	cmpl	$0x4, %r12d
-               	jne	<addr>
+               	movq	%rax, 0x28(%rsp)
                	movq	0x28(%rsp), %rax
+               	movq	%rax, %r10
+               	shlq	%r10
+               	movq	%r10, 0x20(%rsp)
+               	leaq	(%rax,%rax,2), %r10
+               	movq	%r10, 0x18(%rsp)
+               	cmpl	$0x2, %eax
+               	jne	<addr>
+               	movq	0x20(%rsp), %rax
+               	cmpl	$0x4, %eax
+               	jne	<addr>
+               	movq	0x18(%rsp), %rax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x9, %eax
@@ -277,22 +280,21 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
-               	movq	%rax, 0x20(%rsp)
+               	movq	%rax, %rbx
                	movl	$0x4, %edi
                	callq	<addr>
-               	movq	%rax, 0x18(%rsp)
+               	movq	%rax, %r12
                	movl	$0x5, %edi
                	callq	<addr>
-               	movq	0x18(%rsp), %rcx
-               	imulq	$0xa, %rcx, %rcx
-               	movq	%rcx, %r10
-               	movq	0x20(%rsp), %rcx
-               	addq	%r10, %rcx
-               	imulq	$0x64, %rbx, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x3e8, %r12, %rdx      # imm = 0x3E8
-               	addq	%rdx, %rcx
+               	imulq	$0xa, %r12, %rcx
+               	addq	%rbx, %rcx
                	movq	0x28(%rsp), %rdx
+               	imulq	$0x64, %rdx, %rdx
+               	addq	%rdx, %rcx
+               	movq	0x20(%rsp), %rdx
+               	imulq	$0x3e8, %rdx, %rdx      # imm = 0x3E8
+               	addq	%rdx, %rcx
+               	movq	0x18(%rsp), %rdx
                	imulq	$0x2710, %rdx, %rdx     # imm = 0x2710
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx

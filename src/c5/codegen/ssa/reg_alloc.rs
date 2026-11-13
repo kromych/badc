@@ -1154,6 +1154,10 @@ pub(crate) struct RegBanks {
     /// one cannot take the callee bank. False where the convention
     /// preserves the whole register, Win64 xmm6..xmm15 included.
     pub callee_fpr_low64_only: bool,
+    /// What a callee-saved register costs in [`cost_weights`] units: the
+    /// prologue's save and the epilogue's restore, once per call of the
+    /// function. AArch64 saves the registers in pairs, so each costs half.
+    pub open_cost: u64,
 }
 
 impl RegBanks {
@@ -1206,6 +1210,7 @@ impl RegBanks {
             caller_fprs,
             fp_scratch,
             callee_fpr_low64_only: !target.is_x86_64(),
+            open_cost: if target.is_aarch64() { 1 } else { 2 } * (FREQ_ONE + STATIC_COST),
         }
     }
 }
@@ -1398,17 +1403,20 @@ fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64,
 
 /// Per phi-class root, what keeping it in a caller-saved register across
 /// the calls it lives across ([`call_crossings`]) costs: a store and a
-/// load at each, by the call's loop weight.
+/// load at each, by the call's loop weight, and by its frequency and size
+/// ([`cost_weights`]).
 fn call_save_costs(
     func: &FunctionSsa,
     crossings: &[(ValueId, Vec<ValueId>)],
     node_of: &[ValueId],
-) -> Vec<u64> {
+) -> (Vec<u64>, Vec<u64>) {
     let mut cost = alloc::vec![0u64; func.insts.len()];
+    let mut by_freq = alloc::vec![0u64; func.insts.len()];
     if crossings.is_empty() {
-        return cost;
+        return (cost, by_freq);
     }
     let weights = block_weights(func);
+    let freqs = cost_weights(func);
     let mut block_of = alloc::vec![0usize; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
@@ -1416,15 +1424,17 @@ fn call_save_costs(
         }
     }
     for (site, live) in crossings {
-        let w = weights[block_of[*site as usize]].saturating_mul(2);
+        let b = block_of[*site as usize];
+        let (w, f) = (weights[b].saturating_mul(2), freqs[b].saturating_mul(2));
         let mut roots: Vec<ValueId> = live.iter().map(|&v| node_of[v as usize]).collect();
         roots.sort_unstable();
         roots.dedup();
         for r in roots {
             cost[r as usize] = cost[r as usize].saturating_add(w);
+            by_freq[r as usize] = by_freq[r as usize].saturating_add(f);
         }
     }
-    cost
+    (cost, by_freq)
 }
 
 /// The target's full register banks.
@@ -1807,6 +1817,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             call_forbid: 0,
             save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
             def_cost: 0,
             hint: None,
             forbid: 0,
@@ -1834,13 +1846,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
-    let save_costs = call_save_costs(func, &crossings, &node_of);
+    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of);
     if save_costs.iter().any(|&c| c > 0) {
         let defs = compute_def_weights(func, &node_of, &use_counts);
         for (root, c) in node_cons.iter_mut().enumerate() {
             if let Some(c) = c {
                 c.save_cost = save_costs[root];
+                c.save_freq = save_freqs[root];
                 c.def_cost = defs[root];
+            }
+        }
+    }
+    // What spilling each node costs by block frequency and size, against
+    // opening a callee-saved register for it.
+    {
+        let freqs = cost_weights(func);
+        let uses_by_freq = use_weights(func, &node_of, &liveness, &freqs);
+        let defs_by_freq = def_weights(func, &node_of, &use_counts, &freqs);
+        for (root, c) in node_cons.iter_mut().enumerate() {
+            if let Some(c) = c {
+                c.spill_freq = uses_by_freq[root].saturating_add(defs_by_freq[root]);
             }
         }
     }
@@ -3020,7 +3045,7 @@ fn verify_allocation(
         &[(ValueId, Vec<CallSave>)],
     ),
 ) {
-    if std::env::var("BADC_VERIFY_ALLOC").is_ok() {
+    if std::env::var("BADC_VERIFY_ALLOC").is_ok() || ALLOCATION_CHECK.with(|c| c.get()) {
         check_allocation(
             func,
             places,
@@ -3349,6 +3374,18 @@ fn check_allocation(
             }
         }
     }
+    for (site, saves) in call_saves {
+        let held = match places.get(*site as usize) {
+            Some(&Place::IntReg(r)) => Some((false, r)),
+            Some(&Place::FpReg(r)) => Some((true, r)),
+            _ => None,
+        };
+        if saves.iter().any(|s| Some((s.is_fp, s.reg)) == held) {
+            report(alloc::format!(
+                "call-save-result: call v{site} restores the register its result is placed in"
+            ));
+        }
+    }
     let reads = ret_part_reads(func, target);
     for (site, saves) in call_saves {
         let Some(&(gpr, fpr)) = reads.get(site) else {
@@ -3401,6 +3438,12 @@ pub(crate) struct NodeConstraints {
     /// coloring weighs: the loop-weighted definitions. A zero save cost
     /// takes no caller-saved register.
     pub save_cost: u64,
+    /// The save cost by block frequency and size ([`cost_weights`]),
+    /// against opening a callee-saved register, which saves it once per
+    /// call of the function.
+    pub save_freq: u64,
+    /// The spill's uses and definitions by block frequency and size.
+    pub spill_freq: u64,
     pub def_cost: u64,
     /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
@@ -3436,6 +3479,28 @@ pub(crate) struct Coloring {
     /// `(loop, node)`: a node whose register is saved around a loop
     /// ([`super::loop_saves`]).
     pub loop_saved: Vec<(u32, ValueId)>,
+}
+
+#[cfg(feature = "codegen_test")]
+thread_local! {
+    /// Per-thread request for the allocation check `BADC_VERIFY_ALLOC`
+    /// enables, set by [`with_allocation_check`].
+    static ALLOCATION_CHECK: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Run `f` with every allocation on this thread checked, as under
+/// `BADC_VERIFY_ALLOC`: a violation panics.
+#[cfg(feature = "codegen_test")]
+pub(crate) fn with_allocation_check<R>(f: impl FnOnce() -> R) -> R {
+    let prior = ALLOCATION_CHECK.with(|c| c.replace(true));
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ALLOCATION_CHECK.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(prior);
+    f()
 }
 
 #[cfg(feature = "std")]
@@ -3553,6 +3618,9 @@ pub(crate) fn color_graph(
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut saved: Vec<bool> = vec![false; n];
+    // Callee-saved registers some node holds, by bank: the prologue saves
+    // each once, so another node takes it at no further cost.
+    let mut opened = [0u64; 2];
     let mut loop_saved: Vec<(u32, ValueId)> = Vec::new();
     let mut spill_count: u32 = 0;
     // Coloring order: highest spill weight first, so the coldest values
@@ -3653,6 +3721,9 @@ pub(crate) fn color_graph(
             };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
+        // A callee-saved register another node holds: the prologue saves it
+        // once, so this node takes it at no further cost.
+        let open = |r: &u8| free(*r) && (opened[usize::from(c.is_fp)] >> *r) & 1 != 0;
         let mut avoid = c.avoid | hinted;
         for &o in apart.get(node).map_or(&[][..], Vec::as_slice) {
             match (color[o as usize], constraints[o as usize]) {
@@ -3700,13 +3771,27 @@ pub(crate) fn color_graph(
             .or(hint)
             .or_else(|| {
                 if c.must_callee {
-                    callee.iter().copied().find(|&r| free(r))
+                    // An open callee-saved register, else a new one unless
+                    // saving a caller-saved register around the calls costs
+                    // less than the save and restore it takes per call of
+                    // the function, which the spill fallback weighs.
+                    let saves = c.save_freq > 0
+                        && c.save_freq < banks.open_cost
+                        && c.save_freq < c.spill_freq
+                        && caller.iter().any(|&r| !unsaved[r as usize]);
+                    callee.iter().copied().find(open).or_else(|| {
+                        (!saves && (c.spill_freq == 0 || c.spill_freq >= banks.open_cost))
+                            .then(|| callee.iter().copied().find(|&r| free(r)))
+                            .flatten()
+                    })
                 } else {
-                    caller
-                        .iter()
-                        .copied()
-                        .find(|&r| free(r))
-                        .or_else(|| callee.iter().copied().find(|&r| free(r)))
+                    caller.iter().copied().find(|&r| free(r)).or_else(|| {
+                        callee.iter().copied().find(open).or_else(|| {
+                            (c.spill_freq == 0 || c.spill_freq >= banks.open_cost)
+                                .then(|| callee.iter().copied().find(|&r| free(r)))
+                                .flatten()
+                        })
+                    })
                 }
             });
         // Left to spill, a node crossing calls whose saves cost less than
@@ -3717,13 +3802,24 @@ pub(crate) fn color_graph(
                 .copied()
                 .unwrap_or(0)
                 .saturating_add(c.def_cost);
-            if c.save_cost == 0 || c.save_cost >= spill_cost {
+            let (save, spill) = match c.save_freq {
+                0 => (c.save_cost, spill_cost),
+                f => (f, c.spill_freq),
+            };
+            if save == 0 || save >= spill {
                 return None;
             }
-            let r = caller
-                .iter()
-                .copied()
-                .find(|&r| !unsaved[r as usize] && (avoid >> r) & 1 == 0)?;
+            // Its own hint first -- a parameter stays in its argument
+            // register -- then one no neighbor is hinted to, then any.
+            let savable = |r: &u8| caller.contains(r) && !unsaved[*r as usize];
+            let r = (c.hint.filter(savable))
+                .or_else(|| {
+                    caller
+                        .iter()
+                        .copied()
+                        .find(|&r| savable(&r) && (avoid >> r) & 1 == 0)
+                })
+                .or_else(|| caller.iter().copied().find(savable))?;
             saved[node] = true;
             Some(r)
         });
@@ -3759,6 +3855,12 @@ pub(crate) fn color_graph(
                         continue;
                     }
                     holders.push((r, root));
+                    // A value saved around calls stores and reloads its
+                    // register at each, also inside the loop.
+                    if saved[root as usize] {
+                        blocked[r as usize] = true;
+                        continue;
+                    }
                     if around(&loop_saved, root) {
                         continue;
                     }
@@ -3782,6 +3884,9 @@ pub(crate) fn color_graph(
             }
             Some(r)
         });
+        if let Some(r) = pick.filter(|r| callee.contains(r)) {
+            opened[usize::from(c.is_fp)] |= 1 << r;
+        }
         color[node] = match pick {
             Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
@@ -3859,6 +3964,75 @@ pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
         .collect()
 }
 
+/// The scale of [`block_frequencies`]: the entry block's frequency.
+pub(crate) const FREQ_ONE: u64 = 1 << 8;
+
+/// What an instruction's size costs in [`block_frequencies`] units, beside
+/// its executions: a spill, save or restore added at a site no path runs
+/// often still lengthens the function.
+const STATIC_COST: u64 = FREQ_ONE / 4;
+
+/// Per block, what an instruction placed there costs: its frequency and
+/// its size ([`STATIC_COST`]).
+pub(crate) fn cost_weights(func: &FunctionSsa) -> Vec<u64> {
+    block_frequencies(func)
+        .into_iter()
+        .map(|f| f + STATIC_COST)
+        .collect()
+}
+
+/// Per-block execution-frequency estimate relative to the entry, at
+/// [`FREQ_ONE`]: [`block_weights`] (a factor of `LOOP_WEIGHT` per loop level)
+/// halved for each step up the dominator tree from the block to the entry
+/// at which the block does not post-dominate its immediate dominator -- one
+/// arm of a branch runs on part of the paths through the branch. A block
+/// that reaches no exit is not halved, nor one in the loop of a dominator
+/// that leaves it: the loop's iterations take that arm.
+pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
+    use super::mem2reg::{EXIT, dominators, post_dominators, successors};
+    use crate::c5::ir::BlockId;
+    let weights = block_weights(func);
+    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+    let leaves_loop: Vec<bool> = (func.blocks.iter().enumerate())
+        .map(|(b, block)| {
+            successors(
+                &block.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+            .iter()
+            .any(|&s| depths[s as usize] < depths[b])
+        })
+        .collect();
+    let idom = dominators(func);
+    let ipdom = post_dominators(func);
+    let post_dominates = |a: BlockId, mut b: BlockId| loop {
+        match ipdom.get(b as usize).copied() {
+            Some(p) if p == a => return true,
+            Some(EXIT) | None => return false,
+            Some(p) if p == BlockId::MAX => return true,
+            Some(p) => b = p,
+        }
+    };
+    (0..func.blocks.len())
+        .map(|b| {
+            let mut halvings = 0u32;
+            let mut x = b as BlockId;
+            while let Some(&d) = idom.get(x as usize) {
+                if d == x || d == BlockId::MAX {
+                    break;
+                }
+                let continues = leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
+                if !post_dominates(x, d) && !continues {
+                    halvings += 1;
+                }
+                x = d;
+            }
+            weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
+        })
+        .collect()
+}
+
 /// Loop-depth-weighted use count per interference node, keyed by node
 /// id (the phi-congruence-class root). Each use site of any class
 /// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
@@ -3871,8 +4045,17 @@ fn compute_spill_weights(
     node_of: &[ValueId],
     liveness: &super::liveness::Liveness,
 ) -> Vec<u64> {
+    use_weights(func, node_of, liveness, &block_weights(func))
+}
+
+/// [`compute_spill_weights`] by the per-block weights `block_weight`.
+fn use_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+    block_weight: &[u64],
+) -> Vec<u64> {
     let n = func.insts.len();
-    let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
@@ -3909,7 +4092,16 @@ fn compute_spill_weights(
 /// Loop-depth-weighted count of the emitted definitions per interference
 /// node: what storing its members to a spill slot costs.
 fn compute_def_weights(func: &FunctionSsa, node_of: &[ValueId], use_counts: &[u32]) -> Vec<u64> {
-    let block_weight = block_weights(func);
+    def_weights(func, node_of, use_counts, &block_weights(func))
+}
+
+/// [`compute_def_weights`] by the per-block weights `block_weight`.
+fn def_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    use_counts: &[u32],
+    block_weight: &[u64],
+) -> Vec<u64> {
     let mut w: Vec<u64> = vec![0u64; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
@@ -5503,6 +5695,7 @@ mod tests {
             caller_fprs: Vec::new(),
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
             callee_fpr_low64_only: true,
+            open_cost: 2 * FREQ_ONE,
         }
     }
 
@@ -5516,6 +5709,8 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
             def_cost: 0,
             hint,
             forbid: 0,
@@ -5537,6 +5732,8 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
+            save_freq: 0,
+            spill_freq: 0,
             def_cost: 0,
             hint: None,
             forbid: 0,

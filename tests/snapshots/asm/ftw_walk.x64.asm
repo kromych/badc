@@ -28,45 +28,43 @@ Disassembly of section .text:
 <visit>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdx, %rbx
+               	subq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	cmpl	$0x1, %ebx
+               	cmpl	$0x1, %edx
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rsi # <addr>
+               	movq	%rdx, 0x8(%rsp)
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
+               	movq	0x8(%rsp), %rdx
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
                	movl	%eax, <rip> # <addr>
-               	cmpl	$0x1, %ebx
+               	cmpl	$0x1, %edx
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
-               	testl	%ebx, %ebx
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
                	jmp	<addr>
-               	leaq	0x64(%rbx), %rax
-               	popq	%rbx
+               	leaq	0x64(%rdx), %rax
                	leave
                	retq
 

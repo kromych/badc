@@ -476,7 +476,7 @@ fn ent_pc=17 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=main
 fn ent_pc=18 n_params=0 variadic=false locals=10
-  spill_count=1 gpr_used=[3] fp_used=[]
+  spill_count=2 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(18)                                          -> x7
@@ -899,60 +899,60 @@ fn ent_pc=18 n_params=0 variadic=false locals=10
     v332 LocalAddr(-7)                                    -> x0
     v333 ImmData(56)                                      -> x1
     v334 Mcpy { dst=v332, src=v333, size=16, align=8 }    -> -
-    v335 Imm(0)                                           -> x3
+    v335 Imm(0)                                           -> x1
     v336 Imm(0)                                           -> x0
     terminator Jmp(b53)   (exit_acc=v335)
   block 44  start_pc=0
     v343 LocalAddr(-10)                                   -> x0
-    v344 Extend { value=v337, kind=I32 }                  -> x1
+    v344 Extend { value=v337, kind=I32 }                  -> x2
     v345 Binop { op=add, lhs=v343, rhs=v337 }             -> x7
     v346 Imm(5)                                           -> x6
     v347 Imm(7)                                           -> x2
     v348 Call { target_pc=13, args=[v345, v346, v347], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v349 Extend { value=v337, kind=I32 }                  -> x1
-    v350 Imm(5)                                           -> x1
-    v351 Imm(7)                                           -> x2
-    v352 Select { cond=v337, a=v350, b=v351, kind=I64 }   -> x1
+    v349 Extend { value=v337, kind=I32 }                  -> x2
+    v350 Imm(5)                                           -> x2
+    v351 Imm(7)                                           -> x6
+    v352 Select { cond=v337, a=v350, b=v351, kind=I64 }   -> x2
     terminator Jmp(b45)
   block 45  start_pc=0
-    v365 Copy { value=v352, fp=false }                    -> x2
-    v366 Imm(0)                                           -> x2
+    v365 Copy { value=v352, fp=false }                    -> x6
+    v366 Imm(0)                                           -> x6
     v367 Binop { op=ne, lhs=v348, rhs=v352 }              -> x0
     terminator Bz { cond=v367, target=b46, fall=b61 }   (exit_acc=v367)
   block 46  start_pc=0
     v374 LocalAddr(-9)                                    -> x0
-    v375 Extend { value=v337, kind=I32 }                  -> x1
-    v376 BinopI { op=shl, lhs=v337, rhs_imm=2 }           -> x1
+    v375 Extend { value=v337, kind=I32 }                  -> x2
+    v376 BinopI { op=shl, lhs=v337, rhs_imm=2 }           -> x2
     v377 Binop { op=add, lhs=v374, rhs=v376 }             -> x7
     v378 Imm(5)                                           -> x6
     v379 Imm(7)                                           -> x2
     v380 Call { target_pc=14, args=[v377, v378, v379], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v381 Extend { value=v337, kind=I32 }                  -> x1
-    v382 Imm(7)                                           -> x1
-    v383 Imm(5)                                           -> x2
-    v384 Select { cond=v337, a=v382, b=v383, kind=I64 }   -> x1
+    v381 Extend { value=v337, kind=I32 }                  -> x2
+    v382 Imm(7)                                           -> x2
+    v383 Imm(5)                                           -> x6
+    v384 Select { cond=v337, a=v382, b=v383, kind=I64 }   -> x2
     terminator Jmp(b47)
   block 47  start_pc=0
-    v389 Copy { value=v384, fp=false }                    -> x2
-    v390 Imm(0)                                           -> x2
+    v389 Copy { value=v384, fp=false }                    -> x6
+    v390 Imm(0)                                           -> x6
     v391 Binop { op=ne, lhs=v380, rhs=v384 }              -> x0
     terminator Bz { cond=v391, target=b48, fall=b60 }   (exit_acc=v391)
   block 48  start_pc=0
     v398 LocalAddr(-7)                                    -> x0
-    v399 Extend { value=v337, kind=I32 }                  -> x1
-    v400 BinopI { op=shl, lhs=v337, rhs_imm=3 }           -> x1
+    v399 Extend { value=v337, kind=I32 }                  -> x2
+    v400 BinopI { op=shl, lhs=v337, rhs_imm=3 }           -> x2
     v401 Binop { op=add, lhs=v398, rhs=v400 }             -> x7
     v402 Imm(5)                                           -> x6
     v403 Imm(7)                                           -> x2
     v404 Call { target_pc=15, args=[v401, v402, v403], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v405 Extend { value=v337, kind=I32 }                  -> x1
-    v406 Imm(7)                                           -> x1
-    v407 Imm(5)                                           -> x2
-    v408 Select { cond=v337, a=v406, b=v407, kind=I64 }   -> x1
+    v405 Extend { value=v337, kind=I32 }                  -> x2
+    v406 Imm(7)                                           -> x2
+    v407 Imm(5)                                           -> x6
+    v408 Select { cond=v337, a=v406, b=v407, kind=I64 }   -> x2
     terminator Jmp(b49)
   block 49  start_pc=0
-    v413 Copy { value=v408, fp=false }                    -> x2
-    v414 Imm(0)                                           -> x2
+    v413 Copy { value=v408, fp=false }                    -> x6
+    v414 Imm(0)                                           -> x6
     v415 Binop { op=ne, lhs=v404, rhs=v408 }              -> x0
     terminator Bz { cond=v415, target=b50, fall=b59 }   (exit_acc=v415)
   block 50  start_pc=0
@@ -960,23 +960,23 @@ fn ent_pc=18 n_params=0 variadic=false locals=10
     v423 Imm(5)                                           -> x6
     v424 Imm(7)                                           -> x2
     v425 Call { target_pc=16, args=[v337, v423, v424], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v426 Extend { value=v337, kind=I32 }                  -> x1
-    v427 Imm(7)                                           -> x1
-    v428 Imm(5)                                           -> x2
-    v429 Select { cond=v337, a=v427, b=v428, kind=I64 }   -> x1
+    v426 Extend { value=v337, kind=I32 }                  -> x2
+    v427 Imm(7)                                           -> x2
+    v428 Imm(5)                                           -> x6
+    v429 Select { cond=v337, a=v427, b=v428, kind=I64 }   -> x2
     terminator Jmp(b51)
   block 51  start_pc=0
-    v434 Copy { value=v429, fp=false }                    -> x2
-    v435 Imm(0)                                           -> x2
+    v434 Copy { value=v429, fp=false }                    -> x6
+    v435 Imm(0)                                           -> x6
     v436 Binop { op=ne, lhs=v425, rhs=v429 }              -> x0
     terminator Bz { cond=v436, target=b52, fall=b58 }   (exit_acc=v436)
   block 52  start_pc=0
     v340 Extend { value=v337, kind=I32 }                  -> x0
-    v341 BinopI { op=add, lhs=v337, rhs_imm=1 }           -> x3
+    v341 BinopI { op=add, lhs=v337, rhs_imm=1 }           -> x1
     v342 Extend { value=v341, kind=I32, nsw }             -> x0
     terminator Jmp(b53)   (exit_acc=v341)
   block 53  start_pc=0
-    v337 Phi { incoming=[b43:v335, b52:v341], kind=I64 }  -> x3
+    v337 Phi { incoming=[b43:v335, b52:v341], kind=I64 }  -> x1
     v338 Extend { value=v337, kind=I32 }                  -> x0
     v339 BinopI { op=lt, lhs=v337, rhs_imm=2 }            -> x0
     terminator Bz { cond=v339, target=b54, fall=b44 }   (exit_acc=v339)

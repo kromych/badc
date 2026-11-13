@@ -80,31 +80,29 @@ Disassembly of section .text:
 <carry>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	leaq	(%rdi,%rdi,2), %rax
-               	leaq	0x1(%rax), %rbx
+               	leaq	0x1(%rax), %rcx
                	cmpl	$0x3, %edi
                	jge	<addr>
                	cmpl	$0x7, %esi
                	jge	<addr>
+               	movq	%rcx, 0x8(%rsp)
                	movq	%rsi, %rdi
                	callq	<addr>
-               	addq	%rbx, %rax
-               	popq	%rbx
+               	movq	0x8(%rsp), %rcx
+               	addq	%rcx, %rax
                	leave
                	retq
                	cmpl	$0x5, %edi
                	jg	<addr>
                	cmpl	$0x9, %esi
                	jle	<addr>
-               	movq	%rbx, %rax
+               	movq	%rcx, %rax
                	subq	%rsi, %rax
-               	popq	%rbx
                	leave
                	retq
-               	movq	%rbx, %rax
-               	popq	%rbx
+               	movq	%rcx, %rax
                	leave
                	retq
 
@@ -357,15 +355,15 @@ Disassembly of section .text:
                	andq	%rax, %rcx
                	xorq	$-0x1, %rax
                	andq	%r14, %rax
-               	movq	%rcx, %r10
-               	orq	%rax, %r10
-               	movq	%r10, 0x38(%rsp)
+               	orq	%rax, %rcx
                	testl	%ebx, %ebx
                	jne	<addr>
+               	movq	%rcx, 0x30(%rsp)
                	movq	%r13, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	cmpl	0x38(%rsp), %eax
+               	movq	0x30(%rsp), %rcx
+               	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x3, %ebx
                	jmp	<addr>
